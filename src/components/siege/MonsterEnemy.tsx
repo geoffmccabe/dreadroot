@@ -12,8 +12,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
-import { meshGroundHeight } from './meshColliderSystem';
-import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 
@@ -353,14 +352,20 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = monsterBoxes.has(b); } // too tall → wall
         }
       }
-    }
-    // Mesh colliders (towns / mushroom trees) — stand on / step up the REAL surface
-    // instead of the old oversized boxes that made monsters climb on air. Ray from
-    // the monster's own step-reach downward; only counts as ground if it's within a
-    // step (taller mesh = a wall it can't auto-step, same as a box wallTop).
-    if (dist < CLIMB_LOD) {
-      const mg = meshGroundHeight(s.x, s.z, feet + STEP_UP);
-      if (mg != null && mg > groundY && mg <= feet + STEP_UP) groundY = mg;
+      // Static mesh-object greedy boxes (towns / rocks) live in their OWN grid that
+      // the player + bullets never read. Same standable / wall logic, so monsters climb
+      // the real shape instead of walking through it (or air-climbing one fat box).
+      const mcnt = monsterColliderGrid.getNearby(s.x, s.z, me.r + 0.4);
+      const mres = monsterColliderGrid.nearbyResult;
+      for (let i = 0; i < mcnt; i++) {
+        const b = mres[i] as THREE.Box3;
+        if (!b || !b.max) continue;
+        if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
+          const top = b.max.y;
+          if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }                         // standable / step-up
+          else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = false; }   // too tall → wall
+        }
+      }
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
     const belowTop = wallTop > -Infinity && feet < wallTop - 0.1;

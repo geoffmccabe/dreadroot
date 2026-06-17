@@ -12,6 +12,7 @@ import { useMemo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { resolvePlayerMeshCollision, setPlayerProbeY } from './meshColliderSystem';
+import { sdbg } from './siegeDebug';
 
 const PLAYER_RADIUS = 0.3;   // matches FortressControls
 const PLAYER_HEIGHT = 1.6;
@@ -22,6 +23,8 @@ export function MeshColliderPlayer() {
   const camera = useThree((s) => s.camera);
   const corr = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
+    // God mode = fly through everything: skip the mesh push entirely.
+    if (sdbg.godMode) return;
     const feetY = camera.position.y - PLAYER_HEIGHT; // camera sits at the head
     // Tell the ground-raycast how high the player can step (so it only grounds
     // them on surfaces they can reach, never the top of a tall wall).

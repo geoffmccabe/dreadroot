@@ -527,5 +527,14 @@ export const entityCollisionGrid = new SpatialHashGrid({
   emitClearEvent: false,
 });
 
+// Monster collider grid: greedy boxes for mesh objects (towns / rocks), read ONLY
+// by monsters for climb/ground. The player + bullets use the smooth mesh BVH for
+// those same objects, so these boxes must NOT live in worldCollisionGrid (or the
+// player would feel them as invisible walls). Separate lane = clean split.
+export const monsterColliderGrid = new SpatialHashGrid({
+  name: 'MonsterColliderGrid',
+  emitClearEvent: false,
+});
+
 // Temporary back-compat alias (remove later after full migration)
 export const collisionGrid = worldCollisionGrid;

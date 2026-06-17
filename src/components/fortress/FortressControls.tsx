@@ -2169,9 +2169,12 @@ export function FirstPersonControls({
         }
       }
 
+      // Keep the siege god-mode flag in sync EVERY frame (on OR off) so the mesh-collider
+      // player bypass + debug overlay read the real state, not a stuck "true".
+      if (groundHeightFn) sdbg.godMode = godModeRef.current;
       // God Mode: Q = fly up, Z = fly down, no gravity
       if (godModeRef.current) {
-        if (groundHeightFn) { sdbg.isSiege = true; sdbg.godMode = true; sdbg.playerY = camera.position.y; } // SW debug
+        if (groundHeightFn) { sdbg.isSiege = true; sdbg.playerY = camera.position.y; } // SW debug
         // Vertical movement with Q/Z
         if (keys.current.q) {
           deltaMovement.y += runSpeed * delta;

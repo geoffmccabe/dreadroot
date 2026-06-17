@@ -7,10 +7,9 @@ import { Component, ReactNode, Suspense, useEffect, useMemo, useRef, useState } 
 import { useGLTF } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
-import { DEFAULT_MESH_MODELS } from './meshColliderDefaults';
 
 let _meshGroupId = 0;
 import { voxelizeGeometry } from './voxelize';
@@ -53,21 +52,43 @@ class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   render() { return this.state.failed ? null : this.props.children; }
 }
 
+// Greedy boxes for ONE instance, for monsters to climb. Cell size auto-scales to
+// the object: small rocks get fine boxes (hug the shape → minimal air-climbing),
+// huge town blobs stay coarse/cheap. A saved V-tool cell overrides the auto value.
+// Retries coarser if voxelize bails (SOLID_CAP); single AABB only as a last resort.
+const _mbSize = new THREE.Vector3();
+const MB_TARGET_CELLS = 8;   // ~boxes per axis for a typical object
+const MB_MIN_CELL = 0.6;     // finest box (small rocks → many tight boxes)
+const MB_MAX_CELL = 3.0;     // coarsest (big blobs stay manageable)
+function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox: THREE.Box3, ovCell?: number): THREE.Box3[] {
+  const wb = geoBox.clone().applyMatrix4(world);
+  wb.getSize(_mbSize);
+  const maxDim = Math.max(_mbSize.x, _mbSize.y, _mbSize.z);
+  let cell = ovCell ?? Math.min(MB_MAX_CELL, Math.max(MB_MIN_CELL, maxDim / MB_TARGET_CELLS));
+  for (let tries = 0; tries < 4; tries++) {
+    const boxes = voxelizeGeometry(geo, world, cell, 4000);
+    if (boxes.length) return boxes;
+    cell *= 1.8;  // hit SOLID_CAP → coarsen and retry
+  }
+  return [wb];
+}
+
 function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders }:
   { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean }) {
   const gltf = useGLTF(url);
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
   const groupId = gidRef.current;
-  // This MODEL is flagged for a true mesh collider (per-model, all copies).
-  // Mesh collider if: the world enables them AND (this model is mesh-by-default
-  // OR it was explicitly M-flagged). Default-mesh models can't be toggled off.
-  const useMesh = !!meshColliders && (DEFAULT_MESH_MODELS.has(fbx) || !!colliderOverrides.get(fbx)?.mesh);
-  const { node, colliders, meshInputs, meshGeos } = useMemo(() => {
+  // DUAL colliders (Siege): every collidable object gets BOTH a smooth mesh BVH
+  // (player + bullets) AND greedy boxes in the monster-only grid (monsters climb).
+  // The old per-model M-flag is no longer needed — kept only as a V-tool cell hint.
+  const ovCell = colliderOverrides.get(fbx)?.cell;
+  const { node, colliders, meshInputs, meshGeos, monsterBoxes } = useMemo(() => {
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];
     const meshInputs: MeshInstanceInput[] = [];
     const meshGeos = new Map<string, THREE.BufferGeometry>();
+    const monsterBoxes: THREE.Box3[] = [];
     const solid = isSolidGroup(fbx);
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
@@ -141,11 +162,17 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // single box too; the player voxelizes specific ones on demand with V (VoxelizeTool),
         // which then OWNS that instance — so skip any instance it manages.
         const ikey = keyFor(fbx, m.elements[12], m.elements[14]);
-        if (useMesh && geoBox) {
-          // True mesh collider: feed the BVH system this instance; NO box collider.
+        if (meshColliders && geoBox) {
+          // Player + bullets: the smooth mesh BVH (no invisible walls, no pass-through).
           meshGeos.set(src.geometry.uuid, src.geometry);
           meshInputs.push({ key: src.geometry.uuid, matrix: m.clone(), geoBox });
+          // Monsters: greedy boxes in their OWN grid (the player/bullets never read it,
+          // so these can't become invisible walls). Denser than the old single box.
+          if (monsterBoxes.length < 4000 && !managedRocks.has(ikey)) {
+            for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell)) monsterBoxes.push(b);
+          }
         } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
+          // Non-mesh worlds (DreadRoot): single shrunk box / saved voxel as before.
           const ov = colliderOverrides.get(ikey);
           if (ov?.voxel) {
             // Saved authoring: voxelize this instance at the chosen resolution (persists/bakes).
@@ -163,14 +190,20 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       inst.computeBoundingSphere();
       out.add(inst);
     }
-    return { node: out, colliders, meshInputs, meshGeos };
-  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, useMesh]);
+    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes };
+  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
     if (!colliders.length) return;
     colliders.forEach((b) => worldCollisionGrid.insert(b));
     return () => colliders.forEach((b) => worldCollisionGrid.remove(b));
   }, [colliders]);
+  // Monster-only greedy boxes → the separate grid the player/bullets never read.
+  useEffect(() => {
+    if (!monsterBoxes.length) return;
+    monsterBoxes.forEach((b) => monsterColliderGrid.insert(b));
+    return () => monsterBoxes.forEach((b) => monsterColliderGrid.remove(b));
+  }, [monsterBoxes]);
   // Register this group's BVH mesh-collider instances; drop them when it streams out.
   // The decimation keep-ratio is stored in the override's `cell` field (1 = full).
   useEffect(() => {
