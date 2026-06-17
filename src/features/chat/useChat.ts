@@ -8,7 +8,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { GAME_ID } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 import type { ChatMessage } from './types';
 
 const MAX_MESSAGES = 100;       // ring buffer of recent messages held in memory
@@ -22,11 +23,12 @@ export function useChat(opts: {
   color?: string;
 }) {
   const { worldId, userId, username, color } = opts;
+  const gameKey = gameDataKey(useActiveGame());
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const lastSentRef = useRef(0);
 
-  // (Re)subscribe whenever the world changes. Tear the old channel down first.
+  // (Re)subscribe whenever the world OR active game changes. Tear the old channel down first.
   useEffect(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
@@ -35,7 +37,7 @@ export function useChat(opts: {
     setMessages([]); // fresh log per world
     if (!worldId) return;
 
-    const ch = supabase.channel(`chat:${GAME_ID}:${worldId}`, {
+    const ch = supabase.channel(`chat:${gameKey}:${worldId}`, {
       config: { broadcast: { self: false } }, // we add our own messages optimistically
     });
     ch.on('broadcast', { event: 'msg' }, (payload) => {
@@ -50,7 +52,7 @@ export function useChat(opts: {
       supabase.removeChannel(ch);
       if (channelRef.current === ch) channelRef.current = null;
     };
-  }, [worldId]);
+  }, [worldId, gameKey]);
 
   const send = useCallback((raw: string) => {
     const body = raw.trim().slice(0, MAX_BODY);

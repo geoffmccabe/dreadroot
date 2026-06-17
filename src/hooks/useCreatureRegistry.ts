@@ -2,7 +2,7 @@
  * useCreatureRegistry — the game-agnostic source of truth for "which creatures
  * does THIS game use, in what order, renamed/recolored how". Reads the
  * cross-game registry (game_creatures → creatures) filtered to this game
- * (GAME_ID == games.slug), enabled only.
+ * (active-game data key == games.slug), enabled only.
  *
  * Falls back to the build's SHIPPED_CREATURE_SLUGS if the registry is empty or
  * unreachable, so panels/renderers never break before the registry is seeded.
@@ -11,7 +11,9 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID, SHIPPED_CREATURE_SLUGS } from '@/config/game';
+import { SHIPPED_CREATURE_SLUGS } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 
 export interface RegistryCreature {
   slug: string;
@@ -37,14 +39,15 @@ const FALLBACK: RegistryCreature[] = SHIPPED_CREATURE_SLUGS.map((slug, i) => ({
 }));
 
 export function useCreatureRegistry() {
+  const gameKey = gameDataKey(useActiveGame());
   return useQuery({
-    queryKey: ['creature-registry', GAME_ID],
+    queryKey: ['creature-registry', gameKey],
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<RegistryCreature[]> => {
       const { data, error } = await supabase
         .from('game_creatures')
         .select('enabled, color_overrides, name_override, sort_order, creatures!inner(slug, name), games!inner(slug)')
-        .eq('games.slug', GAME_ID)
+        .eq('games.slug', gameKey)
         .eq('enabled', true)
         .order('sort_order');
 

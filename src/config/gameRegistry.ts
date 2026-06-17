@@ -61,10 +61,16 @@ export function gameUsesVoxels(id: string): boolean {
 }
 
 /**
- * The `worlds.game` key to load for this game. Games without their own worlds-table
- * world (Siege Worlds) ride on the BUILD's default data-game, preserving today's
- * behavior where siege runs on the Dreadroot data session.
+ * The data-scoping key for per-game DB rows (worlds, chat, leaderboards, stats,
+ * coin-drops, creatures…). Games without their own data-game (Siege Worlds) ride
+ * on the BUILD's default, preserving today's behavior where siege runs on the
+ * Dreadroot data session. Use this for any query/channel keyed by a `game` column.
  */
-export function gameWorldsKey(id: string): string {
+export function gameDataKey(id: string): string {
   return getGameDef(id).worldsTableKey ?? GAME_ID;
+}
+
+/** Alias of {@link gameDataKey} for the worlds table specifically. */
+export function gameWorldsKey(id: string): string {
+  return gameDataKey(id);
 }

@@ -5,7 +5,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 import type { UserData } from './adminPanel.types';
 
 interface UserStatsRow {
@@ -79,6 +80,7 @@ function fmtDate(s: string | null | undefined): string {
 }
 
 export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps) {
+  const gameKey = gameDataKey(useActiveGame());
   const [stats, setStats] = useState<UserStatsRow | null>(null);
   const [combatStats, setCombatStats] = useState<CombatStatRow[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -126,7 +128,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
         .from('user_stats' as any)
         .select('*')
         .eq('user_id', user.id)
-        .eq('game', GAME_ID)
+        .eq('game', gameKey)
         .maybeSingle() as any);
       if (statRow) setStats(statRow as UserStatsRow);
 
@@ -135,7 +137,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
         .from('user_combat_stats')
         .select('enemy_type, kills')
         .eq('user_id', user.id)
-        .eq('game', GAME_ID)
+        .eq('game', gameKey)
         .order('kills', { ascending: false });
       if (combatRows) setCombatStats(combatRows as CombatStatRow[]);
 
@@ -155,7 +157,7 @@ export function UserStatsModal({ user, open, onOpenChange }: UserStatsModalProps
 
       setLoading(false);
     })();
-  }, [open, user]);
+  }, [open, user, gameKey]);
 
   if (!user) return null;
 

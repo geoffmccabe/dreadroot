@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 import { generatePondsForWorld, type WorldPondSettings, type PondSettings } from '@/lib/pondGenerator';
 
 export interface World {
@@ -59,6 +60,7 @@ export function useWorlds() {
   const [ambientTracks, setAmbientTracks] = useState<AmbientMusicTrack[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const gameKey = gameDataKey(useActiveGame());
 
   const fetchWorlds = useCallback(async () => {
     try {
@@ -66,7 +68,7 @@ export function useWorlds() {
       const { data, error } = await supabase
         .from('worlds')
         .select('*')
-        .eq('game', GAME_ID)
+        .eq('game', gameKey)
         .order('is_default', { ascending: false })
         .order('name');
 
@@ -81,7 +83,7 @@ export function useWorlds() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [gameKey]);
 
   const fetchAmbientTracks = useCallback(async () => {
     try {

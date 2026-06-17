@@ -13,7 +13,8 @@
 // without callers having to change — same method signatures.
 
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID } from '@/config/game';
+import { getActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 
 // ── Common shapes ───────────────────────────────────────────────────
 
@@ -962,7 +963,7 @@ export async function placeBlock(params: {
  *  falls back to a no-op-safe throw if the RPC isn't deployed yet.
  *  enemy_type encodes the tier, e.g. `shwarm_t3`. */
 export async function recordKill(enemyType: string): Promise<void> {
-  const { error } = await supabase.rpc('record_kill', { p_enemy_type: enemyType, p_game: GAME_ID } as never);
+  const { error } = await supabase.rpc('record_kill', { p_enemy_type: enemyType, p_game: gameDataKey(getActiveGame()) } as never);
   if (error && !isMissingFunction(error)) throw error;
   if (error && isMissingFunction(error)) {
     // Pre-migration fallback: direct select-then-update/insert.
@@ -1009,7 +1010,7 @@ export async function rollMonsterCoinDrop(
 ): Promise<unknown[]> {
   const { data, error } = await supabase.rpc('roll_monster_coin_drop', {
     p_enemy_base: enemyBase, p_tier: tier, p_world_id: worldId,
-    p_x: x, p_y: y, p_z: z, p_game: GAME_ID,
+    p_x: x, p_y: y, p_z: z, p_game: gameDataKey(getActiveGame()),
   } as never);
   if (!error) return (data as unknown[]) ?? [];
   if (isMissingFunction(error)) return [];

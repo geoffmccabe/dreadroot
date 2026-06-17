@@ -2,7 +2,7 @@
  * Coin Drops editor — drop-in admin section for a monster tier. See docs/COIN_DROPS.md.
  *
  * Game-scoped + self-contained: it loads/saves its own row in `monster_coin_drops`
- * keyed (GAME_ID, enemyBase, tier), so each game configures drops independently even
+ * keyed (active-game data key, enemyBase, tier), so each game configures drops independently even
  * though the monster def tables are shared. Embed in any enemy design panel:
  *   <CoinDropsEditor enemyBase="shombie" tier={selectedTier} />
  */
@@ -12,12 +12,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Plus, Trash2, Coins, Save } from 'lucide-react';
-import { GAME_ID } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 import type { CoinDropConfig } from './types';
 
 interface CoinTheme { id: string; label: string; }
 
 export function CoinDropsEditor({ enemyBase, tier }: { enemyBase: string; tier: number }) {
+  const gameKey = gameDataKey(useActiveGame());
   const [themes, setThemes] = useState<CoinTheme[]>([]);
   const [rows, setRows] = useState<CoinDropConfig[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -47,13 +49,13 @@ export function CoinDropsEditor({ enemyBase, tier }: { enemyBase: string; tier: 
       const { data } = await supabase
         .from('monster_coin_drops' as never)
         .select('coin_drops')
-        .eq('game', GAME_ID).eq('enemy_base', enemyBase).eq('tier', tier)
+        .eq('game', gameKey).eq('enemy_base', enemyBase).eq('tier', tier)
         .maybeSingle();
       if (!alive) return;
       setRows(((data as unknown as { coin_drops?: CoinDropConfig[] })?.coin_drops) ?? []);
     })();
     return () => { alive = false; };
-  }, [enemyBase, tier]);
+  }, [enemyBase, tier, gameKey]);
 
   const update = (i: number, patch: Partial<CoinDropConfig>) => {
     setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r))); setDirty(true);
@@ -68,7 +70,7 @@ export function CoinDropsEditor({ enemyBase, tier }: { enemyBase: string; tier: 
   const save = async () => {
     setSaving(true);
     const { error } = await supabase.from('monster_coin_drops' as never).upsert({
-      game: GAME_ID, enemy_base: enemyBase, tier, coin_drops: rows, updated_at: new Date().toISOString(),
+      game: gameKey, enemy_base: enemyBase, tier, coin_drops: rows, updated_at: new Date().toISOString(),
     } as never, { onConflict: 'game,enemy_base,tier' } as never);
     setSaving(false);
     if (error) { toast.error(`Coin drops save failed: ${error.message}`); return; }

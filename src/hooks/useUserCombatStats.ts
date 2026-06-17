@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { GAME_ID } from '@/config/game';
+import { useActiveGame } from '@/config/activeGame';
+import { gameDataKey } from '@/config/gameRegistry';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface CombatStat {
@@ -72,6 +73,7 @@ const getVortaxRarityFromTier = getShtickmanRarityFromTier;
 
 export function useUserCombatStats() {
   const { user } = useAuth();
+  const gameKey = gameDataKey(useActiveGame());
   const [stats, setStats] = useState<CombatStat[]>([]);
   const [definitions, setDefinitions] = useState<EnemyDefinition[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -102,7 +104,7 @@ export function useUserCombatStats() {
           .from('user_combat_stats')
           .select('*')
           .eq('user_id', user.id)
-          .eq('game', GAME_ID),
+          .eq('game', gameKey),
         supabase
           .from('shwarm_definitions')
           .select('id, tier, name, texture_url')
@@ -283,7 +285,7 @@ export function useUserCombatStats() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, gameKey]);
 
   // Increment kill count for an enemy type
   const incrementKill = useCallback(async (enemyType: string) => {
