@@ -8,7 +8,8 @@ import { calculatePlacementFast } from '@/lib/voxelRaycast';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
-import { getActiveWeapon } from '@/config/activeWeapon';
+import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
+import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
 import {
   DEBUG_LOGGING,
   FirstPersonControlsProps
@@ -257,6 +258,12 @@ export function FirstPersonControls({
   // Firing rate limiting
   const lastFireTime = useRef(0);
   const FIRE_RATE_LIMIT = 150;
+
+  // Reset the clip whenever the equipped weapon changes (full clip on equip/swap).
+  const activeWeaponForAmmo = useActiveWeapon();
+  useEffect(() => {
+    resetAmmoForWeapon(activeWeaponForAmmo?.ammoClipAmount ?? null);
+  }, [activeWeaponForAmmo]);
   
   // Tree chopping state - Minecraft style hold-to-chop
   const CHOP_INTERVAL_MS = 350; // Time between chops (like Minecraft)
@@ -467,6 +474,15 @@ export function FirstPersonControls({
         keys.current.ctrl = true;
         break;
       case 'KeyR':
+        // SW-style reload: if the gun is out and its clip isn't full, R reloads
+        // (matches Siege Worlds). Otherwise R draws/holsters the gun as before.
+        if (showCrosshairs && canReload()) {
+          const awR = getActiveWeapon();
+          beginReload();
+          playSpatialSound(getSoundUrl(awR?.reloadSound ?? 'rifle_reload', '/rifle_reload.mp3'), 0, { baseVolume: 0.5 });
+          setTimeout(() => finishReload(), (awR?.reloadTime ?? 2) * 1000);
+          break;
+        }
         // R toggles gun on/off regardless of shift/movement state
         if (!blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
@@ -1045,6 +1061,14 @@ export function FirstPersonControls({
       const aw = getActiveWeapon();
       const cooldownMs = aw ? aw.shootCooldown * 1000 : FIRE_RATE_LIMIT;
       if (now - lastFireTime.current < cooldownMs) return;
+
+      // Ammo gate: a reloading or empty clip blocks the shot (empty → click sound).
+      if (!canFire()) {
+        if (!getAmmo().reloading) {
+          playSpatialSound(getSoundUrl(aw?.emptySound ?? 'empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
+        }
+        return;
+      }
       lastFireTime.current = now;
 
       // Calculate shoot direction from camera orientation
@@ -1062,6 +1086,8 @@ export function FirstPersonControls({
       // to the default gunshot when no weapon is equipped.
       const fireKey = aw?.fireSound ?? 'gunshot';
       playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
+
+      consumeAmmo(); // spend a round (no-op for weapons without a clip)
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, widePlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, onWideTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   

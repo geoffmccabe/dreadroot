@@ -16,6 +16,7 @@ import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
 import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
 import { EquipSlots } from './EquipSlots';
+import { AmmoCounter } from './AmmoCounter';
 import {
   useCursorStack,
   cursorStackApi,
@@ -1033,6 +1034,7 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
           old "R for crosshairs" instructions panel. */}
       <EquipSlots equippedItems={equippedItems as Array<{ slot: number; itemId: string }>} />
+      <AmmoCounter />
 
       {/* Bottom-center hotbar + inventory grid + vault */}
       <div
