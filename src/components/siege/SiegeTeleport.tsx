@@ -1,15 +1,15 @@
-// SiegeTeleport — quick travel between the named areas. Press the backtick/tilde
-// key ( ` ) to ARM, then a digit 1-8 to jump there. Shift+<digit> while armed
-// SAVES your current position to that slot (persisted to localStorage), so you
-// can set Harold / Nero / anything to exactly where you want.
+// SiegeTeleport (in-Canvas) — owns the camera + the teleport keys. Ctrl/Cmd+T
+// ARMS quick-travel (a styled menu shows via SiegeTeleportMenu for 5s), then a
+// digit 1-8 jumps. Shift+<digit> while armed SAVES your current spot to that slot
+// (localStorage), so Harold / Nero / anything can be set exactly. Esc cancels.
 //
-// Why backtick and not Ctrl/Cmd+T (as requested): Cmd/Cmd+T is the browser
-// "new tab" shortcut and can't be intercepted by the page, and plain T + the
-// number keys are already used by the controls. Backtick is free + capturable.
+// NOTE: Cmd/Ctrl+T is also the browser "new tab" shortcut; the page may not be
+// able to suppress it on every setup. If it opens a tab, say so and we'll rebind.
 
 import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { SIEGE_TELEPORTS } from './siegeAreas';
+import { setTeleportArmed } from './teleportStore';
 
 const LS = 'sw_teleports_v1';
 type Vec3 = [number, number, number];
@@ -25,21 +25,6 @@ function destFor(slot: number, overrides: Record<number, Vec3>): Vec3 | null {
   if (overrides[slot]) return overrides[slot];
   return SIEGE_TELEPORTS.find((t) => t.slot === slot)?.pos ?? null;
 }
-function nameFor(slot: number): string {
-  return SIEGE_TELEPORTS.find((t) => t.slot === slot)?.name ?? `slot ${slot}`;
-}
-
-function hint(text: string | null): void {
-  let el = document.getElementById('sw-teleport-hint');
-  if (text === null) { el?.remove(); return; }
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'sw-teleport-hint';
-    el.style.cssText = 'position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:9999;font:13px monospace;color:#ffd24a;background:rgba(0,0,0,.72);padding:7px 14px;border-radius:6px;pointer-events:none;white-space:pre;text-align:center;line-height:1.5;';
-    document.body.appendChild(el);
-  }
-  el.textContent = text;
-}
 
 export function SiegeTeleport() {
   const camera = useThree((s) => s.camera);
@@ -47,42 +32,35 @@ export function SiegeTeleport() {
     let armed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const overrides = loadOverrides();
-    const disarm = () => { armed = false; hint(null); };
+    const disarm = () => { armed = false; setTeleportArmed(false); if (timer) clearTimeout(timer); };
+    const arm = () => {
+      armed = true; setTeleportArmed(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(disarm, 5000);
+    };
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'Backquote') {            // ARM
-        e.preventDefault(); e.stopPropagation();
-        armed = true;
-        const list = SIEGE_TELEPORTS.map((t) => `${t.slot} ${t.name}`).join('   ');
-        hint(`TELEPORT  —  press 1-8   (Shift+# = save here)\n${list}`);
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(disarm, 5000);
-        return;
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyT') {     // ARM
+        e.preventDefault(); e.stopPropagation(); arm(); return;
       }
-      if (armed && /^Digit[1-8]$/.test(e.code)) {
+      if (!armed) return;
+      if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
+      if (/^Digit[1-8]$/.test(e.code)) {
         e.preventDefault(); e.stopPropagation();
         const slot = parseInt(e.code.slice(5), 10);
-        if (e.shiftKey) {                       // SAVE current position
-          const p: Vec3 = [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)];
-          saveOverride(slot, p); overrides[slot] = p;
-          hint(`saved ${nameFor(slot)} = ${p.join(', ')}`);
-        } else {                                // TELEPORT
+        if (e.shiftKey) {                                       // SAVE current spot
+          saveOverride(slot, [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)]);
+          overrides[slot] = [Math.round(camera.position.x), Math.round(camera.position.y), Math.round(camera.position.z)];
+        } else {                                                // TELEPORT
           const p = destFor(slot, overrides);
-          if (p) { camera.position.set(p[0], p[1], p[2]); hint(`→ ${nameFor(slot)}`); }
-          else hint(`slot ${slot} not set`);
+          if (p) camera.position.set(p[0], p[1], p[2]);
         }
-        armed = false;
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => hint(null), 1500);
+        disarm();
       }
     };
 
     window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('keydown', onKey, true);
-      if (timer) clearTimeout(timer);
-      hint(null);
-    };
+    return () => { window.removeEventListener('keydown', onKey, true); if (timer) clearTimeout(timer); setTeleportArmed(false); };
   }, [camera]);
 
   return null;

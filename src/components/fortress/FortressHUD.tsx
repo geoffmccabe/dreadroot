@@ -6,6 +6,7 @@ import { GameSwitcher } from '@/components/GameSwitcher';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
+import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -865,6 +866,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <SiegeTitleSplash />
       {/* Siege Worlds live debug readout (temporary) — shows only in siege. */}
       <SiegeDebugOverlay />
+      {/* Siege Worlds quick-travel menu (Ctrl/Cmd+T) — shows only when armed. */}
+      <SiegeTeleportMenu />
       {/* Siege Worlds inspect-view animation panel (game CSS) — shows only in inspect. */}
       <SiegeAnimPanel />
       {/* Flying coin animations */}
