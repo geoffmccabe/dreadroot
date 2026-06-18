@@ -11,7 +11,7 @@ import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
-import { setChallengeToggle, setChallengeLose } from './challengeControl';
+import { setChallengeToggle, setChallengeLose, setChallengeStart } from './challengeControl';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { TEST_CHALLENGE } from './testChallenge';
 import type { Challenge, MonsterDrop } from './challengeTypes';
@@ -48,7 +48,7 @@ export function ChallengeRunner() {
       ? seededPoint(ch.spawn[0], ch.spawn[2], ch.scatterRadius, seed)
       : [drop.x, drop.z];
     const mods: MonsterMods | undefined = drop.boss
-      ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100 }
+      ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100, damageMul: drop.boss.damagePct / 100 }
       : undefined;
     for (let i = 0; i < drop.count; i++) {
       const ang = Math.random() * Math.PI * 2, d = spread ? Math.random() * 5 : 0;
@@ -131,7 +131,8 @@ export function ChallengeRunner() {
   useEffect(() => {
     setChallengeToggle(() => { if (r.active) stop(); else start(TEST_CHALLENGE); });
     setChallengeLose(() => lose());
-    return () => { setChallengeToggle(null); setChallengeLose(null); };
+    setChallengeStart((ch) => { if (r.active) stop(); start(ch); });   // play an authored challenge
+    return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

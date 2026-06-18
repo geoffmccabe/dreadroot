@@ -20,6 +20,7 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
 import { fireChallengeToggle } from './challenge/challengeControl';
+import { toggleCreator } from './challenge/challengeCreatorStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 
 let nextId = 0;
@@ -70,6 +71,8 @@ export function SiegeSpawner() {
     };
 
     const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement?.tagName;
+      if (el === 'INPUT' || el === 'TEXTAREA' || el === 'SELECT') return;   // don't capture typing
       const k = e.key;
       // Spam "0" within 2s of the last spawn → +10 more of the same type.
       if (k === '0' && stage.current === 'idle' && performance.now() < spamUntil.current) {
@@ -79,6 +82,7 @@ export function SiegeSpawner() {
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
         if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the challenge
+        else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
         else if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;

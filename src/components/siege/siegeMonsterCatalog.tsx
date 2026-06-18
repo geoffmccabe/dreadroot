@@ -56,18 +56,18 @@ export const CFG: Partial<Record<MType, {
        spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 10], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2] } },
 };
 
-// Display registry (creator dropdowns, later phases). baseHeight is the normal in-world height.
-export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number }[] = [
-  { id: 1, name: 'Red Demon',                baseHeight: 1.8 },
-  { id: 2, name: 'Mushroom Grunt',           baseHeight: 0.66 },
-  { id: 3, name: 'Giant Skeleton',           baseHeight: 6.0 },
-  { id: 4, name: 'Vomit Demon',              baseHeight: 4.0 },
-  { id: 5, name: 'Dark Lord (boss)',         baseHeight: 6.0 },
-  { id: 6, name: 'Bloody Skeleton (horde)',  baseHeight: 1.8 },
-  { id: 7, name: 'Spintroll',                baseHeight: 3.0 },
+// Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.
+export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; baseHealth: number }[] = [
+  { id: 1, name: 'Red Demon',                baseHeight: 1.8,  baseHealth: 100 },
+  { id: 2, name: 'Mushroom Grunt',           baseHeight: 0.66, baseHealth: 100 },
+  { id: 3, name: 'Giant Skeleton',           baseHeight: 6.0,  baseHealth: 500 },
+  { id: 4, name: 'Vomit Demon',              baseHeight: 4.0,  baseHealth: 200 },
+  { id: 5, name: 'Dark Lord (boss)',         baseHeight: 6.0,  baseHealth: 500 },
+  { id: 6, name: 'Bloody Skeleton (horde)',  baseHeight: 1.8,  baseHealth: 50 },
+  { id: 7, name: 'Spintroll',                baseHeight: 3.0,  baseHealth: 200 },
 ];
 
-export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; }
+export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
 
 /** Render one monster of a catalog type at a spawn position. ov = a horde-member override
  *  (type 6); mods = boss size/speed/health multipliers; riseFromGround = rise out of the floor. */
@@ -80,7 +80,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromG
   if (!m && !o) return null;
   const sz = mods?.sizeMul ?? 1, sp = mods?.speedMul ?? 1, hp = mods?.healthMul ?? 1;
   return (
-    <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} riseFromGround={riseFromGround}
+    <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
       modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={400}
       speed={(o?.speed ?? m!.speed) * sp} wanderRadius={6} health={(o?.health ?? m!.health) * hp}
       animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie gait={m?.gait ?? 'climb'}

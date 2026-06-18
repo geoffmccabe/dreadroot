@@ -81,6 +81,7 @@ export interface MonsterConfig {
   tintRed?: number;           // blood-red tint mix 0..1
   moanSounds?: string[];      // ambient moan clips (random pick, ~per 4-8s, distance-scaled)
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number }; // collider-touch swipe: random dmg + knockback (m)
+  damageMul?: number;         // boss modifier: scales ALL damage this monster deals to the player
   contactDamage?: number;     // touching the player: 30% chance/sec to hit for this × height (m)
   kbInverseSize?: boolean;    // bullets don't stun; knockback ∝ 1/size (small = flung, big = barely)
   stackSink?: number;         // when standing on ANOTHER monster, sink feet this fraction into it (0.30)
@@ -357,7 +358,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
       if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
-        dealPlayerDamage(rnd(c.meleeContact.dmg), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
+        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
       }
     }
 
@@ -370,7 +371,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext) {
         s.contactNext = now + 1000;
         if (Math.random() < 0.30) {
-          dealPlayerDamage(c.contactDamage * H, dx / dist, 0, dz / dist, (1 + Math.random()) * H);
+          dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H);
         }
       }
     }
@@ -439,7 +440,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         play(clips.idle);                        // far retreat: rest in place, no shamble
       } else if (s.behindUntil && now > s.behindUntil && !s.bossAttacked && dist <= c.attackRange + 0.6) {
         s.bossAttacked = true; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-        dealPlayerDamage(20 + Math.random() * 80, dx / dist, 0, dz / dist, 6);   // 20-100 dmg back-strike
+        dealPlayerDamage((20 + Math.random() * 80) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, 6);   // 20-100 dmg back-strike
       } else if (s.behindUntil && now <= s.behindUntil) {
         play(clips.idle);                        // wind-up: the player's dodge window
       } else if (dist > 2.0) {                   // slow shamble toward the player while corporeal
@@ -476,7 +477,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           && dist < inst.radius + 0.45 && now > s.contactNext) {
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
-        dealPlayerDamage(rnd(c.spin.contactDmg) * mul, dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul);
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul);
         // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
         // into a permanent, unrecoverable spin.
         if (zooming && now > s.spinHitNext) {

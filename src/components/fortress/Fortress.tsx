@@ -18,6 +18,7 @@ import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
+import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
@@ -2277,6 +2278,7 @@ export function Fortress() {
 
       <ChatOverlay messages={chatMessages} onSend={sendChat} />
       <ChallengeHUD />
+      <ChallengeCreatorPanel />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}
