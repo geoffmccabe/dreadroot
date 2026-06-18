@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSyncExternalStore } from 'react';
 import { isBrowserOpen, subscribeBrowser, setBrowserOpen } from './challengeBrowserStore';
-import { listGameChallenges, type ChallengeRow } from './challengeStorage';
+import { listGameChallenges, listLeaderboards, type ChallengeRow, type Leaderboard } from './challengeStorage';
 import { fireChallengeStart } from './challengeControl';
 import { useActiveGame } from '@/config/activeGame';
 import { getGameDef } from '@/config/gameRegistry';
@@ -22,6 +22,7 @@ const totalMonsters = (r: ChallengeRow) =>
 export function ChallengeBrowser() {
   const open = useSyncExternalStore(subscribeBrowser, isBrowserOpen, isBrowserOpen);
   const [rows, setRows] = useState<ChallengeRow[]>([]);
+  const [boards, setBoards] = useState<Record<string, Leaderboard>>({});
   const [loading, setLoading] = useState(false);
   const game = useActiveGame();
   const gameLabel = getGameDef(game).label;
@@ -31,7 +32,12 @@ export function ChallengeBrowser() {
     document.exitPointerLock?.();
     setLoading(true);
     let cancelled = false;
-    listGameChallenges(game).then((r) => { if (!cancelled) { setRows(r); setLoading(false); } });
+    listGameChallenges(game).then(async (r) => {
+      if (cancelled) return;
+      setRows(r); setLoading(false);
+      const lbs = await listLeaderboards(r.map((x) => x.id));
+      if (!cancelled) setBoards(lbs);
+    });
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isBrowserOpen()) { e.stopPropagation(); setBrowserOpen(false); } };
     window.addEventListener('keydown', onKey, true);
     return () => { cancelled = true; window.removeEventListener('keydown', onKey, true); };
@@ -83,10 +89,23 @@ export function ChallengeBrowser() {
                       <span style={{ color: '#ffcf6b' }}>Cost {r.data?.costDivi || 0} ◈</span>
                       <span style={{ color: '#8fe6a0' }}>Reward {r.data?.rewardDivi || 0} ◈</span>
                     </div>
-                    {/* Per-card leaderboard — backend (run records / top scores) lands in Phase 7. */}
-                    <div style={{ marginTop: 2, padding: '6px 8px', background: 'hsla(220,25%,9%,0.6)', borderRadius: 6, fontSize: 11, color: '#7e90ad' }}>
-                      🏆 Leaderboard — no runs yet
-                    </div>
+                    {/* Per-card leaderboard — top scores from challenge_runs (Phase 7). */}
+                    {(() => {
+                      const lb = boards[r.id];
+                      return (
+                        <div style={{ marginTop: 2, padding: '6px 8px', background: 'hsla(220,25%,9%,0.6)', borderRadius: 6, fontSize: 11 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#9fb4d0', fontWeight: 700, marginBottom: lb?.top.length ? 4 : 0 }}>
+                            <span>🏆 Leaderboard</span>{lb?.plays ? <span>{lb.plays} {lb.plays === 1 ? 'play' : 'plays'}</span> : null}
+                          </div>
+                          {lb?.top.length ? lb.top.map((e, i) => (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, color: i === 0 ? '#ffd27f' : '#c9d6ec' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {e.player_name ?? 'anon'}{e.completed ? ' ✓' : ''}</span>
+                              <span style={{ fontWeight: 700 }}>{e.score.toLocaleString()}</span>
+                            </div>
+                          )) : <span style={{ color: '#7e90ad' }}>No runs yet</span>}
+                        </div>
+                      );
+                    })()}
                     <button style={{ ...btn(true), marginTop: 'auto' }} onClick={() => play(r)}>▶ Play</button>
                   </div>
                 </div>

@@ -13,7 +13,10 @@ import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart } from './challengeControl';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
+import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
+import { useAuth } from '@/contexts/AuthContext';
+import { getActiveGame } from '@/config/activeGame';
 import type { Challenge, MonsterDrop } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
@@ -30,6 +33,7 @@ function seededPoint(cx: number, cz: number, radius: number, seed: number): [num
 
 export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
+  const { user } = useAuth();
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
@@ -116,10 +120,23 @@ export function ChallengeRunner() {
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0 });
   };
 
+  // Record one play to the leaderboard. Only SAVED challenges (with an id) have a board — the
+  // built-in test challenge is skipped. Fire-and-forget; a failed insert never disrupts gameplay.
+  const record = (completed: boolean, now: number) => {
+    const ch = challengeRef.current;
+    if (!ch?.id) return;
+    void recordChallengeRun({
+      challengeId: ch.id, userId: user?.id ?? null, playerName: user?.email?.split('@')[0] ?? null,
+      game: ch.game ?? getActiveGame(), score: getChallengeScore(),
+      timeMs: Math.round(now - r.startedAt), waveReached: r.waveIdx + 1, completed,
+    });
+  };
+
   // Player died mid-challenge → YOU LOSE!, end it, and put the world back the way it was.
   const lose = () => {
     if (!r.active) return;
     const now = performance.now();
+    record(false, now);
     r.active = false;
     setMobs([]);
     revert();
@@ -184,6 +201,7 @@ export function ChallengeRunner() {
   });
 
   const finish = (now: number) => {
+    record(true, now);
     r.active = false;
     setChallengeState({
       active: false, completed: true, finishedAt: now, waveEndsAt: 0,

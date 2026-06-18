@@ -64,6 +64,44 @@ export async function deleteChallenge(id: string): Promise<string | null> {
   return error ? error.message : null;
 }
 
+// ── Leaderboards (Phase 7) — one row per completed/failed play in the `challenge_runs` table ──────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const runsTbl = () => (supabase as any).from('challenge_runs');
+
+export interface LeaderboardEntry { player_name: string | null; score: number; completed: boolean; time_ms: number | null; }
+export interface Leaderboard { top: LeaderboardEntry[]; plays: number; }
+
+/** Record one play of a challenge. Fire-and-forget; returns an error string or null. */
+export async function recordChallengeRun(run: {
+  challengeId: string; userId?: string | null; playerName?: string | null; game?: string | null;
+  score: number; timeMs?: number | null; waveReached?: number | null; completed: boolean;
+}): Promise<string | null> {
+  const { error } = await runsTbl().insert({
+    challenge_id: run.challengeId, user_id: run.userId ?? null, player_name: run.playerName ?? null,
+    game: run.game ?? null, score: Math.round(run.score), time_ms: run.timeMs ?? null,
+    wave_reached: run.waveReached ?? null, completed: run.completed,
+  });
+  return error ? error.message : null;
+}
+
+/** Top-N runs (by score, desc) + total play count for a SET of challenges, in one query. */
+export async function listLeaderboards(challengeIds: string[], topN = 5): Promise<Record<string, Leaderboard>> {
+  const out: Record<string, Leaderboard> = {};
+  if (!challengeIds.length) return out;
+  const { data } = await runsTbl()
+    .select('challenge_id,player_name,score,completed,time_ms')
+    .in('challenge_id', challengeIds)
+    .order('score', { ascending: false })
+    .limit(2000);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const row of (data ?? []) as any[]) {
+    const lb = out[row.challenge_id] ?? (out[row.challenge_id] = { top: [], plays: 0 });
+    lb.plays++;
+    if (lb.top.length < topN) lb.top.push({ player_name: row.player_name, score: row.score, completed: row.completed, time_ms: row.time_ms });
+  }
+  return out;
+}
+
 /** The current user's roles (lightweight — avoids the heavy useUserData hook). */
 export async function fetchRoles(userId: string): Promise<string[]> {
   const { data } = await supabase.from('user_roles').select('role').eq('user_id', userId);
