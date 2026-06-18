@@ -17,6 +17,7 @@ import { isMeleeKillInProgress } from '@/features/enemies/ai/applyAttack';
 import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
+import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -2273,6 +2274,7 @@ export function Fortress() {
 </Canvas>
 
       <ChatOverlay messages={chatMessages} onSend={sendChat} />
+      <ChallengeHUD />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}

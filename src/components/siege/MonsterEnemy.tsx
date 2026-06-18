@@ -55,6 +55,7 @@ export interface MonsterConfig {
   health?: number;            // HP (default 100)
   noStun?: boolean;           // bullets don't stun-freeze it (keeps walking when shot) — test/boss
   noKnockback?: boolean;      // bullets/hits deal HP only — no shove (Spintroll drives its own motion)
+  riseFromGround?: boolean;   // spawn sunk in the floor and rise out over 1s (challenge drops)
   id?: string;                // stable combat id (auto if omitted)
   onDespawn?: (id: string) => void;  // called once after the death anim finishes
   zombie?: boolean;           // horde variant: per-demon size/speed/rhythm jitter, desaturated
@@ -149,7 +150,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0,
-    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0 });
+    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -626,8 +627,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
 
     me.y = s.y;
-    g.position.set(s.x, s.y, s.z);
-    inst.x = s.x; inst.y = s.y; inst.z = s.z;   // keep the combat hitbox on the live body
+    // Rise-out-of-the-ground intro: spawn sunk by one body-height, emerge over 1s. Render + the
+    // combat hitbox (inst.y) rise together, so the emerging part is shootable the whole time.
+    let yR = s.y;
+    if (cfg.riseFromGround) {
+      if (!s.riseStart) s.riseStart = now;
+      const t = Math.min(1, (now - s.riseStart) / 1000);
+      yR = s.y - (1 - t) * H;
+    }
+    g.position.set(s.x, yR, s.z);
+    inst.x = s.x; inst.y = yR; inst.z = s.z;   // keep the combat hitbox on the live body
     inst.yaw = g.rotation.y;                     // so attached fire rotates with the body
     // BODY collider: feet → shoulders (STAND·H). Other demons stand on its top, so a stacked
     // demon sits at shoulder height (~0.8H) instead of floating above the head below it.

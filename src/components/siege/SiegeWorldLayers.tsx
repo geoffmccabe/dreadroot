@@ -18,6 +18,7 @@ import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
+import { ChallengeRunner } from './challenge/ChallengeRunner';
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const [terrainReady, setTerrainReady] = useState(false);
@@ -34,6 +35,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <BleakrockLighting />
       {/* Underwater murk + breath/drowning damage below the sea surface. */}
       {world.water?.[0]?.surfaceY != null && <UnderwaterEffect level={world.water[0].surfaceY} />}
+      {/* Challenge wave engine (Cmd/Ctrl+Shift+C to start the test challenge). */}
+      <ChallengeRunner />
 
       {terrainReady && (
         <>
