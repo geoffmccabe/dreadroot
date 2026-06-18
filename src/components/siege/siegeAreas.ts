@@ -27,7 +27,7 @@ export interface SiegeTeleport {
 
 // Where the player spawns / respawns in Siege Worlds — Bleakrock (the Mushrooms island), just
 // above its ground (~24) so you drop onto terrain. Used by the initial spawn AND death respawn.
-export const SIEGE_SPAWN_POINT: [number, number, number] = [-1039, 27, 1108];
+export const SIEGE_SPAWN_POINT: [number, number, number] = [-1048.998, 31.120, 1062.865];
 
 export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 1, name: 'Lobby',         pos: [-96, 31, 325] },

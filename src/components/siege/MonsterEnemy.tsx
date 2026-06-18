@@ -664,7 +664,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
-      const inBand = !!c.rangedRange && dist <= c.rangedRange && dist > c.attackRange;
+      // Spray whenever the player is within range — INCLUDING up close (the spray is its only
+      // attack; the old `dist > attackRange` made it just stand idle when you got close to it).
+      const inBand = !!c.rangedRange && dist <= c.rangedRange;
+      // "Ready to swing": close enough (reach for the demon, attackRange for big/lunge monsters)
+      // AND off cooldown. Used to BOTH suppress the chase and fire the swing — so if you're in
+      // range it always attacks, instead of walking forever a hair short of the swing distance.
+      const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
+      const meleeReady = !inBand && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
       if (inBand) {                                          // RANGED breath weapon: HOLD here + spray
         if (now - s.lastRanged > s.nextRangedCd) {
           const cdMin = c.rangedCooldownMs ?? 60000;
@@ -681,18 +688,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const ox = s.x + fxn * H * 0.04, oz = s.z + fzn * H * 0.04;
           c.onRangedAttack?.(ox, my, oz, dx, dist * 0.4, dz);
         } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
-      } else if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil)) {
+      } else if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase — UNLESS mid committed-swing (planted, swinging through), so the knockback that
-        // shoves the player out of reach doesn't cancel the swipe animation.
+        // shoves the player out of reach doesn't cancel the swipe animation; or ready to swing now.
         const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
-      else if (now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= H * 0.5 + 0.5) {
-        // Only swing when actually within REACH (½ height + 0.5m), not the looser attack range —
-        // otherwise demons sitting just out of reach swing-and-miss forever (the swipe-sound drone).
-        // The dist gate also stops the commit-hold from re-firing a swing in place after knockback.
+      else if (meleeReady) {
         s.lastAttack = now;
         if (c.attackStyle === 'spin-lunge') {
           // Mushroom grunt: begin a 0.5s spin-lunge. Capture the forward offset (50% toward the
