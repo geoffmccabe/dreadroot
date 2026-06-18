@@ -31,6 +31,9 @@ const LINEUP: Record<string, [number, number, number]> = {
   // Shi Yang is now the dev's self-contained player-RIG export (48-bone Root + 15 clips),
   // so it takes the player-rig transform (CLEAN), not the old 49-bone static values.
   shiyang: CLEAN,
+  // Thorn = dev's self-contained player-RIG export (48-bone Root + 15 clips), same two-step
+  // bind-fix → unit-normalize pipeline as Shi Yang. Takes the player-rig transform (CLEAN).
+  thorn: CLEAN,
   // Nakano is still the old 49-bone static individual rig (Z-up source → rot 0).
   nakano: [0.00937, -0.0515, 0],
 };

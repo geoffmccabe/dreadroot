@@ -17,6 +17,7 @@ export const SIEGE_CHARACTERS: SiegeCharacter[] = [
   { id: 'ladyhao', name: 'Lady Hao' },
   // Known-good STATIC conversions (own rigs, coherent render, no anim clips yet).
   { id: 'shiyang', name: 'Shi Yang' },
+  { id: 'thorn', name: 'Thorn' },
   { id: 'nakano', name: 'Nakano' },
 ];
 
