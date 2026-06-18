@@ -35,17 +35,16 @@ export function ChallengeCreatorPanel() {
   if (!open) return null;
   const wave = ch.waves[Math.min(wi, ch.waves.length - 1)] as ChallengeWave | undefined;
 
-  // ── immutable updaters ──
+  // ── immutable updaters (all read FRESH state in the setter, so rapid edits never collide) ──
+  const mapWave = (c: Challenge, i: number, fn: (w: ChallengeWave) => ChallengeWave): Challenge => ({ ...c, waves: c.waves.map((w, k) => (k === i ? fn(w) : w)) });
   const patch = (p: Partial<Challenge>) => setCh((c) => ({ ...c, ...p }));
-  const patchWave = (i: number, p: Partial<ChallengeWave>) => setCh((c) => ({ ...c, waves: c.waves.map((w, k) => (k === i ? { ...w, ...p } : w)) }));
-  const patchDrop = (i: number, di: number, p: Partial<MonsterDrop>) =>
-    patchWave(i, { drops: ch.waves[i].drops.map((d, k) => (k === di ? { ...d, ...p } : d)) });
-  const patchBoss = (i: number, di: number, p: Partial<BossMods>) =>
-    patchDrop(i, di, { boss: { ...(ch.waves[i].drops[di].boss ?? DEFAULT_BOSS), ...p } });
-  const addWave = () => { setCh((c) => ({ ...c, waves: [...c.waves, { name: `Wave ${c.waves.length + 1}`, timeSec: 60, drops: [] }] })); setWi(ch.waves.length); };
-  const removeWave = (i: number) => { setCh((c) => ({ ...c, waves: c.waves.filter((_, k) => k !== i) })); setWi((s) => Math.max(0, s - (i <= s ? 1 : 0))); };
-  const addDrop = (i: number) => patchWave(i, { drops: [...ch.waves[i].drops, { type: 1, count: 1, x: ch.spawn?.[0] ?? 0, z: ch.spawn?.[2] ?? 0 }] });
-  const removeDrop = (i: number, di: number) => patchWave(i, { drops: ch.waves[i].drops.filter((_, k) => k !== di) });
+  const patchWave = (i: number, p: Partial<ChallengeWave>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, ...p })));
+  const patchDrop = (i: number, di: number, p: Partial<MonsterDrop>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.map((d, j) => (j === di ? { ...d, ...p } : d)) })));
+  const patchBoss = (i: number, di: number, p: Partial<BossMods>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.map((d, j) => (j === di ? { ...d, boss: { ...(d.boss ?? DEFAULT_BOSS), ...p } } : d)) })));
+  const addWave = () => { setWi(ch.waves.length); setCh((c) => ({ ...c, waves: [...c.waves, { name: `Wave ${c.waves.length + 1}`, timeSec: 60, drops: [] }] })); };
+  const removeWave = (i: number) => { setWi((s) => Math.max(0, Math.min(s, ch.waves.length - 2))); setCh((c) => ({ ...c, waves: c.waves.filter((_, k) => k !== i) })); };
+  const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0 }] })));
+  const removeDrop = (i: number, di: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.filter((_, j) => j !== di) })));
 
   const run = () => { setCreatorOpen(false); fireChallengeStart(clone(ch)); };
 
