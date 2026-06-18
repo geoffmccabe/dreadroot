@@ -9,6 +9,7 @@ import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
+import { BannerInput } from './BannerInput';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -329,7 +330,7 @@ export function ChallengeCreatorPanel() {
           <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>Banner (4×1)</label><div style={{ ...inp, color: '#7e90ad', fontSize: 11 }}>upload — coming soon</div></div>
+          <div style={{ flex: 2 }}><label style={lbl}>Banner (4×1)</label><BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} /></div>
         </div>
 
         {/* Wave nav — click to scroll the stack to that wave */}
