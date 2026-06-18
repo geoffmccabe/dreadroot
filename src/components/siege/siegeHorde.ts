@@ -31,6 +31,7 @@ export interface DemonInstance {
   kvy: number;          // vertical launch impulse (m/s) — consumed once by the mover (blast)
   stunUntil: number;    // performance.now() ms — frozen until then
   hitAt: number;        // last flinch trigger (performance.now())
+  headshotAt?: number;  // last headshot (performance.now()) — drives the quick recoil-lean
   headFrac: number;     // top fraction of the hitbox that counts as a headshot (head zone)
   noStun?: boolean;     // test/boss flag: bullets don't stun-freeze it (keeps walking when shot)
   yaw: number;          // current facing (radians) — lets attached fire rotate WITH the body
@@ -103,6 +104,7 @@ enemyCombatRegistry.register<DemonInstance>({
         String(Math.round(dealt)), info.isHeadshot ? DN_RED : DN_WHITE);
     }
     const now = performance.now();
+    if (info.isHeadshot) d.headshotAt = now;   // triggers the quick body recoil-lean in MonsterEnemy
     if (info.source === 'explosion') {
       // Real falloff-scaled blast impulse (info.bulletSpeed = baseKnockback·falloff, like
       // shombies). SET velocity on ALL axes — knockbackDir carries a 0-45° upward tilt, so this

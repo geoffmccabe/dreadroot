@@ -883,6 +883,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (s.tumbling) {
       if (sup.g) { s.tumbling = false; g.rotation.x = 0; g.rotation.z = 0; }
       else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
+    } else if (inst.headshotAt) {
+      // Headshot recoil: a fast 15° backward heel-pivot lean + snap back, all within 0.1s.
+      const ht = (now - inst.headshotAt) / 100;   // 0..1 over 1/10s
+      if (ht < 1) { g.rotation.order = 'YXZ'; g.rotation.x = -(15 * Math.PI / 180) * Math.sin(Math.PI * ht); }
+      else if (g.rotation.x !== 0) g.rotation.x = 0;
     }
 
     me.y = s.y;

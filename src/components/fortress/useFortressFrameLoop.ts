@@ -799,7 +799,8 @@ export function useFortressFrameLoop({
             const sdy = hitY - prevBY;
             const sdz = hitZ - prevBZ;
             const sdist = Math.hypot(sdx, sdy, sdz);
-            void playSpatialSound(hitSound, sdist, { baseVolume: 0.7 });
+            // Headshot: impact sound rings 30% higher-pitched.
+            void playSpatialSound(hitSound, sdist, { baseVolume: 0.7, playbackRate: isHeadshot ? 1.3 : 1 });
 
             hit = true;
             needsBulletRender = true;
