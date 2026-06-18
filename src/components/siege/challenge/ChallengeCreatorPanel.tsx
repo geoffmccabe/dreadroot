@@ -384,8 +384,9 @@ export function ChallengeCreatorPanel() {
         {/* General info — challenge-level (cost/pool live here, NOT per wave) */}
         <div style={{ padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-            {/* LEFT — name/creator/game, then (after a blank line) the challenge-level economy + region */}
-            <div style={{ flex: 1, minWidth: 0 }}>
+            {/* LEFT — name/creator/game, then (after a blank line) the challenge-level economy + region.
+                Takes 60% so the banner gets 40%; its inner rows flex, so they shrink proportionally. */}
+            <div style={{ flex: 6, minWidth: 0 }}>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
                 <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
@@ -429,8 +430,8 @@ export function ChallengeCreatorPanel() {
                 );
               })()}
             </div>
-            {/* RIGHT — Banner as its own sub-panel */}
-            <div style={{ ...card, width: 300, flexShrink: 0 }}>
+            {/* RIGHT — Banner as its own sub-panel, 40% of the width so it shows much larger */}
+            <div style={{ ...card, flex: 4, minWidth: 0 }}>
               <label style={lbl}>Banner (4×1)</label>
               <BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} />
             </div>
