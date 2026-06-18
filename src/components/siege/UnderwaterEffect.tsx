@@ -30,9 +30,10 @@ export function UnderwaterEffect({ level }: { level: number }) {
 
   useFrame((_, dt) => {
     const depth = level - camera.position.y;            // >0 = submerged (metres under the surface)
-    const under = depth > 0.1;
+    const under = depth > 0.25;                         // eye clearly below the surface
     const mat = scrim.material as THREE.MeshBasicMaterial;
-    mat.opacity = under ? Math.min(0.88, 0.4 + depth * 0.06) : 0;   // murkier the deeper you go
+    // Ramp from ZERO at the surface (no sudden murk when you dip a toe / fight at the waterline).
+    mat.opacity = Math.max(0, Math.min(0.85, depth * 0.12));
     camera.getWorldDirection(_dir);                     // keep the scrim in front of the camera
     scrim.position.copy(camera.position).addScaledVector(_dir, 0.55);
     scrim.quaternion.copy(camera.quaternion);

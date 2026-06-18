@@ -34,6 +34,7 @@ import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
+import { fireChallengeLose } from '@/components/siege/challenge/challengeControl';
 import { sdbg } from '@/components/siege/siegeDebug';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
@@ -783,9 +784,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   }, [applyDamageWithKnockback, takeDamage]);
 
   // Register the player-damage fn for ALL siege monster damage (spray, vomit, Dark Lord strike,
-  // horde contact). Godmode (sdbg.godMode) short-circuits it so no monster can hurt the player.
+  // horde/melee contact). Godmode (sdbg.godMode) short-circuits it so no monster can hurt the
+  // player. A killing blow ends any running challenge (YOU LOSE!).
   useEffect(() => {
-    setSprayDamage(takeDamage ? (dmg, dir, kb) => { if (sdbg.godMode) return; takeDamage(dmg, dir, kb); } : null);
+    setSprayDamage(takeDamage ? (dmg, dir, kb) => {
+      if (sdbg.godMode) return;
+      const res = takeDamage(dmg, dir, kb);
+      if (res?.died) fireChallengeLose();
+    } : null);
     return () => setSprayDamage(null);
   }, [takeDamage]);
 

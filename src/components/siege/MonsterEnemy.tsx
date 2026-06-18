@@ -80,6 +80,7 @@ export interface MonsterConfig {
   hueShift?: number;          // hue rotation in RADIANS (±)
   tintRed?: number;           // blood-red tint mix 0..1
   moanSounds?: string[];      // ambient moan clips (random pick, ~per 4-8s, distance-scaled)
+  meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number }; // collider-touch swipe: random dmg + knockback (m)
   contactDamage?: number;     // touching the player: 30% chance/sec to hit for this × height (m)
   kbInverseSize?: boolean;    // bullets don't stun; knockback ∝ 1/size (small = flung, big = barely)
   stackSink?: number;         // when standing on ANOTHER monster, sink feet this fraction into it (0.30)
@@ -149,7 +150,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
-    moanNext: 0, contactNext: 0,
+    moanNext: 0, contactNext: 0, meleeNext: 0,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
@@ -322,6 +323,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const u = c.moanSounds[(Math.random() * c.moanSounds.length) | 0];
           playSpatialSound(u, dist, { baseVolume: 0.55, playbackRate: 0.8 + Math.random() * 0.4 });
         }
+      }
+    }
+
+    // Melee swipe: when the monster's collider overlaps the player's (vertically too), deal a
+    // random hit + knockback on a cooldown (red demons / mushroom grunts).
+    if (c.meleeContact) {
+      const pTop = camera.position.y, pFeet = camera.position.y - 1.6;
+      if (s.y < pTop && s.y + H > pFeet && dist < inst.radius + 0.6 && now > s.meleeNext) {
+        s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
+        dealPlayerDamage(rnd(c.meleeContact.dmg), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
       }
     }
 

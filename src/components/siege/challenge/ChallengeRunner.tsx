@@ -9,8 +9,9 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { CatalogMonster, makeHordeMember, type MType, type Ov, type MonsterMods } from '../siegeMonsterCatalog';
 import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
+import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
-import { setChallengeToggle } from './challengeControl';
+import { setChallengeToggle, setChallengeLose } from './challengeControl';
 import { resetChallengeScore, addChallengeScore } from './challengeScore';
 import { TEST_CHALLENGE } from './testChallenge';
 import type { Challenge, MonsterDrop } from './challengeTypes';
@@ -21,6 +22,7 @@ export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
+  const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const r = useRef({
     active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0,
     pending: [] as { drop: MonsterDrop; at: number }[], dropsDone: false, sawAlive: false,
@@ -66,22 +68,40 @@ export function ChallengeRunner() {
     challengeRef.current = ch;
     setMobs([]);
     resetChallengeScore();
+    prePos.current = camera.position.clone();   // remember where to put the player back
     if (ch.spawn) camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);   // teleport to the arena
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0 });
     startWave(now);
   };
 
+  const revert = () => { if (prePos.current) camera.position.copy(prePos.current); };
+
   const stop = () => {
     r.active = false;
     setMobs([]);
+    revert();
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0 });
   };
 
-  // Started/stopped via the "!c" spawner command (registered here as a toggle).
+  // Player died mid-challenge → YOU LOSE!, end it, and put the world back the way it was.
+  const lose = () => {
+    if (!r.active) return;
+    const now = performance.now();
+    r.active = false;
+    setMobs([]);
+    revert();
+    setChallengeState({
+      active: false, completed: false, waveEndsAt: 0,
+      announce: { title: 'YOU LOSE!', subtitle: `Reached Wave ${r.waveIdx + 1}/${challengeRef.current!.waves.length}`, faint: false, until: now + 6000 },
+    });
+  };
+
+  // Started/stopped via the "!c" spawner command; lost when the player dies (damage pipeline).
   useEffect(() => {
     setChallengeToggle(() => { if (r.active) stop(); else start(TEST_CHALLENGE); });
-    return () => setChallengeToggle(null);
+    setChallengeLose(() => lose());
+    return () => { setChallengeToggle(null); setChallengeLose(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

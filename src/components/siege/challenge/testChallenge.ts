@@ -11,8 +11,8 @@ export const TEST_CHALLENGE: Challenge = {
   creator: 'system',
   spawn: [-1039, 24, 1108],    // teleport the player to Bleakrock on start
   waves: [
-    { name: 'Red Demon',      timeSec: 60, drops: [{ type: 1, count: 1, x: CX, z: CZ }] },
-    { name: 'Mushroom Grunt',  timeSec: 60, drops: [{ type: 2, count: 1, x: CX, z: CZ }] },
+    { name: 'Red Demons',      timeSec: 60, drops: [{ type: 1, count: 10, x: CX, z: CZ }] },
+    { name: 'Mushroom Grunts',  timeSec: 60, drops: [{ type: 2, count: 10, x: CX, z: CZ }] },
     { name: 'Giant Skeleton',  timeSec: 60, text: 'Aim high.', drops: [{ type: 3, count: 1, x: CX, z: CZ }] },
     { name: 'Vomit Demon',     timeSec: 60, text: 'Keep moving — it spits.', drops: [{ type: 4, count: 1, x: CX, z: CZ }] },
     { name: 'Dark Lord',       timeSec: 60, text: 'It teleports behind you.', drops: [{ type: 5, count: 1, x: CX, z: CZ }] },
