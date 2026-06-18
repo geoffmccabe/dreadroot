@@ -71,7 +71,7 @@ function CharacterRig({ selected }: { selected: string }) {
   // Per-character glb filename. A NEW filename (not just ?v=) is the only sure cache-bust — the old
   // shiyang.glb URL was being served stale from cache regardless of the query string. ?v= stays as
   // a belt-and-suspenders bust for CDN/browser.
-  const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v2' };
+  const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v3' };
   const file = GLB_FILE[selected] ?? selected;
   const { scene, animations } = useGLTF(`/siege/characters/${file}.glb?v=${APP_VERSION}`);
   // Clone the skinned mesh + skeleton (SkeletonUtils, exactly like MonsterEnemy) BEFORE animating.
