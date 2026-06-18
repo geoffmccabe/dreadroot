@@ -10,7 +10,7 @@ import { sampleHeight } from '../terrainHeight';
 import { getChallengeState } from './challengeStore';
 import { listRegionChallenges } from './challengeStorage';
 import { regionCoords } from './regionDefaults';
-import { getActiveGame } from '@/config/activeGame';
+import { useActiveGame } from '@/config/activeGame';
 import type { Challenge, MonsterDrop } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
@@ -46,25 +46,34 @@ function build(s: Sched, drop: MonsterDrop, idc: { n: number }): Spawned[] {
   return out;
 }
 
-const countAlive = (mobs: Spawned[], id: string) => { const p = id + '_'; let n = 0; for (const m of mobs) if (m.id.startsWith(p)) n++; return n; };
-
 export function RegionSpawnerRunner() {
+  const game = useActiveGame();                    // reactive: re-fetch + reset when the game switches
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const scheds = useRef<Sched[]>([]);
   const idc = useRef({ n: 0 });
+  // Live alive-count per schedule id, kept in a ref so the CAP is a HARD cap with no React-commit lag
+  // (reading `mobs` state inside useFrame is one-or-more commits stale and lets bursts blow past CAP).
+  const alive = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
-    listRegionChallenges(getActiveGame()).then((rows) => {
+    listRegionChallenges(game).then((rows) => {
       if (cancelled) return;
       scheds.current = rows
         .filter((r) => r.data?.waves?.some((w) => w.drops?.length))
         .map((r) => buildSched({ ...r.data, id: r.id, region: r.region ?? undefined }));
+      alive.current.clear();
+      setMobs([]);                                 // drop the previous game's spawned monsters
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [game]);
 
-  const remove = (id: string) => setMobs((m) => m.filter((x) => x.id !== id));
+  const remove = (id: string) => {
+    setMobs((m) => m.filter((x) => x.id !== id));
+    const sid = id.slice(0, id.lastIndexOf('_'));  // mob id = `${scheduleId}_${n}`
+    const n = alive.current.get(sid);
+    if (n) alive.current.set(sid, n - 1);          // free a CAP slot immediately
+  };
 
   useFrame(() => {
     if (getChallengeState().active) return;        // a hand-started challenge owns the world
@@ -74,10 +83,13 @@ export function RegionSpawnerRunner() {
     for (const s of scheds.current) {
       if (s.start === 0) s.start = now;
       const phase = now - s.start;
-      const alive = countAlive(mobs, s.id);
+      let n = alive.current.get(s.id) ?? 0;
       while (s.idx < s.events.length && s.events[s.idx].t <= phase) {
         const ev = s.events[s.idx]; s.idx++;
-        if (alive + add.length < CAP) add.push(...build(s, ev.drop, idc.current));
+        if (n >= CAP) continue;                     // hard cap — still advance the cursor so timing holds
+        const made = build(s, ev.drop, idc.current);
+        const take = made.length <= CAP - n ? made : made.slice(0, CAP - n);
+        add.push(...take); n += take.length; alive.current.set(s.id, n);
       }
       if (s.idx >= s.events.length && phase >= s.period) { s.start = now; s.idx = 0; }   // loop
     }

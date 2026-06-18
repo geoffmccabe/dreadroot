@@ -9,7 +9,7 @@ import { useSyncExternalStore } from 'react';
 import { isBrowserOpen, subscribeBrowser, setBrowserOpen } from './challengeBrowserStore';
 import { listGameChallenges, type ChallengeRow } from './challengeStorage';
 import { fireChallengeStart } from './challengeControl';
-import { getActiveGame } from '@/config/activeGame';
+import { useActiveGame } from '@/config/activeGame';
 import { getGameDef } from '@/config/gameRegistry';
 
 const PANEL_BG = 'hsla(222, 32%, 10%, 0.97)';
@@ -23,7 +23,7 @@ export function ChallengeBrowser() {
   const open = useSyncExternalStore(subscribeBrowser, isBrowserOpen, isBrowserOpen);
   const [rows, setRows] = useState<ChallengeRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const game = getActiveGame();
+  const game = useActiveGame();
   const gameLabel = getGameDef(game).label;
 
   useEffect(() => {

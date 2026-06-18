@@ -189,7 +189,13 @@ export function ChallengeCreatorPanel() {
     const rows = isAdmin ? await listAllChallenges() : await listMyChallenges(user.id);
     setPicker({ rows, loading: false });
   };
-  const loadRow = (r: ChallengeRow) => { setCh({ ...r.data, id: r.id }); setPicker(null); setSaveMsg(`Loaded "${r.name}"`); };
+  const loadRow = (r: ChallengeRow) => {
+    // Prefer the DB COLUMNS (what the Browser/region queries actually filter on) over the embedded
+    // JSON, and always land on a concrete game so a re-Save can't silently null it out (which would
+    // hide the challenge from every game's Browser). Old rows with no game fall back to the active one.
+    setCh({ ...r.data, id: r.id, game: r.game ?? r.data.game ?? getActiveGame(), region: r.region ?? r.data.region });
+    setPicker(null); setSaveMsg(`Loaded "${r.name}"`);
+  };
   const onDeleteRow = async (r: ChallengeRow) => {
     const err = await deleteChallenge(r.id);
     if (err) { setSaveMsg('Delete failed: ' + err); return; }
