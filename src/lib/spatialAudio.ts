@@ -366,7 +366,7 @@ export function startLoopSound(
 /** Update a loop's source position, the listener (camera) pose, and optionally its rate. */
 export function updateLoopSound(
   h: LoopSound | null, x: number, y: number, z: number,
-  listenerPos?: THREE.Vector3, listenerDir?: THREE.Vector3, playbackRate?: number,
+  listenerPos?: THREE.Vector3, listenerDir?: THREE.Vector3, playbackRate?: number, volume?: number,
 ): void {
   if (!h || h.stopped || !h._panner) return;
   const ctx = getAudioContext(); if (!ctx) return;
@@ -374,6 +374,7 @@ export function updateLoopSound(
   if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; }
   else p.setPosition(x, y, z);
   if (playbackRate != null && h._src) h._src.playbackRate.value = playbackRate;
+  if (volume != null && h._gain) h._gain.gain.value = volume;
   if (listenerPos && listenerDir) {
     const l = ctx.listener;
     if (l.positionX) {

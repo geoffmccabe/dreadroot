@@ -49,7 +49,7 @@ export const CFG: Partial<Record<MType, {
   5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4,
        bodyFlames: [{ radiusMul: 1.05, heightMul: 2.0, colorHot: '#b85cff', colorCool: '#1a0033' }] },
   7: { url: '/siege/monsters/greentroll.glb',        modelHeight: 1.927, height: 3.0,  speed: 3.5, gait: 'hop',   sizeJitter: 0.10, speedJitter: 0.15, health: 200, animSpeed: 1.0,
-       smokeTrail: true, noStun: true, noKnockback: true,
+       smokeTrail: true, noStun: true,
        bodyFlames: [
          { radiusMul: 1.05, heightMul: 1.70, colorHot: '#5cff6a', colorCool: '#06330f' },
          { radiusMul: 0.525, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },

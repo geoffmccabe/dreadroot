@@ -175,7 +175,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
-    spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false });
+    spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false,
+    deathSnd: false, fellSound: false });
 
   // Looped spin whir (spintroll) — started when it first spins, stopped on death/unmount.
   const spinLoopRef = useRef<LoopSound | null>(null);
@@ -349,6 +350,52 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const now = performance.now();
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
+
+    // ── SPINTROLL custom death: spin-down (2s) → stand (1s) → topple straight back → lie (3s)
+    //    → sink into the ground (3s) → despawn. Pivots at the feet (model origin), not the mesh
+    //    middle, so it falls onto its back without sinking through the floor. ──
+    if (inst.dead && c.spin) {
+      const td = now - inst.deadAt;
+      const SPIN_DOWN = 2000, STAND_END = 3000, FALL = 600, FALL_END = STAND_END + FALL;  // 3600
+      const LIE_END = FALL_END + 3000, SINK = 3000, SINK_END = LIE_END + SINK;            // 6600 / 9600
+      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      let yOff = 0;
+      if (!s.deathSnd) {   // at death: play the death cry once
+        s.deathSnd = true;
+        emitMonster3D(camera, '/spintroll_death.mp3', s.x, s.y + H * 0.6, s.z,
+          Math.hypot(camera.position.x - s.x, camera.position.z - s.z), { baseVolume: 0.9 });
+      }
+      if (td < SPIN_DOWN) {
+        const f = 1 - td / SPIN_DOWN;                 // spin + slide ramp 1 → 0 over 2s
+        g.rotation.y += s.spinVel * f * delta;
+        s.x += inst.kvx * f * delta; s.z += inst.kvz * f * delta;
+        play(clips.idle);
+        if (spinLoopRef.current) {                    // whir: jump to 50% then fade to 0 with the spin
+          const refRev = (c.spin.revPerSec[0] + c.spin.revPerSec[1]) / 2;
+          const baseRate = refRev > 0 ? (Math.abs(s.spinVel) / (Math.PI * 2)) / refRev : 1;
+          camera.getWorldDirection(_aDir);
+          updateLoopSound(spinLoopRef.current, s.x, s.y + H * 0.5, s.z, camera.position, _aDir, baseRate * f, 0.25 * f);
+        }
+      } else {
+        if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }
+        play(clips.idle);
+        if (td >= STAND_END) {                        // topple straight back over the heels
+          g.rotation.order = 'YXZ';
+          const fp = Math.min(1, (td - STAND_END) / FALL);
+          g.rotation.x = -(Math.PI / 2) * fp;
+          if (!s.fellSound && fp >= 1) {              // body hits the ground
+            s.fellSound = true;
+            emitMonster3D(camera, '/enemy_hitting_ground.mp3', s.x, s.y, s.z,
+              Math.hypot(camera.position.x - s.x, camera.position.z - s.z), { baseVolume: 0.8 });
+          }
+        }
+        if (td >= LIE_END) yOff = -H * Math.min(1, (td - LIE_END) / SINK);   // sink under the ground
+      }
+      g.position.set(s.x, s.y + yOff, s.z);
+      inst.x = s.x; inst.y = s.y + yOff; inst.z = s.z;
+      if (!inst.despawned && td > SINK_END) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+      return;
+    }
 
     // ── DEATH: play the death clip once, slide out the last knockback, then despawn ──
     if (inst.dead) {
