@@ -38,6 +38,7 @@ import { MyStoreTab } from '@/features/marketplace/components/MyStoreTab';
 import { TransactionHistoryTab } from '@/features/marketplace/components/TransactionHistoryTab';
 import { WatchlistTab } from '@/features/marketplace/components/WatchlistTab';
 import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
+import { WalletList } from '@/features/wallet/WalletList';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
@@ -603,15 +604,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               paddingTop: '1rem'
             }}
           >
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
-                  <span className="font-medium">{tokenDisplayName}</span>
-                </div>
-                <span className="font-bold text-lg">{tokenBalance?.coins || 0}</span>
-              </div>
-            </Card>
+            {/* Multi-coin holdings: every coin/token/points the player holds, grouped by asset with
+                each chain variant indented (docs/CURRENCY_LEDGER_PLAN.md). */}
+            <WalletList userId={user?.id ?? null} />
 
             <Card className="p-4">
               <div className="space-y-2">
