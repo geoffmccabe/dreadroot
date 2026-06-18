@@ -90,6 +90,7 @@ export interface MonsterConfig {
   spin?: SpinConfig;          // Spintroll: fast spin + erratic zoom + contact damage + player-spin
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
   roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
+  attackSound?: string;       // if set, plays (spatial) the instant a melee swing starts — timed to the swipe
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -509,7 +510,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
-      else if (now - s.lastAttack > c.attackMs) { s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true); }
+      else if (now - s.lastAttack > c.attackMs) {
+        s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
+        // Swing sound, fired the instant the swipe animation starts — no rate variation
+        // so it stays timed to the swing. (punched.mp3 plays separately at impact.)
+        if (c.attackSound) {
+          const adx = camera.position.x - s.x, ady = camera.position.y - s.y, adz = camera.position.z - s.z;
+          void playSpatialSound(c.attackSound, Math.sqrt(adx * adx + ady * ady + adz * adz), { baseVolume: 0.9 });
+        }
+      }
       else if (now > s.swipeUntil) play(clips.idle);
     } else {                                                // no player near -> wander + search
       if (now > s.wNext) {
