@@ -39,13 +39,15 @@ function DragStrip({ children }: { children: React.ReactNode }) {
     ref.current!.style.cursor = 'grabbing';
     e.preventDefault();
   };
-  return <div ref={ref} onMouseDown={onDown} style={{ overflowX: 'auto', display: 'flex', gap: 10, paddingBottom: 8, cursor: 'grab' }}>{children}</div>;
+  return <div ref={ref} className="chal-scroll" onMouseDown={onDown} style={{ overflowX: 'auto', display: 'flex', gap: 10, paddingBottom: 8, cursor: 'grab' }}>{children}</div>;
 }
 
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
   const waveEls = useRef<Map<number, HTMLDivElement>>(new Map());
+  const dragSrc = useRef<{ wave: number; drop: number } | null>(null);
+  const [dropHover, setDropHover] = useState<{ wave: number; drop: number } | null>(null);
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -67,6 +69,8 @@ export function ChallengeCreatorPanel() {
   const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0 }] })));
   const removeDrop = (i: number, di: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.filter((_, j) => j !== di) })));
 
+  const reorderDrop = (i: number, from: number, to: number) => setCh((c) => mapWave(c, i, (w) => { const a = [...w.drops]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return { ...w, drops: a }; }));
+
   const run = () => { setCreatorOpen(false); fireChallengeStart(clone(ch)); };
   const scrollToWave = (i: number) => waveEls.current.get(i)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -77,7 +81,7 @@ export function ChallengeCreatorPanel() {
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#cfe0f6' }}>
           <span>{label}</span><span style={{ color: '#7fd0ff', fontWeight: 700 }}>{fmt(pct)}</span>
         </div>
-        <input type="range" min={min} max={max} step={5} value={pct} style={{ width: '100%' }}
+        <input type="range" className="chal-slider" min={min} max={max} step={5} value={pct} style={{ width: '100%' }}
                onChange={(e) => patchBoss(i, di, { [key]: Number(e.target.value) } as Partial<BossMods>)} />
       </div>
     );
@@ -85,6 +89,17 @@ export function ChallengeCreatorPanel() {
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)' }}>
+      <style>{`
+        input[type=range].chal-slider { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:hsla(220,25%,8%,0.95); border:1px solid hsla(210,30%,45%,0.5); outline:none; }
+        input[type=range].chal-slider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:#5cc8ff; cursor:pointer; }
+        input[type=range].chal-slider::-moz-range-thumb { width:14px; height:14px; border:none; border-radius:50%; background:#5cc8ff; cursor:pointer; }
+        input[type=range].chal-slider::-moz-range-track { height:6px; border-radius:3px; background:hsla(220,25%,8%,0.95); }
+        .chal-scroll { scrollbar-color: hsla(210,30%,45%,0.7) hsla(220,25%,10%,0.5); scrollbar-width: thin; }
+        .chal-scroll::-webkit-scrollbar { width:10px; height:10px; }
+        .chal-scroll::-webkit-scrollbar-track { background:hsla(220,25%,8%,0.5); }
+        .chal-scroll::-webkit-scrollbar-thumb { background:hsla(210,30%,42%,0.8); border-radius:5px; }
+        .chal-scroll::-webkit-scrollbar-thumb:hover { background:hsla(210,35%,52%,0.9); }
+      `}</style>
       <div style={{ width: '95vw', height: '95vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
@@ -113,7 +128,7 @@ export function ChallengeCreatorPanel() {
         </div>
 
         {/* Stacked waves */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <div className="chal-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {ch.waves.map((wave, i) => (
             <div key={i} ref={(el) => { if (el) waveEls.current.set(i, el); else waveEls.current.delete(i); }}
                  style={{ marginBottom: 22, paddingBottom: 16, borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
@@ -131,7 +146,7 @@ export function ChallengeCreatorPanel() {
                   <label style={{ ...lbl, marginTop: 8 }}>Wave Image URL</label><input style={inp} value={wave.image ?? ''} onChange={(e) => patchWave(i, { image: e.target.value })} />
                   <label style={{ ...lbl, marginTop: 8 }}>Wave Text</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 44 }} value={wave.text ?? ''} onChange={(e) => patchWave(i, { text: e.target.value })} />
                   <label style={{ ...lbl, marginTop: 8 }}>Time: {fmtMS(wave.timeSec)}</label>
-                  <input type="range" min={60} max={180} step={5} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(i, { timeSec: Number(e.target.value) })} />
+                  <input type="range" className="chal-slider" min={60} max={180} step={5} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(i, { timeSec: Number(e.target.value) })} />
                   <label style={{ ...lbl, marginTop: 8 }}>Cost to Play (Divi)</label><input style={inp} type="number" value={wave.costDivi ?? 0} onChange={(e) => patchWave(i, { costDivi: Number(e.target.value) })} />
                   <label style={{ ...lbl, marginTop: 8 }}>% to Prize Pool</label><input style={inp} type="number" value={wave.pctToPool ?? 0} onChange={(e) => patchWave(i, { pctToPool: Number(e.target.value) })} />
                 </div>
@@ -152,10 +167,19 @@ export function ChallengeCreatorPanel() {
                     {(() => { let cum = 0; return wave.drops.map((drop, di) => {
                       cum += drop.afterSec ?? 0; const startAt = cum;
                       const c = cat(drop.type);
+                      const isHover = dropHover?.wave === i && dropHover?.drop === di;
                       return (
-                        <div key={di} style={{ ...card, width: 220, flexShrink: 0, ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}) }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}>Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
+                        <div key={di}
+                             onDragOver={(e) => { if (dragSrc.current?.wave === i) e.preventDefault(); }}
+                             onDragEnter={() => { if (dragSrc.current?.wave === i) setDropHover({ wave: i, drop: di }); }}
+                             onDrop={(e) => { e.preventDefault(); const s = dragSrc.current; if (s && s.wave === i && s.drop !== di) reorderDrop(i, s.drop, di); dragSrc.current = null; setDropHover(null); }}
+                             style={{ ...card, width: 220, flexShrink: 0, ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}), ...(isHover ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}) }}>
+                          <div draggable
+                               onDragStart={(e) => { dragSrc.current = { wave: i, drop: di }; e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); }}
+                               onDragEnd={() => { dragSrc.current = null; setDropHover(null); }}
+                               onMouseDown={(e) => e.stopPropagation()}
+                               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
                             <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onClick={() => removeDrop(i, di)}>✕</button>
                           </div>
                           <label style={lbl}>Monster</label>
