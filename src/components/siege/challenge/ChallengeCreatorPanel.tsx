@@ -325,12 +325,18 @@ export function ChallengeCreatorPanel() {
           </div>
         </div>
 
-        {/* General info */}
-        <div style={{ display: 'flex', gap: 10, padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
-          <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
-          <div style={{ flex: 2 }}><label style={lbl}>Banner (4×1)</label><BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} /></div>
+        {/* General info — challenge-level (cost/pool live here, NOT per wave) */}
+        <div style={{ padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
+            <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
+            <div style={{ flex: 2 }}><label style={lbl}>Banner (4×1)</label><BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            <div style={{ flex: 1 }}><label style={lbl}>Cost to Play (Divi)</label><NumField style={inp} value={ch.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ costDivi: n ?? 0 })} /></div>
+            <div style={{ flex: 1 }}><label style={lbl}>% to Prize Pool</label><NumField style={inp} value={ch.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ pctToPool: n ?? 0 })} /></div>
+            <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
+          </div>
         </div>
 
         {/* Wave nav — click to scroll the stack to that wave */}
@@ -361,8 +367,6 @@ export function ChallengeCreatorPanel() {
                   <label style={{ ...lbl, marginTop: 8 }}>Wave Text</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 44 }} value={wave.text ?? ''} onChange={(e) => patchWave(i, { text: e.target.value })} />
                   <label style={{ ...lbl, marginTop: 8 }}>Time: {fmtMS(wave.timeSec)}</label>
                   <input type="range" className="chal-slider" min={60} max={180} step={5} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(i, { timeSec: Number(e.target.value) })} />
-                  <label style={{ ...lbl, marginTop: 8 }}>Cost to Play (Divi)</label><NumField style={inp} value={wave.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patchWave(i, { costDivi: n ?? 0 })} />
-                  <label style={{ ...lbl, marginTop: 8 }}>% to Prize Pool</label><NumField style={inp} value={wave.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patchWave(i, { pctToPool: n ?? 0 })} />
                 </div>
 
                 {/* Right: spawn strip (drag to pan) */}

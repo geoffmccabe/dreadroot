@@ -39,8 +39,6 @@ export interface ChallengeWave {
   image?: string;          // shown under the wave name on the announcement
   text?: string;           // smaller advice/clue/taunt text
   timeSec: number;         // wave time limit, 60-180s
-  costDivi?: number;       // cost to play this wave (Divi)
-  pctToPool?: number;      // % of the fee that feeds the prize pool
   drops: MonsterDrop[];    // up to 10
 }
 
@@ -50,7 +48,10 @@ export interface Challenge {
   name: string;
   creator: string;
   rewardDivi?: number;
+  costDivi?: number;       // cost to play the WHOLE challenge (Divi) — challenge-level, not per-wave
+  pctToPool?: number;      // % of the fee that feeds the prize pool — challenge-level
   banner?: string;         // 4x1 webp banner URL
+  region?: string;         // superadmin: if set, this is the base Open-World spawner for that region
   spawn?: [number, number, number];  // where the player is teleported when the challenge starts
   // If set, monster positions are SEEDED (deterministic, learnable) within this radius (m) of the
   // spawn point instead of using each drop's x,z. Staggered monsters each get their own point;
