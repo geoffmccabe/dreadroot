@@ -6,6 +6,8 @@ we build it in slices (bottom of doc). Shared DB → migrations apply to both Dr
 ## Goals (from the owner)
 
 1. One generic system for **coins, tokens, and points** — DIVI is just one entry. Add any anytime.
+   **Points are first-class** (same tables as coins), because they may be **converted to a crypto or
+   cash at any time** — see "Points & conversion" below.
 2. **Sub-tokens / per-chain variants**: the *same* asset (e.g. USDT) exists on Ethereum, BSC, Base,
    etc. Each variant is its own balance + contract. Lists show the chain clearly and **indent the
    chain variants under their asset** so they read as grouped.
@@ -76,6 +78,7 @@ The real coins the owner funds from outside. Earning debits `balance`; it can't 
 |-----------------|---------|----------------------------------------------------|
 | id              | uuid PK |                                                    |
 | token_theme_id  | uuid    | → token_themes (variant) — UNIQUE                  |
+| source          | text    | **'funded'** (real coins added from outside, hard-capped) \| **'minted'** (game-generated, e.g. points/XP — owner sets/uncapped) |
 | balance         | numeric | current reserve (drawn down on earn)               |
 | total_funded    | numeric | lifetime added (audit)                             |
 | total_dispensed | numeric | lifetime paid out (audit)                          |
@@ -117,7 +120,8 @@ Every credit/debit, for audit + to drive withdrawals + reconcile pool ↔ wallet
 | to_kind         | text    | 'pool' \| 'wallet' \| 'external'                               |
 | to_wallet_id    | uuid    | nullable                                                       |
 | amount          | numeric |                                                                |
-| reason          | text    | 'earn' \| 'spend' \| 'transfer' \| 'withdraw' \| 'deposit' \| 'pool_fill' |
+| reason          | text    | 'earn' \| 'spend' \| 'transfer' \| 'convert' \| 'withdraw' \| 'deposit' \| 'pool_fill' |
+| swap_tx_id      | uuid    | links the two legs of a convert (points-out ↔ coin-in)         |
 | ref             | text    | source (monster kill id, listing id, …)                        |
 | onchain_tx_hash | text    | set when it hits the chain (withdraw/deposit)                  |
 | status          | text    | 'confirmed' (internal) \| 'pending' \| 'failed' (on-chain)     |
@@ -133,12 +137,34 @@ Every credit/debit, for audit + to drive withdrawals + reconcile pool ↔ wallet
   pool (or a sink); ledger row.
 - **`fund_pool(p_token_theme_id, p_amount)`** (admin) — add to the pool; ledger row (external →
   pool, 'pool_fill'). This is how the owner tops up from outside.
+- **`convert_currency(p_from_theme_id, p_to_theme_id, p_from_amount)`** — asset-to-asset swap at a
+  configured rate: debit the user's `from` wallet, **draw the `to` amount from the `to` pool** (real
+  backing applies here), credit the user's `to` wallet. Two ledger rows linked by `swap_tx_id`. This
+  is how **points → DIVI / cash** works: points are minted, but the coin they become is pool-backed.
 - **`request_withdrawal(p_wallet_id, p_dest_address, p_amount)`** (Slice 4) — hold the amount on the
   local wallet, write a `pending` 'withdraw' tx, hand off to the SSO/DiviGo bridge to do the real
   on-chain send; on confirmation mark `confirmed` + store `onchain_tx_hash`.
 
 Coin drops: the existing `spawn_coin_drop` / `roll_monster_coin_drop` route through `grant_currency`
 on pickup, so they become pool-backed automatically.
+
+## Points & conversion
+
+Points are an `token_assets` row with `kind='points'` and one `internal` variant — identical plumbing
+to coins, so they show up in the same wallet list, the same admin tools, the same ledger.
+
+- **Earning points** grants from a `minted` pool (game-generated XP; the owner doesn't fund it with
+  real coins — it's set/uncapped). So `grant_currency` still debits a pool, but a minted one.
+- **Levels** keep working: `getLevelForPoints` just reads the user's points-wallet balance instead
+  of `profile.total_points`. (Migration backfills the wallet from `total_points`.)
+- **Converting points → DIVI / cash** is a `convert_currency` swap (above): debit points, draw the
+  coin from its **funded** pool at a rate. Rate source: each variant already has `coin_rate` (value
+  per common reference, e.g. USD) → cross-rate between the two; an explicit `conversion_rates(pair)`
+  table can override for fixed pairs. "Cash" = a real-coin/stablecoin asset (e.g. USDT) the player
+  then withdraws via Slice 5.
+
+This keeps one mechanic for *everything*: minted pools for game points, funded pools for real coins,
+and a single swap to move between them — so points can become crypto or cash whenever you allow it.
 
 ## UI — sub-token display (asset → indented chain variants)
 
@@ -171,6 +197,8 @@ TRILIUM                                 300
    dead `user_divi_balances`.
 5. Marketplace: replace `price_divi` with `price_token_theme_id` + `price_amount` (price a listing
    in any variant). Keep a compat read during transition.
+6. Points: create a `kind='points'` asset + internal variant + a `minted` pool; backfill each user's
+   points wallet from `profile.total_points`; repoint `getLevelForPoints` / `addPoints` at the wallet.
 
 ## Build plan (slices)
 
@@ -178,12 +206,16 @@ TRILIUM                                 300
   decimals) + admin UI to manage assets and their per-chain variants. No behavior change yet.
 - **Slice 2 — Pools.** `token_pools` + `fund_pool` admin + make `grant_currency` debit the pool
   (earning is now backed). Admin pool manager shows balance / funded / dispensed per variant.
-- **Slice 3 — Ledger + wallets.** `wallets` + `token_transactions`; migrate `user_token_balances`;
-  wallet-aware spend/earn; the indented asset→chain wallet UI; retire `user_divi_balances`.
-- **Slice 4 — Attach external wallet.** Let a player register an external Divi/Trilium address as an
+- **Slice 3 — Ledger + wallets + points.** `wallets` + `token_transactions`; migrate
+  `user_token_balances`; wallet-aware spend/earn; the indented asset→chain wallet UI; retire
+  `user_divi_balances`. **Fold points in** here (kind='points' asset + minted pool + backfill from
+  `total_points`; leveling reads the wallet).
+- **Slice 4 — Conversion.** `convert_currency` swap + rate handling + a convert UI (points → coin,
+  coin → coin). Fully internal.
+- **Slice 5 — Attach external wallet.** Let a player register an external Divi/Trilium address as an
   `external` wallet (no value movement yet — just linking + display).
-- **Slice 5 — Withdrawal bridge.** `request_withdrawal` + the LW-SSO/DiviGo on-chain send + status
+- **Slice 6 — Withdrawal bridge.** `request_withdrawal` + the LW-SSO/DiviGo on-chain send + status
   tracking. **Gated on the DiviGo/SSO API existing.**
 
-Slices 1–3 are fully internal (no external dependency) and deliver the pool-backed multi-coin ledger.
-4–5 add real on-chain movement once the DiviGo side is ready.
+Slices 1–4 are fully internal (no external dependency) and deliver the pool-backed multi-coin ledger
+with points + conversion. 5–6 add real on-chain movement once the DiviGo side is ready.
