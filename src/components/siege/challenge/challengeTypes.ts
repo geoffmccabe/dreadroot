@@ -41,6 +41,7 @@ export interface Challenge {
   creator: string;
   rewardDivi?: number;
   banner?: string;         // 4x1 webp banner URL
+  spawn?: [number, number, number];  // where the player is teleported when the challenge starts
   waves: ChallengeWave[];  // length 10
 }
 

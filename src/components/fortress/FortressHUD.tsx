@@ -4,6 +4,7 @@ import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
+import { ChallengePointsCounter } from '@/components/siege/challenge/ChallengePointsCounter';
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
@@ -1108,6 +1109,7 @@ export function FortressHUD(props: FortressHUDProps) {
             style={{
               display: 'flex',
               gap: '10px',
+              position: 'relative',   /* anchor for the challenge points counter (right of slot 6) */
             }}
           >
             {hotbarSlots.map((slot) => {
@@ -1333,6 +1335,8 @@ export function FortressHUD(props: FortressHUDProps) {
                 </div>
               );
             })}
+            {/* Challenge wave timer (red) + points (light blue), right of slot 6. */}
+            <ChallengePointsCounter />
           </div>
         </div>
       </div>

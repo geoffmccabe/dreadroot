@@ -51,11 +51,19 @@ export const siegeDemons: DemonInstance[] = [];
 
 export function addDemon(d: DemonInstance): void { siegeDemons.push(d); }
 
+// Challenge scoring: every bit of damage dealt to a siege monster is reported here (the runner
+// registers a hook that adds it to the live score; headshots are flagged for the 3× bonus).
+type ScoreHook = (damage: number, headshot: boolean) => void;
+let scoreHook: ScoreHook | null = null;
+export function setSiegeScoreHook(fn: ScoreHook | null) { scoreHook = fn; }
+
 // Direct (non-knockback) damage — used for blast-impact hits (slamming a wall / the ground).
 // Returns true if this killed it.
 export function hurtDemon(d: DemonInstance, amount: number): boolean {
   if (d.dead || amount <= 0) return false;
-  d.hp -= amount * (d.opacity ?? 1);
+  const dealt = amount * (d.opacity ?? 1);
+  d.hp -= dealt;
+  scoreHook?.(dealt, false);
   if (d.hp <= 0) { d.dead = true; d.deadAt = performance.now(); return true; }
   return false;
 }
@@ -84,7 +92,9 @@ enemyCombatRegistry.register<DemonInstance>({
   createBurnFollower: (d, x, y, z) => d.attach?.(x, y, z) ?? null,
   applyDamage: (d, info) => {
     if (d.dead) return false;
-    d.hp -= info.damage * (d.opacity ?? 1);   // opacity = damage resistance (fading boss is tankier)
+    const dealt = info.damage * (d.opacity ?? 1);   // opacity = damage resistance (fading boss is tankier)
+    d.hp -= dealt;
+    scoreHook?.(dealt, info.isHeadshot);
     const now = performance.now();
     if (info.source === 'explosion') {
       // Real falloff-scaled blast impulse (info.bulletSpeed = baseKnockback·falloff, like

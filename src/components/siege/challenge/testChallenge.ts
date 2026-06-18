@@ -3,11 +3,13 @@
 // wave 10 = one of each (1-7) PLUS a #1 horde of 20 and a #2 horde of 50. 1 minute each.
 import type { Challenge } from './challengeTypes';
 
-const CX = -400, CZ = 685;   // drop centre, ~25m in front of the Siege beach spawn
+// Bleakrock (mushroom island) centroid — challenge runs here for now.
+const CX = -1039, CZ = 1108;
 
 export const TEST_CHALLENGE: Challenge = {
   name: 'Test Gauntlet',
   creator: 'system',
+  spawn: [-1039, 24, 1108],    // teleport the player to Bleakrock on start
   waves: [
     { name: 'Red Demon',      timeSec: 60, drops: [{ type: 1, count: 1, x: CX, z: CZ }] },
     { name: 'Mushroom Grunt',  timeSec: 60, drops: [{ type: 2, count: 1, x: CX, z: CZ }] },

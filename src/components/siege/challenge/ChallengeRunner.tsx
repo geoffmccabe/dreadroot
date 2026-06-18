@@ -5,17 +5,20 @@
 //
 // Start/stop the built-in test challenge with Cmd/Ctrl+Shift+C (Cmd+W closes the browser tab).
 import { useEffect, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { CatalogMonster, makeHordeMember, type MType, type Ov, type MonsterMods } from '../siegeMonsterCatalog';
-import { siegeDemons } from '../siegeHorde';
+import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
 import { setChallengeState } from './challengeStore';
+import { setChallengeToggle } from './challengeControl';
+import { resetChallengeScore, addChallengeScore } from './challengeScore';
 import { TEST_CHALLENGE } from './testChallenge';
 import type { Challenge, MonsterDrop } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
 
 export function ChallengeRunner() {
+  const camera = useThree((s) => s.camera);
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
   const r = useRef({
@@ -62,6 +65,8 @@ export function ChallengeRunner() {
     const now = performance.now();
     challengeRef.current = ch;
     setMobs([]);
+    resetChallengeScore();
+    if (ch.spawn) camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);   // teleport to the arena
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0 });
     startWave(now);
@@ -73,18 +78,18 @@ export function ChallengeRunner() {
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0 });
   };
 
-  // Keybind: Cmd/Ctrl+Shift+C toggles the test challenge.
+  // Started/stopped via the "!c" spawner command (registered here as a toggle).
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const el = document.activeElement?.tagName;
-      if (el === 'INPUT' || el === 'TEXTAREA') return;
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'KeyC') {
-        e.preventDefault(); e.stopPropagation();
-        if (r.active) stop(); else start(TEST_CHALLENGE);
-      }
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    setChallengeToggle(() => { if (r.active) stop(); else start(TEST_CHALLENGE); });
+    return () => setChallengeToggle(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Score: damage to siege monsters → points while a challenge is active. Headshots already deal
+  // 2× damage, so ×1.5 here makes a headshot worth 3× the points of the equivalent body shot.
+  useEffect(() => {
+    setSiegeScoreHook((dmg, headshot) => { if (r.active) addChallengeScore(dmg * (headshot ? 1.5 : 1)); });
+    return () => setSiegeScoreHook(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

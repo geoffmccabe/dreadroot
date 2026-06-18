@@ -19,6 +19,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
+import { fireChallengeToggle } from './challenge/challengeControl';
+import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -76,7 +78,8 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
+        if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the challenge
+        else if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;
       }
@@ -92,6 +95,16 @@ export function SiegeSpawner() {
   }, [camera]);
 
   const despawn = (id: string) => setDemons((d) => d.filter((x) => `d${x.id}` !== id));
+
+  // When a challenge starts, clear any !N# test-spawns so only the challenge monsters remain.
+  useEffect(() => {
+    let was = getChallengeState().active;
+    return subscribeChallenge(() => {
+      const a = getChallengeState().active;
+      if (a && !was) setDemons([]);
+      was = a;
+    });
+  }, []);
 
   return (
     <>

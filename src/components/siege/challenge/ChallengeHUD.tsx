@@ -20,30 +20,18 @@ export function ChallengeHUD() {
 
   const now = performance.now();
   const ann = st.announce && now < st.announce.until ? st.announce : null;
-  const showTimer = st.active && st.waveEndsAt > 0;
-  const remaining = showTimer ? Math.max(0, (st.waveEndsAt - now) / 1000) : 0;
-  if (!ann && !showTimer) return null;
+  if (!ann) return null;
 
-  const annOpacity = ann ? (ann.faint ? 0.5 : 1) * (ann.until - now < 500 ? (ann.until - now) / 500 : 1) : 0;
+  const annOpacity = (ann.faint ? 0.5 : 1) * (ann.until - now < 500 ? (ann.until - now) / 500 : 1);
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 60, fontFamily: 'var(--hud-font, Inter, sans-serif)' }}>
-      {showTimer && (
-        <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', textAlign: 'center' }}>
-          <div style={{ color: '#fff', fontSize: 16, fontWeight: 700, letterSpacing: 1, textShadow: '0 2px 6px #000' }}>
-            Wave {st.wave}/{st.totalWaves}
-          </div>
-          <div style={{ color: '#ff4040', fontSize: 30, fontWeight: 800, textShadow: '0 2px 8px #000' }}>{fmt(remaining)}</div>
-        </div>
-      )}
-      {ann && (
-        <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', opacity: annOpacity, transition: 'opacity 0.15s' }}>
-          <div style={{ color: '#fff', fontSize: 64, fontWeight: 900, letterSpacing: 2, textShadow: '0 4px 18px #000' }}>{ann.title}</div>
-          {ann.subtitle && <div style={{ color: '#ffd76a', fontSize: 34, fontWeight: 700, marginTop: 6, textShadow: '0 2px 8px #000' }}>{ann.subtitle}</div>}
-          {ann.image && <img src={ann.image} alt="" style={{ maxWidth: 360, maxHeight: 200, marginTop: 12, borderRadius: 8, boxShadow: '0 6px 24px #000' }} />}
-          {ann.text && <div style={{ color: '#cfe3ff', fontSize: 20, marginTop: 10, textShadow: '0 2px 6px #000' }}>{ann.text}</div>}
-        </div>
-      )}
+      <div style={{ position: 'absolute', top: '34%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', width: '100%', opacity: annOpacity, transition: 'opacity 0.15s' }}>
+        <div style={{ color: '#fff', fontSize: 'min(13vw, 150px)', fontWeight: 900, letterSpacing: 3, lineHeight: 1, textShadow: '0 6px 28px #000, 0 0 40px rgba(0,0,0,0.8)' }}>{ann.title}</div>
+        {ann.subtitle && <div style={{ color: '#ffd76a', fontSize: 'min(6vw, 60px)', fontWeight: 800, marginTop: 10, textShadow: '0 3px 12px #000' }}>{ann.subtitle}</div>}
+        {ann.image && <img src={ann.image} alt="" style={{ maxWidth: 420, maxHeight: 240, marginTop: 14, borderRadius: 10, boxShadow: '0 6px 28px #000' }} />}
+        {ann.text && <div style={{ color: '#cfe3ff', fontSize: 'min(3vw, 26px)', marginTop: 12, textShadow: '0 2px 8px #000' }}>{ann.text}</div>}
+      </div>
     </div>,
     document.body,
   );
