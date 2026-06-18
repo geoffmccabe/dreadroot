@@ -84,14 +84,17 @@ export const DEFAULT_MODIFIERS: DamageModifier[] = [
       const baseSteady = calculateSteadyFromLevel(ctx.playerLevel);
       const totalSteady = baseSteady + ctx.steady;
       
-      // Flat reduction: each STEADY point reduces knockback by 1 block
+      // Flat reduction: each STEADY point reduces knockback by 1 block — but it can NEVER
+      // fully cancel a hit. You always feel at least 40% of the shove, so high-level players
+      // (STEADY = level/2) still get knocked around by enemies, just less than a newbie.
       const reducedForce = event.knockback.baseForce - totalSteady;
-      
-      return { 
-        ...event, 
-        knockback: { 
-          ...event.knockback, 
-          finalForce: Math.max(0, reducedForce) 
+      const floor = event.knockback.baseForce * 0.4;
+
+      return {
+        ...event,
+        knockback: {
+          ...event.knockback,
+          finalForce: Math.max(floor, reducedForce)
         }
       };
     },
