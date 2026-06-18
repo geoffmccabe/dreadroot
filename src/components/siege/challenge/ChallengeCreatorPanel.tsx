@@ -32,6 +32,11 @@ const DEFAULT_BOSS: BossMods = { sizePct: 100, speedPct: 100, healthPct: 100, da
 
 // HUD-themed styles.
 const PANEL_BG = 'hsla(222, 32%, 10%, 0.96)';
+// Opaque variant for the fixed top chrome (header / general-info / wave-nav). The shared thumbnail
+// canvas (MonsterPortCanvas) renders at z90 over the whole panel; lifting the chrome above it with a
+// SOLID bg makes cards that scroll up vanish UNDER the header instead of drawing on top of it.
+const PANEL_SOLID = 'hsl(222, 32%, 10%)';
+const CHROME: React.CSSProperties = { position: 'relative', zIndex: 95, background: PANEL_SOLID };
 const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.8)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 8, padding: 10 };
 const lbl: React.CSSProperties = { fontSize: 11, color: '#9fb4d0', fontWeight: 600, display: 'block', marginBottom: 3 };
 const inp: React.CSSProperties = { width: '100%', background: 'hsla(220,25%,8%,0.9)', border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, color: '#e8eefb', padding: '5px 7px', fontSize: 13, fontFamily: 'inherit' };
@@ -369,7 +374,7 @@ export function ChallengeCreatorPanel() {
       `}</style>
       <div style={{ width: '95vw', height: '95vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
+        <div style={{ ...CHROME, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Challenge Creator</div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
@@ -382,7 +387,7 @@ export function ChallengeCreatorPanel() {
         </div>
 
         {/* General info — challenge-level (cost/pool live here, NOT per wave) */}
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
+        <div style={{ ...CHROME, padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
             {/* LEFT — name/creator/game, then (after a blank line) the challenge-level economy + region.
                 Takes 60% so the banner gets 40%; its inner rows flex, so they shrink proportionally. */}
@@ -439,7 +444,7 @@ export function ChallengeCreatorPanel() {
         </div>
 
         {/* Wave nav — click to scroll the stack to that wave */}
-        <div style={{ display: 'flex', gap: 5, padding: '8px 16px', flexWrap: 'wrap', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
+        <div style={{ ...CHROME, display: 'flex', gap: 5, padding: '8px 16px', flexWrap: 'wrap', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
           {ch.waves.map((w, i) => (
             <button key={i} style={{ ...btn(), padding: '4px 10px', fontSize: 12 }} onClick={() => scrollToWave(i)}>#{i + 1} {w.name || '—'}</button>
           ))}
