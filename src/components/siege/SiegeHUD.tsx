@@ -9,6 +9,7 @@ import { useUserPanel } from '@/contexts/UserPanelContext';
 import { PlayerStatusPanel } from '@/components/hud/PlayerStatusPanel';
 import { InstructionsPanel } from '@/components/hud/InstructionsPanel';
 import { CombatTelemetryOverlay } from '@/components/siege/CombatTelemetryView';
+import { SiegeStartModal } from '@/components/siege/SiegeStartModal';
 
 export function SiegeHUD() {
   const { profile, tokenBalance } = useUserData();
@@ -43,6 +44,9 @@ export function SiegeHUD() {
 
       {/* Top-right: combat recorder (pause + copy the timing/spacing of every hit). */}
       <CombatTelemetryOverlay />
+
+      {/* Start-of-game mode picker (Challenge vs Open World). */}
+      <SiegeStartModal />
     </>
   );
 }

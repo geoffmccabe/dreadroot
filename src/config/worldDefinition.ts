@@ -142,8 +142,9 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
   meshColliders: true, // SWW uses BVH mesh colliders for rocks/mountains
   bounds: null, // 4×4 grid of 500m tiles ≈ 2000×2000, but never hardcoded here
   ground: { kind: 'gltf-terrain', surfaceY: 0 },
-  // Player start on Lobby Island (engine frame = -UnityX). Y just above sea level (22).
-  spawn: { position: [-96, 25, 325], yaw: 0 },
+  // Player start on Bleakrock (the Mushrooms island) — same spot the Challenge uses, so testers
+  // begin where the action is. The start modal then offers Challenge vs Open World.
+  spawn: { position: [-1039, 27, 1108], yaw: 0 },
   // Sea level from Client.cs WATER_HEIGHT=22 (depth to ~9.8). Walk-the-bottom, no swim yet.
   water: [{ min: [-2000, 9.8, -214], max: [0, 22, 1786], surfaceY: 22, movement: 'walk-bottom' }],
   props: undefined,
