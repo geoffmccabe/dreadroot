@@ -680,7 +680,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
-      else if (now - s.lastAttack > c.attackMs) {
+      else if (now - s.lastAttack > c.attackMs && dist <= c.attackRange + 0.6) {
+        // MUST be in range to start a swing. Without this dist gate, a swing whose commit-hold
+        // blocks the chase (above) would re-fire here every attackMs even after knockback shoved
+        // the player away — locking the demon swinging in place forever, never chasing.
         s.lastAttack = now;
         if (c.attackStyle === 'spin-lunge') {
           // Mushroom grunt: begin a 0.5s spin-lunge. Capture the forward offset (50% toward the
