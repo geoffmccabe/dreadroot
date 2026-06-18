@@ -20,6 +20,7 @@ import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
+import { DamageNumbers } from './DamageNumbers';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -47,6 +48,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <ChallengeRunner />
       {/* Combat recorder probe — feeds player position to the telemetry every frame. */}
       <CombatTelemetryProbe />
+      {/* Floating combat damage numbers (Unity FloatingDamageText port). */}
+      <DamageNumbers />
 
       {terrainReady && (
         <>

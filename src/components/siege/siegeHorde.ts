@@ -13,6 +13,7 @@ import {
   type FlameAttachPoint,
   type BurnFollower,
 } from '@/features/enemies/combat/EnemyCombatRegistry';
+import { spawnDamageNumber, DN_RED, DN_WHITE } from './damageNumbers';
 
 export interface DemonInstance {
   id: string;
@@ -95,6 +96,12 @@ enemyCombatRegistry.register<DemonInstance>({
     const dealt = info.damage * (d.opacity ?? 1);   // opacity = damage resistance (fading boss is tankier)
     d.hp -= dealt;
     scoreHook?.(dealt, info.isHeadshot);
+    // Floating damage number (Unity port): white normal / red headshot, on discrete hits only
+    // (skip flame DoT ticks so they don't flood). Spawns near the hit zone on the body.
+    if (info.source !== 'flame' && dealt > 0) {
+      spawnDamageNumber(d.x, d.y + d.height * (info.isHeadshot ? 0.92 : 0.6), d.z,
+        String(Math.round(dealt)), info.isHeadshot ? DN_RED : DN_WHITE);
+    }
     const now = performance.now();
     if (info.source === 'explosion') {
       // Real falloff-scaled blast impulse (info.bulletSpeed = baseKnockback·falloff, like
