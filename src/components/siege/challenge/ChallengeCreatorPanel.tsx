@@ -8,7 +8,7 @@ import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCrea
 import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
-import { MonsterPreviewBox } from './MonsterPreview';
+import { MonsterThumb, MonsterPortCanvas } from './MonsterPreview';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -28,22 +28,13 @@ const lbl: React.CSSProperties = { fontSize: 11, color: '#9fb4d0', fontWeight: 6
 const inp: React.CSSProperties = { width: '100%', background: 'hsla(220,25%,8%,0.9)', border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, color: '#e8eefb', padding: '5px 7px', fontSize: 13, fontFamily: 'inherit' };
 const btn = (active = false): React.CSSProperties => ({ background: active ? '#3a6ea8' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
 
-// Where the floating monster-preview box sits relative to a spawn card: centred above it (or below
-// if there's no room above), clamped to the viewport. Square box so the model isn't cropped.
-const BOX_W = 260, BOX_H = 260;
-function boxPos(rect: DOMRect) {
-  const x = Math.max(8, Math.min(rect.left + rect.width / 2 - BOX_W / 2, window.innerWidth - BOX_W - 8));
-  let y = rect.top - BOX_H - 12;
-  if (y < 8) y = Math.min(rect.bottom + 12, window.innerHeight - BOX_H - 8);
-  return { x, y };
-}
-
-// Custom monster picker so HOVERING an option previews that monster live (native <select> options
-// can't be hovered). Opening pins the preview to this card; hovering an option overrides the shown
-// monster; clicking commits. The list is portalled to <body> so the scroll strip can't clip it.
+// Custom monster picker so HOVERING an option previews that monster live in the card's thumbnail
+// (native <select> options can't be hovered). Opening marks this card active; hovering an option
+// overrides the shown monster; clicking commits. The list is portalled to <body> so the scroll
+// strip can't clip it.
 function MonsterSelect({ value, onChange, onOpen, onClose, onHover }: {
   value: number; onChange: (t: number) => void;
-  onOpen: (x: number, y: number) => void; onClose: () => void; onHover: (t: number | null) => void;
+  onOpen: () => void; onClose: () => void; onHover: (t: number | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
@@ -54,8 +45,7 @@ function MonsterSelect({ value, onChange, onOpen, onClose, onHover }: {
     const el = ref.current; if (!el) return;
     const br = el.getBoundingClientRect();
     setLp({ left: br.left, top: br.bottom + 4, width: br.width });
-    const cardEl = el.closest('[data-spawn]') as HTMLElement | null;
-    if (cardEl) { const p = boxPos(cardEl.getBoundingClientRect()); onOpen(p.x, p.y); }
+    onOpen();
     setOpen(true);
   };
   return (
@@ -139,9 +129,8 @@ export function ChallengeCreatorPanel() {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const dragHover = useRef<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
-  const [preview, setPreview] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);
-  const [pinned, setPinned] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);
-  const [hoverType, setHoverType] = useState<number | null>(null);
+  const [openCard, setOpenCard] = useState<{ wave: number; drop: number } | null>(null);   // dropdown open
+  const [hoverType, setHoverType] = useState<number | null>(null);                          // hovered option
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -209,6 +198,8 @@ export function ChallengeCreatorPanel() {
   // where in the card the cursor is (ox,oy) so the card tracks the cursor 1:1 with no recenter.
   const spawnInner = (drop: MonsterDrop, i: number, di: number, startAt: number) => {
     const c = cat(drop.type);
+    // While THIS card's dropdown is open, hovering an option overrides the thumbnail's monster.
+    const thumbType = (openCard?.wave === i && openCard?.drop === di && hoverType != null) ? hoverType : drop.type;
     return (
       <>
         <div onMouseDown={(e) => {
@@ -216,18 +207,21 @@ export function ChallengeCreatorPanel() {
                e.stopPropagation(); e.preventDefault();
                const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
                const rect = cardEl?.getBoundingClientRect();
-               dragHover.current = di; setPreview(null); setPinned(null); setHoverType(null);
+               dragHover.current = di; setOpenCard(null); setHoverType(null);
                setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
                setDragPos({ x: e.clientX, y: e.clientY });
              }}
-             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
-          <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
+             style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
+          <MonsterThumb type={thumbType} size={60} />
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
+            <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
+          </div>
         </div>
         <label style={lbl}>Monster</label>
         <MonsterSelect value={drop.type} onChange={(t) => patchDrop(i, di, { type: t })}
-                       onOpen={(x, y) => setPinned({ wave: i, drop: di, x, y })}
-                       onClose={() => { setPinned(null); setHoverType(null); }}
+                       onOpen={() => setOpenCard({ wave: i, drop: di })}
+                       onClose={() => { setOpenCard(null); setHoverType(null); }}
                        onHover={(t) => setHoverType(t)} />
         <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
         <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
@@ -341,11 +335,6 @@ export function ChallengeCreatorPanel() {
                       const isDragging = drag?.wave === i && drag?.from === di;
                       return (
                         <div key={di} data-wave={i} data-spawn={di}
-                             onMouseEnter={(e) => {
-                               const p = boxPos((e.currentTarget as HTMLElement).getBoundingClientRect());
-                               setPreview({ wave: i, drop: di, x: p.x, y: p.y });
-                             }}
-                             onMouseLeave={() => setPreview((p) => (p && p.wave === i && p.drop === di ? null : p))}
                              style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.12s, border-color 0.12s',
                                ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}),
                                ...(isHover && !isDragging ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}),
@@ -376,16 +365,8 @@ export function ChallengeCreatorPanel() {
         );
       })()}
 
-      {/* Live 3D look at the monster, floating above the hovered card (or the card whose dropdown is
-          open — then hovering an option overrides the shown monster). */}
-      {(() => {
-        const a = drag ? null : (pinned ?? preview);
-        if (!a) return null;
-        const d = ch.waves[a.wave]?.drops[a.drop];
-        if (!d) return null;
-        const t = hoverType ?? d.type;
-        return <MonsterPreviewBox type={t} name={cat(t).name} x={a.x} y={a.y} />;
-      })()}
+      {/* The single transparent canvas that draws every card's monster thumbnail. */}
+      <MonsterPortCanvas />
 
       {/* Delete-spawn confirmation. */}
       {confirmDel && (
