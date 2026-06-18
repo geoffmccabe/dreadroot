@@ -79,7 +79,7 @@ export function ChallengeCreatorPanel() {
   const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
   const waveEls = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dropHover, setDropHover] = useState<{ wave: number; drop: number } | null>(null);
-  const [drag, setDrag] = useState<null | { wave: number; from: number; w: number; label: string; monster: string }>(null);
+  const [drag, setDrag] = useState<null | { wave: number; from: number; w: number; ox: number; oy: number }>(null);
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const dragHover = useRef<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
@@ -142,6 +142,57 @@ export function ChallengeCreatorPanel() {
         <input type="range" className="chal-slider" min={min} max={max} step={5} value={pct} style={{ width: '100%' }}
                onChange={(e) => patchBoss(i, di, { [key]: Number(e.target.value) } as Partial<BossMods>)} />
       </div>
+    );
+  };
+
+  // The full spawn card body — shared by the live card AND the floating drag preview, so the
+  // dragged thing IS the real card (every field), not a summary chip. Grabbing the header captures
+  // where in the card the cursor is (ox,oy) so the card tracks the cursor 1:1 with no recenter.
+  const spawnInner = (drop: MonsterDrop, i: number, di: number, startAt: number) => {
+    const c = cat(drop.type);
+    return (
+      <>
+        <div onMouseDown={(e) => {
+               if (e.button !== 0) return;
+               e.stopPropagation(); e.preventDefault();
+               const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
+               const rect = cardEl?.getBoundingClientRect();
+               dragHover.current = di;
+               setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
+               setDragPos({ x: e.clientX, y: e.clientY });
+             }}
+             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
+          <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
+        </div>
+        <label style={lbl}>Monster</label>
+        <select style={inp} value={drop.type} onChange={(e) => patchDrop(i, di, { type: Number(e.target.value) })}>
+          {MONSTER_CATALOG.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
+        <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>Count</label><NumField style={inp} value={drop.count} min={1} onChange={(n) => patchDrop(i, di, { count: n ?? 1 })} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><NumField style={inp} value={drop.dropHeight} allowEmpty placeholder="rise" onChange={(n) => patchDrop(i, di, { dropHeight: n })} /></div>
+        </div>
+        {drop.count > 1 && (
+          <div style={{ marginTop: 6 }}><label style={lbl}>Stagger: one every {drop.staggerMs ? (drop.staggerMs / 1000) : 0}s (0 = together)</label>
+            <NumField style={inp} value={drop.staggerMs ? drop.staggerMs / 1000 : undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { staggerMs: n ? n * 1000 : undefined })} /></div>
+        )}
+        <div style={{ marginTop: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!drop.boss} onChange={(e) => patchDrop(i, di, { boss: e.target.checked ? clone(DEFAULT_BOSS) : undefined })} /> Boss modifiers
+          </label>
+        </div>
+        {drop.boss && (
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
+            {slider(i, di, 'sizePct', 'Size', drop, 25, 300, (p) => `${c.baseHeight.toFixed(1)}m → ${(c.baseHeight * p / 100).toFixed(1)}m`)}
+            {slider(i, di, 'healthPct', 'Health', drop, 25, 500, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
+            {slider(i, di, 'speedPct', 'Speed', drop, 25, 300, (p) => `100% → ${p}%`)}
+            {slider(i, di, 'damagePct', 'Damage', drop, 25, 500, (p) => `100% → ${p}%`)}
+          </div>
+        )}
+      </>
     );
   };
 
@@ -226,54 +277,15 @@ export function ChallengeCreatorPanel() {
                   <DragStrip>
                     {(() => { let cum = 0; return wave.drops.map((drop, di) => {
                       cum += drop.afterSec ?? 0; const startAt = cum;
-                      const c = cat(drop.type);
                       const isHover = dropHover?.wave === i && dropHover?.drop === di;
                       const isDragging = drag?.wave === i && drag?.from === di;
                       return (
                         <div key={di} data-wave={i} data-spawn={di}
-                             style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.1s',
+                             style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.12s, border-color 0.12s',
                                ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}),
                                ...(isHover && !isDragging ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}),
-                               ...(isDragging ? { opacity: 0.3 } : {}) }}>
-                          <div onMouseDown={(e) => {
-                                 if (e.button !== 0) return;
-                                 e.stopPropagation(); e.preventDefault();
-                                 const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
-                                 dragHover.current = di;
-                                 setDrag({ wave: i, from: di, w: cardEl?.offsetWidth ?? 220, label: `Spawn ${di + 1}`, monster: c.name });
-                                 setDragPos({ x: e.clientX, y: e.clientY });
-                               }}
-                               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
-                            <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
-                          </div>
-                          <label style={lbl}>Monster</label>
-                          <select style={inp} value={drop.type} onChange={(e) => patchDrop(i, di, { type: Number(e.target.value) })}>
-                            {MONSTER_CATALOG.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                          </select>
-                          <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
-                          <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
-                          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                            <div style={{ flex: 1 }}><label style={lbl}>Count</label><NumField style={inp} value={drop.count} min={1} onChange={(n) => patchDrop(i, di, { count: n ?? 1 })} /></div>
-                            <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><NumField style={inp} value={drop.dropHeight} allowEmpty placeholder="rise" onChange={(n) => patchDrop(i, di, { dropHeight: n })} /></div>
-                          </div>
-                          {drop.count > 1 && (
-                            <div style={{ marginTop: 6 }}><label style={lbl}>Stagger: one every {drop.staggerMs ? (drop.staggerMs / 1000) : 0}s (0 = together)</label>
-                              <NumField style={inp} value={drop.staggerMs ? drop.staggerMs / 1000 : undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { staggerMs: n ? n * 1000 : undefined })} /></div>
-                          )}
-                          <div style={{ marginTop: 6 }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                              <input type="checkbox" checked={!!drop.boss} onChange={(e) => patchDrop(i, di, { boss: e.target.checked ? clone(DEFAULT_BOSS) : undefined })} /> Boss modifiers
-                            </label>
-                          </div>
-                          {drop.boss && (
-                            <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
-                              {slider(i, di, 'sizePct', 'Size', drop, 25, 300, (p) => `${c.baseHeight.toFixed(1)}m → ${(c.baseHeight * p / 100).toFixed(1)}m`)}
-                              {slider(i, di, 'healthPct', 'Health', drop, 25, 500, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
-                              {slider(i, di, 'speedPct', 'Speed', drop, 25, 300, (p) => `100% → ${p}%`)}
-                              {slider(i, di, 'damagePct', 'Damage', drop, 25, 500, (p) => `100% → ${p}%`)}
-                            </div>
-                          )}
+                               ...(isDragging ? { opacity: 0.25, borderStyle: 'dashed' } : {}) }}>
+                          {spawnInner(drop, i, di, startAt)}
                         </div>
                       );
                     }); })()}
@@ -285,13 +297,19 @@ export function ChallengeCreatorPanel() {
         </div>
       </div>
 
-      {/* Floating glow card that follows the cursor while dragging a spawn. */}
-      {drag && (
-        <div style={{ position: 'fixed', left: dragPos.x - drag.w / 2, top: dragPos.y - 18, width: drag.w, pointerEvents: 'none', zIndex: 200, ...card, boxShadow: DRAG_GLOW, transform: 'rotate(-2deg) scale(1.04)' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}>⠿ {drag.label}</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#e8eefb', marginTop: 4 }}>{drag.monster}</div>
-        </div>
-      )}
+      {/* The real card, lifted: a full clone of the dragged spawn that tracks the cursor 1:1 (held
+          at the exact point it was grabbed) with the panel glow behind it. No tilt — it reads as
+          the actual card floating above the strip. pointer-events:none so drop-detection sees through. */}
+      {drag && (() => {
+        const dw = ch.waves[drag.wave]; const dd = dw?.drops[drag.from];
+        if (!dd) return null;
+        let s = 0; for (let k = 0; k <= drag.from; k++) s += dw.drops[k].afterSec ?? 0;
+        return (
+          <div style={{ position: 'fixed', left: dragPos.x - drag.ox, top: dragPos.y - drag.oy, width: drag.w, pointerEvents: 'none', zIndex: 200, ...card, boxShadow: DRAG_GLOW }}>
+            {spawnInner(dd, drag.wave, drag.from, s)}
+          </div>
+        );
+      })()}
 
       {/* Delete-spawn confirmation. */}
       {confirmDel && (
