@@ -24,13 +24,14 @@ export interface SwMonster {
 
 // Default names per npcType. Editable in the panel; overrides win.
 const DEFAULT_NAMES: Record<number, string> = {
-  1: 'Red Demon',
+  1: 'Demon Horde',
   2: 'Mushroom Grunt',
   3: 'Giant Skeleton',
   4: 'Acid Demon',
   5: 'Dark Lord',
-  6: 'Monster 6',
+  6: 'Bloody Skeleton',
   7: 'Green Troll',
+  8: 'Red Demon',
 };
 
 const KEY = 'dr_sw_monster_names';

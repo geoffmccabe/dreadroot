@@ -6,7 +6,7 @@ import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
-export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 export type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
                    desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -55,17 +55,21 @@ export const CFG: Partial<Record<MType, {
          { radiusMul: 0.525, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },
        ],
        spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 10], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2], spinSound: '/spintroll_sound.mp3' } },
+  // The BIG original red demon — its own monster, separate from the small Demon Horde (#1). Same
+  // model + sounds for now, but independently tunable (HP/damage/AI/sounds).
+  8: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 4.0,  speed: 3.2, gait: 'climb', sizeJitter: 0.05, speedJitter: 0.10, health: 1000, noStun: true, attackRange: 2.2, attackMs: 1500, meleeContact: { dmg: [20, 60], kb: [4, 9], cooldownMs: 1500 }, attackSound: '/demon_attack.mp3', missSound: '/swoosh_miss_low.mp3', roarSound: '/demon_roar_1.mp3' },
 };
 
 // Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.
 export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; baseHealth: number }[] = [
-  { id: 1, name: 'Red Demon',                baseHeight: 1.8,  baseHealth: 100 },
+  { id: 1, name: 'Demon Horde',              baseHeight: 1.8,  baseHealth: 100 },
   { id: 2, name: 'Mushroom Grunt',           baseHeight: 0.66, baseHealth: 100 },
   { id: 3, name: 'Giant Skeleton',           baseHeight: 6.0,  baseHealth: 500 },
   { id: 4, name: 'Vomit Demon',              baseHeight: 4.0,  baseHealth: 200 },
   { id: 5, name: 'Dark Lord (boss)',         baseHeight: 6.0,  baseHealth: 500 },
   { id: 6, name: 'Bloody Skeleton (horde)',  baseHeight: 1.8,  baseHealth: 50 },
   { id: 7, name: 'Spintroll',                baseHeight: 3.0,  baseHealth: 200 },
+  { id: 8, name: 'Red Demon',                baseHeight: 4.0,  baseHealth: 1000 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }

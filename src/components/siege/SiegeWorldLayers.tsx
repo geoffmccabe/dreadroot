@@ -61,8 +61,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               challenge so only the challenge monsters remain. */}
           {!challengeActive && (
             <Suspense fallback={null}>
+              {/* The BIG Red Demon (npcType 8) — now strikes for real (committed swipe). */}
               <MonsterEnemy spawn={[-400, 26, 705]} url="/siege/monsters/reddemon.glb"
                             modelHeight={1.886} height={4} aggro={140} health={1000} noStun
+                            attackRange={2.2} attackMs={1500}
+                            meleeContact={{ dmg: [20, 60], kb: [4, 9], cooldownMs: 1500 }}
                             roarSound="/demon_roar_1.mp3" attackSound="/demon_attack.mp3"
                             missSound="/swoosh_miss_low.mp3" />
               <MonsterEnemy spawn={[-440, 26, 695]} url="/siege/monsters/greentrollgrunt.glb"
