@@ -19,6 +19,7 @@ import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
+import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
@@ -85,6 +86,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           )}
           {/* One of each NEW FantasyRivals monster — also hidden during a challenge. */}
           {!challengeActive && <SiegeMonsterParade />}
+          {/* Open-World ambient spawner: plays + loops any region-tagged Challenge at its coords. */}
+          {!challengeActive && <RegionSpawnerRunner />}
         </>
       )}
     </>

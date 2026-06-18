@@ -45,6 +45,12 @@ export async function listAllChallenges(): Promise<ChallengeRow[]> {
   return (data ?? []) as ChallengeRow[];
 }
 
+/** Challenges tagged as Open-World region spawners (region is set). Used by RegionSpawnerRunner. */
+export async function listRegionChallenges(): Promise<ChallengeRow[]> {
+  const { data } = await tbl().select(COLS).not('region', 'is', null);
+  return (data ?? []) as ChallengeRow[];
+}
+
 /** Delete a challenge (RLS allows own + admin). Returns an error string or null. */
 export async function deleteChallenge(id: string): Promise<string | null> {
   const { error } = await tbl().delete().eq('id', id);

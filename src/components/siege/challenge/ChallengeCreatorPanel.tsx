@@ -13,6 +13,7 @@ import { BannerInput } from './BannerInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
 import { SIEGE_TELEPORTS } from '../siegeAreas';
+import { regionCoords } from './regionDefaults';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -385,13 +386,29 @@ export function ChallengeCreatorPanel() {
             {isSuper && (
               <div style={{ flex: 1 }}>
                 <label style={{ ...lbl, color: '#ffd27f' }}>Open-World Region (superadmin)</label>
-                <select style={inp} value={ch.region ?? ''} onChange={(e) => patch({ region: e.target.value || undefined })}>
+                <select style={inp} value={ch.region ?? ''}
+                        onChange={(e) => { const r = e.target.value || undefined; patch({ region: r, spawn: r ? (ch.spawn ?? regionCoords(r)) : ch.spawn }); }}>
                   <option value="">— not a region spawner —</option>
                   {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
             )}
           </div>
+          {/* Region spawn coordinates (superadmin, only when this challenge IS a region spawner).
+              Defaults to the region's known coords; edit + Save to update where its monsters appear. */}
+          {isSuper && ch.region && (() => {
+            const sp = ch.spawn ?? regionCoords(ch.region);
+            const setSp = (idx: number, n: number | undefined) => { const s: [number, number, number] = [sp[0], sp[1], sp[2]]; s[idx] = n ?? 0; patch({ spawn: s }); };
+            return (
+              <div style={{ display: 'flex', gap: 10, marginTop: 8, alignItems: 'flex-end' }}>
+                <div style={{ fontSize: 11, color: '#ffd27f', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>📍 {ch.region} spawn</div>
+                <div style={{ flex: 1 }}><label style={lbl}>Spawn X</label><NumField style={inp} value={sp[0]} onChange={(n) => setSp(0, n)} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Spawn Y</label><NumField style={inp} value={sp[1]} onChange={(n) => setSp(1, n)} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Spawn Z</label><NumField style={inp} value={sp[2]} onChange={(n) => setSp(2, n)} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Scatter Radius</label><NumField style={inp} value={ch.scatterRadius ?? 14} min={0} onChange={(n) => patch({ scatterRadius: n ?? 14 })} /></div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Wave nav — click to scroll the stack to that wave */}
