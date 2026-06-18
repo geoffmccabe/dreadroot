@@ -47,6 +47,33 @@ function DragStrip({ children }: { children: React.ReactNode }) {
   return <div ref={ref} className="chal-scroll" onMouseDown={onDown} style={{ overflowX: 'auto', display: 'flex', gap: 10, paddingBottom: 8, cursor: 'grab' }}>{children}</div>;
 }
 
+// A number input that lets you type freely — local string buffer so it never forces a sticky 0,
+// you can clear it, and the model only syncs back in when the field isn't focused. Normalizes on
+// blur (clamps `min`, applies the empty value).
+function NumField({ value, onChange, min, allowEmpty, placeholder, style }: {
+  value: number | undefined; onChange: (n: number | undefined) => void;
+  min?: number; allowEmpty?: boolean; placeholder?: string; style?: React.CSSProperties;
+}) {
+  const [txt, setTxt] = useState(value == null ? '' : String(value));
+  const focused = useRef(false);
+  useEffect(() => { if (!focused.current) setTxt(value == null ? '' : String(value)); }, [value]);
+  const commit = () => {
+    if (txt.trim() === '') { onChange(allowEmpty ? undefined : (min ?? 0)); setTxt(allowEmpty ? '' : String(min ?? 0)); return; }
+    let n = Number(txt); if (Number.isNaN(n)) n = min ?? 0; if (min != null && n < min) n = min;
+    onChange(n); setTxt(String(n));
+  };
+  return (
+    <input className="chal-num" type="number" min={min} placeholder={placeholder} style={style} value={txt}
+      onFocus={() => { focused.current = true; }}
+      onBlur={() => { focused.current = false; commit(); }}
+      onChange={(e) => {
+        const t = e.target.value; setTxt(t);
+        if (t.trim() === '') { if (allowEmpty) onChange(undefined); return; }
+        const n = Number(t); if (!Number.isNaN(n)) onChange(n);
+      }} />
+  );
+}
+
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
@@ -130,6 +157,8 @@ export function ChallengeCreatorPanel() {
         .chal-scroll::-webkit-scrollbar-track { background:hsla(220,25%,8%,0.5); }
         .chal-scroll::-webkit-scrollbar-thumb { background:hsla(210,30%,42%,0.8); border-radius:5px; }
         .chal-scroll::-webkit-scrollbar-thumb:hover { background:hsla(210,35%,52%,0.9); }
+        input[type=number].chal-num::-webkit-inner-spin-button, input[type=number].chal-num::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+        input[type=number].chal-num { -moz-appearance:textfield; appearance:textfield; }
       `}</style>
       <div style={{ width: '95vw', height: '95vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
@@ -146,7 +175,7 @@ export function ChallengeCreatorPanel() {
         <div style={{ display: 'flex', gap: 10, padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
           <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
-          <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><input style={inp} type="number" value={ch.rewardDivi ?? 0} onChange={(e) => patch({ rewardDivi: Number(e.target.value) })} /></div>
+          <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>Banner (4×1)</label><div style={{ ...inp, color: '#7e90ad', fontSize: 11 }}>upload — coming soon</div></div>
         </div>
 
@@ -178,8 +207,8 @@ export function ChallengeCreatorPanel() {
                   <label style={{ ...lbl, marginTop: 8 }}>Wave Text</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 44 }} value={wave.text ?? ''} onChange={(e) => patchWave(i, { text: e.target.value })} />
                   <label style={{ ...lbl, marginTop: 8 }}>Time: {fmtMS(wave.timeSec)}</label>
                   <input type="range" className="chal-slider" min={60} max={180} step={5} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(i, { timeSec: Number(e.target.value) })} />
-                  <label style={{ ...lbl, marginTop: 8 }}>Cost to Play (Divi)</label><input style={inp} type="number" value={wave.costDivi ?? 0} onChange={(e) => patchWave(i, { costDivi: Number(e.target.value) })} />
-                  <label style={{ ...lbl, marginTop: 8 }}>% to Prize Pool</label><input style={inp} type="number" value={wave.pctToPool ?? 0} onChange={(e) => patchWave(i, { pctToPool: Number(e.target.value) })} />
+                  <label style={{ ...lbl, marginTop: 8 }}>Cost to Play (Divi)</label><NumField style={inp} value={wave.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patchWave(i, { costDivi: n ?? 0 })} />
+                  <label style={{ ...lbl, marginTop: 8 }}>% to Prize Pool</label><NumField style={inp} value={wave.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patchWave(i, { pctToPool: n ?? 0 })} />
                 </div>
 
                 {/* Right: spawn strip (drag to pan) */}
@@ -223,14 +252,14 @@ export function ChallengeCreatorPanel() {
                             {MONSTER_CATALOG.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                           </select>
                           <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
-                          <input style={inp} type="number" min={0} value={drop.afterSec ?? 0} onChange={(e) => patchDrop(i, di, { afterSec: Math.max(0, Number(e.target.value)) })} />
+                          <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
                           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                            <div style={{ flex: 1 }}><label style={lbl}>Count</label><input style={inp} type="number" min={1} value={drop.count} onChange={(e) => patchDrop(i, di, { count: Math.max(1, Number(e.target.value)) })} /></div>
-                            <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><input style={inp} type="number" value={drop.dropHeight ?? ''} onChange={(e) => patchDrop(i, di, { dropHeight: e.target.value === '' ? undefined : Number(e.target.value) })} /></div>
+                            <div style={{ flex: 1 }}><label style={lbl}>Count</label><NumField style={inp} value={drop.count} min={1} onChange={(n) => patchDrop(i, di, { count: n ?? 1 })} /></div>
+                            <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><NumField style={inp} value={drop.dropHeight} allowEmpty placeholder="rise" onChange={(n) => patchDrop(i, di, { dropHeight: n })} /></div>
                           </div>
                           {drop.count > 1 && (
                             <div style={{ marginTop: 6 }}><label style={lbl}>Stagger: one every {drop.staggerMs ? (drop.staggerMs / 1000) : 0}s (0 = together)</label>
-                              <input style={inp} type="number" min={0} value={drop.staggerMs ? drop.staggerMs / 1000 : 0} onChange={(e) => patchDrop(i, di, { staggerMs: Number(e.target.value) > 0 ? Number(e.target.value) * 1000 : undefined })} /></div>
+                              <NumField style={inp} value={drop.staggerMs ? drop.staggerMs / 1000 : undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { staggerMs: n ? n * 1000 : undefined })} /></div>
                           )}
                           <div style={{ marginTop: 6 }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
