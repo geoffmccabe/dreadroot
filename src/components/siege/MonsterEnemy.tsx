@@ -664,31 +664,26 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
-      // Spray whenever the player is within range — INCLUDING up close (the spray is its only
-      // attack; the old `dist > attackRange` made it just stand idle when you got close to it).
-      const inBand = !!c.rangedRange && dist <= c.rangedRange;
-      // "Ready to swing": close enough (reach for the demon, attackRange for big/lunge monsters)
-      // AND off cooldown. Used to BOTH suppress the chase and fire the swing — so if you're in
-      // range it always attacks, instead of walking forever a hair short of the swing distance.
+      // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
+      // monster keeps WALKING toward you between spits instead of standing still and spraying.
+      if (c.rangedRange && dist <= c.rangedRange && now - s.lastRanged > s.nextRangedCd) {
+        const cdMin = c.rangedCooldownMs ?? 60000;
+        s.lastRanged = now;
+        s.nextRangedCd = cdMin + Math.random() * Math.max(0, (c.rangedCooldownMaxMs ?? cdMin) - cdMin);
+        const fxn = dx / dist, fzn = dz / dist;
+        const my = s.y + H * 0.60;            // mouth — lowered 10% of height (was 0.70)
+        const ox = s.x + fxn * H * 0.04, oz = s.z + fzn * H * 0.04;
+        // 3D aim: point at the player's ACTUAL height (camera.y) + a small upward arc so the acid
+        // drops onto them over distance — no more firing flat over your head when you're downhill.
+        const dyAim = (camera.position.y - my) + dist * 0.18;
+        c.onRangedAttack?.(ox, my, oz, dx, dyAim, dz);
+      }
+      // "Ready to swing": melee monsters only — close enough + off cooldown. Suppresses the chase
+      // and fires the swing so being in range always attacks.
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
-      const meleeReady = !inBand && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
-      if (inBand) {                                          // RANGED breath weapon: HOLD here + spray
-        if (now - s.lastRanged > s.nextRangedCd) {
-          const cdMin = c.rangedCooldownMs ?? 60000;
-          s.lastRanged = now;
-          s.nextRangedCd = cdMin + Math.random() * Math.max(0, (c.rangedCooldownMaxMs ?? cdMin) - cdMin);
-          s.swipeUntil = now + 1000;                         // attack anim runs for the 1s spray, then idle
-          play(clips.attack);                                // loop the attack pose while spraying
-          const aAtk = clip(clips.attack); if (aAtk) aAtk.time = 0.5;  // start 0.5s in so it matches the spray
-          // Mouth ≈ 30% down from the top (0.70·H, accounts for the long horns). Nudge a
-          // touch forward to the face so from the side it reads as coming from the mouth,
-          // slightly inside (not floating in the air in front).
-          const fxn = dx / dist, fzn = dz / dist;
-          const my = s.y + H * 0.70;
-          const ox = s.x + fxn * H * 0.04, oz = s.z + fzn * H * 0.04;
-          c.onRangedAttack?.(ox, my, oz, dx, dist * 0.4, dz);
-        } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
-      } else if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
+      const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
+        && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
+      if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase — UNLESS mid committed-swing (planted, swinging through), so the knockback that
         // shoves the player out of reach doesn't cancel the swipe animation; or ready to swing now.
         const step = Math.min(SPD * delta, dist - c.attackRange);

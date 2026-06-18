@@ -19,22 +19,32 @@ function outBack(t: number): number {
 
 function DamageItem({ d }: { d: DamageNumber }) {
   const group = useRef<THREE.Group>(null);
-  const txt = useRef<THREE.Mesh & { material: THREE.Material }>(null);
-  useFrame(() => {
+  const txt = useRef<(THREE.Mesh & { material: THREE.Material; outlineWidth: number; sync?: () => void }) | null>(null);
+  const outlineSet = useRef(false);
+  useFrame((state) => {
     const g = group.current; if (!g) return;
     const age = performance.now() - d.born;
     const rise = d.speed * (Math.min(age, DN_LIFE_MS) / 1000);          // up at `speed` m/s
     g.position.set(d.x + d.driftX * d.speed * (Math.min(age, DN_LIFE_MS) / 1000) * 0.5, d.y + rise, d.z);
     g.scale.setScalar(age < 750 ? Math.max(0, outBack(age / 750)) : 1); // pop-in 0→1 over 0.75s
     const t = age / DN_LIFE_MS;
-    const alpha = t < 0.5 ? 1 : Math.max(0, 1 - (t - 0.5) / 0.5);        // hold 0.5s, then fade
+    // Peak at 70% opacity (30% transparent), hold 0.5s, then fade out.
+    const alpha = 0.7 * (t < 0.5 ? 1 : Math.max(0, 1 - (t - 0.5) / 0.5));
     const m = txt.current?.material as (THREE.Material & { opacity: number }) | undefined;
     if (m) { m.transparent = true; m.opacity = alpha; }
+    // Scale the black border to distance (once — the number only lives ~1s) so it reads as a
+    // uniform thickness whether the kill is point-blank or across the map.
+    if (!outlineSet.current && txt.current) {
+      outlineSet.current = true;
+      const camDist = state.camera.position.distanceTo(g.position);
+      txt.current.outlineWidth = Math.min(0.28, Math.max(0.05, 0.012 * camDist));
+      txt.current.sync?.();
+    }
   });
   return (
     <Billboard ref={group} position={[d.x, d.y, d.z]}>
-      <Text ref={txt as never} fontSize={0.8} color={d.color} anchorX="center" anchorY="middle"
-            outlineWidth={0.06} outlineColor="#000000">
+      <Text ref={txt as never} font="/AVENGEANCE.ttf" fontSize={0.8} color={d.color}
+            anchorX="center" anchorY="middle" outlineWidth={0.06} outlineColor="#000000">
         {d.text}
       </Text>
     </Billboard>
