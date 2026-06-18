@@ -12,7 +12,7 @@ import { sampleHeight } from '../terrainHeight';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose } from './challengeControl';
-import { resetChallengeScore, addChallengeScore } from './challengeScore';
+import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { TEST_CHALLENGE } from './testChallenge';
 import type { Challenge, MonsterDrop } from './challengeTypes';
 
@@ -123,7 +123,7 @@ export function ChallengeRunner() {
     revert();
     setChallengeState({
       active: false, completed: false, waveEndsAt: 0,
-      announce: { title: 'YOU LOSE!', subtitle: `Reached Wave ${r.waveIdx + 1}/${challengeRef.current!.waves.length}`, faint: false, until: now + 6000 },
+      announce: { title: 'YOU LOSE!', subtitle: `Reached Wave ${r.waveIdx + 1}/${challengeRef.current!.waves.length}`, text: `Points: ${Math.round(getChallengeScore())}`, faint: false, until: now + 6000 },
     });
   };
 
@@ -184,7 +184,7 @@ export function ChallengeRunner() {
     r.active = false;
     setChallengeState({
       active: false, completed: true, finishedAt: now, waveEndsAt: 0,
-      announce: { title: 'Challenge Complete!', subtitle: `Time: ${((now - r.startedAt) / 1000).toFixed(1)}s`, faint: false, until: now + 8000 },
+      announce: { title: 'Challenge Complete!', subtitle: `${Math.round(getChallengeScore())} points`, text: `Time: ${((now - r.startedAt) / 1000).toFixed(1)}s`, faint: false, until: now + 8000 },
     });
     setMobs([]);
   };
