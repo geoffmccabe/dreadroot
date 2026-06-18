@@ -93,6 +93,9 @@ export interface MonsterConfig {
   roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
   attackSound?: string;       // if set, plays (spatial) the instant a melee swing starts — timed to the swipe
   missSound?: string;         // if set, plays (spatial) when a swing whiffs — the player left hit range before contact
+  hitSound?: string;          // impact sound when THIS monster lands a hit (default punched.mp3 — e.g. little_slap for grunts)
+  attackStyle?: 'spin-lunge'; // 'spin-lunge' = mushroom grunt: 360° body spin (0.25s) + lunge to 50% closer and back (0.5s),
+                              // strike at the peak. No swipe. Reads dmg/kb from meleeContact.
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -155,6 +158,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false,
+    lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
@@ -354,12 +358,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // Melee swipe: when the monster's collider overlaps the player's (vertically too), deal a
     // random hit + knockback on a cooldown (red demons / mushroom grunts).
-    if (c.meleeContact) {
+    if (c.meleeContact && c.attackStyle !== 'spin-lunge') {
       const pTop = camera.position.y, pFeet = camera.position.y - 1.6;
       // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
       if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
-        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
+        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound);
         s.swingHit = true;   // this swing connected → no whiff sound
       }
     }
@@ -373,7 +377,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext) {
         s.contactNext = now + 1000;
         if (Math.random() < 0.30) {
-          dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H);
+          dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H, c.hitSound);
           s.swingHit = true;
         }
       }
@@ -527,16 +531,28 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         play(clips.walk);
       } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
       else if (now - s.lastAttack > c.attackMs) {
-        s.lastAttack = now; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-        // Swing sound, fired the instant the swipe animation starts — no rate variation
-        // so it stays timed to the swing. (punched.mp3 plays separately at impact.)
-        if (c.attackSound) {
-          const adx = camera.position.x - s.x, ady = camera.position.y - s.y, adz = camera.position.z - s.z;
-          void playSpatialSound(c.attackSound, Math.sqrt(adx * adx + ady * ady + adz * adz), { baseVolume: 0.9 });
+        s.lastAttack = now;
+        if (c.attackStyle === 'spin-lunge') {
+          // Mushroom grunt: begin a 0.5s spin-lunge. Capture the forward offset (50% toward the
+          // player NOW) and the base facing; the visual override below drives spin + lunge and
+          // resolves hit/miss at the 0.25s peak.
+          s.lungeStart = now; s.lungeStruck = false; s.swipeUntil = now + 500;
+          s.lungeOX = (camera.position.x - s.x) * 0.5;
+          s.lungeOZ = (camera.position.z - s.z) * 0.5;
+          s.lungeYaw0 = Math.atan2(dx, dz) + c.faceOffset;
+          play(clips.idle);   // limbs still — the WHOLE body spins + lunges
+        } else {
+          s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
+          // Swing sound, fired the instant the swipe animation starts — no rate variation
+          // so it stays timed to the swing. (punched.mp3 plays separately at impact.)
+          if (c.attackSound) {
+            const adx = camera.position.x - s.x, ady = camera.position.y - s.y, adz = camera.position.z - s.z;
+            void playSpatialSound(c.attackSound, Math.sqrt(adx * adx + ady * ady + adz * adz), { baseVolume: 0.9 });
+          }
+          // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
+          // has left hit range by then, it was a genuine miss → swoosh.
+          if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
         }
-        // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
-        // has left hit range by then, it was a genuine miss → swoosh.
-        if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
       }
       else if (now > s.swipeUntil) play(clips.idle);
     } else {                                                // no player near -> wander + search
@@ -699,6 +715,33 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       yR = s.y - (1 - t) * H;
     }
     g.position.set(s.x, yR, s.z);
+
+    // ── Spin-lunge visual (mushroom grunt): override the rendered transform for 0.5s. Full
+    //    body revolution over the first 0.25s; lunge to 50% closer and back (sin ease, peak at
+    //    0.25s); strike resolved once at the peak → little_slap on a hit, swoosh on a whiff.
+    //    Hitbox (inst/box) stays on s.x/s.z so it never shoves other colliders. ──
+    if (c.attackStyle === 'spin-lunge' && s.lungeStart) {
+      const el = now - s.lungeStart;
+      if (el < 500) {
+        const off = Math.sin(Math.PI * (el / 500));        // 0→1→0, peak at 0.25s
+        g.position.set(s.x + s.lungeOX * off, yR, s.z + s.lungeOZ * off);
+        g.rotation.y = s.lungeYaw0 + Math.min(1, el / 250) * Math.PI * 2;  // full spin over 0.25s
+        if (!s.lungeStruck && el >= 250) {
+          s.lungeStruck = true;
+          const px = s.x + s.lungeOX, pz = s.z + s.lungeOZ;  // lunge-peak point
+          const sdx = camera.position.x - px, sdz = camera.position.z - pz;
+          const sdist = Math.hypot(sdx, sdz) || 1;
+          const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
+          if (sdist < (c.attackRange ?? 1.8) && vOverlap && c.meleeContact) {
+            dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), sdx / sdist, 0, sdz / sdist,
+                             rnd(c.meleeContact.kb), c.hitSound);
+          } else if (c.missSound) {
+            void playSpatialSound(c.missSound, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
+          }
+        }
+      } else s.lungeStart = 0;
+    }
+
     inst.x = s.x; inst.y = yR; inst.z = s.z;   // keep the combat hitbox on the live body
     inst.yaw = g.rotation.y;                     // so attached fire rotates with the body
     // BODY collider: feet → shoulders (STAND·H). Other demons stand on its top, so a stacked

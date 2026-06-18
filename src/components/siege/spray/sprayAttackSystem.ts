@@ -45,13 +45,14 @@ export function setSprayDamage(fn: DamageFn | null) { damageFn = fn; }
 // Direct hit on the player from a melee monster (e.g. the Dark Lord's teleport-strike),
 // routed through the same registered player-damage sink as the spray.
 const _dmgDir = new THREE.Vector3();
-export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0) {
+export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0, hitSound = '/punched.mp3') {
   if (damageFn) {
     _dmgDir.set(dirX, dirY, dirZ).normalize();
     damageFn(dmg, _dmgDir, knockback);
     recordHit(dmg, knockback);   // combat telemetry: stamp this hit with timing + spacing
-    // Punch impact at the player (distance 0 = full volume), pitch/length varied ±15%.
-    void playSpatialSound('/punched.mp3', 0, { baseVolume: 0.7, playbackRate: vary() });
+    // Impact sound at the player (distance 0 = full volume), pitch/length varied ±15%.
+    // Default = punched; monsters can override (e.g. little_slap for the mushroom grunt).
+    void playSpatialSound(hitSound, 0, { baseVolume: 0.7, playbackRate: vary() });
   }
 }
 

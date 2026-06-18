@@ -72,7 +72,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <MonsterEnemy spawn={[-420, 26, 720]} url="/siege/monsters/redtroll.glb"
                             modelHeight={2.033} height={2.7} aggro={140} />
               <MonsterEnemy spawn={[-380, 26, 720]} url="/siege/monsters/mushroomgruntanim.glb"
-                            modelHeight={2.331} height={2.2} aggro={140} />
+                            modelHeight={2.331} height={2.2} aggro={140} attackMs={1500}
+                            attackStyle="spin-lunge" meleeContact={{ dmg: [10, 50], kb: [1, 5] }}
+                            hitSound="/little_slap.mp3" missSound="/swoosh_miss_high.mp3" />
             </Suspense>
           )}
           {/* One of each NEW FantasyRivals monster — also hidden during a challenge. */}
