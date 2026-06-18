@@ -742,6 +742,26 @@ export async function transferSlot(
   return data as { replayed: boolean; itemId?: string; quantity?: number; noop?: boolean };
 }
 
+/** Move (or swap) a single item between the equip region and another region.
+ *  Exactly one side must be region='equip'. The move is delete-source +
+ *  insert-dest, so the existing user_slots realtime clears the source side. */
+export async function equipTransfer(
+  from: { region: string; page: number; slot: number },
+  to: { region: string; page: number; slot: number },
+  requestId?: string,
+): Promise<{ replayed: boolean; moved?: boolean; swapped?: boolean; noop?: boolean }> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { data, error } = await (supabase as unknown as {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  }).rpc('equip_transfer', {
+    p_from_region: from.region, p_from_page: from.page, p_from_slot: from.slot,
+    p_to_region: to.region, p_to_page: to.page, p_to_slot: to.slot,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+  return data as { replayed: boolean; moved?: boolean; swapped?: boolean; noop?: boolean };
+}
+
 export async function grantSlot(
   region: 'inventory' | 'quick_select' | 'vault',
   itemId: string,
