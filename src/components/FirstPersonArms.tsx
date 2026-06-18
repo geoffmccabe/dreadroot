@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { useFBX } from '@react-three/drei';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { frameLoop } from '@/lib/frameLoop';
+import { getBaseFov } from '@/config/fovSetting';
 
 // Pre-allocate reusable vectors OUTSIDE component to prevent GC
 const forwardVec = new THREE.Vector3();
@@ -87,9 +88,11 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
       const targetAim = isAimingRef.current ? 1 : 0;
       aimProgress.current += (targetAim - aimProgress.current) * 8 * delta;
       
-      // FOV zoom when aiming - use damp for smooth exponential easing
+      // FOV zoom when aiming - use damp for smooth exponential easing. Base FoV is the
+      // user's setting (fovSetting); aiming zooms to base-25 (clamped).
       if (camera instanceof THREE.PerspectiveCamera) {
-        const targetFov = isAimingRef.current ? 50 : 75;
+        const base = getBaseFov();
+        const targetFov = isAimingRef.current ? Math.max(40, base - 25) : base;
         camera.fov = THREE.MathUtils.damp(camera.fov, targetFov, 8, delta);
         camera.updateProjectionMatrix();
       }

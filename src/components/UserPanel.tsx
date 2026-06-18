@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
+import { useBaseFov, setBaseFov, FOV_MIN, FOV_MAX, FOV_DEFAULT } from '@/config/fovSetting';
 import { Switch } from '@/components/ui/switch';
 import { useUserData } from '@/hooks/useUserData';
 import { supabase } from '@/integrations/supabase/client';
@@ -96,6 +97,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [blockchainAddress, setBlockchainAddress] = useState('');
   const [visualDistance, setVisualDistance] = useState(4);
   const [fogEnabled, setFogEnabled] = useState(true);
+  const fov = useBaseFov();
   const [displayName, setDisplayName] = useState('');
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -529,6 +531,28 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Controls how far you can see. Lower = better performance.
+                </p>
+              </div>
+            </Card>
+
+            <Card className="p-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Field of View</Label>
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {fov}°{fov === FOV_DEFAULT ? ' (default)' : ''}
+                  </span>
+                </div>
+                <Slider
+                  value={[fov]}
+                  onValueChange={(v) => setBaseFov(v[0])}
+                  min={FOV_MIN}
+                  max={FOV_MAX}
+                  step={1}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lower = more zoomed in, less edge distortion (enemies look closer to their true distance). Higher = wider view.
                 </p>
               </div>
             </Card>

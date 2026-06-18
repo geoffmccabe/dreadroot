@@ -35,6 +35,11 @@ export interface PlayerHealthState {
   isDead: boolean;
 }
 
+// Module mirror of the player's current health so non-react code (combat telemetry) can
+// read it without a hook. Updated whenever healthState changes.
+let _playerHealthSnapshot = 0;
+export function getPlayerHealthSnapshot(): number { return _playerHealthSnapshot; }
+
 /**
  * Calculate max health based on level
  * Base: 100 health at level 1
@@ -110,6 +115,7 @@ export function usePlayerHealth() {
   // Sync refs with state
   useEffect(() => {
     healthRef.current = healthState;
+    _playerHealthSnapshot = healthState.currentHealth;   // mirror for non-react readers (combat telemetry)
   }, [healthState]);
   
   useEffect(() => {

@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { SprayConfig, SpraySprite } from './sprayConfig';
 import { KPH } from './sprayConfig';
 import { playSpatialSound } from '@/lib/spatialAudio';
+import { recordHit } from '../combatTelemetry';
 
 // Random ±15% playback rate → pitch + length vary together so a repeated impact/roar
 // never sounds exactly the same.
@@ -48,6 +49,7 @@ export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: 
   if (damageFn) {
     _dmgDir.set(dirX, dirY, dirZ).normalize();
     damageFn(dmg, _dmgDir, knockback);
+    recordHit(dmg, knockback);   // combat telemetry: stamp this hit with timing + spacing
     // Punch impact at the player (distance 0 = full volume), pitch/length varied ±15%.
     void playSpatialSound('/punched.mp3', 0, { baseVolume: 0.7, playbackRate: vary() });
   }

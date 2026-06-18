@@ -8,6 +8,7 @@ import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { PlayerStatusPanel } from '@/components/hud/PlayerStatusPanel';
 import { InstructionsPanel } from '@/components/hud/InstructionsPanel';
+import { CombatTelemetryOverlay } from '@/components/siege/CombatTelemetry';
 
 export function SiegeHUD() {
   const { profile, tokenBalance } = useUserData();
@@ -39,6 +40,9 @@ export function SiegeHUD() {
         line1="Click to shoot • R for crosshairs"
         line2="WASD move • Space jump • Shift run • I = Inventory"
       />
+
+      {/* Top-right: combat recorder (pause + copy the timing/spacing of every hit). */}
+      <CombatTelemetryOverlay />
     </>
   );
 }

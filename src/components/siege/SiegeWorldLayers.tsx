@@ -19,6 +19,7 @@ import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
+import { CombatTelemetryProbe } from './CombatTelemetry';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -44,6 +45,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {world.water?.[0]?.surfaceY != null && <UnderwaterEffect level={world.water[0].surfaceY} />}
       {/* Challenge wave engine. Start/stop the test challenge with the "!c" command. */}
       <ChallengeRunner />
+      {/* Combat recorder probe — feeds player position to the telemetry every frame. */}
+      <CombatTelemetryProbe />
 
       {terrainReady && (
         <>
