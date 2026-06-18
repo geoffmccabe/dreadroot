@@ -583,13 +583,11 @@ export function usePlayerHealth() {
         }
       });
     
-    toast({
-      title: "Respawned",
-      description: "You have been respawned with full health",
-    });
-    
+    // (No respawn toast — the bottom-right toast was intrusive. Respawn is silent;
+    // in-world feedback can be added later if wanted.)
+
     return SPAWN_POINT.clone();
-  }, [toast]);
+  }, []);
 
   /**
    * Set max health (for upgrades)
