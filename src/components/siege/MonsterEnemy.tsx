@@ -643,12 +643,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         const mul = zooming ? c.spin.zoomHitMul : 1;
         // Spintroll's own impact sound on the working 3D path; '' skips dealPlayerDamage's own.
         emitMonster3D(camera, '/hit_by_spintroll.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
-        // 2× player knockback from the spintroll.
-        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 2, '');
-        // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
-        // into a permanent, unrecoverable spin.
-        if (zooming && now > s.spinHitNext) {
-          s.spinHitNext = now + 3000;
+        // Big player knockback — scaled way up so it clearly flings you (the ×2 was too small).
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 6, '');
+        // Spin the player's view OPPOSITE the troll's spin — on EVERY hit now (was a rare zoom-only
+        // fling). __applyPlayerSpin SETS + decays, so a short re-trigger gap keeps it recoverable.
+        if (now > s.spinHitNext) {
+          s.spinHitNext = now + 700;
           (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(
             rnd(c.spin.playerSpinRev), s.spinVel > 0 ? -1 : 1);   // player spins OPPOSITE the troll
         }
@@ -697,9 +697,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           // frame-driven below (no rate variation, so it stays timed to the swing).
           if (c.attackSound) s.attackSoundAt = now + 650;
           if (c.meleeContact && c.attackSound) {
-            // Committed swipe: the demon plants + swings through; the hit/miss is resolved once
-            // at the strike point (0.65s, lands with the swipe sound), 50/50 for now.
-            s.strikeAt = now + 650;
+            // Committed swipe: the demon plants + swings through. The swipe sound lands at 0.65s
+            // (the visible swipe); the actual strike (impact + knockback) is ~0.15s after that.
+            s.strikeAt = now + 800;
           } else if (c.missSound) {
             // Legacy whiff (monsters with a swoosh but no committed strike).
             s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false;

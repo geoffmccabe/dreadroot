@@ -412,7 +412,15 @@ export const WISP_DEATH_SOUND = '/wisp_death.mp3';
 // Yodel sound URLs
 export const YODEL_SOUND = '/yodel_1.mp3';
 
+// Siege monster combat sounds — DECODED up front so the first swipe/hit/roar in a fight plays
+// instantly and overlaps, instead of trickling in one-by-one as each decodes on first use.
+const MONSTER_COMBAT_SOUNDS = [
+  '/demon_attack.mp3', '/demon_roar_1.mp3', '/punched.mp3', '/swoosh_miss_low.mp3',
+  '/swoosh_miss_high.mp3', '/little_slap.mp3', '/hit_by_spintroll.mp3', '/spintroll_sound.mp3',
+  '/spintroll_death.mp3', '/enemy_hitting_ground.mp3', '/giant_skeleton_walk.mp3', '/skeleton_hit.mp3',
+];
+
 // Preload sounds on module load (with error handling to avoid blocking)
-preloadSpatialSounds([...SHWARM_SOUNDS, SHNAKE_SOUND, SHNAKE_DEATH_SOUND, WISP_DEATH_SOUND, YODEL_SOUND]).catch((e) => {
+preloadSpatialSounds([...SHWARM_SOUNDS, SHNAKE_SOUND, SHNAKE_DEATH_SOUND, WISP_DEATH_SOUND, YODEL_SOUND, ...MONSTER_COMBAT_SOUNDS]).catch((e) => {
   console.warn('[SpatialAudio] Failed to preload sounds:', e);
 });
