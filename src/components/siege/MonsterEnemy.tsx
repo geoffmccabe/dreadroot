@@ -725,13 +725,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
       const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
-      if (dist > c.attackRange && now > s.swipeUntil && !meleeReady) {
-        // Chase. Planted only while mid-attack (now < swipeUntil): a committed swipe, or the ~1s
-        // vomit pose — so a ranged sprayer still WALKS toward you between (and after) spits.
+      if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
+        // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
+        // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
+        // holds the vomit pose during the spit (movement continues).
         const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
-        play(clips.walk);
+        if (now > s.swipeUntil) play(clips.walk);   // vomit/swing pose shows during an attack
       } else if (c.rangedRange) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
