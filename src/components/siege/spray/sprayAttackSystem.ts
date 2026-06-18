@@ -65,6 +65,9 @@ const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _f = new THREE.Vector3
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** Start a spray from (ox,oy,oz) toward (dx,dy,dz). Particles emit over cfg.emitWindow. */
+let _lastSprayHitAt = 0;
+export function getLastSprayHitAt(): number { return _lastSprayHitAt; }
+
 export function fireSpray(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, cfg: SprayConfig) {
   _f.set(dx, dy, dz).normalize();
   // orthonormal basis around the forward axis
@@ -141,6 +144,7 @@ export function updateSpray(
     const ddx = p.x - px, ddy = p.y - py, ddz = p.z - pz;
     if (ddx * ddx + ddy * ddy + ddz * ddz < p.cfg.hitRadius * p.cfg.hitRadius) {
       if (damageFn) { _hitDir.set(p.vx, p.vy, p.vz).normalize(); damageFn(p.cfg.damage, _hitDir, 0); }
+      _lastSprayHitAt = performance.now();   // so a sprayer can tell its breath connected (→ wide-arc retry)
       onHit(p.cfg);
       particles.splice(i, 1); continue;
     }

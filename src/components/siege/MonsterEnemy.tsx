@@ -16,7 +16,7 @@ import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { useBossAura } from './darkLordAura';
-import { dealPlayerDamage } from './spray/sprayAttackSystem';
+import { dealPlayerDamage, getLastSprayHitAt } from './spray/sprayAttackSystem';
 import { play3DPositionalSound, startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
 import { DarkLordFlame } from './DarkLordFlame';
 import { useSmokeTrail } from './siegeSmoke';
@@ -71,7 +71,7 @@ export interface MonsterConfig {
   rangedRange?: number;       // if set, fires a ranged attack when the player is within this (m) but beyond melee
   rangedCooldownMs?: number;  // MIN recharge (ms) between ranged attacks (default 60000)
   rangedCooldownMaxMs?: number; // MAX recharge — each cooldown is random in [min,max]; defaults to min
-  onRangedAttack?: (x: number, y: number, z: number, dx: number, dy: number, dz: number) => void; // fire the breath weapon
+  onRangedAttack?: (x: number, y: number, z: number, dx: number, dy: number, dz: number, wide?: boolean) => void; // fire the breath weapon (wide = 90° sweep)
   boss?: 'teleporter';        // 'teleporter' = Dark Lord: teleports around the player, opacity = damage
                               // resistance, aura of black/purple fire + smoke, melee strike from behind
   bossSpeedFactor?: number;   // shamble-speed multiplier while corporeal (default 0.4 = slow)
@@ -92,6 +92,8 @@ export interface MonsterConfig {
   spin?: SpinConfig;          // Spintroll: fast spin + erratic zoom + contact damage + player-spin
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
   roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
+  callSound?: string;         // ambient call (spatial) — 10% chance every 10-20s, ±15% pitch/speed
+  annoyedSound?: string;      // ranged sprayer: plays after 2 vomits in a row that ALL missed
   attackSound?: string;       // if set, plays (spatial) the instant a melee swing starts — timed to the swipe
   missSound?: string;         // if set, plays (spatial) when a swing whiffs — the player left hit range before contact
   hitSound?: string;          // impact sound when THIS monster lands a hit (default punched.mp3 — e.g. little_slap for grunts)
@@ -180,7 +182,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
-    deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0 });
+    deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0,
+    sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0 });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -213,6 +216,27 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     schedule();
     return () => { alive = false; clearTimeout(timer); };
   }, [c.roarSound, camera]);
+  // Occasional ambient CALL (e.g. vomit demon's deer roar): 10% chance every 10-20s, re-rolling
+  // both the chance AND the gap each time, with ±15% pitch+speed variation.
+  useEffect(() => {
+    if (!c.callSound) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (!alive) return;
+        if (Math.random() < 0.10) {
+          const s = st.current;
+          const dist = Math.hypot(camera.position.x - s.x, camera.position.z - s.z);
+          emitMonster3D(camera, c.callSound!, s.x, s.y + 1.2, s.z, dist,
+            { baseVolume: 0.8, playbackRate: 0.85 + Math.random() * 0.30 });
+        }
+        schedule();
+      }, 10000 + Math.random() * 10000);
+    };
+    schedule();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [c.callSound, camera]);
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%
@@ -369,6 +393,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (c.hurtSound && inst.hitAt > s.lastHurtAt) {
       s.lastHurtAt = inst.hitAt;
       emitMonster3D(camera, c.hurtSound, s.x, s.y + H * 0.5, s.z, dist, { baseVolume: 0.7, playbackRate: 0.9 + Math.random() * 0.2 });
+    }
+    // Spray hit/miss check: 2s after a vomit (long enough for the blobs to land), did any connect?
+    // Two vomits in a row that ALL missed → annoyed grunt + the NEXT vomit is a wide 90° sweep.
+    if (s.sprayCheck && now > s.sprayCheck) {
+      s.sprayCheck = 0;
+      if (getLastSprayHitAt() > s.sprayFireAt) s.sprayMiss = 0;   // at least one blob hit you
+      else if (++s.sprayMiss >= 2) {
+        s.wideNext = true;
+        if (c.annoyedSound) emitMonster3D(camera, c.annoyedSound, s.x, s.y + 1.2, s.z, dist, { baseVolume: 0.85, playbackRate: 0.85 + Math.random() * 0.30 });
+      }
     }
     // Stop the walk loop once dead (death blocks below return early).
     if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
@@ -678,7 +712,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // 3D aim: point at the player's ACTUAL height (camera.y) + a small upward arc so the acid
         // drops onto them over distance — no more firing flat over your head when you're downhill.
         const dyAim = (camera.position.y - my) + dist * 0.18;
-        c.onRangedAttack?.(ox, my, oz, dx, dyAim, dz);
+        // After 2 vomits in a row that ALL missed, this one is a WIDE 90° sweep (+ head-shake below).
+        const wide = s.wideNext; s.wideNext = false;
+        if (wide) { s.wideUntil = now + 1000; s.sprayMiss = 0; }
+        s.sprayFireAt = now; s.sprayCheck = now + 2000;   // check 2s later whether any blob connected
+        c.onRangedAttack?.(ox, my, oz, dx, dyAim, dz, wide);
       }
       // "Ready to swing": melee monsters only — close enough + off cooldown. Suppresses the chase
       // and fires the swing so being in range always attacks.
@@ -939,6 +977,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         const off = Math.sin(Math.PI * (el / dur));   // 0→1→0 over the swing
         g.position.set(s.x + s.lungeOX * off, yR + s.lungeOY * off, s.z + s.lungeOZ * off);
       } else s.lungeStart = 0;
+    }
+
+    // ── Wide-vomit head-shake: oscillate the facing ±45° at 5 Hz so the 90° spray cone sweeps
+    //    across the player (5 back-and-forths in the 1s wide spray). ──
+    if (s.wideUntil) {
+      if (now < s.wideUntil) {
+        const ph = (s.wideUntil - now) / 1000;   // phase (1→0 over the second)
+        g.rotation.y = Math.atan2(dx, dz) + c.faceOffset + (45 * Math.PI / 180) * Math.sin(2 * Math.PI * 5 * ph);
+      } else s.wideUntil = 0;
     }
 
     inst.x = s.x; inst.y = yR; inst.z = s.z;   // keep the combat hitbox on the live body
