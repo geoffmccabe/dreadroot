@@ -16,7 +16,8 @@ registerRecipe({
   color0: '#46603f',
   color1: '#8aa07e',
   size1: 0.8,
-  spiralOpacity: 0.4,
+  rise: 2.0,        // rises twice as fast as the base smoke
+  spiral: false,    // no spinning spirals — plain rising smoke
 });
 
 /** Drop a continuous smoke trail from a monster's body while `enabled`. */
