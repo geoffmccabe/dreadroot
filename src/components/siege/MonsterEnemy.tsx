@@ -717,20 +717,22 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (wide) { s.wideUntil = now + 1000; s.sprayMiss = 0; }
         s.sprayFireAt = now; s.sprayCheck = now + 2000;   // check 2s later whether any blob connected
         c.onRangedAttack?.(ox, my, oz, dx, dyAim, dz, wide);
+        s.swipeUntil = now + 1000;                        // plant + play the vomit pose for the 1s spray
+        play(clips.attack); const aAtk = clip(clips.attack); if (aAtk) aAtk.time = 0;
       }
       // "Ready to swing": melee monsters only — close enough + off cooldown. Suppresses the chase
       // and fires the swing so being in range always attacks.
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
       const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
-      if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
-        // Chase — UNLESS mid committed-swing (planted, swinging through), so the knockback that
-        // shoves the player out of reach doesn't cancel the swipe animation; or ready to swing now.
+      if (dist > c.attackRange && now > s.swipeUntil && !meleeReady) {
+        // Chase. Planted only while mid-attack (now < swipeUntil): a committed swipe, or the ~1s
+        // vomit pose — so a ranged sprayer still WALKS toward you between (and after) spits.
         const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
-      } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
+      } else if (c.rangedRange) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
         if (c.attackStyle === 'spin-lunge') {
