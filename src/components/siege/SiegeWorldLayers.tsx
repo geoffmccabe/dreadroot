@@ -19,7 +19,7 @@ import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
-import { CombatTelemetryProbe } from './CombatTelemetry';
+import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 

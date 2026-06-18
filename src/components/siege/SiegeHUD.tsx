@@ -8,7 +8,7 @@ import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { PlayerStatusPanel } from '@/components/hud/PlayerStatusPanel';
 import { InstructionsPanel } from '@/components/hud/InstructionsPanel';
-import { CombatTelemetryOverlay } from '@/components/siege/CombatTelemetry';
+import { CombatTelemetryOverlay } from '@/components/siege/CombatTelemetryView';
 
 export function SiegeHUD() {
   const { profile, tokenBalance } = useUserData();
