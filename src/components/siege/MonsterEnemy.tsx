@@ -488,7 +488,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       s.strikeAt = 0;
       const reach = H * 0.5 + 0.5;
       const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
-      if (c.meleeContact && dist < reach && vOverlap) {
+      // Connects only if in reach AND a 50/50 roll — so even point-blank it misses ~half the time
+      // (→ swoosh). Out of reach (you dodged / were knocked away) always misses.
+      if (c.meleeContact && dist < reach && vOverlap && Math.random() < 0.5) {
         emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
         // '' = skip dealPlayerDamage's own sound (we already played the impact above).
         dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
@@ -703,8 +705,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           if (c.attackSound) s.attackSoundAt = now + 650;
           if (c.meleeContact && c.attackSound) {
             // Committed swipe: the demon plants + swings through. The swipe sound lands at 0.65s
-            // (the visible swipe); the actual strike (impact + knockback) is ~0.15s after that.
-            s.strikeAt = now + 800;
+            // (the visible swipe); the strike (impact + knockback) is ~0.3s after that.
+            s.strikeAt = now + 950;
             s.swingGap = 1000 + Math.random() * 2000;   // next swipe in a random 1-3s
           } else if (c.missSound) {
             // Legacy whiff (monsters with a swoosh but no committed strike).
