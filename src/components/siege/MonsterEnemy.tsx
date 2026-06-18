@@ -171,7 +171,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
-    moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0,
+    moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
 
@@ -370,9 +370,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
 
-    // Melee swipe: when the monster's collider overlaps the player's (vertically too), deal a
-    // random hit + knockback on a cooldown (red demons / mushroom grunts).
-    if (c.meleeContact && c.attackStyle !== 'spin-lunge') {
+    // Passive melee contact: silent melee monsters (giant skeleton, bloody horde) deal damage
+    // whenever they're overlapping the player. Monsters with a SWING (attackSound) instead deal
+    // damage via the committed-swipe strike below, so they're excluded here; spin-lunge too.
+    if (c.meleeContact && !c.attackSound && c.attackStyle !== 'spin-lunge') {
       const pTop = camera.position.y, pFeet = camera.position.y - 1.6;
       // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
       if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
@@ -402,6 +403,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (s.attackSoundAt && now > s.attackSoundAt) {
       s.attackSoundAt = 0;
       if (c.attackSound) emitMonster3D(camera, c.attackSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
+    }
+
+    // Committed-swipe strike: at the contact point (with the swipe sound) roll 50/50 — HIT plays
+    // the impact sound + deals damage + knockback; MISS plays the swoosh. No passive damage.
+    if (s.strikeAt && now > s.strikeAt) {
+      s.strikeAt = 0;
+      if (Math.random() < 0.5 && c.meleeContact) {
+        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound);
+      } else if (c.missSound) {
+        emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
+      }
     }
 
     // Whiff resolution: a swing was armed (missSound) and its contact moment has arrived.
@@ -545,7 +557,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const ox = s.x + fxn * H * 0.04, oz = s.z + fzn * H * 0.04;
           c.onRangedAttack?.(ox, my, oz, dx, dist * 0.4, dz);
         } else if (now > s.swipeUntil) play(clips.idle);     // hold position between sprays
-      } else if (dist > c.attackRange) {
+      } else if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil)) {
+        // Chase — UNLESS mid committed-swing (planted, swinging through), so the knockback that
+        // shoves the player out of reach doesn't cancel the swipe animation.
         const step = Math.min(SPD * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
@@ -567,9 +581,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           // Swing sound is delayed 0.65s so it lands ON the swipe, not at the wind-up. Played
           // frame-driven below (no rate variation, so it stays timed to the swing).
           if (c.attackSound) s.attackSoundAt = now + 650;
-          // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
-          // has left hit range by then, it was a genuine miss → swoosh.
-          if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
+          if (c.meleeContact && c.attackSound) {
+            // Committed swipe: the demon plants + swings through; the hit/miss is resolved once
+            // at the strike point (0.65s, lands with the swipe sound), 50/50 for now.
+            s.strikeAt = now + 650;
+          } else if (c.missSound) {
+            // Legacy whiff (monsters with a swoosh but no committed strike).
+            s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false;
+          }
         }
       }
       else if (now > s.swipeUntil) play(clips.idle);
