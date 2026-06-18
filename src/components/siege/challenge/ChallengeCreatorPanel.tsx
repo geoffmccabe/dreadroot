@@ -8,9 +8,14 @@ import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCrea
 import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
+import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
+// Same Kinetik-style glow ring the user/admin panels use (--panel-glow), for the lifted drag card.
+const DRAG_GLOW = '0 0 0 2px hsl(var(--panel-glow) / 0.85), 0 0 28px 6px hsl(var(--panel-glow) / 0.5), 0 16px 40px -8px rgb(0 0 0 / 0.6)';
+
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
+const reorder = <T,>(a: T[], from: number, to: number): T[] => { const r = [...a]; const [m] = r.splice(from, 1); r.splice(to, 0, m); return r; };
 const cat = (type: number) => MONSTER_CATALOG.find((m) => m.id === type) ?? MONSTER_CATALOG[0];
 const fmtMS = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 const DEFAULT_BOSS: BossMods = { sizePct: 100, speedPct: 100, healthPct: 100, damagePct: 100 };
@@ -46,8 +51,11 @@ export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
   const waveEls = useRef<Map<number, HTMLDivElement>>(new Map());
-  const dragSrc = useRef<{ wave: number; drop: number } | null>(null);
   const [dropHover, setDropHover] = useState<{ wave: number; drop: number } | null>(null);
+  const [drag, setDrag] = useState<null | { wave: number; from: number; w: number; label: string; monster: string }>(null);
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+  const dragHover = useRef<number | null>(null);
+  const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -55,6 +63,31 @@ export function ChallengeCreatorPanel() {
     if (open) window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [open]);
+
+  // Pointer-drag reorder: while dragging a spawn header, a glowing card follows the cursor and the
+  // hovered spawn highlights as the drop target; drop plays a thud. (drag is stable for the drag.)
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      setDragPos({ x: e.clientX, y: e.clientY });
+      const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-spawn]');
+      if (el && Number(el.getAttribute('data-wave')) === drag.wave) {
+        const t = Number(el.getAttribute('data-spawn'));
+        if (t !== dragHover.current) { dragHover.current = t; setDropHover({ wave: drag.wave, drop: t }); }
+      }
+    };
+    const onUp = () => {
+      const t = dragHover.current;
+      if (t !== null && t !== drag.from) {
+        setCh((c) => ({ ...c, waves: c.waves.map((w, k) => (k !== drag.wave ? w : { ...w, drops: reorder(w.drops, drag.from, t) })) }));
+        void playSound('/wooden_thud_sound.mp3', 0.55);
+      }
+      dragHover.current = null; setDrag(null); setDropHover(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [drag]);
 
   if (!open) return null;
 
@@ -68,8 +101,6 @@ export function ChallengeCreatorPanel() {
   const removeWave = (i: number) => setCh((c) => ({ ...c, waves: c.waves.filter((_, k) => k !== i) }));
   const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0 }] })));
   const removeDrop = (i: number, di: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.filter((_, j) => j !== di) })));
-
-  const reorderDrop = (i: number, from: number, to: number) => setCh((c) => mapWave(c, i, (w) => { const a = [...w.drops]; const [m] = a.splice(from, 1); a.splice(to, 0, m); return { ...w, drops: a }; }));
 
   const run = () => { setCreatorOpen(false); fireChallengeStart(clone(ch)); };
   const scrollToWave = (i: number) => waveEls.current.get(i)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -168,19 +199,24 @@ export function ChallengeCreatorPanel() {
                       cum += drop.afterSec ?? 0; const startAt = cum;
                       const c = cat(drop.type);
                       const isHover = dropHover?.wave === i && dropHover?.drop === di;
+                      const isDragging = drag?.wave === i && drag?.from === di;
                       return (
-                        <div key={di}
-                             onDragOver={(e) => { if (dragSrc.current?.wave === i) e.preventDefault(); }}
-                             onDragEnter={() => { if (dragSrc.current?.wave === i) setDropHover({ wave: i, drop: di }); }}
-                             onDrop={(e) => { e.preventDefault(); const s = dragSrc.current; if (s && s.wave === i && s.drop !== di) reorderDrop(i, s.drop, di); dragSrc.current = null; setDropHover(null); }}
-                             style={{ ...card, width: 220, flexShrink: 0, ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}), ...(isHover ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}) }}>
-                          <div draggable
-                               onDragStart={(e) => { dragSrc.current = { wave: i, drop: di }; e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); }}
-                               onDragEnd={() => { dragSrc.current = null; setDropHover(null); }}
-                               onMouseDown={(e) => e.stopPropagation()}
+                        <div key={di} data-wave={i} data-spawn={di}
+                             style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.1s',
+                               ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}),
+                               ...(isHover && !isDragging ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}),
+                               ...(isDragging ? { opacity: 0.3 } : {}) }}>
+                          <div onMouseDown={(e) => {
+                                 if (e.button !== 0) return;
+                                 e.stopPropagation(); e.preventDefault();
+                                 const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
+                                 dragHover.current = di;
+                                 setDrag({ wave: i, from: di, w: cardEl?.offsetWidth ?? 220, label: `Spawn ${di + 1}`, monster: c.name });
+                                 setDragPos({ x: e.clientX, y: e.clientY });
+                               }}
                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
                             <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
-                            <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onClick={() => removeDrop(i, di)}>✕</button>
+                            <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
                           </div>
                           <label style={lbl}>Monster</label>
                           <select style={inp} value={drop.type} onChange={(e) => patchDrop(i, di, { type: Number(e.target.value) })}>
@@ -219,6 +255,27 @@ export function ChallengeCreatorPanel() {
           ))}
         </div>
       </div>
+
+      {/* Floating glow card that follows the cursor while dragging a spawn. */}
+      {drag && (
+        <div style={{ position: 'fixed', left: dragPos.x - drag.w / 2, top: dragPos.y - 18, width: drag.w, pointerEvents: 'none', zIndex: 200, ...card, boxShadow: DRAG_GLOW, transform: 'rotate(-2deg) scale(1.04)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}>⠿ {drag.label}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#e8eefb', marginTop: 4 }}>{drag.monster}</div>
+        </div>
+      )}
+
+      {/* Delete-spawn confirmation. */}
+      {confirmDel && (
+        <div onClick={() => setConfirmDel(null)} style={{ position: 'fixed', inset: 0, zIndex: 210, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, padding: 20, minWidth: 280, textAlign: 'center', boxShadow: '0 14px 44px #000' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 14 }}>Delete this spawn?</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button style={{ ...btn(), background: '#a83232' }} onClick={() => { removeDrop(confirmDel.wave, confirmDel.drop); setConfirmDel(null); }}>Delete</button>
+              <button style={btn()} onClick={() => setConfirmDel(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>,
     document.body,
   );
