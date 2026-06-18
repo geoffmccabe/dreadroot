@@ -1037,6 +1037,20 @@ export async function rollMonsterCoinDrop(
   throw error;
 }
 
+/** Admin: top up (or create) a coin's reserve pool from outside the game. Earning draws from this
+ *  pool (funded pools are hard-capped). Returns the updated pool row, or null if the RPC isn't
+ *  deployed yet. */
+export async function fundPool(
+  tokenThemeId: string, amount: number, source: 'funded' | 'minted' = 'funded',
+): Promise<{ balance: number; total_funded: number; total_dispensed: number } | null> {
+  const { data, error } = await supabase.rpc('fund_pool', {
+    p_token_theme_id: tokenThemeId, p_amount: amount, p_source: source,
+  } as never);
+  if (!error) return data as never;
+  if (isMissingFunction(error)) return null;
+  throw error;
+}
+
 /** Spawn a coin drop with an EXPLICIT amount + coin (by token-theme name, e.g. 'divi') instead of
  *  rolling a monster's admin config. Used by Siege Worlds to drop DIVI = round(initialHealth/10) on
  *  a kill. Inserts a world_coin_drops row server-side so pickup credits real DIVI; returns the
@@ -1194,6 +1208,7 @@ export const worldStore = {
   rollShwarmDrop,
   rollMonsterCoinDrop,
   spawnCoinDrop,
+  fundPool,
   pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,
