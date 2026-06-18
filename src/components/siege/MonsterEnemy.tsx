@@ -374,7 +374,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     });
   }, [cloned, J.desat]);
 
-  const clip = (key: string) => { const n = names.find((nm) => nm.toLowerCase().includes(key)); return n ? actions[n] : null; };
+  const clip = (key: string) => {
+    const n = names.find((nm) => nm.toLowerCase().includes(key.toLowerCase()));
+    if (n) return actions[n];
+    // Synty/Mixamo rigs often ship clips NOT literally named "idle" (e.g. "A_Idle_Standing_Masc",
+    // "Armature|Take 001|BaseLayer"). For the idle/default pose, fall back to the FIRST clip so the
+    // monster animates instead of freezing in T-pose — matching the Challenge Creator preview, which
+    // plays names[0] when there's no exact "idle". (Idle key only; walk/attack/death stay strict.)
+    if (key === clips.idle && names.length) return actions[names[0]];
+    return null;
+  };
   const play = (key: string, once = false) => {
     const a = clip(key); if (!a || st.current.cur === key) return;
     Object.values(actions).forEach((x) => { if (x && x !== a) x.fadeOut(0.15); });
