@@ -173,7 +173,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
-    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
+    spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
+    spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false });
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
   // monster's position, with ±15% random pitch/length. Cleans up on death/despawn.
@@ -514,22 +515,39 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.zoomNext = now + rnd(c.spin.zoomEveryMs);
       }
       const zooming = now < s.zoomUntil;
+      s.spiraling = !zooming;
       if (zooming) {
         const zl = Math.hypot(s.zoomVx, s.zoomVz) || 1;
         mvx = s.zoomVx / zl; mvz = s.zoomVz / zl; moving = true;   // direction for the climb/hop gait
         s.x += s.zoomVx * delta; s.z += s.zoomVz * delta;
         play(clips.walk);
-      } else if (dist < c.aggro && dist > c.attackRange) { // normal pursuit between zooms
-        const step = Math.min(SPD * delta, dist - c.attackRange);
-        mvx = dx / dist; mvz = dz / dist; moving = true;
-        s.x += mvx * step; s.z += mvz * step; play(clips.walk);
-      } else play(clips.walk);
+        s.spiralOn = false;   // re-seed a fresh spiral when this zoom ends
+      } else {
+        // Between zooms: SPIRAL OUTWARD like a top — a fast circular path whose heading sweeps a
+        // full revolution every 0.5-1s (re-randomized after each zoom) while the radius grows, so
+        // it's erratic and hard to hit. A collider hit (handled in the wall section) bounces it
+        // straight into a zoom.
+        if (!s.spiralOn) {
+          s.spiralOn = true;
+          s.spiralStart = now;
+          s.spiralPeriod = 500 + Math.random() * 500;           // ms per full revolution (0.5-1s)
+          s.spiralHeading = Math.atan2(s.zoomVx || dx, s.zoomVz || dz);  // flow out of the last zoom
+        }
+        const omega = (2 * Math.PI) / (s.spiralPeriod / 1000);  // rad/s, same direction as the visual spin
+        s.spiralHeading += omega * delta * (s.spinVel > 0 ? 1 : -1);
+        const t = (now - s.spiralStart) / 1000;
+        const speed = Math.min(SPD * 5, SPD * 2.6 * (1 + t * 0.9));   // fast, grows outward, capped
+        mvx = Math.sin(s.spiralHeading); mvz = Math.cos(s.spiralHeading); moving = true;
+        s.x += mvx * speed * delta; s.z += mvz * speed * delta;
+        play(clips.walk);
+      }
       // Contact: real hitbox overlap → dmg + knockback; ×zoomHitMul + a view-spin fling mid-zoom.
       if (s.y < camera.position.y && s.y + H > camera.position.y - 1.6
           && dist < inst.radius + 0.45 && now > s.contactNext) {
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
-        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul);
+        // 2× player knockback from the spintroll.
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 2);
         // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
         // into a permanent, unrecoverable spin.
         if (zooming && now > s.spinHitNext) {
@@ -681,6 +699,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // are only non-zero from knockback, so normal walking never triggers this).
       const hs = Math.hypot(inst.kvx, inst.kvz);
       if (hs > IMPACT_MIN && !inst.dead) { hurtDemon(inst, impactDamage(hs)); inst.kvx = 0; inst.kvz = 0; }
+    }
+
+    // Spintroll bounce: hitting a collider mid-spiral fires it straight into a zoom, away from
+    // the wall — reads as bouncing off the object.
+    if (c.spin && s.spiraling && wallTop > -Infinity && moving) {
+      const ang = s.spiralHeading + Math.PI;                 // back the way it came
+      const speed = SPD * rnd(c.spin.zoomSpeedMul);
+      s.zoomVx = Math.sin(ang) * speed; s.zoomVz = Math.cos(ang) * speed;
+      s.zoomUntil = now + ((5 + Math.random() * 15) / speed) * 1000;
+      s.zoomNext = now + rnd(c.spin.zoomEveryMs);
+      s.spiraling = false; s.spiralOn = false;
     }
 
     // ── Blocked by a wall — two reusable SW gaits ──
