@@ -12,6 +12,14 @@ export interface BossMods {
   damagePct: number;
 }
 
+/** Per-spawn colour overrides applied on top of the monster's textures (preview + in-game). */
+export interface ColorMods {
+  sat: number;       // saturation %, 0 = grey, 100 = normal, 200 = double-saturated
+  hue: number;       // hue rotation in DEGREES (0-360)
+  tint: string;      // overlay colour (hex)
+  tintAmt: number;   // tint strength %, 0 = none, 100 = full overlay
+}
+
 /** One cluster of monsters dropped during a wave. */
 export interface MonsterDrop {
   type: number;            // monster catalog id (1-7 today; see siegeMonsterCatalog)
@@ -22,6 +30,7 @@ export interface MonsterDrop {
   afterSec?: number;       // SECONDS since the previous spawn in this wave (0 = with it / at wave start)
   staggerMs?: number;      // if set, the `count` spawn ONE every this-many ms (only during this wave)
   boss?: BossMods;         // if set, apply boss modifiers to every monster in this drop
+  color?: ColorMods;       // if set, recolour this drop's monsters (else the monster's natural look)
 }
 
 /** One of the 10 waves. All authoring fields are optional (nothing is required). */

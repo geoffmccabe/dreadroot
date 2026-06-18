@@ -8,7 +8,7 @@ import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCrea
 import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
-import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox } from './MonsterPreview';
+import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -209,8 +209,12 @@ export function ChallengeCreatorPanel() {
   // where in the card the cursor is (ox,oy) so the card tracks the cursor 1:1 with no recenter.
   const spawnInner = (drop: MonsterDrop, i: number, di: number, startAt: number) => {
     const c = cat(drop.type);
-    // While THIS card's dropdown is open, hovering an option overrides the thumbnail's monster.
-    const thumbType = (pinned?.wave === i && pinned?.drop === di && hoverType != null) ? hoverType : drop.type;
+    const col = drop.color ?? defaultColor(drop.type);
+    // While THIS card's dropdown is open, hovering an option overrides the thumbnail's monster
+    // (shown with that monster's natural default colour).
+    const overriding = pinned?.wave === i && pinned?.drop === di && hoverType != null;
+    const thumbType = overriding ? hoverType! : drop.type;
+    const thumbColor = overriding ? defaultColor(thumbType) : col;
     return (
       <>
         <div onMouseDown={(e) => {
@@ -223,7 +227,7 @@ export function ChallengeCreatorPanel() {
                setDragPos({ x: e.clientX, y: e.clientY });
              }}
              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
-          <MonsterThumb type={thumbType} size={60} />
+          <MonsterThumb type={thumbType} color={thumbColor} size={60} />
           <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
             <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
@@ -251,12 +255,41 @@ export function ChallengeCreatorPanel() {
         </div>
         {drop.boss && (
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
-            {slider(i, di, 'sizePct', 'Size', drop, 25, 300, (p) => `${c.baseHeight.toFixed(1)}m → ${(c.baseHeight * p / 100).toFixed(1)}m`)}
-            {slider(i, di, 'healthPct', 'Health', drop, 25, 500, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
-            {slider(i, di, 'speedPct', 'Speed', drop, 25, 300, (p) => `100% → ${p}%`)}
-            {slider(i, di, 'damagePct', 'Damage', drop, 25, 500, (p) => `100% → ${p}%`)}
+            {slider(i, di, 'sizePct', 'Size', drop, 25, 1000, (p) => `${c.baseHeight.toFixed(1)}m → ${(c.baseHeight * p / 100).toFixed(1)}m`)}
+            {slider(i, di, 'healthPct', 'Health', drop, 25, 1000, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
+            {slider(i, di, 'speedPct', 'Speed', drop, 25, 1000, (p) => `100% → ${p}%`)}
+            {slider(i, di, 'damagePct', 'Damage', drop, 25, 1000, (p) => `100% → ${p}%`)}
           </div>
         )}
+
+        {/* Colour overrides — applied live on the preview (2×2: Saturation, Hue, Tint, Tint Opacity). */}
+        {(() => {
+          const setCol = (p: Partial<typeof col>) => patchDrop(i, di, { color: { ...col, ...p } });
+          return (
+            <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
+              <label style={lbl}>Color</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={lbl}>Saturation: {col.sat}%</label>
+                  <input type="range" className="chal-slider" min={0} max={200} step={5} value={col.sat} style={{ width: '100%' }} onChange={(e) => setCol({ sat: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label style={lbl}>Hue: {col.hue}°</label>
+                  <input type="range" className="chal-hue" min={0} max={360} step={2} value={col.hue} style={{ width: '100%' }} onChange={(e) => setCol({ hue: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label style={lbl}>Tint</label>
+                  <input type="color" value={col.tint} onChange={(e) => setCol({ tint: e.target.value })}
+                         style={{ width: '100%', height: 26, padding: 0, border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, background: 'transparent', cursor: 'pointer' }} />
+                </div>
+                <div>
+                  <label style={lbl}>Tint Opacity: {col.tintAmt}%</label>
+                  <input type="range" className="chal-slider" min={0} max={100} step={5} value={col.tintAmt} style={{ width: '100%' }} onChange={(e) => setCol({ tintAmt: Number(e.target.value) })} />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </>
     );
   };
@@ -268,6 +301,10 @@ export function ChallengeCreatorPanel() {
         input[type=range].chal-slider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:#5cc8ff; cursor:pointer; }
         input[type=range].chal-slider::-moz-range-thumb { width:14px; height:14px; border:none; border-radius:50%; background:#5cc8ff; cursor:pointer; }
         input[type=range].chal-slider::-moz-range-track { height:6px; border-radius:3px; background:hsla(220,25%,8%,0.95); }
+        input[type=range].chal-hue { -webkit-appearance:none; appearance:none; height:8px; border-radius:4px; outline:none; border:1px solid hsla(210,30%,45%,0.5);
+          background:linear-gradient(90deg,#ff0000,#ffff00,#00ff00,#00ffff,#0000ff,#ff00ff,#ff0000); }
+        input[type=range].chal-hue::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:#fff; border:1px solid #2a3550; cursor:pointer; }
+        input[type=range].chal-hue::-moz-range-thumb { width:14px; height:14px; border-radius:50%; background:#fff; border:1px solid #2a3550; cursor:pointer; }
         .chal-scroll { scrollbar-color: hsla(210,30%,45%,0.7) hsla(220,25%,10%,0.5); scrollbar-width: thin; }
         .chal-scroll::-webkit-scrollbar { width:10px; height:10px; }
         .chal-scroll::-webkit-scrollbar-track { background:hsla(220,25%,8%,0.5); }
@@ -388,8 +425,10 @@ export function ChallengeCreatorPanel() {
         if (!a) return null;
         const d = ch.waves[a.wave]?.drops[a.drop];
         if (!d) return null;
-        const t = hoverType ?? d.type;
-        return <MonsterPreviewBox type={t} name={cat(t).name} x={a.x} y={a.y} />;
+        const over = hoverType != null && pinned != null;
+        const t = over ? hoverType : d.type;
+        const col = over ? defaultColor(t) : (d.color ?? defaultColor(d.type));
+        return <MonsterPreviewBox type={t} name={cat(t).name} color={col} x={a.x} y={a.y} />;
       })()}
 
       {/* The single transparent canvas that draws every card's small monster thumbnail. */}
