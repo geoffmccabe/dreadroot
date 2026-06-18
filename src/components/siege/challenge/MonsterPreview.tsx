@@ -86,7 +86,11 @@ function Model({ url, modelHeight, flames, color }: { url: string; modelHeight: 
   const turn = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, turn);
   useEffect(() => {
-    const a = actions['idle'] || (names.length ? actions[names[0]] : null);
+    // Prefer a clip whose name CONTAINS "idle" (Synty rigs name it "A_Idle_Standing_Masc" etc.),
+    // not an exact "idle" key — else we'd fall through to names[0], which is often the ATTACK clip
+    // (e.g. mushroomgrunt → "A_Attack…", a broken-looking walk). Match the in-game resolver.
+    const idleName = names.find((nm) => nm.toLowerCase().includes('idle')) ?? names[0];
+    const a = idleName ? actions[idleName] : null;
     a?.reset().fadeIn(0.3).play();
     return () => { a?.fadeOut(0.2); };
   }, [actions, names]);
