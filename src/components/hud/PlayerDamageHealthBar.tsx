@@ -15,6 +15,8 @@ import { subscribeHealthBar, getHealthBarState } from './healthBarStore';
 const HOLD_MS = 1000;
 const FADE_MS = 500;
 const TOTAL_MS = HOLD_MS + FADE_MS;
+const FLASH_MS = 100;          // red screen tint on a hit (~1/10s)
+const FLASH_MAX = 0.4;         // peak red opacity
 
 function colorFor(pct: number): string {
   if (pct < 10) return '#e23b3b';   // 0–10%  red
@@ -53,8 +55,17 @@ export function PlayerDamageHealthBar() {
   const opacity = elapsed < HOLD_MS ? 1 : 1 - (elapsed - HOLD_MS) / FADE_MS;
   const pct = Math.max(0, Math.min(100, (st.current / st.max) * 100));
   const fill = colorFor(pct);
+  // Brief red full-screen tint on a hit (not on a heal), fading out over ~1/10s.
+  const flash = st.damage && elapsed < FLASH_MS ? FLASH_MAX * (1 - elapsed / FLASH_MS) : 0;
 
   return (
+    <>
+    {flash > 0 && (
+      <div style={{
+        position: 'fixed', inset: 0, background: '#ff0000', opacity: flash,
+        pointerEvents: 'none', zIndex: 69,
+      }} />
+    )}
     <div
       style={{
         position: 'fixed', top: '75%', left: 0, width: '100vw',
@@ -85,5 +96,6 @@ export function PlayerDamageHealthBar() {
         {fmtPct(pct)}
       </div>
     </div>
+    </>
   );
 }
