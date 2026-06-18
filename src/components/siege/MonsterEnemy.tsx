@@ -628,8 +628,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           && dist < inst.radius + 0.45 && now > s.contactNext) {
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
-        // Impact sound on the working 3D path; '' skips dealPlayerDamage's own (silent) sound.
-        emitMonster3D(camera, '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
+        // Spintroll's own impact sound on the working 3D path; '' skips dealPlayerDamage's own.
+        emitMonster3D(camera, '/hit_by_spintroll.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
         // 2× player knockback from the spintroll.
         dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 2, '');
         // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
