@@ -41,9 +41,9 @@ export const CFG: Partial<Record<MType, {
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number };
   attackRange?: number; attackMs?: number;
   attackStyle?: 'spin-lunge'; hitSound?: string; missSound?: string; attackSound?: string; roarSound?: string;
-  walkSound?: string; hurtSound?: string;
+  walkSound?: string; hurtSound?: string; lungeOnSwing?: boolean;
 }>> = {
-  1: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100, attackRange: 1.2, attackMs: 1200, meleeContact: { dmg: [10, 50], kb: [3, 7], cooldownMs: 1200 }, attackSound: '/demon_attack.mp3', missSound: '/swoosh_miss_low.mp3', roarSound: '/demon_roar_1.mp3' },
+  1: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100, attackRange: 1.2, attackMs: 1200, meleeContact: { dmg: [10, 50], kb: [3, 7], cooldownMs: 1200 }, attackSound: '/demon_attack.mp3', missSound: '/swoosh_miss_low.mp3', roarSound: '/demon_roar_1.mp3', lungeOnSwing: true },
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [3, 17], kb: [1, 5], cooldownMs: 1200 }, attackStyle: 'spin-lunge', hitSound: '/little_slap.mp3', missSound: '/swoosh_miss_high.mp3' },
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 10.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 6, attackRange: 4, attackMs: 2000, meleeContact: { dmg: [15, 45], kb: [2, 6], cooldownMs: 1800 }, walkSound: '/giant_skeleton_walk.mp3', hurtSound: '/skeleton_hit.mp3' },
   4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 4.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 2000, rangedCooldownMaxMs: 4000, spray: ACID_VOMIT },
@@ -99,7 +99,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromG
       bodyFlames={m?.bodyFlames} smokeTrail={m?.smokeTrail} spin={m?.spin}
       meleeContact={o ? { dmg: [4, 12], kb: [1, 2], cooldownMs: 1300 } : m?.meleeContact}
       attackRange={o ? 1.6 : m?.attackRange} attackMs={m?.attackMs}
-      attackStyle={m?.attackStyle} hitSound={m?.hitSound} missSound={m?.missSound} attackSound={m?.attackSound} roarSound={m?.roarSound}
+      attackStyle={m?.attackStyle} hitSound={m?.hitSound} missSound={m?.missSound} attackSound={m?.attackSound} roarSound={m?.roarSound} lungeOnSwing={m?.lungeOnSwing}
       walkSound={m?.walkSound} hurtSound={m?.hurtSound}
       onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />
   );

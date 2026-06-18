@@ -99,6 +99,8 @@ export interface MonsterConfig {
   hurtSound?: string;         // plays (spatial) each time a bullet hits this monster
   attackStyle?: 'spin-lunge'; // 'spin-lunge' = mushroom grunt: 360° body spin (0.25s) + lunge to 50% closer and back (0.5s),
                               // strike at the peak. No swipe. Reads dmg/kb from meleeContact.
+  lungeOnSwing?: boolean;     // committed-swipe monsters: lunge the body 65% toward the camera + up
+                              // toward its height (face in your view) during the swing, then snap back.
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -177,7 +179,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
-    spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false,
+    spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
     deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0 });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
@@ -712,6 +714,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             // (the visible swipe); the strike (impact + knockback) is ~0.3s after that.
             s.strikeAt = now + 950;
             s.swingGap = 1000 + Math.random() * 2000;   // next swipe in a random 1-3s
+            if (c.lungeOnSwing) {   // lunge the body 65% toward the camera + up toward its height
+              s.lungeStart = now;
+              s.lungeOX = (camera.position.x - s.x) * 0.65;
+              s.lungeOZ = (camera.position.z - s.z) * 0.65;
+              s.lungeOY = (camera.position.y - (s.y + H * 0.8)) * 0.65;
+            }
           } else if (c.missSound) {
             // Legacy whiff (monsters with a swoosh but no committed strike).
             s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false;
@@ -919,6 +927,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
           }
         }
+      } else s.lungeStart = 0;
+    }
+
+    // ── Committed-swipe lunge (demon horde): lunge the body 65% toward the camera + UP toward its
+    //    own height (so a small demon's face fills your view), peaking mid-swing, then snap back.
+    //    No spin; the hitbox stays on s.x/s.z. ──
+    if (c.lungeOnSwing && s.lungeStart) {
+      const el = now - s.lungeStart, dur = c.attackClipMs;
+      if (el < dur) {
+        const off = Math.sin(Math.PI * (el / dur));   // 0→1→0 over the swing
+        g.position.set(s.x + s.lungeOX * off, yR + s.lungeOY * off, s.z + s.lungeOZ * off);
       } else s.lungeStart = 0;
     }
 
