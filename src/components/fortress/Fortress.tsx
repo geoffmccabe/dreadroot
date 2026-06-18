@@ -24,6 +24,7 @@ import { setActiveWorldId } from '@/config/activeWorld';
 import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
 import { ChallengeBrowser } from '@/components/siege/challenge/ChallengeBrowser';
+import { ChallengeResultPanel } from '@/components/siege/challenge/ChallengeResultPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
@@ -2294,6 +2295,7 @@ export function Fortress() {
       <PlayerDamageHealthBar />
       <ChallengeCreatorPanel />
       <ChallengeBrowser />
+      <ChallengeResultPanel />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}

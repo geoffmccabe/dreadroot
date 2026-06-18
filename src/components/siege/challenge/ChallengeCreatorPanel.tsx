@@ -383,48 +383,58 @@ export function ChallengeCreatorPanel() {
 
         {/* General info — challenge-level (cost/pool live here, NOT per wave) */}
         <div style={{ padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.2)' }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
-            <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
-            <div style={{ flex: 1 }}>
-              <label style={lbl}>Game</label>
-              {/* A challenge only runs in its game. Defaults to the game you're in; change to author for another. */}
-              <select style={inp} value={ch.game ?? getActiveGame()} onChange={(e) => patch({ game: e.target.value })}>
-                {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
-              </select>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+            {/* LEFT — name/creator/game, then (after a blank line) the challenge-level economy + region */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
+                <div style={{ flex: 1 }}>
+                  <label style={lbl}>Game</label>
+                  {/* A challenge only runs in its game. Defaults to the game you're in; change to author for another. */}
+                  <select style={inp} value={ch.game ?? getActiveGame()} onChange={(e) => patch({ game: e.target.value })}>
+                    {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* blank line before the four challenge-level sections */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Cost to Play (Divi)</label><NumField style={inp} value={ch.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ costDivi: n ?? 0 })} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>% to Prize Pool</label><NumField style={inp} value={ch.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ pctToPool: n ?? 0 })} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
+                {isSuper && (
+                  <div style={{ flex: 1 }}>
+                    <label style={{ ...lbl, color: '#ffd27f' }}>Open-World Region (superadmin)</label>
+                    <select style={inp} value={ch.region ?? ''}
+                            onChange={(e) => { const r = e.target.value || undefined; patch({ region: r, spawn: r ? (ch.spawn ?? regionCoords(r)) : ch.spawn }); }}>
+                      <option value="">— not a region spawner —</option>
+                      {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+              {/* Region spawn coordinates (superadmin, only when this challenge IS a region spawner).
+                  Defaults to the region's known coords; edit + Save to update where its monsters appear. */}
+              {isSuper && ch.region && (() => {
+                const sp = ch.spawn ?? regionCoords(ch.region);
+                const setSp = (idx: number, n: number | undefined) => { const s: [number, number, number] = [sp[0], sp[1], sp[2]]; s[idx] = n ?? 0; patch({ spawn: s }); };
+                return (
+                  <div style={{ display: 'flex', gap: 10, marginTop: 8, alignItems: 'flex-end' }}>
+                    <div style={{ fontSize: 11, color: '#ffd27f', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>📍 {ch.region} spawn</div>
+                    <div style={{ flex: 1 }}><label style={lbl}>Spawn X</label><NumField style={inp} value={sp[0]} onChange={(n) => setSp(0, n)} /></div>
+                    <div style={{ flex: 1 }}><label style={lbl}>Spawn Y</label><NumField style={inp} value={sp[1]} onChange={(n) => setSp(1, n)} /></div>
+                    <div style={{ flex: 1 }}><label style={lbl}>Spawn Z</label><NumField style={inp} value={sp[2]} onChange={(n) => setSp(2, n)} /></div>
+                    <div style={{ flex: 1 }}><label style={lbl}>Scatter Radius</label><NumField style={inp} value={ch.scatterRadius ?? 14} min={0} onChange={(n) => patch({ scatterRadius: n ?? 14 })} /></div>
+                  </div>
+                );
+              })()}
             </div>
-            <div style={{ flex: 2 }}><label style={lbl}>Banner (4×1)</label><BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} /></div>
+            {/* RIGHT — Banner as its own sub-panel */}
+            <div style={{ ...card, width: 300, flexShrink: 0 }}>
+              <label style={lbl}>Banner (4×1)</label>
+              <BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} />
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-            <div style={{ flex: 1 }}><label style={lbl}>Cost to Play (Divi)</label><NumField style={inp} value={ch.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ costDivi: n ?? 0 })} /></div>
-            <div style={{ flex: 1 }}><label style={lbl}>% to Prize Pool</label><NumField style={inp} value={ch.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ pctToPool: n ?? 0 })} /></div>
-            <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
-            {isSuper && (
-              <div style={{ flex: 1 }}>
-                <label style={{ ...lbl, color: '#ffd27f' }}>Open-World Region (superadmin)</label>
-                <select style={inp} value={ch.region ?? ''}
-                        onChange={(e) => { const r = e.target.value || undefined; patch({ region: r, spawn: r ? (ch.spawn ?? regionCoords(r)) : ch.spawn }); }}>
-                  <option value="">— not a region spawner —</option>
-                  {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
-          {/* Region spawn coordinates (superadmin, only when this challenge IS a region spawner).
-              Defaults to the region's known coords; edit + Save to update where its monsters appear. */}
-          {isSuper && ch.region && (() => {
-            const sp = ch.spawn ?? regionCoords(ch.region);
-            const setSp = (idx: number, n: number | undefined) => { const s: [number, number, number] = [sp[0], sp[1], sp[2]]; s[idx] = n ?? 0; patch({ spawn: s }); };
-            return (
-              <div style={{ display: 'flex', gap: 10, marginTop: 8, alignItems: 'flex-end' }}>
-                <div style={{ fontSize: 11, color: '#ffd27f', fontWeight: 700, alignSelf: 'center', whiteSpace: 'nowrap' }}>📍 {ch.region} spawn</div>
-                <div style={{ flex: 1 }}><label style={lbl}>Spawn X</label><NumField style={inp} value={sp[0]} onChange={(n) => setSp(0, n)} /></div>
-                <div style={{ flex: 1 }}><label style={lbl}>Spawn Y</label><NumField style={inp} value={sp[1]} onChange={(n) => setSp(1, n)} /></div>
-                <div style={{ flex: 1 }}><label style={lbl}>Spawn Z</label><NumField style={inp} value={sp[2]} onChange={(n) => setSp(2, n)} /></div>
-                <div style={{ flex: 1 }}><label style={lbl}>Scatter Radius</label><NumField style={inp} value={ch.scatterRadius ?? 14} min={0} onChange={(n) => patch({ scatterRadius: n ?? 14 })} /></div>
-              </div>
-            );
-          })()}
         </div>
 
         {/* Wave nav — click to scroll the stack to that wave */}

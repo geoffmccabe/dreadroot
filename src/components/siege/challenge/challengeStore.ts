@@ -1,6 +1,7 @@
 // challengeStore — a tiny module singleton bridging the in-Canvas ChallengeRunner to the DOM HUD.
 // The runner writes (wave, timer, announcement, completion); the HUD reads via useSyncExternalStore.
 // Updates are infrequent (wave changes) — the HUD animates its own countdown from waveEndsAt.
+import type { Challenge } from './challengeTypes';
 
 export interface ChallengeAnnounce {
   title: string;        // e.g. "Wave 3/10"
@@ -9,6 +10,17 @@ export interface ChallengeAnnounce {
   text?: string;        // smaller advice/taunt line
   faint: boolean;       // carry-over announcement: 50% opacity, half as long
   until: number;        // performance.now() ms to hide at
+}
+
+/** Shown after a challenge ends (win or lose) so the player can retry or pick another. */
+export interface ChallengeResult {
+  outcome: 'win' | 'lose';
+  name: string;
+  score: number;
+  timeMs: number;
+  wave: number;          // wave reached (1-based)
+  totalWaves: number;
+  challenge: Challenge;  // the played challenge, for "Play Again"
 }
 
 export interface ChallengeState {
@@ -21,11 +33,12 @@ export interface ChallengeState {
   completed: boolean;
   startedAt: number;    // performance.now() ms
   finishedAt: number;
+  result: ChallengeResult | null;   // post-challenge result panel (null = hidden)
 }
 
 let state: ChallengeState = {
   active: false, name: '', wave: 0, totalWaves: 10, waveEndsAt: 0,
-  announce: null, completed: false, startedAt: 0, finishedAt: 0,
+  announce: null, completed: false, startedAt: 0, finishedAt: 0, result: null,
 };
 const listeners = new Set<() => void>();
 

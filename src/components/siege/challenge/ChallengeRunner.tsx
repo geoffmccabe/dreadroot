@@ -107,7 +107,7 @@ export function ChallengeRunner() {
     prePos.current = camera.position.clone();   // remember where to put the player back
     if (ch.spawn) camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);   // teleport to the arena
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
-    setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0 });
+    setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null });
     startWave(now);
   };
 
@@ -117,7 +117,7 @@ export function ChallengeRunner() {
     r.active = false;
     setMobs([]);
     revert();
-    setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0 });
+    setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, result: null });
   };
 
   // Record one play to the leaderboard. Only SAVED challenges (with an id) have a board — the
@@ -132,11 +132,21 @@ export function ChallengeRunner() {
     });
   };
 
+  // Post-challenge result panel (any challenge, incl. the test one) — lets the player retry or browse.
+  const showResult = (outcome: 'win' | 'lose', now: number) => {
+    const ch = challengeRef.current; if (!ch) return;
+    setChallengeState({ result: {
+      outcome, name: ch.name, score: Math.round(getChallengeScore()),
+      timeMs: Math.round(now - r.startedAt), wave: r.waveIdx + 1, totalWaves: ch.waves.length, challenge: ch,
+    } });
+  };
+
   // Player died mid-challenge → YOU LOSE!, end it, and put the world back the way it was.
   const lose = () => {
     if (!r.active) return;
     const now = performance.now();
     record(false, now);
+    showResult('lose', now);
     r.active = false;
     setMobs([]);
     revert();
@@ -202,6 +212,7 @@ export function ChallengeRunner() {
 
   const finish = (now: number) => {
     record(true, now);
+    showResult('win', now);
     r.active = false;
     setChallengeState({
       active: false, completed: true, finishedAt: now, waveEndsAt: 0,
