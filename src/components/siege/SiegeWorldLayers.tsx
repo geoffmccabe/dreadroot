@@ -63,7 +63,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             <Suspense fallback={null}>
               <MonsterEnemy spawn={[-400, 26, 705]} url="/siege/monsters/reddemon.glb"
                             modelHeight={1.886} height={4} aggro={140} health={1000} noStun
-                            roarSound="/demon_roar_1.mp3" attackSound="/demon_attack.mp3" />
+                            roarSound="/demon_roar_1.mp3" attackSound="/demon_attack.mp3"
+                            missSound="/swoosh_miss_low.mp3" />
               <MonsterEnemy spawn={[-440, 26, 695]} url="/siege/monsters/greentrollgrunt.glb"
                             modelHeight={1.772} height={2.4} aggro={140} />
               <MonsterEnemy spawn={[-360, 26, 695]} url="/siege/monsters/greentroll.glb"

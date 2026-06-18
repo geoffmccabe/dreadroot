@@ -18,6 +18,7 @@ import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
+import { PlayerDamageHealthBar } from '@/components/hud/PlayerDamageHealthBar';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -2278,6 +2279,8 @@ export function Fortress() {
 
       <ChatOverlay messages={chatMessages} onSend={sendChat} />
       <ChallengeHUD />
+      {/* Brief on-screen health bar — flashes on every hit / potion heal, all games. */}
+      <PlayerDamageHealthBar />
       <ChallengeCreatorPanel />
       <FortressHUD
         flyingCoins={flyingCoins}

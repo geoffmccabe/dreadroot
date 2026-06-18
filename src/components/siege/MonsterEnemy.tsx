@@ -92,6 +92,7 @@ export interface MonsterConfig {
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
   roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
   attackSound?: string;       // if set, plays (spatial) the instant a melee swing starts — timed to the swipe
+  missSound?: string;         // if set, plays (spatial) when a swing whiffs — the player left hit range before contact
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -153,7 +154,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
-    moanNext: 0, contactNext: 0, meleeNext: 0,
+    moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
@@ -359,6 +360,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
         dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
+        s.swingHit = true;   // this swing connected → no whiff sound
       }
     }
 
@@ -372,7 +374,20 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.contactNext = now + 1000;
         if (Math.random() < 0.30) {
           dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H);
+          s.swingHit = true;
         }
+      }
+    }
+
+    // Whiff resolution: a swing was armed (missSound) and its contact moment has arrived.
+    // Swoosh only on a GENUINE miss — no damage landed AND the player has left hit range
+    // (a real dodge), so standing point-blank between cooldowns never false-triggers it.
+    if (c.missSound && s.swingResolveAt && now > s.swingResolveAt) {
+      s.swingResolveAt = 0;
+      const inHitRange = dist < c.attackRange + 0.8
+        && s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
+      if (!s.swingHit && !inHitRange) {
+        void playSpatialSound(c.missSound, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
       }
     }
 
@@ -519,6 +534,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const adx = camera.position.x - s.x, ady = camera.position.y - s.y, adz = camera.position.z - s.z;
           void playSpatialSound(c.attackSound, Math.sqrt(adx * adx + ady * ady + adz * adz), { baseVolume: 0.9 });
         }
+        // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
+        // has left hit range by then, it was a genuine miss → swoosh.
+        if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
       }
       else if (now > s.swipeUntil) play(clips.idle);
     } else {                                                // no player near -> wander + search

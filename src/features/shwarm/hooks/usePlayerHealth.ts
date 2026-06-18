@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { frameLoop } from '@/lib/frameLoop';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { pulseHealthBar } from '@/components/hud/healthBarStore';
 import * as THREE from 'three';
 import { 
   PLAYER_SPAWN_POINT, 
@@ -83,8 +83,7 @@ const SPAWN_POINT = new THREE.Vector3(
 
 export function usePlayerHealth() {
   const { user } = useAuth();
-  const { toast } = useToast();
-  
+
   const [healthState, setHealthState] = useState<PlayerHealthState>({
     currentHealth: 10,
     maxHealth: 10,
@@ -245,7 +244,10 @@ export function usePlayerHealth() {
     
     const newHealth = Math.max(0, current.currentHealth - amount);
     const died = newHealth <= 0;
-    
+
+    // Flash the brief on-screen health bar (all games) — only on actual hits, not regen.
+    pulseHealthBar(newHealth, current.maxHealth);
+
     // Optimistic update
     setHealthState(prev => ({
       ...prev,
@@ -264,16 +266,9 @@ export function usePlayerHealth() {
         }
       });
     
-    if (died) {
-      toast({
-        title: "You died!",
-        description: "Respawning in 3 seconds...",
-        variant: "destructive",
-      });
-    }
-    
+    // Death is announced by the big centered "YOU DIED" message (ChallengeHUD), not a toast.
     return { died };
-  }, [toast]);
+  }, []);
 
   /**
    * Add a status effect to the player
