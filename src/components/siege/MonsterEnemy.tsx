@@ -157,7 +157,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
-    moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false,
+    moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
 
@@ -383,6 +383,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
 
+    // Delayed swing sound: fires 0.5s after the swipe begins so it lands on the strike, not
+    // the wind-up. Distance is recomputed now (the monster may have closed in since).
+    if (s.attackSoundAt && now > s.attackSoundAt) {
+      s.attackSoundAt = 0;
+      if (c.attackSound) void playSpatialSound(c.attackSound, dist, { baseVolume: 0.9 });
+    }
+
     // Whiff resolution: a swing was armed (missSound) and its contact moment has arrived.
     // Swoosh only on a GENUINE miss — no damage landed AND the player has left hit range
     // (a real dodge), so standing point-blank between cooldowns never false-triggers it.
@@ -543,12 +550,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           play(clips.idle);   // limbs still — the WHOLE body spins + lunges
         } else {
           s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-          // Swing sound, fired the instant the swipe animation starts — no rate variation
-          // so it stays timed to the swing. (punched.mp3 plays separately at impact.)
-          if (c.attackSound) {
-            const adx = camera.position.x - s.x, ady = camera.position.y - s.y, adz = camera.position.z - s.z;
-            void playSpatialSound(c.attackSound, Math.sqrt(adx * adx + ady * ady + adz * adz), { baseVolume: 0.9 });
-          }
+          // Swing sound is delayed 0.5s so it lands ON the swipe, not at the wind-up. Played
+          // frame-driven below (no rate variation, so it stays timed to the swing).
+          if (c.attackSound) s.attackSoundAt = now + 500;
           // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
           // has left hit range by then, it was a genuine miss → swoosh.
           if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
