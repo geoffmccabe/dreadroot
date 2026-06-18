@@ -5,7 +5,7 @@ import type { EffectsHandle } from '@/effects/types';
 type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects' | 'migrate';
 
 // Subtab types for NPCs panel
-export type NPCSubtab = 'enemies' | 'friends' | 'pathfinding';
+export type NPCSubtab = 'enemies' | 'enemies-sw' | 'friends' | 'pathfinding';
 
 // Subtab types for Seeds panel
 export type SeedSubtab = 'ordinary' | 'wide' | 'fungal';

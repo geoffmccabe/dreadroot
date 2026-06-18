@@ -41,6 +41,7 @@ const CREATURE_DESIGN_PANELS: Record<string, { Component: React.ComponentType; c
 import { AllItemsPanel } from './AdminPanel.AllItemsPanel';
 import { DropTablesPanel } from './AdminPanel.DropTablesPanel';
 import { PathfindingConfigPanel } from '@/features/pathfinding/components/PathfindingConfigPanel';
+import { SwEnemiesPanel } from './siege/SwEnemiesPanel';
 import { useUserData } from '@/hooks/useUserData';
 import { useCreatureRegistry } from '@/hooks/useCreatureRegistry';
 import { WaterfallControls } from './AdminPanel.WaterfallControls';
@@ -303,8 +304,9 @@ export function AdminPanel({
 
           <TabsContent value="npcs" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={npcSubtab} onValueChange={(v) => setNpcSubtab(v as NPCSubtab)} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-3 flex-shrink-0 mb-4">
-                <TabsTrigger value="enemies">Enemies</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4">
+                <TabsTrigger value="enemies">Enemies EMS</TabsTrigger>
+                <TabsTrigger value="enemies-sw">Enemies SW</TabsTrigger>
                 <TabsTrigger value="friends">Friends</TabsTrigger>
                 <TabsTrigger value="pathfinding">Pathfinding</TabsTrigger>
               </TabsList>
@@ -317,6 +319,12 @@ export function AdminPanel({
                       return <Panel key={c.slug} />;
                     })}
                   </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="enemies-sw" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <SwEnemiesPanel />
                 </ScrollArea>
               </TabsContent>
 
