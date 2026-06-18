@@ -18,6 +18,7 @@ import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
+import { setChallengeState } from '@/components/siege/challenge/challengeStore';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1132,6 +1133,8 @@ export function Fortress() {
   useEffect(() => {
     if (isDead && respawnTimer === 0) {
       setRespawnTimer(3);
+      // Big centered death message — same overlay/style as the wave announcements.
+      setChallengeState({ announce: { title: 'YOU DIED', subtitle: 'Respawning…', faint: false, until: performance.now() + 3000 } });
     }
   }, [isDead]);
   
@@ -1142,10 +1145,9 @@ export function Fortress() {
       }, 1000);
       return () => clearTimeout(timer);
     } else if (respawnTimer === 0 && isDead) {
-      // Auto-respawn after timer
-      const spawnPos = respawn();
-      setRespawnPosition(spawnPos);
-      
+      // Restore health where the player died — no teleport (stay in place).
+      respawn();
+
       // Reset all enemy AI states (clears revenge, stun, etc.)
       // This prevents invisible attacks from shnakes that were chasing the dead player
       EnemyManager.clearAllRevengeStates();
