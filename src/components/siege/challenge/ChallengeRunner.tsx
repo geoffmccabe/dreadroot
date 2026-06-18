@@ -18,6 +18,16 @@ import type { Challenge, MonsterDrop } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
 
+// Deterministic pseudo-random in [0,1) from an integer seed (so spawn spots are the SAME every
+// play and the player can learn them).
+const hashRnd = (n: number) => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453123; return s - Math.floor(s); };
+// A seeded point on a uniform disk of `radius` around (cx,cz).
+function seededPoint(cx: number, cz: number, radius: number, seed: number): [number, number] {
+  const ang = hashRnd(seed * 1.7 + 0.3) * Math.PI * 2;
+  const rr = Math.sqrt(hashRnd(seed * 2.9 + 5.1)) * radius;
+  return [cx + Math.cos(ang) * rr, cz + Math.sin(ang) * rr];
+}
+
 export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
   const [mobs, setMobs] = useState<Spawned[]>([]);
@@ -25,25 +35,30 @@ export function ChallengeRunner() {
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const r = useRef({
     active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0,
-    pending: [] as { drop: MonsterDrop; at: number }[], dropsDone: false, sawAlive: false,
+    pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
     faintNext: false, idc: 0,
   }).current;
 
-  const buildMobs = (drop: MonsterDrop): Spawned[] => {
+  const buildMobs = (drop: MonsterDrop, seed: number, spread: boolean): Spawned[] => {
     const out: Spawned[] = [];
-    const ground = sampleHeight(drop.x, drop.z) ?? 26;
-    const baseY = drop.dropHeight != null ? ground + drop.dropHeight : ground;
-    const rise = drop.dropHeight == null;                       // no explicit height → rise from floor
-    const rad = drop.count <= 1 ? 0 : Math.min(8, 1 + Math.sqrt(drop.count));
+    const ch = challengeRef.current!;
+    // Seeded spawn POINT (consistent every play) within scatterRadius of the start; else the
+    // authored x,z. `spread` = a horde, so cluster within 5m of that point.
+    const [px, pz] = ch.scatterRadius && ch.spawn
+      ? seededPoint(ch.spawn[0], ch.spawn[2], ch.scatterRadius, seed)
+      : [drop.x, drop.z];
     const mods: MonsterMods | undefined = drop.boss
       ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100 }
       : undefined;
     for (let i = 0; i < drop.count; i++) {
-      const ang = Math.random() * Math.PI * 2, d = Math.random() * rad;
+      const ang = Math.random() * Math.PI * 2, d = spread ? Math.random() * 5 : 0;
+      const mx = px + Math.cos(ang) * d, mz = pz + Math.sin(ang) * d;
+      const ground = sampleHeight(mx, mz) ?? 26;
+      const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
-        id: `chal${r.runId}_${r.idc++}`, type: drop.type,
-        spawn: [drop.x + Math.cos(ang) * d, baseY, drop.z + Math.sin(ang) * d],
-        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, rise,
+        id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
+        ov: drop.type === 6 ? makeHordeMember() : undefined, mods,
+        rise: drop.dropHeight == null,
       });
     }
     return out;
@@ -54,14 +69,19 @@ export function ChallengeRunner() {
     // Build the spawn schedule. A staggered drop spreads its `count` one-per-staggerMs (this wave
     // only — replacing r.pending on the next wave drops any not-yet-spawned ones).
     r.pending = [];
-    for (const drop of wave.drops) {
+    wave.drops.forEach((drop, dropIdx) => {
       const base = now + (drop.delayMs ?? 0);
+      const dropSeed = r.waveIdx * 10000 + dropIdx * 100;
       if (drop.staggerMs && drop.count > 1) {
-        for (let i = 0; i < drop.count; i++) r.pending.push({ drop: { ...drop, count: 1 }, at: base + i * drop.staggerMs });
+        // Each staggered monster gets its OWN seeded point (different + learnable).
+        for (let i = 0; i < drop.count; i++) {
+          r.pending.push({ drop: { ...drop, count: 1 }, at: base + i * drop.staggerMs, seed: dropSeed + 1 + i, spread: false });
+        }
       } else {
-        r.pending.push({ drop, at: base });
+        // Single monster → its point; horde (count>1) → one point, clustered.
+        r.pending.push({ drop, at: base, seed: dropSeed, spread: drop.count > 1 });
       }
-    }
+    });
     r.dropsDone = r.pending.length === 0;
     r.sawAlive = false;
     r.waveEndsAt = now + wave.timeSec * 1000;
@@ -134,7 +154,7 @@ export function ChallengeRunner() {
       const due = r.pending.filter((p) => p.at <= now);
       if (due.length) {
         r.pending = r.pending.filter((p) => p.at > now);
-        const fresh = due.flatMap((p) => buildMobs(p.drop));
+        const fresh = due.flatMap((p) => buildMobs(p.drop, p.seed, p.spread));
         if (fresh.length) setMobs((m) => [...m, ...fresh]);
       }
       if (!r.pending.length) r.dropsDone = true;

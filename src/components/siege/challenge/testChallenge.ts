@@ -10,6 +10,7 @@ export const TEST_CHALLENGE: Challenge = {
   name: 'Test Gauntlet',
   creator: 'system',
   spawn: [-1039, 24, 1108],    // teleport the player to Bleakrock on start
+  scatterRadius: 50,           // seeded, learnable spawn points within 50m of the start
   waves: [
     { name: 'Red Demons',      timeSec: 60, drops: [{ type: 1, count: 10, x: CX, z: CZ }] },
     { name: 'Mushroom Grunts',  timeSec: 60, drops: [{ type: 2, count: 10, x: CX, z: CZ }] },
