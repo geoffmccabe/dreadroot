@@ -1757,7 +1757,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {isSiege && <LaserProbe />}
       {isSiege && <VoxelizeTool />}
       {isSiege && <SiegeExplosion ref={siegeExplosionRef} />}
-      {isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
+      {/* Local blue avatar (SiegeCharacter) disabled per user request — it rendered a
+          character ~3m in front of the camera and the player kept ending up inside/at its
+          feet. Re-enable by flipping `false` when the held-weapon character work is ready. */}
+      {false && isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (
