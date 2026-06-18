@@ -178,7 +178,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false,
-    deathSnd: false, fellSound: false, lastHurtAt: 0 });
+    deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0 });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -492,6 +492,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
         // '' = skip dealPlayerDamage's own sound (we already played the impact above).
         dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
+        // Spin the view 0-90° clockwise (opposite the swipe) as the hit lands, with the knockback.
+        (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(Math.random() * 0.38, -1);
       } else if (c.missSound) {
         emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
       }
@@ -680,10 +682,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.x += mvx * step; s.z += mvz * step;
         play(clips.walk);
       } else if (c.rangedRange) { play(clips.idle); }        // ranged monsters don't melee-bite up close (looks silly)
-      else if (now - s.lastAttack > c.attackMs && dist <= c.attackRange + 0.6) {
-        // MUST be in range to start a swing. Without this dist gate, a swing whose commit-hold
-        // blocks the chase (above) would re-fire here every attackMs even after knockback shoved
-        // the player away — locking the demon swinging in place forever, never chasing.
+      else if (now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= H * 0.5 + 0.5) {
+        // Only swing when actually within REACH (½ height + 0.5m), not the looser attack range —
+        // otherwise demons sitting just out of reach swing-and-miss forever (the swipe-sound drone).
+        // The dist gate also stops the commit-hold from re-firing a swing in place after knockback.
         s.lastAttack = now;
         if (c.attackStyle === 'spin-lunge') {
           // Mushroom grunt: begin a 0.5s spin-lunge. Capture the forward offset (50% toward the
@@ -703,6 +705,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             // Committed swipe: the demon plants + swings through. The swipe sound lands at 0.65s
             // (the visible swipe); the actual strike (impact + knockback) is ~0.15s after that.
             s.strikeAt = now + 800;
+            s.swingGap = 1000 + Math.random() * 2000;   // next swipe in a random 1-3s
           } else if (c.missSound) {
             // Legacy whiff (monsters with a swoosh but no committed strike).
             s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false;
