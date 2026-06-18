@@ -103,6 +103,9 @@ export interface MonsterConfig {
                               // strike at the peak. No swipe. Reads dmg/kb from meleeContact.
   lungeOnSwing?: boolean;     // committed-swipe monsters: lunge the body 65% toward the camera + up
                               // toward its height (face in your view) during the swing, then snap back.
+  bulletTumble?: boolean;     // mushroom grunt: a BULLET launches it 1-10m away from the shot + tumbles
+                              // it end-over-end (1-5 rev/s) instead of a small slide.
+  deathStyle?: 'deflate';     // mushroom grunt: fall face-first → deflate (mesh flattens) → sink in.
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -183,7 +186,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
     deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0,
-    sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0 });
+    sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
+    tumbleYaw: 0, bulletTumble: false });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -258,6 +262,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     yaw: 0,
     opacity: 1,
     kbScale: cfg.kbInverseSize ? 6 / H : undefined,   // 1-3·(6/H) velocity → ~1-3m slide ÷ size
+    tumbleOnBullet: cfg.bulletTumble ?? false,        // mushroom: bullets launch + tumble it
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
@@ -453,6 +458,33 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       return;
     }
 
+    // ── MUSHROOM custom death: fall FACE-FIRST over the toes (0.6s) → lie 1s → DEFLATE (the mesh
+    //    flattens, 80%, over 1s) → sink into the ground (3s) → despawn. Pivots at the feet. ──
+    if (inst.dead && c.deathStyle === 'deflate') {
+      const td = now - inst.deadAt;
+      const FALL = 600, LIE_END = FALL + 1000, DEFLATE = 1000, DEFLATE_END = LIE_END + DEFLATE;  // 600/1600/2600
+      const SINK = 3000, SINK_END = DEFLATE_END + SINK;                                          // 5600
+      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      s.x += inst.kvx * delta; s.z += inst.kvz * delta; inst.kvx *= 0.82; inst.kvz *= 0.82;  // settle last shove
+      play(clips.idle);
+      g.rotation.order = 'YXZ';
+      const fp = Math.min(1, td / FALL);
+      g.rotation.x = (Math.PI / 2) * fp;          // topple forward onto its face over the toes
+      if (!s.fellSound && fp >= 1) {              // face hits the ground
+        s.fellSound = true;
+        emitMonster3D(camera, '/enemy_hitting_ground.mp3', s.x, s.y, s.z,
+          Math.hypot(camera.position.x - s.x, camera.position.z - s.z), { baseVolume: 0.7 });
+      }
+      // Deflate: compress the now-vertical body axis (local Z, once face-down) full → 20%.
+      const defl = td >= LIE_END ? 1 - 0.8 * Math.min(1, (td - LIE_END) / DEFLATE) : 1;
+      g.scale.set(scale, scale, scale * defl);
+      const yOff = td >= DEFLATE_END ? -H * Math.min(1, (td - DEFLATE_END) / SINK) : 0;  // sink once flat
+      g.position.set(s.x, s.y + yOff, s.z);
+      inst.x = s.x; inst.y = s.y + yOff; inst.z = s.z;
+      if (!inst.despawned && td > SINK_END) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+      return;
+    }
+
     // ── DEATH: play the death clip once, slide out the last knockback, then despawn ──
     if (inst.dead) {
       if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }  // kill the spin whir
@@ -557,11 +589,20 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // ── Blast vertical launch: apply once → gravity arcs them; kick off a tumbling spin. ──
     if (inst.kvy) {
       s.vy = inst.kvy; inst.kvy = 0;
-      s.wasClimbing = false;   // a blast cancels any in-progress climb so they fly, not re-climb
+      s.wasClimbing = false;   // a blast/bullet-launch cancels any in-progress climb so they fly
       s.tumbling = true;
-      const a = Math.random() * Math.PI * 2;
-      s.spinX = Math.cos(a) * (Math.random() * 13);   // 0–13 rad/s tumble
-      s.spinZ = Math.sin(a) * (Math.random() * 13);
+      if (inst.bulletTumbleAt) {
+        // Bullet tumble (mushroom): a CLEAN end-over-end — face the flight direction, then pitch
+        // backward at the chosen rev/sec, so it flips away from the shot perpendicular to it.
+        s.tumbleYaw = Math.atan2(inst.kvx, inst.kvz);
+        s.spinX = (inst.bulletTumbleRev || 2) * Math.PI * 2;   // rev/s → rad/s
+        s.bulletTumble = true; inst.bulletTumbleAt = 0;
+      } else {
+        const a = Math.random() * Math.PI * 2;
+        s.spinX = Math.cos(a) * (Math.random() * 13);   // 0–13 rad/s tumble (random axis, blast)
+        s.spinZ = Math.sin(a) * (Math.random() * 13);
+        s.bulletTumble = false;
+      }
     }
     // ── Horizontal knockback slide. Decays only while GROUNDED (friction); airborne keeps its
     //    momentum so a blast flings them in a full arc instead of stopping after ~1m. ──
@@ -925,8 +966,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // Tumble through the air after a blast; land + settle upright once grounded.
     if (s.tumbling) {
-      if (sup.g) { s.tumbling = false; g.rotation.x = 0; g.rotation.z = 0; }
-      else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
+      if (sup.g) { s.tumbling = false; s.bulletTumble = false; g.rotation.x = 0; g.rotation.z = 0; }
+      else if (s.bulletTumble) {
+        // Clean end-over-end: lock the facing to the flight direction, backflip around local X.
+        g.rotation.order = 'YXZ';
+        g.rotation.y = s.tumbleYaw; g.rotation.z = 0;
+        g.rotation.x -= s.spinX * delta;
+      } else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
     } else if (inst.headshotAt) {
       // Headshot recoil: a fast 15° backward heel-pivot lean + snap back, all within 0.1s.
       const ht = (now - inst.headshotAt) / 100;   // 0..1 over 1/10s

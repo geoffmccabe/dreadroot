@@ -42,6 +42,11 @@ export interface DemonInstance {
   // skeleton horde sets kbScale = 6/size so small skeletons fly far, big ones barely budge).
   kbScale?: number;
   noKnockback?: boolean;   // bullets/hits deal HP only — no shove (the Spintroll drives its own motion)
+  // Mushroom grunt: a BULLET flings it 1-10m away + launches it so MonsterEnemy tumbles it
+  // end-over-end (set on the instance at creation). bulletTumbleAt/Rev are the per-hit handoff.
+  tumbleOnBullet?: boolean;
+  bulletTumbleAt?: number;
+  bulletTumbleRev?: number;
   // Set by MonsterEnemy: attach a world hit point to the nearest skeleton bone so
   // an ongoing burn rides the animation (gait bob + turn). Undefined until ready.
   attach?: (x: number, y: number, z: number) => BurnFollower | null;
@@ -117,11 +122,18 @@ enemyCombatRegistry.register<DemonInstance>({
       d.hitAt = now;
     } else if (info.source !== 'flame') {
       // Burn DoT (flame) only chips HP — no re-stun (else the horde perma-freezes).
+      const bulletTumble = d.tumbleOnBullet && info.source === 'bullet';
       const kb = info.source === 'melee' ? (info.knockbackImpulse ?? 8)
-        : (d.kbScale ? (1 + Math.random() * 2) * d.kbScale : 4.5); // bullet: fixed stagger, or 1-3·kbScale
+        : bulletTumble ? (5 + Math.random() * 8)                    // big 5-13 stagger → flies ~1-10m
+        : (d.kbScale ? (1 + Math.random() * 2) * d.kbScale : 4.5);  // bullet: fixed stagger, or 1-3·kbScale
       if (!d.noKnockback) {
         d.kvx += info.knockbackDirX * kb;
         d.kvz += info.knockbackDirZ * kb;
+      }
+      if (bulletTumble) {
+        d.kvy = 5 + Math.random() * 3;             // launch up so it arcs while tumbling
+        d.bulletTumbleAt = now;
+        d.bulletTumbleRev = 1 + Math.random() * 4; // 1-5 revolutions / second (random each hit)
       }
       if (!d.noStun) d.stunUntil = now + 1000 + Math.random() * 2000; // 1–3s stun (skipped for noStun boss/test demon)
       d.hitAt = now;
