@@ -17,7 +17,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
-import { playSpatialSound } from '@/lib/spatialAudio';
+import { play3DPositionalSound } from '@/lib/spatialAudio';
 import { DarkLordFlame } from './DarkLordFlame';
 import { useSmokeTrail } from './siegeSmoke';
 
@@ -108,6 +108,20 @@ const GRAVITY = 22, JUMP_VEL = 9.5, STEP_UP = 0.45;
 const TRAP_RADIUS = 1.3, TRAP_COUNT = 3; // boxed in by this many of its own kind → climb over
 const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-collision query
 
+// TRUE 3D directional audio for monster-emitted sounds (roar/attack/miss/moan): HRTF panning
+// from the monster's mouth toward the player's ears + natural distance falloff. Skipped past
+// 50m (inaudible). Scratch vectors are safe — play3DPositionalSound snapshots them synchronously.
+const _aSrc = new THREE.Vector3();
+const _aDir = new THREE.Vector3();
+function emitMonster3D(camera: THREE.Camera, url: string, sx: number, sy: number, sz: number,
+                      dist: number, opts: { baseVolume?: number; playbackRate?: number }) {
+  if (dist > 50) return;
+  _aSrc.set(sx, sy, sz);
+  camera.getWorldDirection(_aDir);
+  void play3DPositionalSound(url, _aSrc, camera.position, _aDir,
+    { baseVolume: opts.baseVolume, playbackRate: opts.playbackRate, refDistance: 5, maxDistance: 50, rolloffFactor: 1.5 });
+}
+
 // Shared live registry of monster footprints so each pushes out of the others (cheap O(n²)
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
@@ -172,8 +186,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (!alive) return;
         if (Math.random() < 0.20) {
           const s = st.current;
-          const dx = camera.position.x - s.x, dy = camera.position.y - s.y, dz = camera.position.z - s.z;
-          void playSpatialSound(c.roarSound!, Math.sqrt(dx * dx + dy * dy + dz * dz),
+          const dist = Math.hypot(camera.position.x - s.x, camera.position.z - s.z);
+          emitMonster3D(camera, c.roarSound!, s.x, s.y + 1.2, s.z, dist,
             { baseVolume: 0.85, playbackRate: 0.85 + Math.random() * 0.30 });
         }
         schedule(); // re-roll in another 3-5s
@@ -351,7 +365,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.moanNext = now + 4000 + Math.random() * 4000;
         if (Math.random() < 0.12 && dist < 55) {   // ~10%/cycle like the SW shombies — ambient, not a wall
           const u = c.moanSounds[(Math.random() * c.moanSounds.length) | 0];
-          playSpatialSound(u, dist, { baseVolume: 0.55, playbackRate: 0.8 + Math.random() * 0.4 });
+          emitMonster3D(camera, u, s.x, s.y + 1, s.z, dist, { baseVolume: 0.55, playbackRate: 0.8 + Math.random() * 0.4 });
         }
       }
     }
@@ -383,11 +397,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
 
-    // Delayed swing sound: fires 0.5s after the swipe begins so it lands on the strike, not
+    // Delayed swing sound: fires 0.65s after the swipe begins so it lands on the strike, not
     // the wind-up. Distance is recomputed now (the monster may have closed in since).
     if (s.attackSoundAt && now > s.attackSoundAt) {
       s.attackSoundAt = 0;
-      if (c.attackSound) void playSpatialSound(c.attackSound, dist, { baseVolume: 0.9 });
+      if (c.attackSound) emitMonster3D(camera, c.attackSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
     }
 
     // Whiff resolution: a swing was armed (missSound) and its contact moment has arrived.
@@ -398,7 +412,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const inHitRange = dist < c.attackRange + 0.8
         && s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
       if (!s.swingHit && !inHitRange) {
-        void playSpatialSound(c.missSound, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
+        emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
       }
     }
 
@@ -550,9 +564,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           play(clips.idle);   // limbs still — the WHOLE body spins + lunges
         } else {
           s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-          // Swing sound is delayed 0.5s so it lands ON the swipe, not at the wind-up. Played
+          // Swing sound is delayed 0.65s so it lands ON the swipe, not at the wind-up. Played
           // frame-driven below (no rate variation, so it stays timed to the swing).
-          if (c.attackSound) s.attackSoundAt = now + 500;
+          if (c.attackSound) s.attackSoundAt = now + 650;
           // Arm whiff detection: resolve ~60% into the swing. If no hit landed AND the player
           // has left hit range by then, it was a genuine miss → swoosh.
           if (c.missSound) { s.swingResolveAt = now + c.attackClipMs * 0.6; s.swingHit = false; }
@@ -740,7 +754,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), sdx / sdist, 0, sdz / sdist,
                              rnd(c.meleeContact.kb), c.hitSound);
           } else if (c.missSound) {
-            void playSpatialSound(c.missSound, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
+            emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
           }
         }
       } else s.lungeStart = 0;

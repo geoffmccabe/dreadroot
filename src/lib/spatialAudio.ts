@@ -242,6 +242,12 @@ export async function play3DPositionalSound(
     rolloffFactor = YODEL_ROLLOFF_FACTOR,
   } = options;
 
+  // Snapshot positions NOW — callers may pass reused scratch vectors that get mutated before
+  // the async buffer load below resolves, which would mis-place the sound.
+  const sx = sourcePosition.x, sy = sourcePosition.y, sz = sourcePosition.z;
+  const lx = listenerPosition.x, ly = listenerPosition.y, lz = listenerPosition.z;
+  const fx = listenerDirection.x, fy = listenerDirection.y, fz = listenerDirection.z;
+
   const ctx = getAudioContext();
   if (!ctx) return;
 
@@ -269,37 +275,34 @@ export async function play3DPositionalSound(
     panner.coneOuterGain = 1;
 
     // Set sound source position
-    panner.positionX.setValueAtTime(sourcePosition.x, ctx.currentTime);
-    panner.positionY.setValueAtTime(sourcePosition.y, ctx.currentTime);
-    panner.positionZ.setValueAtTime(sourcePosition.z, ctx.currentTime);
+    panner.positionX.setValueAtTime(sx, ctx.currentTime);
+    panner.positionY.setValueAtTime(sy, ctx.currentTime);
+    panner.positionZ.setValueAtTime(sz, ctx.currentTime);
 
     // Set listener position and orientation
     const listener = ctx.listener;
 
     // Position
     if (listener.positionX) {
-      listener.positionX.setValueAtTime(listenerPosition.x, ctx.currentTime);
-      listener.positionY.setValueAtTime(listenerPosition.y, ctx.currentTime);
-      listener.positionZ.setValueAtTime(listenerPosition.z, ctx.currentTime);
+      listener.positionX.setValueAtTime(lx, ctx.currentTime);
+      listener.positionY.setValueAtTime(ly, ctx.currentTime);
+      listener.positionZ.setValueAtTime(lz, ctx.currentTime);
     } else {
       // Fallback for older browsers
-      listener.setPosition(listenerPosition.x, listenerPosition.y, listenerPosition.z);
+      listener.setPosition(lx, ly, lz);
     }
 
     // Orientation (forward direction and up vector)
     if (listener.forwardX) {
-      listener.forwardX.setValueAtTime(listenerDirection.x, ctx.currentTime);
-      listener.forwardY.setValueAtTime(listenerDirection.y, ctx.currentTime);
-      listener.forwardZ.setValueAtTime(listenerDirection.z, ctx.currentTime);
+      listener.forwardX.setValueAtTime(fx, ctx.currentTime);
+      listener.forwardY.setValueAtTime(fy, ctx.currentTime);
+      listener.forwardZ.setValueAtTime(fz, ctx.currentTime);
       listener.upX.setValueAtTime(0, ctx.currentTime);
       listener.upY.setValueAtTime(1, ctx.currentTime);
       listener.upZ.setValueAtTime(0, ctx.currentTime);
     } else {
       // Fallback for older browsers
-      listener.setOrientation(
-        listenerDirection.x, listenerDirection.y, listenerDirection.z,
-        0, 1, 0
-      );
+      listener.setOrientation(fx, fy, fz, 0, 1, 0);
     }
 
     // Connect: source -> gain -> panner -> destination

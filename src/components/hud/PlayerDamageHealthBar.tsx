@@ -18,11 +18,15 @@ const TOTAL_MS = HOLD_MS + FADE_MS;
 const FLASH_MS = 100;          // red screen tint on a hit (~1/10s)
 const FLASH_MAX = 0.4;         // peak red opacity
 
-function colorFor(pct: number): string {
-  if (pct < 10) return '#e23b3b';   // 0–10%  red
-  if (pct < 25) return '#ff9a1f';   // 10–25% orange
-  if (pct < 50) return '#ffe11f';   // 25–50% yellow
-  return '#33d14e';                 // 50–100% green
+// Fill colour per HP band, as a left→right gradient: full saturation on the left fading to
+// 50% saturation toward the low-health (right) end of the bar.
+function fillGradient(pct: number): string {
+  const [h, s, l] =
+    pct < 10 ? [0, 73, 56] :    // red
+    pct < 25 ? [34, 100, 56] :  // orange
+    pct < 50 ? [51, 100, 56] :  // yellow
+               [133, 61, 51];   // green
+  return `linear-gradient(to right, hsl(${h} ${s}% ${l}%), hsl(${h} ${Math.round(s * 0.5)}% ${l}%))`;
 }
 
 function fmtPct(pct: number): string {
@@ -54,7 +58,7 @@ export function PlayerDamageHealthBar() {
 
   const opacity = elapsed < HOLD_MS ? 1 : 1 - (elapsed - HOLD_MS) / FADE_MS;
   const pct = Math.max(0, Math.min(100, (st.current / st.max) * 100));
-  const fill = colorFor(pct);
+  const fill = fillGradient(pct);
   // Brief red full-screen tint on a hit (not on a heal), fading out over ~1/10s.
   const flash = st.damage && elapsed < FLASH_MS ? FLASH_MAX * (1 - elapsed / FLASH_MS) : 0;
 
@@ -78,11 +82,17 @@ export function PlayerDamageHealthBar() {
       <div
         style={{
           width: '33.33vw', height: 64, boxSizing: 'border-box',
-          border: '20px solid #000', background: '#000', overflow: 'hidden',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+          border: '20px solid rgba(0,0,0,0.6)', background: 'rgba(0,0,0,0.6)', overflow: 'hidden',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.35)',
         }}
       >
-        <div style={{ width: `${pct}%`, height: '100%', background: fill, transition: 'none' }} />
+        {/* Gradient anchored to the FULL inner bar width (not the fill), so the desaturated
+            end always sits at the bar's right edge and the fill reveals it from the left. */}
+        <div style={{
+          width: `${pct}%`, height: '100%', background: fill,
+          backgroundSize: 'calc(33.33vw - 40px) 100%', backgroundRepeat: 'no-repeat',
+          backgroundPosition: 'left center', transition: 'none',
+        }} />
       </div>
       {/* The % readout, large white, to the right of the bar. */}
       <div
