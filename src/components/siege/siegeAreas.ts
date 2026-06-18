@@ -24,6 +24,11 @@ export interface SiegeTeleport {
 // Centroids measured from the exported placement data; Y nudged up so you drop
 // onto the terrain. Slots 4 (Harold) and 5 (Nero) are best-guesses — overwrite
 // them in-game with Shift+<n> once you're standing where you want them.
+
+// Where the player spawns / respawns in Siege Worlds — Bleakrock (the Mushrooms island), just
+// above its ground (~24) so you drop onto terrain. Used by the initial spawn AND death respawn.
+export const SIEGE_SPAWN_POINT: [number, number, number] = [-1039, 27, 1108];
+
 export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 1, name: 'Lobby',         pos: [-96, 31, 325] },
   { slot: 2, name: 'Beach',         pos: [-537, 46, 688] },

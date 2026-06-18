@@ -488,16 +488,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       s.strikeAt = 0;
       const reach = H * 0.5 + 0.5;
       const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
-      // Connects only if in reach AND a 50/50 roll — so even point-blank it misses ~half the time
-      // (→ swoosh). Out of reach (you dodged / were knocked away) always misses.
-      if (c.meleeContact && dist < reach && vOverlap && Math.random() < 0.5) {
-        emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
-        // '' = skip dealPlayerDamage's own sound (we already played the impact above).
-        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
-        // Spin the view 0-90° clockwise (opposite the swipe) as the hit lands, with the knockback.
-        (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(Math.random() * 0.38, -1);
-      } else if (c.missSound) {
-        emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
+      const swoosh = () => { if (c.missSound) emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 }); };
+      if (c.meleeContact && dist < reach && vOverlap) {
+        if (Math.random() < 0.5) {
+          // HIT (50%): impact sound + damage + knockback + 0-90° view-spin.
+          emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
+          dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
+          (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(Math.random() * 0.38, -1);
+        } else {
+          // AUTO-DODGE (50%): you slip back ~1m out of reach — no damage, NO view-spin — + swoosh.
+          (window as { __applyPlayerKnockback?: (d: THREE.Vector3, dist: number) => void })
+            .__applyPlayerKnockback?.(new THREE.Vector3(dx / dist, 0, dz / dist), 0.6);
+          swoosh();
+        }
+      } else {
+        swoosh();   // already out of reach (you moved away): a clean miss
       }
     }
 

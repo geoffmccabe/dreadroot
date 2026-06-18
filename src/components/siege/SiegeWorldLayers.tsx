@@ -79,7 +79,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
                             modelHeight={2.033} height={2.7} aggro={140} />
               <MonsterEnemy spawn={[-380, 26, 720]} url="/siege/monsters/mushroomgruntanim.glb"
                             modelHeight={2.331} height={2.2} aggro={140} attackMs={1500}
-                            attackStyle="spin-lunge" meleeContact={{ dmg: [10, 50], kb: [1, 5] }}
+                            attackStyle="spin-lunge" meleeContact={{ dmg: [3, 17], kb: [1, 5] }}
                             hitSound="/little_slap.mp3" missSound="/swoosh_miss_high.mp3" />
             </Suspense>
           )}

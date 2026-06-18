@@ -43,6 +43,7 @@ const _inspectorMatrix = new THREE.Matrix4();
 const _inspectorPos = new THREE.Vector3();
 const _inspectorDir = new THREE.Vector3();
 const _inspectorDistVec = new THREE.Vector3();
+const _sdbgDir = new THREE.Vector3();   // scratch: camera look dir for the siege debug readout
 
 export function FirstPersonControls({
   onShoot,
@@ -2844,6 +2845,9 @@ export function FirstPersonControls({
       if (groundHeightFn) {
         const tY = groundHeightFn(camera.position.x, camera.position.z);
         sdbg.isSiege = true; sdbg.ghf = true; sdbg.godMode = godModeRef.current; sdbg.onGround = onGround.current; sdbg.playerY = camera.position.y; sdbg.terrainY = tY; // SW debug
+        sdbg.playerX = camera.position.x; sdbg.playerZ = camera.position.z;
+        { const _f = camera.getWorldDirection(_sdbgDir); sdbg.fwdX = _f.x; sdbg.fwdY = _f.y; sdbg.fwdZ = _f.z;
+          sdbg.yawDeg = (Math.atan2(_f.x, _f.z) * 180 / Math.PI + 360) % 360; sdbg.pitchDeg = Math.asin(Math.max(-1, Math.min(1, _f.y))) * 180 / Math.PI; }
         // Floor = terrain height, or sea level (22) as a fallback if the heightfield is
         // missing here. Snap + set grounded ONLY when at/below the floor; when ABOVE it, do
         // NOT touch onGround so gravity keeps pulling the player down. (The old code forced

@@ -19,6 +19,8 @@ import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
 import { PlayerDamageHealthBar } from '@/components/hud/PlayerDamageHealthBar';
+import { getActiveGame } from '@/config/activeGame';
+import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -1147,8 +1149,11 @@ export function Fortress() {
       }, 1000);
       return () => clearTimeout(timer);
     } else if (respawnTimer === 0 && isDead) {
-      // Restore health where the player died — no teleport (stay in place).
-      respawn();
+      respawn();   // restore health
+      // Siege Worlds: respawn back at the Bleakrock start point (not where you died).
+      if (getActiveGame() === 'siege-worlds') {
+        setRespawnPosition(new THREE.Vector3(...SIEGE_SPAWN_POINT));
+      }
 
       // Reset all enemy AI states (clears revenge, stun, etc.)
       // This prevents invisible attacks from shnakes that were chasing the dead player

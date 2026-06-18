@@ -36,6 +36,7 @@ import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
 import { fireChallengeLose } from '@/components/siege/challenge/challengeControl';
 import { sdbg } from '@/components/siege/siegeDebug';
+import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
@@ -260,7 +261,7 @@ export function FortressScene({
   // HUD, lighting, sky) is world-agnostic and shared. Gated so Dreadroot is untouched.
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
-  const siegeSpawn = useMemo(() => new THREE.Vector3(-400, 28, 660), []); // just above beach ground (~26) so you start grounded, not hovering high
+  const siegeSpawn = useMemo(() => new THREE.Vector3(...SIEGE_SPAWN_POINT), []); // Bleakrock — start where the action is
   // useThree() camera — MUST be declared before the live-swap effect below, which reads
   // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
   // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)
