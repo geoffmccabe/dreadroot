@@ -322,6 +322,78 @@ export async function preloadSpatialSounds(urls: string[]): Promise<void> {
   await Promise.all(urls.map(url => loadAudioBuffer(url)));
 }
 
+// ── Looping 3D positional sounds (e.g. the spintroll's continuous spin whir) ────────────
+// A LoopSound is a handle you start once, update each frame (position + listener + rate), and
+// stop on death/unmount. Returned synchronously so it can be stopped even before the buffer
+// finishes loading.
+export interface LoopSound {
+  stopped: boolean;
+  _src: AudioBufferSourceNode | null;
+  _gain: GainNode | null;
+  _panner: PannerNode | null;
+}
+
+export function startLoopSound(
+  url: string,
+  opts: { x: number; y: number; z: number; baseVolume?: number; playbackRate?: number;
+          refDistance?: number; maxDistance?: number; rolloffFactor?: number }
+): LoopSound {
+  const h: LoopSound = { stopped: false, _src: null, _gain: null, _panner: null };
+  const ctx = getAudioContext();
+  if (!ctx) { h.stopped = true; return h; }
+  void (async () => {
+    const buffer = await loadAudioBuffer(url);
+    if (!buffer || h.stopped) return;   // stopped before the load finished
+    const src = ctx.createBufferSource();
+    src.buffer = buffer; src.loop = true;
+    src.playbackRate.value = opts.playbackRate ?? 1;
+    const panner = ctx.createPanner();
+    panner.panningModel = 'HRTF'; panner.distanceModel = 'inverse';
+    panner.refDistance = opts.refDistance ?? 5;
+    panner.maxDistance = opts.maxDistance ?? 50;
+    panner.rolloffFactor = opts.rolloffFactor ?? 1.5;
+    if (panner.positionX) { panner.positionX.value = opts.x; panner.positionY.value = opts.y; panner.positionZ.value = opts.z; }
+    else panner.setPosition(opts.x, opts.y, opts.z);
+    const gain = ctx.createGain(); gain.gain.value = opts.baseVolume ?? 0.5;
+    src.connect(gain); gain.connect(panner); panner.connect(ctx.destination);
+    src.start();
+    if (h.stopped) { try { src.stop(); } catch { /* already gone */ } return; }
+    h._src = src; h._gain = gain; h._panner = panner;
+  })();
+  return h;
+}
+
+/** Update a loop's source position, the listener (camera) pose, and optionally its rate. */
+export function updateLoopSound(
+  h: LoopSound | null, x: number, y: number, z: number,
+  listenerPos?: THREE.Vector3, listenerDir?: THREE.Vector3, playbackRate?: number,
+): void {
+  if (!h || h.stopped || !h._panner) return;
+  const ctx = getAudioContext(); if (!ctx) return;
+  const p = h._panner;
+  if (p.positionX) { p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; }
+  else p.setPosition(x, y, z);
+  if (playbackRate != null && h._src) h._src.playbackRate.value = playbackRate;
+  if (listenerPos && listenerDir) {
+    const l = ctx.listener;
+    if (l.positionX) {
+      l.positionX.value = listenerPos.x; l.positionY.value = listenerPos.y; l.positionZ.value = listenerPos.z;
+      l.forwardX.value = listenerDir.x; l.forwardY.value = listenerDir.y; l.forwardZ.value = listenerDir.z;
+      l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0;
+    } else {
+      l.setPosition(listenerPos.x, listenerPos.y, listenerPos.z);
+      l.setOrientation(listenerDir.x, listenerDir.y, listenerDir.z, 0, 1, 0);
+    }
+  }
+}
+
+export function stopLoopSound(h: LoopSound | null): void {
+  if (!h || h.stopped) return;
+  h.stopped = true;
+  try { h._src?.stop(); } catch { /* not started */ }
+  try { h._src?.disconnect(); h._gain?.disconnect(); h._panner?.disconnect(); } catch { /* already gone */ }
+}
+
 // Shwarm sound URLs
 export const SHWARM_SOUNDS = [
   '/shwarm_sound_1.mp3',

@@ -54,7 +54,7 @@ export const CFG: Partial<Record<MType, {
          { radiusMul: 1.05, heightMul: 1.70, colorHot: '#5cff6a', colorCool: '#06330f' },
          { radiusMul: 0.525, heightMul: 2.72, colorHot: '#5cc0ff', colorCool: '#031a40' },
        ],
-       spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 10], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2] } },
+       spin: { revPerSec: [3, 5], zoomEveryMs: [1000, 10000], zoomSpeedMul: [3, 10], contactDmg: [10, 100], contactKb: [1, 10], zoomHitMul: 2, playerSpinRev: [0.5, 2], spinSound: '/spintroll_sound.mp3' } },
 };
 
 // Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.

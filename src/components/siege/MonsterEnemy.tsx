@@ -17,7 +17,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
-import { play3DPositionalSound } from '@/lib/spatialAudio';
+import { play3DPositionalSound, startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
 import { DarkLordFlame } from './DarkLordFlame';
 import { useSmokeTrail } from './siegeSmoke';
 
@@ -39,6 +39,7 @@ export interface SpinConfig {
   contactKb: [number, number];    // touch knockback (m)
   zoomHitMul: number;             // dmg + kb multiplier when the hit lands mid-zoom
   playerSpinRev: [number, number];// on a zoom-hit, spin the player's view this fast (revs/sec)
+  spinSound?: string;             // looped 3D whir while spinning; pitch tracks this troll's spin rate
 }
 
 export interface MonsterConfig {
@@ -175,6 +176,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false });
+
+  // Looped spin whir (spintroll) — started when it first spins, stopped on death/unmount.
+  const spinLoopRef = useRef<LoopSound | null>(null);
+  useEffect(() => () => { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }, []);
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
   // monster's position, with ±15% random pitch/length. Cleans up on death/despawn.
@@ -347,6 +352,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // ── DEATH: play the death clip once, slide out the last knockback, then despawn ──
     if (inst.dead) {
+      if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }  // kill the spin whir
       play(clips.death, true);
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
       inst.kvx *= 0.82; inst.kvz *= 0.82;
@@ -507,6 +513,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.zoomNext = now + rnd(c.spin.zoomEveryMs);
       }
       g.rotation.y += s.spinVel * delta;                   // fast visual spin (overrides facing)
+      // Looped whir, pitched to THIS troll's spin rate (the ±20% per-individual variation maps to
+      // ±20% playback rate). Started once; position + listener tracked at the end of the frame.
+      if (c.spin.spinSound && !spinLoopRef.current) {
+        const refRev = (c.spin.revPerSec[0] + c.spin.revPerSec[1]) / 2;
+        const thisRev = Math.abs(s.spinVel) / (Math.PI * 2);
+        spinLoopRef.current = startLoopSound(c.spin.spinSound, {
+          x: s.x, y: s.y + H * 0.5, z: s.z, baseVolume: 0.5,
+          playbackRate: refRev > 0 ? thisRev / refRev : 1,
+        });
+      }
       if (now > s.zoomNext) {                              // start a random zoom dash (≥5m)
         const ang = Math.random() * Math.PI * 2, mul = rnd(c.spin.zoomSpeedMul);
         const speed = SPD * mul, targetDist = 5 + Math.random() * 15;   // 5-20m per dash
@@ -826,6 +842,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (cfg.boss === 'teleporter') {                 // fade the model to its current opacity
       const o = inst.opacity ?? 1, mats = bossMats.current;
       for (let i = 0; i < mats.length; i++) mats[i].opacity = o;
+    }
+    // Keep the looped spin whir on the troll's body + the listener on the camera.
+    if (spinLoopRef.current) {
+      camera.getWorldDirection(_aDir);
+      updateLoopSound(spinLoopRef.current, s.x, s.y + H * 0.5, s.z, camera.position, _aDir);
     }
     sdbg.monsters = MONSTERS.size; // SW debug
   });
