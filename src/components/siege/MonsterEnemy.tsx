@@ -178,6 +178,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false,
     deathSnd: false, fellSound: false });
 
+  // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
+  const flamesRef = useRef<THREE.Group>(null);
   // Looped spin whir (spintroll) — started when it first spins, stopped on death/unmount.
   const spinLoopRef = useRef<LoopSound | null>(null);
   useEffect(() => () => { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }, []);
@@ -350,6 +352,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const now = performance.now();
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
+
+    // Body flames go out on death: shrink to zero height over the first 2s (both colours).
+    if (flamesRef.current && cfg.bodyFlames) {
+      flamesRef.current.scale.y = inst.dead ? Math.max(0, 1 - (now - inst.deadAt) / 2000) : 1;
+    }
 
     // ── SPINTROLL custom death: spin-down (2s) → stand (1s) → topple straight back → lie (3s)
     //    → sink into the ground (3s) → despawn. Pivots at the feet (model origin), not the mesh
@@ -577,8 +584,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           playbackRate: refRev > 0 ? thisRev / refRev : 1,
         });
       }
-      if (now > s.zoomNext) {                              // start a random zoom dash (≥5m)
-        const ang = Math.random() * Math.PI * 2, mul = rnd(c.spin.zoomSpeedMul);
+      if (now > s.zoomNext) {                              // start a zoom dash (≥5m)
+        // ~60% of dashes aim THROUGH the player (so it actually charges + contacts you — a zoom-hit
+        // is the big one that flings your view); the rest are random for erratic evasion.
+        const ang = Math.random() < 0.6
+          ? Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.7   // toward the player, ±0.35 rad
+          : Math.random() * Math.PI * 2;
+        const mul = rnd(c.spin.zoomSpeedMul);
         const speed = SPD * mul, targetDist = 5 + Math.random() * 15;   // 5-20m per dash
         s.zoomVx = Math.sin(ang) * speed; s.zoomVz = Math.cos(ang) * speed;
         s.zoomUntil = now + (targetDist / speed) * 1000;   // dash until it has covered the distance
@@ -616,8 +628,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           && dist < inst.radius + 0.45 && now > s.contactNext) {
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
+        // Impact sound on the working 3D path; '' skips dealPlayerDamage's own (silent) sound.
+        emitMonster3D(camera, '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
         // 2× player knockback from the spintroll.
-        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 2);
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 2, '');
         // View-spin fling only on a zoom-hit, and at most once every ~3s so it can't be chained
         // into a permanent, unrecoverable spin.
         if (zooming && now > s.spinHitNext) {
@@ -911,12 +925,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       {/* Body fire: one procedural flame shell per spec, wrapping the body. The inner group
           cancels the model scale so flames are sized in world metres; being a child means they
           follow the body automatically as it moves/teleports/spins. */}
-      {cfg.bodyFlames?.map((f, i) => (
-        <group key={i} scale={1 / scale}>
-          <DarkLordFlame height={H * f.heightMul} radius={inst.radius * f.radiusMul}
-                         colorHot={f.colorHot} colorCool={f.colorCool} />
-        </group>
-      ))}
+      <group ref={flamesRef}>
+        {cfg.bodyFlames?.map((f, i) => (
+          <group key={i} scale={1 / scale}>
+            <DarkLordFlame height={H * f.heightMul} radius={inst.radius * f.radiusMul}
+                           colorHot={f.colorHot} colorCool={f.colorCool} />
+          </group>
+        ))}
+      </group>
     </group>
   );
 }
