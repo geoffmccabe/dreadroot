@@ -89,6 +89,7 @@ export interface MonsterConfig {
   smokeTrail?: boolean;       // drop a long-lived (7s) smoke trail (Spintroll)
   spin?: SpinConfig;          // Spintroll: fast spin + erratic zoom + contact damage + player-spin
   clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
+  roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -152,6 +153,28 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0, meleeNext: 0,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0 });
+
+  // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
+  // monster's position, with ±15% random pitch/length. Cleans up on death/despawn.
+  useEffect(() => {
+    if (!c.roarSound) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(() => {
+        if (!alive) return;
+        if (Math.random() < 0.20) {
+          const s = st.current;
+          const dx = camera.position.x - s.x, dy = camera.position.y - s.y, dz = camera.position.z - s.z;
+          void playSpatialSound(c.roarSound!, Math.sqrt(dx * dx + dy * dy + dz * dz),
+            { baseVolume: 0.85, playbackRate: 0.85 + Math.random() * 0.30 });
+        }
+        schedule(); // re-roll in another 3-5s
+      }, 3000 + Math.random() * 2000);
+    };
+    schedule();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [c.roarSound, camera]);
   // Separation footprint (registered in the shared registry; updated each frame). y lets
   // separation skip STACKED demons (one standing on another) so piles don't shove apart.
   // Separation radius. Horde monsters pack TIGHT — based on the body collider (≈H*0.26), +20%

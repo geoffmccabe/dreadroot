@@ -6,6 +6,11 @@
 import * as THREE from 'three';
 import type { SprayConfig, SpraySprite } from './sprayConfig';
 import { KPH } from './sprayConfig';
+import { playSpatialSound } from '@/lib/spatialAudio';
+
+// Random ±15% playback rate → pitch + length vary together so a repeated impact/roar
+// never sounds exactly the same.
+const vary = () => 0.85 + Math.random() * 0.30;
 
 export interface SprayParticle {
   x: number; y: number; z: number;
@@ -40,7 +45,12 @@ export function setSprayDamage(fn: DamageFn | null) { damageFn = fn; }
 // routed through the same registered player-damage sink as the spray.
 const _dmgDir = new THREE.Vector3();
 export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0) {
-  if (damageFn) { _dmgDir.set(dirX, dirY, dirZ).normalize(); damageFn(dmg, _dmgDir, knockback); }
+  if (damageFn) {
+    _dmgDir.set(dirX, dirY, dirZ).normalize();
+    damageFn(dmg, _dmgDir, knockback);
+    // Punch impact at the player (distance 0 = full volume), pitch/length varied ±15%.
+    void playSpatialSound('/punched.mp3', 0, { baseVolume: 0.7, playbackRate: vary() });
+  }
 }
 
 export function getSprayParticles(): SprayParticle[] { return particles; }
