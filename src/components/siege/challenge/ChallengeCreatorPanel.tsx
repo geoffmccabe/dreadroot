@@ -10,8 +10,13 @@ import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
 import { BannerInput } from './BannerInput';
+import { useAuth } from '@/contexts/AuthContext';
+import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
+import { SIEGE_TELEPORTS } from '../siegeAreas';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
+
+const REGIONS = SIEGE_TELEPORTS.map((t) => t.name);   // Open-World regions for the superadmin spawner
 
 // Same Kinetik-style glow ring the user/admin panels use (--panel-glow), for the lifted drag card.
 const DRAG_GLOW = '0 0 0 2px hsl(var(--panel-glow) / 0.85), 0 0 28px 6px hsl(var(--panel-glow) / 0.5), 0 16px 40px -8px rgb(0 0 0 / 0.6)';
@@ -133,7 +138,13 @@ function NumField({ value, onChange, min, allowEmpty, placeholder, style }: {
 
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
+  const { user } = useAuth();
   const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
+  const [roles, setRoles] = useState<string[]>([]);
+  const [saveMsg, setSaveMsg] = useState('');
+  const [picker, setPicker] = useState<null | { rows: ChallengeRow[]; loading: boolean }>(null);
+  const isAdmin = roles.includes('admin') || roles.includes('superadmin');
+  const isSuper = roles.includes('superadmin');
   const waveEls = useRef<Map<number, HTMLDivElement>>(new Map());
   const [dropHover, setDropHover] = useState<{ wave: number; drop: number } | null>(null);
   const [drag, setDrag] = useState<null | { wave: number; from: number; w: number; ox: number; oy: number }>(null);
@@ -150,6 +161,38 @@ export function ChallengeCreatorPanel() {
     if (open) window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [open]);
+
+  // Load the signed-in user's roles when the panel opens (admins/superadmins get extra powers).
+  useEffect(() => { if (open && user?.id) fetchRoles(user.id).then(setRoles); }, [open, user?.id]);
+
+  // ── Save / load ──────────────────────────────────────────────────────────────────────────────
+  const newChallenge = () => {
+    const fresh = clone(TEST_CHALLENGE); delete fresh.id;
+    fresh.creator = user?.email?.split('@')[0] ?? fresh.creator;
+    setCh(fresh); setSaveMsg('New challenge — unsaved');
+  };
+  const onSave = async () => {
+    if (!user?.id) { setSaveMsg('Sign in to save'); return; }
+    setSaveMsg('Saving…');
+    const res = await saveChallenge(ch, user.id, ch.creator || user.email?.split('@')[0] || 'anon');
+    if (res.error) { setSaveMsg('Error: ' + res.error); return; }
+    if (res.id && !ch.id) setCh((c) => ({ ...c, id: res.id }));
+    setSaveMsg('Saved ✓');
+  };
+  const onOpen = async () => {
+    if (!user?.id) { setSaveMsg('Sign in to load'); return; }
+    setPicker({ rows: [], loading: true });
+    const rows = isAdmin ? await listAllChallenges() : await listMyChallenges(user.id);
+    setPicker({ rows, loading: false });
+  };
+  const loadRow = (r: ChallengeRow) => { setCh({ ...r.data, id: r.id }); setPicker(null); setSaveMsg(`Loaded "${r.name}"`); };
+  const onDeleteRow = async (r: ChallengeRow) => {
+    const err = await deleteChallenge(r.id);
+    if (err) { setSaveMsg('Delete failed: ' + err); return; }
+    setPicker((p) => (p ? { ...p, rows: p.rows.filter((x) => x.id !== r.id) } : p));
+    if (ch.id === r.id) { setCh((c) => { const n = clone(c); delete n.id; return n; }); }
+  };
+  const msgErr = /^(Error|Delete|Sign)/.test(saveMsg);
 
   // Pointer-drag reorder: while dragging a spawn header, a glowing card follows the cursor and the
   // hovered spawn highlights as the drop target; drop plays a thud. (drag is stable for the drag.)
@@ -318,9 +361,12 @@ export function ChallengeCreatorPanel() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Challenge Creator</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={btn()} onClick={() => setCh(clone(TEST_CHALLENGE))}>Reset</button>
-            <button style={{ ...btn(true), background: '#2e8b57' }} onClick={run}>▶ Run Challenge</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
+            <button style={btn()} onClick={newChallenge}>＋ New</button>
+            <button style={btn()} onClick={onOpen}>📂 Open</button>
+            <button style={{ ...btn(true) }} onClick={onSave}>💾 Save</button>
+            <button style={{ ...btn(true), background: '#2e8b57' }} onClick={run}>▶ Run</button>
             <button style={btn()} onClick={() => setCreatorOpen(false)}>✕ Close</button>
           </div>
         </div>
@@ -336,6 +382,15 @@ export function ChallengeCreatorPanel() {
             <div style={{ flex: 1 }}><label style={lbl}>Cost to Play (Divi)</label><NumField style={inp} value={ch.costDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ costDivi: n ?? 0 })} /></div>
             <div style={{ flex: 1 }}><label style={lbl}>% to Prize Pool</label><NumField style={inp} value={ch.pctToPool || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ pctToPool: n ?? 0 })} /></div>
             <div style={{ flex: 1 }}><label style={lbl}>Divi Reward (to beat)</label><NumField style={inp} value={ch.rewardDivi || undefined} allowEmpty placeholder="0" onChange={(n) => patch({ rewardDivi: n ?? 0 })} /></div>
+            {isSuper && (
+              <div style={{ flex: 1 }}>
+                <label style={{ ...lbl, color: '#ffd27f' }}>Open-World Region (superadmin)</label>
+                <select style={inp} value={ch.region ?? ''} onChange={(e) => patch({ region: e.target.value || undefined })}>
+                  <option value="">— not a region spawner —</option>
+                  {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -438,6 +493,32 @@ export function ChallengeCreatorPanel() {
 
       {/* The single transparent canvas that draws every card's small monster thumbnail. */}
       <MonsterPortCanvas />
+
+      {/* Open: pick a saved challenge (your own; admins see everyone's). */}
+      {picker && (
+        <div onClick={() => setPicker(null)} style={{ position: 'fixed', inset: 0, zIndex: 215, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
+          <div onClick={(e) => e.stopPropagation()} className="chal-scroll" style={{ ...card, width: 580, maxHeight: '72vh', overflowY: 'auto', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>{isAdmin ? 'All Challenges' : 'My Challenges'}</div>
+              <button style={btn()} onClick={() => setPicker(null)}>Close</button>
+            </div>
+            {picker.loading ? <div style={{ color: '#9fb4d0' }}>Loading…</div>
+              : picker.rows.length === 0 ? <div style={{ color: '#9fb4d0' }}>No saved challenges yet — make one and hit Save.</div>
+              : picker.rows.map((r) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.name}{r.region && <span style={{ fontSize: 10, color: '#ffd27f', fontWeight: 700 }}> · region: {r.region}</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#7e90ad' }}>{r.creator_name ?? '—'} · {new Date(r.updated_at).toLocaleString()}</div>
+                  </div>
+                  <button style={btn(true)} onClick={() => loadRow(r)}>Open</button>
+                  {(isAdmin || r.user_id === user?.id) && <button style={{ ...btn(), background: '#7a2b2b' }} onClick={() => onDeleteRow(r)}>Delete</button>}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Delete-spawn confirmation. */}
       {confirmDel && (
