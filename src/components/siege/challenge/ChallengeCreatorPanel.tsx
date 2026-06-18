@@ -11,6 +11,7 @@ import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challeng
 
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
 const cat = (type: number) => MONSTER_CATALOG.find((m) => m.id === type) ?? MONSTER_CATALOG[0];
+const fmtMS = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 const DEFAULT_BOSS: BossMods = { sizePct: 100, speedPct: 100, healthPct: 100, damagePct: 100 };
 
 // HUD-themed styles.
@@ -102,31 +103,40 @@ export function ChallengeCreatorPanel() {
               <label style={lbl}>Wave Name</label><input style={inp} value={wave.name ?? ''} onChange={(e) => patchWave(wi, { name: e.target.value })} />
               <label style={{ ...lbl, marginTop: 8 }}>Wave Image URL</label><input style={inp} value={wave.image ?? ''} onChange={(e) => patchWave(wi, { image: e.target.value })} />
               <label style={{ ...lbl, marginTop: 8 }}>Wave Text</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 44 }} value={wave.text ?? ''} onChange={(e) => patchWave(wi, { text: e.target.value })} />
-              <label style={{ ...lbl, marginTop: 8 }}>Time: {(wave.timeSec / 60).toFixed(2)} min</label>
-              <input type="range" min={60} max={180} step={15} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(wi, { timeSec: Number(e.target.value) })} />
+              <label style={{ ...lbl, marginTop: 8 }}>Time: {fmtMS(wave.timeSec)}</label>
+              <input type="range" min={60} max={180} step={5} value={wave.timeSec} style={{ width: '100%' }} onChange={(e) => patchWave(wi, { timeSec: Number(e.target.value) })} />
               <label style={{ ...lbl, marginTop: 8 }}>Cost to Play (Divi)</label><input style={inp} type="number" value={wave.costDivi ?? 0} onChange={(e) => patchWave(wi, { costDivi: Number(e.target.value) })} />
               <label style={{ ...lbl, marginTop: 8 }}>% to Prize Pool</label><input style={inp} type="number" value={wave.pctToPool ?? 0} onChange={(e) => patchWave(wi, { pctToPool: Number(e.target.value) })} />
             </div>
 
-            {/* Right: drops */}
+            {/* Right: spawning */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <div style={{ fontSize: 14, fontWeight: 800 }}>Monster Drops</div>
-                <button style={{ ...btn(true), padding: '4px 10px', fontSize: 12 }} onClick={() => addDrop(wi)}>＋ Add Drop</button>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>Monster Spawning</div>
+                <button style={{ ...btn(true), padding: '4px 10px', fontSize: 12 }} onClick={() => addDrop(wi)}>＋ Add Spawn</button>
+                {(() => {
+                  const total = wave.drops.reduce((a, d) => a + (d.afterSec ?? 0), 0);
+                  return total > wave.timeSec
+                    ? <span style={{ color: '#ff6b6b', fontSize: 12, fontWeight: 700 }}>⚠ last spawn {fmtMS(total)} — past the {fmtMS(wave.timeSec)} wave time</span>
+                    : <span style={{ color: '#7e90ad', fontSize: 11 }}>last spawn @ {fmtMS(total)} / {fmtMS(wave.timeSec)}</span>;
+                })()}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-                {wave.drops.map((drop, di) => {
+                {(() => { let cum = 0; return wave.drops.map((drop, di) => {
+                  cum += drop.afterSec ?? 0; const startAt = cum;
                   const c = cat(drop.type);
                   return (
-                    <div key={di} style={{ ...card, width: 230 }}>
+                    <div key={di} style={{ ...card, width: 230, ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}) }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}>Drop {di + 1}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}>Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
                         <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onClick={() => removeDrop(wi, di)}>✕</button>
                       </div>
                       <label style={lbl}>Monster</label>
                       <select style={inp} value={drop.type} onChange={(e) => patchDrop(wi, di, { type: Number(e.target.value) })}>
                         {MONSTER_CATALOG.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
+                      <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
+                      <input style={inp} type="number" min={0} value={drop.afterSec ?? 0} onChange={(e) => patchDrop(wi, di, { afterSec: Math.max(0, Number(e.target.value)) })} />
                       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                         <div style={{ flex: 1 }}><label style={lbl}>Count</label><input style={inp} type="number" min={1} value={drop.count} onChange={(e) => patchDrop(wi, di, { count: Math.max(1, Number(e.target.value)) })} /></div>
                         <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><input style={inp} type="number" value={drop.dropHeight ?? ''} onChange={(e) => patchDrop(wi, di, { dropHeight: e.target.value === '' ? undefined : Number(e.target.value) })} /></div>
@@ -150,7 +160,7 @@ export function ChallengeCreatorPanel() {
                       )}
                     </div>
                   );
-                })}
+                }); })()}
               </div>
             </div>
           </div>

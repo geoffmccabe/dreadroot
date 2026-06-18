@@ -19,7 +19,7 @@ export interface MonsterDrop {
   x: number;               // world X (ground position)
   z: number;               // world Z (ground position)
   dropHeight?: number;     // metres ABOVE ground to appear at; undefined → rise out of the ground over 1s
-  delayMs?: number;        // ms into the wave before this drop appears (0 / undefined = at wave start)
+  afterSec?: number;       // SECONDS since the previous spawn in this wave (0 = with it / at wave start)
   staggerMs?: number;      // if set, the `count` spawn ONE every this-many ms (only during this wave)
   boss?: BossMods;         // if set, apply boss modifiers to every monster in this drop
 }

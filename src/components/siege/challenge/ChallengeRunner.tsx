@@ -69,8 +69,10 @@ export function ChallengeRunner() {
     // Build the spawn schedule. A staggered drop spreads its `count` one-per-staggerMs (this wave
     // only — replacing r.pending on the next wave drops any not-yet-spawned ones).
     r.pending = [];
+    let acc = 0;   // ms from wave start — each spawn's afterSec is relative to the previous one
     wave.drops.forEach((drop, dropIdx) => {
-      const base = now + (drop.delayMs ?? 0);
+      acc += (drop.afterSec ?? 0) * 1000;
+      const base = now + acc;
       const dropSeed = r.waveIdx * 10000 + dropIdx * 100;
       if (drop.staggerMs && drop.count > 1) {
         // Each staggered monster gets its OWN seeded point (different + learnable).
