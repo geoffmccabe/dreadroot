@@ -8,6 +8,7 @@ import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCrea
 import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
+import { MonsterPreviewBox } from './MonsterPreview';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -83,6 +84,7 @@ export function ChallengeCreatorPanel() {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const dragHover = useRef<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
+  const [preview, setPreview] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -157,7 +159,7 @@ export function ChallengeCreatorPanel() {
                e.stopPropagation(); e.preventDefault();
                const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
                const rect = cardEl?.getBoundingClientRect();
-               dragHover.current = di;
+               dragHover.current = di; setPreview(null);
                setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
                setDragPos({ x: e.clientX, y: e.clientY });
              }}
@@ -281,6 +283,14 @@ export function ChallengeCreatorPanel() {
                       const isDragging = drag?.wave === i && drag?.from === di;
                       return (
                         <div key={di} data-wave={i} data-spawn={di}
+                             onMouseEnter={(e) => {
+                               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                               const BW = 240, BH = 200;
+                               let px = Math.max(8, Math.min(r.left + r.width / 2 - BW / 2, window.innerWidth - BW - 8));
+                               let py = r.top - BH - 12; if (py < 8) py = Math.min(r.bottom + 12, window.innerHeight - BH - 8);
+                               setPreview({ wave: i, drop: di, x: px, y: py });
+                             }}
+                             onMouseLeave={() => setPreview((p) => (p && p.wave === i && p.drop === di ? null : p))}
                              style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.12s, border-color 0.12s',
                                ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}),
                                ...(isHover && !isDragging ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}),
@@ -309,6 +319,13 @@ export function ChallengeCreatorPanel() {
             {spawnInner(dd, drag.wave, drag.from, s)}
           </div>
         );
+      })()}
+
+      {/* Live 3D look at the selected monster, floating above the hovered spawn card. */}
+      {preview && !drag && (() => {
+        const d = ch.waves[preview.wave]?.drops[preview.drop];
+        if (!d) return null;
+        return <MonsterPreviewBox type={d.type} name={cat(d.type).name} x={preview.x} y={preview.y} />;
       })()}
 
       {/* Delete-spawn confirmation. */}
