@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronDown, Plus, Save, Trash2, Upload } from 'lucide-react';
 import { ItemDetailModal } from './AdminPanel.ItemDetailModal';
-import { grantInventoryItem } from '@/services/worldStore';
+import { grantSlot } from '@/services/worldStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface ItemRow {
@@ -411,11 +411,13 @@ export function AllItemsPanel() {
   const handleTake = async (item: ItemRow) => {
     setTaking(true);
     try {
-      const res = await grantInventoryItem(item.id, 1);
-      if (res?.rows && res.rows.length > 0) {
+      // grantSlot writes to user_slots region='inventory' — the unified store the
+      // inventory grid reads (grantInventoryItem wrote to the old user_inventory table).
+      const res = await grantSlot('inventory', item.id, 1);
+      if (res?.granted > 0) {
         toast.success(`Added ${item.name} to inventory`);
       } else {
-        toast.error('Could not add — inventory may be full');
+        toast.error('Could not add — inventory is full');
       }
     } catch (err) {
       console.error('[TakeItem] grant failed:', err);
