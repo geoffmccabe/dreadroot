@@ -474,6 +474,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       g.rotation.order = 'YXZ';
       const fp = Math.min(1, td / FALL);
       g.rotation.x = (Math.PI / 2) * fp;          // topple forward onto its face over the toes
+      g.rotation.z = 0;                            // clear any roll left from a mid-tumble death
       if (!s.fellSound && fp >= 1) {              // face hits the ground
         s.fellSound = true;
         emitMonster3D(camera, '/enemy_hitting_ground.mp3', s.x, s.y, s.z,
