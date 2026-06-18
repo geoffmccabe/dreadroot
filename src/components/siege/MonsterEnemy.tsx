@@ -412,12 +412,19 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (c.attackSound) emitMonster3D(camera, c.attackSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
     }
 
-    // Committed-swipe strike: at the contact point (with the swipe sound) roll 50/50 — HIT plays
-    // the impact sound + deals damage + knockback; MISS plays the swoosh. No passive damage.
+    // Committed-swipe strike: at the contact point (with the swipe sound) it CONNECTS only if the
+    // player is actually within arm's reach — reach ≈ half the monster's height + ~0.5m to the
+    // player's center (a 2m troll reaches ~1m, so centers within ~1.5m connect). So being knocked
+    // back (or stepping away) makes the next swing whiff. HIT → punch (3D, the working audio path)
+    // + damage + knockback; MISS → swoosh. No passive damage for swipe monsters.
     if (s.strikeAt && now > s.strikeAt) {
       s.strikeAt = 0;
-      if (Math.random() < 0.5 && c.meleeContact) {
-        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound);
+      const reach = H * 0.5 + 0.5;
+      const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
+      if (c.meleeContact && dist < reach && vOverlap) {
+        emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
+        // '' = skip dealPlayerDamage's own sound (we already played the impact above).
+        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
       } else if (c.missSound) {
         emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
       }
