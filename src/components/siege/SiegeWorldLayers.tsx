@@ -20,7 +20,7 @@ import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
-import { DamageNumbers } from './DamageNumbers';
+import { DamageNumbers } from './DamageNumbersLayer';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 

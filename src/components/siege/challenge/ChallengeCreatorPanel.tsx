@@ -28,6 +28,61 @@ const lbl: React.CSSProperties = { fontSize: 11, color: '#9fb4d0', fontWeight: 6
 const inp: React.CSSProperties = { width: '100%', background: 'hsla(220,25%,8%,0.9)', border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, color: '#e8eefb', padding: '5px 7px', fontSize: 13, fontFamily: 'inherit' };
 const btn = (active = false): React.CSSProperties => ({ background: active ? '#3a6ea8' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
 
+// Where the floating monster-preview box sits relative to a spawn card: centred above it (or below
+// if there's no room above), clamped to the viewport. Square box so the model isn't cropped.
+const BOX_W = 260, BOX_H = 260;
+function boxPos(rect: DOMRect) {
+  const x = Math.max(8, Math.min(rect.left + rect.width / 2 - BOX_W / 2, window.innerWidth - BOX_W - 8));
+  let y = rect.top - BOX_H - 12;
+  if (y < 8) y = Math.min(rect.bottom + 12, window.innerHeight - BOX_H - 8);
+  return { x, y };
+}
+
+// Custom monster picker so HOVERING an option previews that monster live (native <select> options
+// can't be hovered). Opening pins the preview to this card; hovering an option overrides the shown
+// monster; clicking commits. The list is portalled to <body> so the scroll strip can't clip it.
+function MonsterSelect({ value, onChange, onOpen, onClose, onHover }: {
+  value: number; onChange: (t: number) => void;
+  onOpen: (x: number, y: number) => void; onClose: () => void; onHover: (t: number | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(-1);
+  const [lp, setLp] = useState<{ left: number; top: number; width: number } | null>(null);
+  const ref = useRef<HTMLButtonElement>(null);
+  const close = () => { setOpen(false); setHi(-1); onHover(null); onClose(); };
+  const openIt = () => {
+    const el = ref.current; if (!el) return;
+    const br = el.getBoundingClientRect();
+    setLp({ left: br.left, top: br.bottom + 4, width: br.width });
+    const cardEl = el.closest('[data-spawn]') as HTMLElement | null;
+    if (cardEl) { const p = boxPos(cardEl.getBoundingClientRect()); onOpen(p.x, p.y); }
+    setOpen(true);
+  };
+  return (
+    <>
+      <button ref={ref} type="button" onMouseDown={(e) => e.stopPropagation()} onClick={() => (open ? close() : openIt())}
+              style={{ ...inp, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>{cat(value).name}</span><span style={{ color: '#7e90ad' }}>▾</span>
+      </button>
+      {open && lp && createPortal(
+        <>
+          <div onClick={close} style={{ position: 'fixed', inset: 0, zIndex: 219 }} />
+          <div onMouseLeave={() => { setHi(-1); onHover(null); }} className="chal-scroll"
+               style={{ position: 'fixed', left: lp.left, top: lp.top, width: Math.max(lp.width, 180), maxHeight: 280, overflowY: 'auto', zIndex: 220, ...card, padding: 4 }}>
+            {MONSTER_CATALOG.map((m, idx) => (
+              <div key={m.id} onMouseEnter={() => { setHi(idx); onHover(m.id); }}
+                   onClick={() => { onChange(m.id); close(); }}
+                   style={{ padding: '6px 9px', borderRadius: 5, cursor: 'pointer', fontSize: 13, color: '#e8eefb',
+                     background: hi === idx ? 'hsla(205,70%,45%,0.55)' : m.id === value ? 'hsla(210,40%,32%,0.6)' : 'transparent' }}>
+                {m.name}
+              </div>
+            ))}
+          </div>
+        </>, document.body)}
+    </>
+  );
+}
+
 // A horizontally scrollable strip you can grab-and-drag (except on form controls) to pan.
 function DragStrip({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -85,6 +140,8 @@ export function ChallengeCreatorPanel() {
   const dragHover = useRef<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
   const [preview, setPreview] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);
+  const [pinned, setPinned] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);
+  const [hoverType, setHoverType] = useState<number | null>(null);
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -159,7 +216,7 @@ export function ChallengeCreatorPanel() {
                e.stopPropagation(); e.preventDefault();
                const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
                const rect = cardEl?.getBoundingClientRect();
-               dragHover.current = di; setPreview(null);
+               dragHover.current = di; setPreview(null); setPinned(null); setHoverType(null);
                setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
                setDragPos({ x: e.clientX, y: e.clientY });
              }}
@@ -168,9 +225,10 @@ export function ChallengeCreatorPanel() {
           <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
         </div>
         <label style={lbl}>Monster</label>
-        <select style={inp} value={drop.type} onChange={(e) => patchDrop(i, di, { type: Number(e.target.value) })}>
-          {MONSTER_CATALOG.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-        </select>
+        <MonsterSelect value={drop.type} onChange={(t) => patchDrop(i, di, { type: t })}
+                       onOpen={(x, y) => setPinned({ wave: i, drop: di, x, y })}
+                       onClose={() => { setPinned(null); setHoverType(null); }}
+                       onHover={(t) => setHoverType(t)} />
         <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
         <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
@@ -284,11 +342,8 @@ export function ChallengeCreatorPanel() {
                       return (
                         <div key={di} data-wave={i} data-spawn={di}
                              onMouseEnter={(e) => {
-                               const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                               const BW = 240, BH = 200;
-                               let px = Math.max(8, Math.min(r.left + r.width / 2 - BW / 2, window.innerWidth - BW - 8));
-                               let py = r.top - BH - 12; if (py < 8) py = Math.min(r.bottom + 12, window.innerHeight - BH - 8);
-                               setPreview({ wave: i, drop: di, x: px, y: py });
+                               const p = boxPos((e.currentTarget as HTMLElement).getBoundingClientRect());
+                               setPreview({ wave: i, drop: di, x: p.x, y: p.y });
                              }}
                              onMouseLeave={() => setPreview((p) => (p && p.wave === i && p.drop === di ? null : p))}
                              style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.12s, border-color 0.12s',
@@ -321,11 +376,15 @@ export function ChallengeCreatorPanel() {
         );
       })()}
 
-      {/* Live 3D look at the selected monster, floating above the hovered spawn card. */}
-      {preview && !drag && (() => {
-        const d = ch.waves[preview.wave]?.drops[preview.drop];
+      {/* Live 3D look at the monster, floating above the hovered card (or the card whose dropdown is
+          open — then hovering an option overrides the shown monster). */}
+      {(() => {
+        const a = drag ? null : (pinned ?? preview);
+        if (!a) return null;
+        const d = ch.waves[a.wave]?.drops[a.drop];
         if (!d) return null;
-        return <MonsterPreviewBox type={d.type} name={cat(d.type).name} x={preview.x} y={preview.y} />;
+        const t = hoverType ?? d.type;
+        return <MonsterPreviewBox type={t} name={cat(t).name} x={a.x} y={a.y} />;
       })()}
 
       {/* Delete-spawn confirmation. */}
