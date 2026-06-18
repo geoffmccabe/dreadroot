@@ -51,7 +51,17 @@ export function ChallengeRunner() {
 
   const startWave = (now: number) => {
     const wave = challengeRef.current!.waves[r.waveIdx];
-    r.pending = wave.drops.map((drop) => ({ drop, at: now + (drop.delayMs ?? 0) }));
+    // Build the spawn schedule. A staggered drop spreads its `count` one-per-staggerMs (this wave
+    // only — replacing r.pending on the next wave drops any not-yet-spawned ones).
+    r.pending = [];
+    for (const drop of wave.drops) {
+      const base = now + (drop.delayMs ?? 0);
+      if (drop.staggerMs && drop.count > 1) {
+        for (let i = 0; i < drop.count; i++) r.pending.push({ drop: { ...drop, count: 1 }, at: base + i * drop.staggerMs });
+      } else {
+        r.pending.push({ drop, at: base });
+      }
+    }
     r.dropsDone = r.pending.length === 0;
     r.sawAlive = false;
     r.waveEndsAt = now + wave.timeSec * 1000;

@@ -330,7 +330,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // random hit + knockback on a cooldown (red demons / mushroom grunts).
     if (c.meleeContact) {
       const pTop = camera.position.y, pFeet = camera.position.y - 1.6;
-      if (s.y < pTop && s.y + H > pFeet && dist < inst.radius + 0.6 && now > s.meleeNext) {
+      // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
+      if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
         dealPlayerDamage(rnd(c.meleeContact.dmg), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb));
       }

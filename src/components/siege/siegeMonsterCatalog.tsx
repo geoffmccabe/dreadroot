@@ -39,9 +39,10 @@ export const CFG: Partial<Record<MType, {
   boss?: 'teleporter'; noStun?: boolean; noKnockback?: boolean; bossSpeedFactor?: number;
   bodyFlames?: BodyFlame[]; smokeTrail?: boolean; spin?: SpinConfig;
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number };
+  attackRange?: number; attackMs?: number;
 }>> = {
-  1: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100, meleeContact: { dmg: [10, 50], kb: [1, 5] } },
-  2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100, meleeContact: { dmg: [10, 50], kb: [1, 5] } },
+  1: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [10, 50], kb: [1, 5], cooldownMs: 1200 } },
+  2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [10, 50], kb: [1, 5], cooldownMs: 1200 } },
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 5.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 3 },
   4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 4.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, rangedRange: 30, rangedCooldownMs: 5000, rangedCooldownMaxMs: 10000, spray: ACID_VOMIT },
   5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4,
@@ -90,6 +91,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromG
       rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
       boss={m?.boss} noStun={o ? true : m?.noStun} noKnockback={m?.noKnockback} bossSpeedFactor={m?.bossSpeedFactor}
       bodyFlames={m?.bodyFlames} smokeTrail={m?.smokeTrail} spin={m?.spin} meleeContact={m?.meleeContact}
+      attackRange={m?.attackRange} attackMs={m?.attackMs}
       onRangedAttack={m?.spray ? (x, y, z, dx, dy, dz) => fireSpray(x, y, z, dx, dy, dz, m!.spray!) : undefined} />
   );
 }
