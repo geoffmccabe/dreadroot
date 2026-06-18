@@ -83,6 +83,7 @@ export function PlayerDamageHealthBar() {
         style={{
           width: '33.33vw', height: 64, boxSizing: 'border-box',
           border: '20px solid rgba(0,0,0,0.6)', background: 'rgba(0,0,0,0.6)', overflow: 'hidden',
+          borderRadius: 'var(--hud-radius, 8px)',
           boxShadow: '0 2px 10px rgba(0,0,0,0.35)',
         }}
       >
