@@ -72,7 +72,10 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
   // cap so monsters don't climb the empty air the coarse AABB would leave under the cap.
   const target = finer ? 22 : MB_TARGET_CELLS;
   const minCell = finer ? 0.35 : MB_MIN_CELL;
-  let cell = ovCell ?? Math.min(MB_MAX_CELL, Math.max(minCell, maxDim / target));
+  // Organic overhangs (mushrooms/stalagmites) cap their box size so even a GIANT mushroom-tree
+  // gets sub-1.2m, shape-hugging boxes (climbable stem + cap) instead of a coarse 2-3m blob.
+  const maxCell = finer ? 1.2 : MB_MAX_CELL;
+  let cell = ovCell ?? Math.min(maxCell, Math.max(minCell, maxDim / target));
   for (let tries = 0; tries < 4; tries++) {
     const boxes = voxelizeGeometry(geo, world, cell, 4000);
     if (boxes.length) return boxes;
