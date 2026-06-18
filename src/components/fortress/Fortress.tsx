@@ -20,6 +20,7 @@ import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
 import { PlayerDamageHealthBar } from '@/components/hud/PlayerDamageHealthBar';
 import { getActiveGame } from '@/config/activeGame';
+import { setActiveWorldId } from '@/config/activeWorld';
 import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
@@ -327,6 +328,10 @@ export function Fortress() {
   }, [currentWorld?.view_settings]);
 
   const viewSettingsDbRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror the current world id to a module holder so deep-scene code (siege coin drops fired from
+  // MonsterEnemy) can read it without prop-threading.
+  useEffect(() => { setActiveWorldId(currentWorldId); }, [currentWorldId]);
+
   const handleViewSettingsChange = useCallback((updated: ViewSettings) => {
     setViewSettings(updated);                       // immediate state for real-time reactivity
     if (currentWorldId) {

@@ -17,6 +17,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage, getLastSprayHitAt } from './spray/sprayAttackSystem';
+import { dropSiegeDivi } from './siegeCoinDrops';
 import { play3DPositionalSound, startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
 import { DarkLordFlame } from './DarkLordFlame';
 import { useSmokeTrail } from './siegeSmoke';
@@ -187,7 +188,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
     deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0,
     sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
-    tumbleYaw: 0, bulletTumble: false });
+    tumbleYaw: 0, bulletTumble: false, killFired: false });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -411,6 +412,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
     // Stop the walk loop once dead (death blocks below return early).
     if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
+    // Coin drop: fire ONCE on death. Open-world only (the helper skips challenge kills). DIVI =
+    // round(initialHealth/10) at the body.
+    if (inst.dead && !s.killFired) { s.killFired = true; void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
 
     // ── SPINTROLL custom death: spin-down (2s) → stand (1s) → topple straight back → lie (3s)
     //    → sink into the ground (3s) → despawn. Pivots at the feet (model origin), not the mesh

@@ -1037,6 +1037,23 @@ export async function rollMonsterCoinDrop(
   throw error;
 }
 
+/** Spawn a coin drop with an EXPLICIT amount + coin (by token-theme name, e.g. 'divi') instead of
+ *  rolling a monster's admin config. Used by Siege Worlds to drop DIVI = round(initialHealth/10) on
+ *  a kill. Inserts a world_coin_drops row server-side so pickup credits real DIVI; returns the
+ *  floating instances (or [] if the RPC isn't deployed yet). */
+export async function spawnCoinDrop(
+  worldId: string, themeName: string, amount: number, floatCount: number,
+  x: number, y: number, z: number,
+): Promise<unknown[]> {
+  const { data, error } = await supabase.rpc('spawn_coin_drop', {
+    p_world_id: worldId, p_theme_name: themeName, p_amount: amount, p_float_count: floatCount,
+    p_x: x, p_y: y, p_z: z,
+  } as never);
+  if (!error) return (data as unknown[]) ?? [];
+  if (isMissingFunction(error)) return [];
+  throw error;
+}
+
 /** Pick up a floating coin drop → credits the picker (server enforces the 60s
  *  killer-only window + idempotency). Returns the RPC result, or null if the
  *  RPC isn't deployed yet. */
@@ -1176,6 +1193,7 @@ export const worldStore = {
   recordKill,
   rollShwarmDrop,
   rollMonsterCoinDrop,
+  spawnCoinDrop,
   pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,
