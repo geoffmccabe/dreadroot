@@ -95,6 +95,8 @@ export interface MonsterConfig {
   attackSound?: string;       // if set, plays (spatial) the instant a melee swing starts — timed to the swipe
   missSound?: string;         // if set, plays (spatial) when a swing whiffs — the player left hit range before contact
   hitSound?: string;          // impact sound when THIS monster lands a hit (default punched.mp3 — e.g. little_slap for grunts)
+  walkSound?: string;         // looped 3D footstep/stomp sound, audible only while the monster is moving
+  hurtSound?: string;         // plays (spatial) each time a bullet hits this monster
   attackStyle?: 'spin-lunge'; // 'spin-lunge' = mushroom grunt: 360° body spin (0.25s) + lunge to 50% closer and back (0.5s),
                               // strike at the peak. No swipe. Reads dmg/kb from meleeContact.
 }
@@ -176,13 +178,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false,
-    deathSnd: false, fellSound: false });
+    deathSnd: false, fellSound: false, lastHurtAt: 0 });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
-  // Looped spin whir (spintroll) — started when it first spins, stopped on death/unmount.
+  // Looped 3D sounds (spintroll whir, walk stomps) — stopped on death/unmount.
   const spinLoopRef = useRef<LoopSound | null>(null);
-  useEffect(() => () => { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }, []);
+  const walkLoopRef = useRef<LoopSound | null>(null);
+  useEffect(() => () => {
+    stopLoopSound(spinLoopRef.current); spinLoopRef.current = null;
+    stopLoopSound(walkLoopRef.current); walkLoopRef.current = null;
+  }, []);
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
   // monster's position, with ±15% random pitch/length. Cleans up on death/despawn.
@@ -357,6 +363,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (flamesRef.current && cfg.bodyFlames) {
       flamesRef.current.scale.y = inst.dead ? Math.max(0, 1 - (now - inst.deadAt) / 2000) : 1;
     }
+    // Bullet-hit sound: fires each time a new bullet lands (inst.hitAt advances on every hit).
+    if (c.hurtSound && inst.hitAt > s.lastHurtAt) {
+      s.lastHurtAt = inst.hitAt;
+      emitMonster3D(camera, c.hurtSound, s.x, s.y + H * 0.5, s.z, dist, { baseVolume: 0.7, playbackRate: 0.9 + Math.random() * 0.2 });
+    }
+    // Stop the walk loop once dead (death blocks below return early).
+    if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
 
     // ── SPINTROLL custom death: spin-down (2s) → stand (1s) → topple straight back → lie (3s)
     //    → sink into the ground (3s) → despawn. Pivots at the feet (model origin), not the mesh
@@ -915,6 +928,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (spinLoopRef.current) {
       camera.getWorldDirection(_aDir);
       updateLoopSound(spinLoopRef.current, s.x, s.y + H * 0.5, s.z, camera.position, _aDir);
+    }
+    // Walk stomps: looped on the feet, volume-gated so it's only audible while actually moving.
+    if (c.walkSound) {
+      if (!walkLoopRef.current) walkLoopRef.current = startLoopSound(c.walkSound, { x: s.x, y: s.y, z: s.z, baseVolume: 0 });
+      camera.getWorldDirection(_aDir);
+      updateLoopSound(walkLoopRef.current, s.x, s.y, s.z, camera.position, _aDir, 1, moving ? 0.55 : 0);
     }
     sdbg.monsters = MONSTERS.size; // SW debug
   });
