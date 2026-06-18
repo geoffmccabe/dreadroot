@@ -47,6 +47,9 @@ export interface Challenge {
   id?: string;
   name: string;
   creator: string;
+  game?: string;           // which game this challenge belongs to (dreadroot / siege-worlds / pinkland / …).
+                           // A challenge only ever runs in its own game; the Browser + region spawner are
+                           // scoped to the active game. Defaults to the active game at creation.
   rewardDivi?: number;
   costDivi?: number;       // cost to play the WHOLE challenge (Divi) — challenge-level, not per-wave
   pctToPool?: number;      // % of the fee that feeds the prize pool — challenge-level

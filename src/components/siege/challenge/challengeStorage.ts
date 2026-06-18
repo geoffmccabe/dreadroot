@@ -10,18 +10,19 @@ export interface ChallengeRow {
   user_id: string;
   name: string;
   creator_name: string | null;
+  game: string | null;
   region: string | null;
   data: Challenge;
   updated_at: string;
 }
 
-const COLS = 'id,user_id,name,creator_name,region,data,updated_at';
+const COLS = 'id,user_id,name,creator_name,game,region,data,updated_at';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const tbl = () => (supabase as any).from('challenges');
 
 /** Insert (new) or update (existing ch.id) — returns the saved row id or an error string. */
 export async function saveChallenge(ch: Challenge, userId: string, creatorName: string): Promise<{ id?: string; error?: string }> {
-  const base = { name: ch.name || 'Untitled', creator_name: creatorName, region: ch.region ?? null, data: ch };
+  const base = { name: ch.name || 'Untitled', creator_name: creatorName, game: ch.game ?? null, region: ch.region ?? null, data: ch };
   if (ch.id) {
     const { data, error } = await tbl().update({ ...base, updated_at: new Date().toISOString() }).eq('id', ch.id).select('id').maybeSingle();
     if (error) return { error: error.message };
@@ -45,9 +46,15 @@ export async function listAllChallenges(): Promise<ChallengeRow[]> {
   return (data ?? []) as ChallengeRow[];
 }
 
-/** Challenges tagged as Open-World region spawners (region is set). Used by RegionSpawnerRunner. */
-export async function listRegionChallenges(): Promise<ChallengeRow[]> {
-  const { data } = await tbl().select(COLS).not('region', 'is', null);
+/** Every playable challenge for ONE game — the Challenge Browser list (region spawners excluded). */
+export async function listGameChallenges(game: string): Promise<ChallengeRow[]> {
+  const { data } = await tbl().select(COLS).eq('game', game).is('region', null).order('updated_at', { ascending: false }).limit(500);
+  return (data ?? []) as ChallengeRow[];
+}
+
+/** Region spawners for ONE game (region is set). Used by RegionSpawnerRunner — game-scoped. */
+export async function listRegionChallenges(game: string): Promise<ChallengeRow[]> {
+  const { data } = await tbl().select(COLS).eq('game', game).not('region', 'is', null);
   return (data ?? []) as ChallengeRow[];
 }
 

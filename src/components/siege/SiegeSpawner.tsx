@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
 import { fireChallengeToggle } from './challenge/challengeControl';
 import { toggleCreator } from './challenge/challengeCreatorStore';
+import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 
 let nextId = 0;
@@ -81,8 +82,9 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the challenge
+        if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the test challenge
         else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
+        else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
         else clearStage();
         return;

@@ -14,6 +14,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
 import { SIEGE_TELEPORTS } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
+import { getActiveGame } from '@/config/activeGame';
+import { GAME_LIST } from '@/config/gameRegistry';
 import { playSound } from '@/lib/spatialAudio';
 import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
 
@@ -140,7 +142,7 @@ function NumField({ value, onChange, min, allowEmpty, placeholder, style }: {
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const { user } = useAuth();
-  const [ch, setCh] = useState<Challenge>(() => clone(TEST_CHALLENGE));
+  const [ch, setCh] = useState<Challenge>(() => ({ ...clone(TEST_CHALLENGE), game: getActiveGame() }));
   const [roles, setRoles] = useState<string[]>([]);
   const [saveMsg, setSaveMsg] = useState('');
   const [picker, setPicker] = useState<null | { rows: ChallengeRow[]; loading: boolean }>(null);
@@ -170,6 +172,7 @@ export function ChallengeCreatorPanel() {
   const newChallenge = () => {
     const fresh = clone(TEST_CHALLENGE); delete fresh.id;
     fresh.creator = user?.email?.split('@')[0] ?? fresh.creator;
+    fresh.game = getActiveGame();
     setCh(fresh); setSaveMsg('New challenge — unsaved');
   };
   const onSave = async () => {
@@ -377,6 +380,13 @@ export function ChallengeCreatorPanel() {
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
             <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Game</label>
+              {/* A challenge only runs in its game. Defaults to the game you're in; change to author for another. */}
+              <select style={inp} value={ch.game ?? getActiveGame()} onChange={(e) => patch({ game: e.target.value })}>
+                {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+              </select>
+            </div>
             <div style={{ flex: 2 }}><label style={lbl}>Banner (4×1)</label><BannerInput value={ch.banner} onChange={(v) => patch({ banner: v })} /></div>
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -525,7 +535,7 @@ export function ChallengeCreatorPanel() {
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.name}{r.region && <span style={{ fontSize: 10, color: '#ffd27f', fontWeight: 700 }}> · region: {r.region}</span>}
+                      {r.name}{r.game && <span style={{ fontSize: 10, color: '#7fd0ff', fontWeight: 700 }}> · {r.game}</span>}{r.region && <span style={{ fontSize: 10, color: '#ffd27f', fontWeight: 700 }}> · region: {r.region}</span>}
                     </div>
                     <div style={{ fontSize: 11, color: '#7e90ad' }}>{r.creator_name ?? '—'} · {new Date(r.updated_at).toLocaleString()}</div>
                   </div>

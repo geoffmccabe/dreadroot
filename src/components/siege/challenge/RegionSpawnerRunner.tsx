@@ -10,6 +10,7 @@ import { sampleHeight } from '../terrainHeight';
 import { getChallengeState } from './challengeStore';
 import { listRegionChallenges } from './challengeStorage';
 import { regionCoords } from './regionDefaults';
+import { getActiveGame } from '@/config/activeGame';
 import type { Challenge, MonsterDrop } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
@@ -54,7 +55,7 @@ export function RegionSpawnerRunner() {
 
   useEffect(() => {
     let cancelled = false;
-    listRegionChallenges().then((rows) => {
+    listRegionChallenges(getActiveGame()).then((rows) => {
       if (cancelled) return;
       scheds.current = rows
         .filter((r) => r.data?.waves?.some((w) => w.drops?.length))
