@@ -139,8 +139,20 @@ SQL delivered per-phase (copy/paste) when that phase is implemented — not all 
   Reuses FortressScene's existing aim state via new `aimState` store.
 - ✅ **Phase 4** (v4.76.0): per-weapon scope overlay (`ScopeOverlay.tsx`) — fades in `scope_graphic_url`,
   or a generic tunnel-vision vignette+reticle for `is_sniper`, when aiming.
-- ⬜ Remaining: 2b weapon-model kick, spread (bulletsPerTap/spread multipliers), Phase 5 polish
-  (muzzle flash, shells, shake, sway, burst), hide-arms-at-full-zoom (arms currently disabled anyway).
+- ✅ **Audit fix** (v4.76.1): ADS FOV no longer drifts the resting FOV (only managed during an aim
+  cycle, returns to the exact pre-aim value); recoil pitch clamped under ±90° (no camera flip).
+- ✅ **Spread + multi-pellet** (v4.77.0): `bulletsPerTap` pellets per shot within the weapon's
+  horizontal/vertical spread cone; dynamic accuracy — zero when aiming (single-pellet = pinpoint ADS),
+  ×2 while moving, base otherwise; shotguns always cone.
+- ✅ **Dynamic crosshair** (v4.78.0): reticle contracts when aiming (tracks the accuracy change).
+- ⬜ Remaining (blocked or low-value):
+  - **Muzzle flash / shell casings / weapon-model kick / sway** — need the first-person weapon model,
+    which is intentionally disabled (`FirstPersonArms` behind `{false &&}`). Deferred until/if a gun
+    model is shown.
+  - **Burst fire** (`is_burst_fire` + `time_between_shots`) — needs two more `weapon_stats` columns; few
+    weapons use it. Easy to add on request.
+  - **FOV slider → camera** — the in-game FOV setting doesn't move the camera (same disabled-arms cause).
+    Now that the controls loop owns FOV, this is a small wire-up if wanted.
 
 New optional `weapon_stats` columns these read (nullable; unset = sensible defaults):
 `camera_recoil_pitch, camera_recoil_yaw, ads_recoil_scale, scoped_fov, zoom_speed, is_sniper, scope_graphic_url`.

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAiming } from '@/config/aimState';
 
 interface PentabulletCrosshairProps {
   chargeProgress: number; // 0-5+ seconds
@@ -86,6 +87,9 @@ function CrosshairRing({
 export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '#ff2431', inspectorMode = false }: PentabulletCrosshairProps) {
   const [rotation, setRotation] = useState(0);
   const [cycleColorIndex, setCycleColorIndex] = useState(0);
+  // Aim-down-sights: the crosshair contracts when aiming (tighter = more
+  // accurate, matching the spread system + SWU feel).
+  const aiming = useAiming();
 
   // Calculate number of additional rings based on charge time
   // Ring timing: 1.0s, 1.75s, 2.5s, 3.25s, 4.0s (every 0.75s after 1s)
@@ -147,8 +151,9 @@ export function PentabulletCrosshair({ chargeProgress, baseMode, bulletColor = '
   // Don't show crosshair when inactive
   if (baseMode === 'inactive') return null;
   
-  // Base crosshair diameter (matches original CSS)
-  const baseDiameter = 14;
+  // Base crosshair diameter (matches original CSS). Contracts when aiming so the
+  // reticle visibly tightens with the improved accuracy.
+  const baseDiameter = aiming ? 8 : 14;
   
   return (
     <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-50">
