@@ -18,12 +18,14 @@
 -- BEFORE RUNNING: replace PASTE_SUPERADMIN_USER_ID with your user id from:
 --   SELECT user_id, role FROM user_roles WHERE role IN ('admin','superadmin');
 
-INSERT INTO placed_blocks (world_id, user_id, block_type, texture_url, position_x, position_y, position_z)
+-- IMPORTANT: do NOT set texture_url. 'fortress_block' is a registered building
+-- block whose definition already carries the cliff texture. Setting texture_url
+-- routes the block through the tree/atlas override path and it renders invisible.
+INSERT INTO placed_blocks (world_id, user_id, block_type, position_x, position_y, position_z)
 SELECT
   '0a407a30-9d6a-426c-8114-b8a17096773a'::uuid,
   'PASTE_SUPERADMIN_USER_ID'::uuid,
   'fortress_block',
-  '/cliff_texture_seamless.webp',
   p.x, p.y, p.z
 FROM (
   -- WALLS (y 0..19) --------------------------------------------------------

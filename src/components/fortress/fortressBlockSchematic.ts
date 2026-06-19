@@ -22,10 +22,11 @@ export interface FortressVoxel {
   z: number;
 }
 
-// Block type + texture used for every fortress block. The cliff texture is applied
-// per-block (tiled look) so each cube samples the same stone the mesh walls use.
+// Block type used for every fortress block. 'fortress_block' is the registered
+// basic stone building block — its block definition already carries the cliff
+// texture, so DO NOT set a per-block texture_url (that misroutes blocks through
+// the tree/atlas override path and renders them invisible).
 export const FORTRESS_BLOCK_TYPE = 'fortress_block';
-export const FORTRESS_BLOCK_TEXTURE = '/cliff_texture_seamless.webp';
 
 // Battlement (merlon) layout on top of the walls: 2-wide stone teeth alternating
 // with 2-wide gaps (2 on, 2 off), 2 blocks tall, flush merlon at the start corner.
