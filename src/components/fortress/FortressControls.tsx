@@ -2578,8 +2578,11 @@ export function FirstPersonControls({
           knockbackVelRef.current.z = 0;
         } else {
           if (push.direction === 1) {
-            // Already resting on ground — don't push up again (prevents bounce oscillation)
-            if (onGround.current && velocity.current.y >= 0) {
+            // Already resting on ground — don't push up again (prevents bounce oscillation).
+            // BUT only skip for shallow resting jitter: if a block was genuinely placed
+            // inside the player (significant up-distance), eject UP even when on the ground,
+            // otherwise the player stays embedded and falls through to y=0.
+            if (onGround.current && velocity.current.y >= 0 && push.distance < 0.25) {
               break;
             }
             // Pushed UP onto a surface - set position but DON'T zero velocity
