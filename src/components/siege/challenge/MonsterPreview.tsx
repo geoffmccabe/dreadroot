@@ -33,84 +33,105 @@ export const defaultColor = (type: number): ColorMods => (type === 6 ? COLOR_BLO
 
 type ColUniforms = { uHue: { value: number }; uSat: { value: number }; uTint: { value: THREE.Color }; uTintAmt: { value: number } };
 
-function Model({ url, modelHeight, flames, color }: { url: string; modelHeight: number; flames?: BodyFlame[]; color: ColorMods }) {
+// Per-type preview behaviour, matching the in-game look:
+//  • 7 Spintroll spins fast (its in-game ~3.5 rev/s), 9 Ghost spins slowly like its idle.
+//  • 9 Ghost renders upside-down + 50% transparent.
+//  • 2 Mushroom Grunt + 6 Bloody Skeleton are HORDES — show 5 in a cluster, not one.
+const spinRate = (type: number) => (type === 7 ? 22 : type === 9 ? 0.9 : 0.5);   // rad/s
+const isUpsideDown = (type: number) => type === 9;
+const opacityFor = (type: number) => (type === 9 ? 0.5 : 1);
+const countFor = (type: number) => (type === 2 || type === 6 ? 5 : 1);
+const HORDE_OFFSETS: [number, number, number][] = [
+  [0, 0, 0.18], [-0.55, 0, -0.12], [0.55, 0, -0.12], [-0.3, 0, 0.5], [0.32, 0, -0.52],
+];
+
+// Brighten + recolour a clone's materials (shared by every member), returning its colour uniforms.
+function setupMaterials(c: THREE.Group, opacity: number): ColUniforms[] {
+  const list: ColUniforms[] = [];
+  c.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    mesh.frustumCulled = false;
+    if (!mesh.isMesh) return;
+    const src = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    const mats = src.map((mm) => (mm as THREE.Material).clone());
+    mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
+    mats.forEach((mm) => {
+      const m = mm as THREE.MeshStandardMaterial;
+      if ('metalness' in m) m.metalness = 0;
+      if ('roughness' in m) m.roughness = 0.85;
+      if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
+      if (opacity < 1) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+      const u: ColUniforms = { uHue: { value: 0 }, uSat: { value: 1 }, uTint: { value: new THREE.Color('#ffffff') }, uTintAmt: { value: 0 } };
+      m.customProgramCacheKey = () => `chalcol_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uHue = u.uHue; shader.uniforms.uSat = u.uSat;
+        shader.uniforms.uTint = u.uTint; shader.uniforms.uTintAmt = u.uTintAmt;
+        shader.fragmentShader = 'uniform float uHue;\nuniform float uSat;\nuniform vec3 uTint;\nuniform float uTintAmt;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <dithering_fragment>',
+          '#include <dithering_fragment>\n{ vec3 _c = gl_FragColor.rgb;'
+          + ' if (uHue != 0.0) { vec3 _k = vec3(0.57735); float _cs = cos(uHue), _sn = sin(uHue); _c = _c*_cs + cross(_k,_c)*_sn + _k*dot(_k,_c)*(1.0-_cs); }'
+          + ' float _l = dot(_c, vec3(0.299,0.587,0.114));'
+          + ' _c = mix(vec3(_l), _c, uSat);'
+          + ' _c = mix(_c, uTint, uTintAmt);'
+          + ' gl_FragColor.rgb = clamp(_c, 0.0, 1.0); }',
+        );
+      };
+      m.needsUpdate = true;
+      list.push(u);
+    });
+  });
+  return list;
+}
+
+// One animated monster (its own skeleton clone + mixer), placed at `offset` within the group.
+function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset }: {
+  url: string; modelHeight: number; color: ColorMods; opacity: number; upsideDown: boolean; scaleMul: number; offset: [number, number, number];
+}) {
   const { scene, animations } = useGLTF(url);
   const uniforms = useRef<ColUniforms[]>([]);
-  // Clone (skeleton + skinned mesh) so this copy animates + recolours independently. Brighten the
-  // dark source textures (metalness 0 + emissive map) like MonsterEnemy, and inject the recolour.
-  const cloned = useMemo(() => {
-    const c = SkeletonUtils.clone(scene) as THREE.Group;
-    const list: ColUniforms[] = [];
-    c.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      mesh.frustumCulled = false;
-      if (!mesh.isMesh) return;
-      const src = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      const mats = src.map((mm) => (mm as THREE.Material).clone());
-      mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
-      mats.forEach((mm) => {
-        const m = mm as THREE.MeshStandardMaterial;
-        if ('metalness' in m) m.metalness = 0;
-        if ('roughness' in m) m.roughness = 0.85;
-        if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
-        const u: ColUniforms = { uHue: { value: 0 }, uSat: { value: 1 }, uTint: { value: new THREE.Color('#ffffff') }, uTintAmt: { value: 0 } };
-        m.customProgramCacheKey = () => `chalcol_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
-        m.onBeforeCompile = (shader) => {
-          shader.uniforms.uHue = u.uHue; shader.uniforms.uSat = u.uSat;
-          shader.uniforms.uTint = u.uTint; shader.uniforms.uTintAmt = u.uTintAmt;
-          shader.fragmentShader = 'uniform float uHue;\nuniform float uSat;\nuniform vec3 uTint;\nuniform float uTintAmt;\n' + shader.fragmentShader;
-          shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <dithering_fragment>',
-            '#include <dithering_fragment>\n{ vec3 _c = gl_FragColor.rgb;'
-            + ' if (uHue != 0.0) { vec3 _k = vec3(0.57735); float _cs = cos(uHue), _sn = sin(uHue); _c = _c*_cs + cross(_k,_c)*_sn + _k*dot(_k,_c)*(1.0-_cs); }'
-            + ' float _l = dot(_c, vec3(0.299,0.587,0.114));'
-            + ' _c = mix(vec3(_l), _c, uSat);'      // uSat: 0 grey · 1 normal · 2 oversaturated
-            + ' _c = mix(_c, uTint, uTintAmt);'      // colour overlay
-            + ' gl_FragColor.rgb = clamp(_c, 0.0, 1.0); }',
-          );
-        };
-        m.needsUpdate = true;
-        list.push(u);
-      });
-    });
-    uniforms.current = list;
-    return c;
-  }, [scene]);
-
-  // Push the live colour into every material's uniforms (no recompile) whenever it changes.
+  const cloned = useMemo(() => { const c = SkeletonUtils.clone(scene) as THREE.Group; uniforms.current = setupMaterials(c, opacity); return c; }, [scene, opacity]);
   useEffect(() => {
     for (const u of uniforms.current) {
-      u.uHue.value = (color.hue * Math.PI) / 180;
-      u.uSat.value = color.sat / 100;
-      u.uTint.value.set(color.tint);
-      u.uTintAmt.value = color.tintAmt / 100;
+      u.uHue.value = (color.hue * Math.PI) / 180; u.uSat.value = color.sat / 100;
+      u.uTint.value.set(color.tint); u.uTintAmt.value = color.tintAmt / 100;
     }
   }, [color, cloned]);
-
-  const turn = useRef<THREE.Group>(null);
-  const { actions, names } = useAnimations(animations, turn);
+  const root = useRef<THREE.Group>(null);
+  const { actions, names } = useAnimations(animations, root);
   useEffect(() => {
-    // Prefer a clip whose name CONTAINS "idle" (Synty rigs name it "A_Idle_Standing_Masc" etc.),
-    // not an exact "idle" key — else we'd fall through to names[0], which is often the ATTACK clip
-    // (e.g. mushroomgrunt → "A_Attack…", a broken-looking walk). Match the in-game resolver.
     const idleName = names.find((nm) => nm.toLowerCase().includes('idle')) ?? names[0];
     const a = idleName ? actions[idleName] : null;
-    a?.reset().fadeIn(0.3).play();
+    if (a) { a.reset().fadeIn(0.3).play(); a.time = Math.random() * (a.getClip().duration || 1); }   // desync horde members
     return () => { a?.fadeOut(0.2); };
   }, [actions, names]);
-  useFrame((_, d) => { if (turn.current) turn.current.rotation.y += d * 0.5; });
 
-  // Authored feet-at-origin; scale to TARGET tall then drop by TARGET/2 so the body is centred.
-  const scale = TARGET / (modelHeight || 1.795);
-  const feetY = -TARGET / 2;
-  const radius = 0.2 * TARGET;
-
+  const scale = (TARGET / (modelHeight || 1.795)) * scaleMul;
+  const half = (TARGET * scaleMul) / 2;
   return (
-    <group ref={turn}>
-      <group position={[0, feetY, 0]} scale={scale}>
+    <group ref={root} position={offset}>
+      {/* feet-at-origin model; flip 180° on X (head-down) for the ghost, recentred so it stays framed. */}
+      <group position={[0, upsideDown ? half : -half, 0]} rotation={[upsideDown ? Math.PI : 0, 0, 0]} scale={scale}>
         <primitive object={cloned} />
       </group>
-      {flames && flames.length > 0 && (
+    </group>
+  );
+}
+
+// The spinning group: 1 member normally, 5 for a horde; body flames for single flame-monsters.
+function Model({ type, color }: { type: number; color: ColorMods }) {
+  const url = urlFor(type), mh = heightFor(type), flames = flamesFor(type);
+  const count = countFor(type), upsideDown = isUpsideDown(type), opacity = opacityFor(type), spin = spinRate(type);
+  const scaleMul = count > 1 ? 0.62 : 1;
+  const turn = useRef<THREE.Group>(null);
+  useFrame((_, d) => { if (turn.current) turn.current.rotation.y += d * spin; });
+  const feetY = -TARGET / 2, radius = 0.2 * TARGET;
+  return (
+    <group ref={turn}>
+      {HORDE_OFFSETS.slice(0, count).map((o, i) => (
+        <Member key={i} url={url} modelHeight={mh} color={color} opacity={opacity} upsideDown={upsideDown} scaleMul={scaleMul} offset={count > 1 ? o : [0, 0, 0]} />
+      ))}
+      {count === 1 && flames && flames.length > 0 && (
         <group position={[0, feetY, 0]}>
           {flames.map((f, i) => (
             <DarkLordFlame key={i} height={TARGET * Math.min(f.heightMul, 1.15)} radius={radius * f.radiusMul}
@@ -131,7 +152,7 @@ function Scene({ type, color, dist, fov }: { type: number; color: ColorMods; dis
       <directionalLight position={[3, 5, 4]} intensity={1.5} />
       <directionalLight position={[-4, 2, -3]} intensity={0.6} color="#7fb0ff" />
       <Suspense fallback={null}>
-        <Model url={urlFor(type)} modelHeight={heightFor(type)} flames={flamesFor(type)} color={color} />
+        <Model type={type} color={color} />
       </Suspense>
     </>
   );
