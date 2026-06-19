@@ -39,6 +39,7 @@ import { TransactionHistoryTab } from '@/features/marketplace/components/Transac
 import { WatchlistTab } from '@/features/marketplace/components/WatchlistTab';
 import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
 import { WalletList } from '@/features/wallet/WalletList';
+import { GameWalletPanel } from '@/features/wallet/GameWalletPanel';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
@@ -604,8 +605,11 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               paddingTop: '1rem'
             }}
           >
-            {/* Multi-coin holdings: every coin/token/points the player holds, grouped by asset with
-                each chain variant indented (docs/CURRENCY_LEDGER_PLAN.md). */}
+            {/* GAME WALLET (admin/superadmin only): the game's pool reserves + deposit addresses. */}
+            {(userRoles.includes('admin') || userRoles.includes('superadmin')) && <GameWalletPanel />}
+
+            {/* Multi-coin holdings: every coin/token/points the player holds, grouped chain-first
+                (docs/CURRENCY_LEDGER_PLAN.md). */}
             <WalletList userId={user?.id ?? null} />
 
             <Card className="p-4">

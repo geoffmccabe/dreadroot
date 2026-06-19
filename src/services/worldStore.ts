@@ -1051,6 +1051,14 @@ export async function fundPool(
   throw error;
 }
 
+/** Admin: set (or clear) the game's deposit-wallet address for a coin's pool. */
+export async function setPoolAddress(tokenThemeId: string, address: string): Promise<void> {
+  const { error } = await supabase.rpc('set_pool_address', {
+    p_token_theme_id: tokenThemeId, p_address: address,
+  } as never);
+  if (error && !isMissingFunction(error)) throw error;
+}
+
 /** Spawn a coin drop with an EXPLICIT amount + coin (by token-theme name, e.g. 'divi') instead of
  *  rolling a monster's admin config. Used by Siege Worlds to drop DIVI = round(initialHealth/10) on
  *  a kill. Inserts a world_coin_drops row server-side so pickup credits real DIVI; returns the
@@ -1209,6 +1217,7 @@ export const worldStore = {
   rollMonsterCoinDrop,
   spawnCoinDrop,
   fundPool,
+  setPoolAddress,
   pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,

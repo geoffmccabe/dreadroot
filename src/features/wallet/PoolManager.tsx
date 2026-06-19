@@ -4,7 +4,7 @@
 // See docs/CURRENCY_LEDGER_PLAN.md.
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { fundPool } from '@/services/worldStore';
+import { fundPool, setPoolAddress } from '@/services/worldStore';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { networkLabel } from './types';
 
 interface VariantRow { id: string; asset_id: string | null; display_name: string; name: string; network: string; ticker_symbol: string | null; }
 interface AssetRow { id: string; symbol: string; }
-interface PoolRow { token_theme_id: string; source: 'funded' | 'minted'; balance: number; total_funded: number; total_dispensed: number; }
+interface PoolRow { token_theme_id: string; source: 'funded' | 'minted'; balance: number; total_funded: number; total_dispensed: number; deposit_address: string | null; }
 
 const fmt = (n: number) => (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
 
@@ -22,6 +22,7 @@ export function PoolManager() {
   const [assets, setAssets] = useState<Map<string, AssetRow>>(new Map());
   const [pools, setPools] = useState<Map<string, PoolRow>>(new Map());
   const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [addr, setAddr] = useState<Record<string, string>>({});
   const [source, setSource] = useState<Record<string, 'funded' | 'minted'>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +32,7 @@ export function PoolManager() {
     const [vRes, aRes, pRes] = await Promise.all([
       supabase.from('token_themes').select('id, asset_id, display_name, name, network, ticker_symbol').eq('is_active', true),
       supabase.from('token_assets' as never).select('id, symbol'),
-      supabase.from('token_pools' as never).select('token_theme_id, source, balance, total_funded, total_dispensed'),
+      supabase.from('token_pools' as never).select('token_theme_id, source, balance, total_funded, total_dispensed, deposit_address'),
     ]);
     setVariants((vRes.data as unknown as VariantRow[]) ?? []);
     setAssets(new Map(((aRes.data as unknown as AssetRow[]) ?? []).map((a) => [a.id, a])));
@@ -49,6 +50,12 @@ export function PoolManager() {
       setAmounts((m) => ({ ...m, [themeId]: '' }));
       await load();
     } finally { setBusy(null); }
+  };
+
+  const onSaveAddr = async (themeId: string, current: string | null) => {
+    const val = addr[themeId] ?? current ?? '';
+    setBusy(themeId);
+    try { await setPoolAddress(themeId, val); await load(); } finally { setBusy(null); }
   };
 
   if (loading) return <div className="text-sm text-muted-foreground p-4">Loading pools…</div>;
@@ -106,6 +113,17 @@ export function PoolManager() {
               />
               <Button size="sm" disabled={busy === v.id} onClick={() => onFund(v.id)}>
                 {busy === v.id ? '…' : 'Fund'}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="game wallet deposit address (where you send coins to fund this pool)"
+                value={addr[v.id] ?? pool?.deposit_address ?? ''}
+                onChange={(e) => setAddr((m) => ({ ...m, [v.id]: e.target.value }))}
+                className="h-8 text-xs font-mono"
+              />
+              <Button size="sm" variant="outline" disabled={busy === v.id} onClick={() => onSaveAddr(v.id, pool?.deposit_address ?? null)}>
+                Save
               </Button>
             </div>
           </Card>
