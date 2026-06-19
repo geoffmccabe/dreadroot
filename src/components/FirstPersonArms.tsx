@@ -119,6 +119,11 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
       // Subtle sway
       const t = performance.now() * 0.001;
       groupRef.current.rotateZ(Math.sin(t * 1.5) * 0.01);
+
+      // Reveal only AFTER the first positioning. The group's default transform is
+      // world origin (0,0,0); rendering it there for the initial frame(s) showed a
+      // blue y-bot flashing at the origin every load. Stay hidden until placed.
+      if (!groupRef.current.visible) groupRef.current.visible = true;
     }, 30); // Higher priority - needs to run early for camera updates
     
     return unregister;
@@ -128,9 +133,9 @@ export function FirstPersonArms({ isGunEquipped, isAiming = false }: FirstPerson
   
   // The model needs to be offset down so we see arms, not head
   return (
-    <group ref={groupRef}>
-      <primitive 
-        object={armsModel} 
+    <group ref={groupRef} visible={false}>
+      <primitive
+        object={armsModel}
         scale={0.012}
         position={[0, -1.2, 0]} // Push down to show torso/arms
       />
