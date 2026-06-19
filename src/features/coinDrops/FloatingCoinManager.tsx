@@ -19,6 +19,7 @@ import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { worldStore } from '@/services/worldStore';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { setCoinDropListener } from './coinDropBus';
+import { sampleCoinGround } from './coinGround';
 import { DEFAULT_COIN_DROP_BEHAVIOR as CFG, OWNERSHIP_WINDOW_MS } from './config';
 import type { CoinDropInstance } from './types';
 
@@ -145,8 +146,12 @@ export function FloatingCoinManager({ userId }: { userId: string | null }) {
           // not mid-air where a falling/airborne kill happened.
           if (u.vy < 0) {
             const below = Math.floor(u.y - 0.15);
+            const groundY = sampleCoinGround(u.x, u.z);   // mesh-terrain height (siege); null in voxel worlds
             if (worldCollisionGrid.hasVoxel(Math.floor(u.x), below, Math.floor(u.z))) {
               u.baseY = below + 1 + 0.2;       // rest on the block top, slight hover
+              u.y = u.baseY; u.state = 'idle';
+            } else if (groundY != null && u.y <= groundY + 0.25) {
+              u.baseY = groundY + 0.25;        // rest on the mesh terrain (no voxels here)
               u.y = u.baseY; u.state = 'idle';
             } else if (u.y <= 0.4) {           // safety floor if nothing solid below
               u.baseY = 0.4; u.y = 0.4; u.state = 'idle';

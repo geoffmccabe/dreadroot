@@ -5,8 +5,10 @@
 // layers (kind:'siege'), while the player, controls, jet-boost, weapons, and HUD — all
 // world-agnostic — come from Fortress unchanged. Terrain mounts first; the rest follows.
 
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import type { WorldDefinition } from '@/config/worldDefinition';
+import { sampleHeight } from './terrainHeight';
+import { setCoinGroundSampler } from '@/features/coinDrops/coinGround';
 import { TerrainLayer } from './TerrainLayer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
@@ -32,6 +34,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
   // monsters are in the world.
   const challengeActive = useSyncExternalStore(subscribeChallenge, selectActive, selectActive);
+  // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
+  useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}
