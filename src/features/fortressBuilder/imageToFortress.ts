@@ -38,6 +38,7 @@ export interface FortressBuildOpts {
   faceFlip?: boolean;
   wallSym?: WallSym;
   entry?: FortressEntry | null;
+  stairs?: boolean; // step blocks up to the entry (outside + mirrored inside) when vert >= 2
 }
 
 export interface FortressVoxel { x: number; y: number; z: number; tier: number; }
@@ -69,6 +70,20 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
   const colAt = (gx: number) => (W === F ? gx : Math.min(W - 1, Math.floor((gx / F) * W)));
   const rnd = seed ? mulberry32(seed) : null;
   const maxBlockH = Math.round(H * heightScale);
+
+  // Multi-octave seeded variation: a broad swell + a finer wave reshape the WHOLE
+  // skyline per rebuild (not just ±a couple blocks at the very top), plus a little
+  // per-column noise. Precompute the wave params so the variation is smooth.
+  let a1 = 0, f1 = 1, p1 = 0, a2 = 0, f2 = 1, p2 = 0;
+  if (rnd) {
+    a1 = (0.12 + rnd() * 0.20) * maxBlockH;
+    f1 = 1 + Math.floor(rnd() * 3);
+    p1 = rnd() * Math.PI * 2;
+    a2 = (0.05 + rnd() * 0.10) * maxBlockH;
+    f2 = 4 + Math.floor(rnd() * 5);
+    p2 = rnd() * Math.PI * 2;
+  }
+
   const topH = new Array<number>(F).fill(0);
   const greyCol = new Array<number>(F).fill(0);
   for (let gx = 0; gx < F; gx++) {
@@ -77,7 +92,10 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
     for (let r = 0; r < H; r++) {
       if (present[r][c]) {
         let h = Math.round((H - r) * heightScale);
-        if (rnd) h += Math.round((rnd() - 0.5) * 5);
+        if (rnd) {
+          const u = F > 1 ? gx / (F - 1) : 0;
+          h += Math.round(a1 * Math.sin(u * f1 * Math.PI + p1) + a2 * Math.sin(u * f2 * Math.PI + p2) + (rnd() - 0.5) * 4);
+        }
         topH[gx] = Math.max(0, Math.min(maxBlockH, h));
         break;
       }
@@ -121,9 +139,11 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   else if (wallSym === '2way') { const a = mk(0), b = mk(1); wallProfiles = [a, b, a, b]; }
   else { wallProfiles = [mk(0), mk(1), mk(2), mk(3)]; }
 
-  // Entry opening span (centered along its wall).
-  const entryLo = entry ? Math.floor((F - entry.w) / 2) : 0;
-  const entryHi = entry ? entryLo + entry.w - 1 : -1;
+  // Entry width must share the fortress parity so the opening (and stairs) are
+  // perfectly centered/symmetric: even fortress -> even entry, odd -> odd.
+  const entryW = entry ? Math.max(1, ((F - entry.w) % 2 === 0) ? entry.w : entry.w - 1) : 0;
+  const entryLo = entry ? Math.floor((F - entryW) / 2) : 0;
+  const entryHi = entry ? entryLo + entryW - 1 : -1;
   const inEntryColumns = (col: number) => entry !== null && col >= entryLo && col <= entryHi;
 
   const voxels: FortressVoxel[] = [];
@@ -167,6 +187,35 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
         const tier = tierFor(gray[r][greyCol], levels);
         voxels.push({ x: lx, y, z: lz, tier });
         tierCounts[tier]++;
+      }
+    }
+  }
+
+  // --- Stairs up to the entry (outside) + mirrored inside, when lifted >= 2 blocks ---
+  // Each step is a solid column to the ground (stone-stairs look), tier 3 (medium),
+  // same width as the entry. vert V -> (V-1) steps; nearest step is V-1 tall.
+  if (opts.stairs && entry && entry.vert >= 2 && entryW > 0) {
+    const V = entry.vert;
+    const stairTier = Math.min(3, levels);
+    const placeCol = (gx: number, gz: number, height: number) => {
+      if (gx < 0 || gx >= F || gz < 0 || gz >= F) {
+        // allow outside-footprint coords (stairs extend beyond the wall)
+      }
+      const lx = gx - half, lz = gz - half;
+      for (let y = 0; y < height; y++) { voxels.push({ x: lx, y, z: lz, tier: stairTier }); tierCounts[stairTier]++; }
+    };
+    // Wall geometry: along-axis columns = [entryLo, entryHi]; perp = into/out of the wall.
+    const horizontal = entry.wall === 0 || entry.wall === 2; // front/back run along x
+    const outerPerp = (entry.wall === 0 || entry.wall === 3) ? 0 : F - 1; // low edge or high edge
+    const outDir = (entry.wall === 0 || entry.wall === 3) ? -1 : 1;       // outward direction
+    const innerPerp = (entry.wall === 0 || entry.wall === 3) ? T : F - 1 - T; // first courtyard cell
+    for (let d = 1; d <= V - 1; d++) {
+      const height = V - d;
+      const outPerp = outerPerp + outDir * d;     // step in front of the wall
+      const inPerp = innerPerp - outDir * (d - 1); // mirrored step inside the courtyard
+      for (let a = entryLo; a <= entryHi; a++) {
+        if (horizontal) { placeCol(a, outPerp, height); placeCol(a, inPerp, height); }
+        else { placeCol(outPerp, a, height); placeCol(inPerp, a, height); }
       }
     }
   }

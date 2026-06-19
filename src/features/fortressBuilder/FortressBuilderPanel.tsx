@@ -151,6 +151,14 @@ export function FortressBuilderPanel() {
             </div>
           </div>
           <Row label={`Vert (lift): ${s.entryVert}`} min={0} max={5} step={1} value={s.entryVert} onChange={(v) => builderStore.set({ entryVert: v })} />
+          <Button
+            size="sm"
+            variant={s.stairs ? 'default' : 'outline'}
+            className="w-full"
+            onClick={() => builderStore.set({ stairs: !s.stairs })}
+          >
+            Stairs: {s.stairs ? 'ON' : 'OFF'}{s.entryVert < 2 ? ' (needs lift ≥ 2)' : ''}
+          </Button>
         </div>
 
         <div className="space-y-1">

@@ -22,6 +22,7 @@ export interface BuilderState {
   entryH: number;            // entry tunnel height (blocks)
   entryWall: number;         // 0 front, 1 right, 2 back, 3 left
   entryVert: number;         // lift the entry off the ground (0..5)
+  stairs: boolean;           // build stairs up to a lifted entry (outside + mirrored inside)
 }
 
 const initial: BuilderState = {
@@ -40,9 +41,10 @@ const initial: BuilderState = {
   faceFlip: false,
   wallSym: '4way',
   entryW: 4,
-  entryH: 5,
+  entryH: 9,
   entryWall: 0,
   entryVert: 0,
+  stairs: true,
 };
 
 let state: BuilderState = initial;

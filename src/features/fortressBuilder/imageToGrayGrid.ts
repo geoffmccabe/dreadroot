@@ -15,7 +15,7 @@ export function loadImageEl(src: string): Promise<HTMLImageElement> {
   });
 }
 
-export function imageToGrayGrid(img: HTMLImageElement, F: number): GrayGrid {
+export function imageToGrayGrid(img: HTMLImageElement, F: number, seed = 0): GrayGrid {
   const H = Math.max(1, Math.round(F * (img.naturalHeight / img.naturalWidth)));
   const canvas = document.createElement('canvas');
   canvas.width = F;
@@ -32,6 +32,12 @@ export function imageToGrayGrid(img: HTMLImageElement, F: number): GrayGrid {
   const cornerAvg = cornerOffsets.reduce((a, o) => a + (d[o] + d[o + 1] + d[o + 2]) / 765, 0) / 4;
   const bgIsDark = cornerAvg < 0.5; // if the background is dark, structure = the bright pixels
 
+  // Seeded threshold offset: rebuilds shift what counts as "structure", so the whole
+  // silhouette shape changes (not just the top edge). 0 seed = neutral.
+  const off = seed ? ((((seed * 2654435761) >>> 0) / 4294967296) - 0.5) * 0.18 : 0;
+  const darkThr = 0.30 + off;
+  const lightThr = 0.70 + off;
+
   const gray: number[][] = [];
   const present: boolean[][] = [];
   for (let r = 0; r < H; r++) {
@@ -42,7 +48,7 @@ export function imageToGrayGrid(img: HTMLImageElement, F: number): GrayGrid {
       const b = (d[o] + d[o + 1] + d[o + 2]) / 765;
       const a = d[o + 3] / 255;
       gray[r][c] = b;
-      present[r][c] = alphaVaries ? a > 0.5 : (bgIsDark ? b > 0.30 : b < 0.70);
+      present[r][c] = alphaVaries ? a > 0.5 : (bgIsDark ? b > darkThr : b < lightThr);
     }
   }
   return { gray, present, W: F, H };

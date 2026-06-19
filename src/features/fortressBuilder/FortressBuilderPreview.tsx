@@ -66,7 +66,7 @@ function BarrierWalls({ D }: { D: number }) {
 export function FortressBuilderPreview() {
   const {
     isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed,
-    faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert,
+    faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert, stairs,
   } = useBuilder();
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -106,19 +106,24 @@ export function FortressBuilderPreview() {
       c.z = Math.round(c.z);
       c.y = 0;
       centerRef.current = c;
+      // Default the entry to the wall facing the player (so they see it). Nearest
+      // wall normal ≈ -forward. 0 front(-z) 1 right(+x) 2 back(+z) 3 left(-x).
+      const nx = -fwd.x, nz = -fwd.z;
+      const wall = Math.abs(nz) >= Math.abs(nx) ? (nz < 0 ? 0 : 2) : (nx > 0 ? 1 : 3);
+      builderStore.set({ entryWall: wall });
     }
     if (!isOpen) centerRef.current = null;
   }, [isOpen, camera]);
 
   const F = Math.max(1, Math.round(0.6 * D));
-  const grid = useMemo(() => (img ? imageToGrayGrid(img, F) : null), [img, F]);
+  const grid = useMemo(() => (img ? imageToGrayGrid(img, F, rebuildSeed) : null), [img, F, rebuildSeed]);
   const result = useMemo(
     () => (grid ? buildFortressVoxels(grid, {
       D, T, heightScale, seed: rebuildSeed,
-      faceSym, faceFlip, wallSym,
+      faceSym, faceFlip, wallSym, stairs,
       entry: entryW > 0 ? { w: entryW, h: entryH, wall: entryWall, vert: entryVert } : null,
     }) : null),
-    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert]
+    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, stairs, entryW, entryH, entryWall, entryVert]
   );
 
   // Register/clear the dynamic monster-exclusion barrier (20-60-20 outer ring = D).
