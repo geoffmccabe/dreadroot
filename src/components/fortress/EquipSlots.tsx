@@ -6,6 +6,7 @@ import { setActiveWeapon } from '@/config/activeWeapon';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
 import { playSound } from '@/lib/spatialAudio';
+import { useToast } from '@/hooks/use-toast';
 
 // The four equip slots are a REAL region ('equip') in the unified user_slots system,
 // so equipping MOVES the item out of inventory/QS (it can't be in two places). Drag an
@@ -37,11 +38,26 @@ const sb = supabase as unknown as {
   };
 };
 
-async function itemCategory(itemId: string): Promise<string | null> {
-  const { data } = await (supabase as unknown as {
-    from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { item_category: string } | null }> } } };
-  }).from('items').select('item_category').eq('id', itemId).maybeSingle();
-  return data?.item_category ?? null;
+// Whether an item may go in a given equip slot. item_category is a BROAD field (block/item/seed/…)
+// that most weapons don't tag as 'weapon', so the weapon slot ALSO accepts anything the game treats
+// as a weapon: a row in weapon_stats (the same source the active-weapon system uses) or the flame
+// glove by key. Other slots use the explicit item_category match.
+async function canAcceptInSlot(def: SlotDef, itemId: string): Promise<boolean> {
+  const { data: it } = await (supabase as unknown as {
+    from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { item_category: string | null; item_number: number | null; key: string | null } | null }> } } };
+  }).from('items').select('item_category,item_number,key').eq('id', itemId).maybeSingle();
+  if (!it) return false;
+  if (it.item_category && def.cats.includes(it.item_category)) return true;
+  if (def.type === 'weapon') {
+    if (it.key === 'flame_glove' || (it.key ?? '').includes('glove')) return true;
+    if (it.item_number != null) {
+      const { data: ws } = await (supabase as unknown as {
+        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number } | null }> } } };
+      }).from('weapon_stats').select('item_number').eq('item_number', it.item_number).maybeSingle();
+      return !!ws;
+    }
+  }
+  return false;
 }
 
 function originToRpc(origin: CursorOrigin): { region: string; page: number; slot: number } {
@@ -52,6 +68,7 @@ function originToRpc(origin: CursorOrigin): { region: string; page: number; slot
 
 export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; itemId: string }>; onMoved: () => void | Promise<void> }) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [equip, setEquip] = useState<EquipMap>(EMPTY);
   const cursorHeld = useCursorStack((s) => !!s.cursor);
 
@@ -122,8 +139,10 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
     if (cur) {
-      const cat = await itemCategory(cur.itemId);
-      if (!cat || !def.cats.includes(cat)) return; // wrong type for this slot
+      if (!(await canAcceptInSlot(def, cur.itemId))) {
+        toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 });
+        return; // wrong type for this slot — now with feedback instead of a silent reject
+      }
       const from = originToRpc(cur.origin);
       cursorStackApi.setCursor(null);
       try {
