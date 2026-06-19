@@ -24,7 +24,6 @@ import { ProceduralGround } from './ProceduralGround';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
-import { OriginGiantProbe } from './OriginGiantProbe';
 import { SceneReflections } from '@/components/SceneReflections';
 import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
@@ -1739,10 +1738,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       />
       
       <MultiplayerPlayers players={players} />
-      <OriginGiantProbe />
       {/* Local player avatar hidden for now (the visible blue body) — re-enable by flipping this. */}
       {false && <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />}
-      <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />
+      {/* FirstPersonArms DISABLED: it renders the y-bot SKINNED mesh, and a skinned
+          mesh ignores node scale (its bones drive vertices at native ~180m size), so
+          the 0.012 scale didn't shrink it — it showed as the giant blue avatar at the
+          origin. Re-enable only after the arms are scaled via the skeleton root, not
+          the mesh node. */}
+      {false && <FirstPersonArms isGunEquipped={crosshairsEnabled} isAiming={isAiming} />}
       <FortressJetBoostFX ref={jetBoostFXRef} getDefinition={getDefinition} bulletTier={selectedBulletTier} />
       <SceneReflections />
       
