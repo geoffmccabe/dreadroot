@@ -40,6 +40,7 @@ import { WatchlistTab } from '@/features/marketplace/components/WatchlistTab';
 import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
 import { WalletList } from '@/features/wallet/WalletList';
 import { GameWalletPanel } from '@/features/wallet/GameWalletPanel';
+import { WaxWalletPanel } from '@/features/wallet/WaxWalletPanel';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
@@ -611,6 +612,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             {/* Multi-coin holdings: every coin/token/points the player holds, grouped chain-first
                 (docs/CURRENCY_LEDGER_PLAN.md). */}
             <WalletList userId={user?.id ?? null} />
+
+            {/* Wax / Alien Worlds wallet, embedded from LW-SSO (docs/WAX_WALLET_IFRAME_PLAN.md).
+                S2: hardcoded test account until the per-user account handoff (S3) is wired. */}
+            <WaxWalletPanel account="phmo4.c.wam" />
 
             <Card className="p-4">
               <div className="space-y-2">
