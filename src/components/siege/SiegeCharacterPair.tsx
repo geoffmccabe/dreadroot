@@ -25,6 +25,21 @@ const PAIR: { id: string; name: string }[] = [
 
 const SPACING = 2.5; // metres between characters
 
+// THE fix for the long-chased "stretched hands/fingers" distortion. These player clips bake a
+// per-bone TRANSLATION track on EVERY bone, and those translations are LONGER than the bone's
+// rest offset (e.g. a finger bone rest-offset 3.03 is animated to 3.51) — so on WebGL GPU
+// skinning the finger/limb chains elongate into spikes (it looks fine in Blender/Unity, which
+// re-derive bones differently). Bones should only ROTATE during animation; the offset is fixed
+// by the rig (now rest==bind, so the rest offset is correct). Keep rotation tracks only, plus
+// the root bone's position for any root motion. Verified clean on a real Metal GPU render.
+function rotationOnlyClips(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+  return clips.map((c) => new THREE.AnimationClip(
+    c.name, c.duration,
+    c.tracks.filter((t) => t.name.endsWith('.quaternion') ||
+      (t.name.endsWith('.position') && /hips|pelvis|root/i.test(t.name))),
+  ));
+}
+
 // shiyang's GOOD file is shiyang_v2 (bind-fixed only). The "v3" unit-normalize step
 // (ibm 100→1) actually CORRUPTED the rig — it blew the bind pose out to 3m wide and
 // stretched the fingers into spikes on Apple/Metal GPUs (clean on software GL, which is
@@ -36,7 +51,8 @@ function CharacterStand({ id, name, x, z }: { id: string; name: string; x: numbe
   const { scene, animations } = useGLTF(`/siege/characters/${file}.glb?v=${APP_VERSION}`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
-  const { actions, names } = useAnimations(animations, group);
+  const clips = useMemo(() => rotationOnlyClips(animations), [animations]);
+  const { actions, names } = useAnimations(clips, group);
 
   // Feet on the ground; face roughly toward where the player spawns (so you see the front).
   const groundY = useMemo(() => (sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1]) - CLEAN_FEET_Y, [x, z]);
