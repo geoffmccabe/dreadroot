@@ -159,7 +159,9 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       // the DB move + shared reconcile happen in the background, so it feels immediate.
       setEquip((prev) => ({ ...prev, [def.num]: r.item }));
       cursorStackApi.setCursor(null);
-      void playSound(r.reloadKey ? getSoundUrl(r.reloadKey, EQUIP_FALLBACK) : EQUIP_FALLBACK, 0.6);
+      // Weapon slot: ALWAYS a reload sound (the weapon's reload_sound, or the default reload clip the
+      // game uses) — never the thud. Other slots: the soft place sound.
+      void playSound(def.type === 'weapon' ? getSoundUrl(r.reloadKey ?? 'rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
       const from = originToRpc(cur.origin);
       try { await equipTransfer(from, { region: 'equip', page: 0, slot: def.num }); }
       catch (err) { reportFail('Equip failed', err); }
