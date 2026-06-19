@@ -614,8 +614,8 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <WalletList userId={user?.id ?? null} />
 
             {/* Wax / Alien Worlds wallet, embedded from LW-SSO (docs/WAX_WALLET_IFRAME_PLAN.md).
-                S2: hardcoded test account until the per-user account handoff (S3) is wired. */}
-            <WaxWalletPanel account="phmo4.c.wam" />
+                Per-user: loads the linked Wax account, captures it from the iframe on connect. */}
+            <WaxWalletPanel userId={user?.id ?? null} />
 
             <Card className="p-4">
               <div className="space-y-2">

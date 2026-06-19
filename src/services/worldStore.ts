@@ -1061,6 +1061,26 @@ export async function setBlockchainAddress(tokenThemeId: string, address: string
   if (error && !isMissingFunction(error)) throw error;
 }
 
+/** The caller's linked external account for a chain (e.g. their Wax account), or null. */
+export async function getWalletLink(chain: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('user_wallet_links' as never)
+    .select('account').eq('chain', chain).maybeSingle();
+  if (error) { if (!isMissingFunction(error)) console.error('[getWalletLink]', error); return null; }
+  return (data as { account?: string } | null)?.account ?? null;
+}
+
+/** Link (upsert) the caller's external account for a chain — public account string, display-only. */
+export async function setWalletLink(chain: string, account: string): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const uid = session?.user?.id;
+  if (!uid || !account) return;
+  const { error } = await supabase
+    .from('user_wallet_links' as never)
+    .upsert({ user_id: uid, chain, account } as never, { onConflict: 'user_id,chain' } as never);
+  if (error && !isMissingFunction(error)) console.error('[setWalletLink]', error);
+}
+
 /** Admin: set (or clear) the game's deposit-wallet address for a coin's pool. */
 export async function setPoolAddress(tokenThemeId: string, address: string): Promise<void> {
   const { error } = await supabase.rpc('set_pool_address', {
@@ -1229,6 +1249,8 @@ export const worldStore = {
   fundPool,
   setPoolAddress,
   setBlockchainAddress,
+  getWalletLink,
+  setWalletLink,
   pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,
