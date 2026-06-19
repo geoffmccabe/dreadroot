@@ -11,9 +11,9 @@ import { getChallengeState } from './challengeStore';
 import { listRegionChallenges } from './challengeStorage';
 import { regionCoords } from './regionDefaults';
 import { useActiveGame } from '@/config/activeGame';
-import type { Challenge, MonsterDrop } from './challengeTypes';
+import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
-interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
+interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
 interface Sched { id: string; coords: [number, number, number]; radius: number; events: { t: number; drop: MonsterDrop }[]; period: number; start: number; idx: number; }
 
 const CAP = 35;   // max alive monsters per region (keeps a runaway loop in check)
@@ -41,7 +41,7 @@ function build(s: Sched, drop: MonsterDrop, idc: { n: number }): Spawned[] {
     const mx = s.coords[0] + Math.cos(ang) * rr, mz = s.coords[2] + Math.sin(ang) * rr;
     const ground = sampleHeight(mx, mz) ?? s.coords[1] ?? 26;
     const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
-    out.push({ id: `${s.id}_${idc.n++}`, type: drop.type as MType, spawn: [mx, y, mz], ov: drop.type === 6 ? makeHordeMember() : undefined, mods, rise: drop.dropHeight == null });
+    out.push({ id: `${s.id}_${idc.n++}`, type: drop.type as MType, spawn: [mx, y, mz], ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color, rise: drop.dropHeight == null });
   }
   return out;
 }
@@ -97,6 +97,6 @@ export function RegionSpawnerRunner() {
   });
 
   return <>{mobs.map((s) => (
-    <CatalogMonster key={s.id} id={s.id} type={s.type} spawn={s.spawn} ov={s.ov} mods={s.mods} riseFromGround={s.rise} onDespawn={remove} />
+    <CatalogMonster key={s.id} id={s.id} type={s.type} spawn={s.spawn} ov={s.ov} mods={s.mods} color={s.color} riseFromGround={s.rise} onDespawn={remove} />
   ))}</>;
 }

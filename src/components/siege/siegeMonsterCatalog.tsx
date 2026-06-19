@@ -4,6 +4,7 @@
 // fixed CFG entry — each mob is a random per-individual override (Ov) from makeHordeMember().
 import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
 import { GhostMonster } from './GhostMonster';
+import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
@@ -80,9 +81,9 @@ export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: 
 
 /** Render one monster of a catalog type at a spawn position. ov = a horde-member override
  *  (type 6); mods = boss size/speed/health multipliers; riseFromGround = rise out of the floor. */
-export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromGround }: {
+export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, riseFromGround }: {
   type: MType; spawn: [number, number, number]; id?: string;
-  onDespawn?: (id: string) => void; ov?: Ov; mods?: MonsterMods; riseFromGround?: boolean;
+  onDespawn?: (id: string) => void; ov?: Ov; mods?: MonsterMods; color?: ColorMods; riseFromGround?: boolean;
 }) {
   // Type 9 = the Ghost — its own self-contained flying/upside-down/transparent component (not CFG-driven).
   if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
@@ -96,7 +97,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromG
       speed={(o?.speed ?? m!.speed) * sp} wanderRadius={6} health={(o?.health ?? m!.health) * hp}
       animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie gait={m?.gait ?? 'climb'}
       sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
-      desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed}
+      desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed} colorMods={color}
       moanSounds={o ? HORDE6_MOANS : undefined}
       contactDamage={o ? 20 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
       rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}

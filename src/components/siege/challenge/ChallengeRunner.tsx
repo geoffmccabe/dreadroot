@@ -17,9 +17,9 @@ import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getActiveGame } from '@/config/activeGame';
-import type { Challenge, MonsterDrop } from './challengeTypes';
+import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
-interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; rise: boolean; }
+interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
 
 // Deterministic pseudo-random in [0,1) from an integer seed (so spawn spots are the SAME every
 // play and the player can learn them).
@@ -61,7 +61,7 @@ export function ChallengeRunner() {
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
         id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
-        ov: drop.type === 6 ? makeHordeMember() : undefined, mods,
+        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color,
         rise: drop.dropHeight == null,
       });
     }
@@ -224,7 +224,7 @@ export function ChallengeRunner() {
   return (
     <>
       {mobs.map((s) => (
-        <CatalogMonster key={s.id} id={s.id} type={s.type} spawn={s.spawn} ov={s.ov} mods={s.mods}
+        <CatalogMonster key={s.id} id={s.id} type={s.type} spawn={s.spawn} ov={s.ov} mods={s.mods} color={s.color}
                         riseFromGround={s.rise} onDespawn={removeMob} />
       ))}
     </>

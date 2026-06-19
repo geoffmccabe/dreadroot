@@ -12,6 +12,8 @@ import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { injectRecolor, setRecolor } from './challenge/colorMods';
+import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
@@ -81,6 +83,7 @@ export interface MonsterConfig {
   desat?: number;             // explicit desaturation 0..1 (overrides the zombie auto-desat)
   hueShift?: number;          // hue rotation in RADIANS (±)
   tintRed?: number;           // blood-red tint mix 0..1
+  colorMods?: ColorMods;      // authored Challenge recolour (sat/hue/tint/blend) — takes over from the zombie tint
   moanSounds?: string[];      // ambient moan clips (random pick, ~per 4-8s, distance-scaled)
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number }; // collider-touch swipe: random dmg + knockback (m)
   damageMul?: number;         // boss modifier: scales ALL damage this monster deals to the player
@@ -328,6 +331,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // zombie horde, also CLONE each material (so this demon is independent) and inject a per-demon
   // grayscale mix in the fragment shader → varied greyed-out red shades (zombie look).
   useMemo(() => {
+    const cm = cfg.colorMods;                                   // authored Challenge recolour (takes over)
     const colDesat = cfg.desat ?? (cfg.zombie ? J.desat : 0);   // explicit desat overrides the zombie auto-desat
     const colHue = cfg.hueShift ?? 0;
     const colRed = cfg.tintRed ?? 0;
@@ -336,7 +340,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       let mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      if (cfg.zombie || needsColor) {   // clone so per-demon uniforms are independent
+      if (cfg.zombie || needsColor || cm) {   // clone so per-demon uniforms are independent
         mats = mats.map((mm) => (mm as THREE.Material).clone());
         mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       }
@@ -347,7 +351,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if ('roughness' in m) m.roughness = 0.85;
         if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
         if (cfg.boss === 'teleporter') { m.transparent = true; m.depthWrite = true; bossMats.current.push(m); }
-        if (needsColor) {
+        if (cm) {
+          // Authored Challenge colour — the SAME shader the Creator preview uses (sat/hue/tint/blend).
+          setRecolor(injectRecolor(m), cm);
+        } else if (needsColor) {
           // ONE shared program per texture-feature set (uniforms vary per demon): hue-rotate
           // around the grey axis → desaturate → blood-red tint. All three default to no-op.
           m.customProgramCacheKey = () => `zcol_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;

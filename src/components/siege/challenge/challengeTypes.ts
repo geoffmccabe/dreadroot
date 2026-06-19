@@ -18,6 +18,7 @@ export interface ColorMods {
   hue: number;       // hue rotation in DEGREES (0-360)
   tint: string;      // overlay colour (hex)
   tintAmt: number;   // tint strength %, 0 = none, 100 = full overlay
+  blend?: string;    // tint BLEND mode (normal / multiply / screen / overlay / … see colorMods.ts); default normal
 }
 
 /** One cluster of monsters dropped during a wave. */

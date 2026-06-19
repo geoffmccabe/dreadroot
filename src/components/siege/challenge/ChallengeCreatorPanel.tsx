@@ -9,6 +9,7 @@ import { fireChallengeStart } from './challengeControl';
 import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
+import { BLEND_MODES } from './colorMods';
 import { BannerInput } from './BannerInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
@@ -345,6 +346,12 @@ export function ChallengeCreatorPanel() {
                   <label style={lbl}>Tint Opacity: {col.tintAmt}%</label>
                   <input type="range" className="chal-slider" min={0} max={100} step={5} value={col.tintAmt} style={{ width: '100%' }} onChange={(e) => setCol({ tintAmt: Number(e.target.value) })} />
                 </div>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <label style={lbl}>Tint Blend</label>
+                <select style={inp} value={col.blend ?? 'normal'} onChange={(e) => setCol({ blend: e.target.value })}>
+                  {BLEND_MODES.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
               </div>
             </div>
           );

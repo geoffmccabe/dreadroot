@@ -13,6 +13,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { CFG, type MType, type BodyFlame } from '../siegeMonsterCatalog';
 import { DarkLordFlame } from '../DarkLordFlame';
+import { injectRecolor, setRecolor, type RecolorUniforms } from './colorMods';
 import type { ColorMods } from './challengeTypes';
 
 const FALLBACK = '/siege/monsters/skeletonlight.glb';                 // type 6 (horde) has no CFG
@@ -31,8 +32,6 @@ export const COLOR_NEUTRAL: ColorMods = { sat: 100, hue: 0, tint: '#ffffff', tin
 const COLOR_BLOODY: ColorMods = { sat: 55, hue: 0, tint: '#c01818', tintAmt: 48 };
 export const defaultColor = (type: number): ColorMods => (type === 6 ? COLOR_BLOODY : COLOR_NEUTRAL);
 
-type ColUniforms = { uHue: { value: number }; uSat: { value: number }; uTint: { value: THREE.Color }; uTintAmt: { value: number } };
-
 // Per-type preview behaviour, matching the in-game look:
 //  • 7 Spintroll spins fast (its in-game ~3.5 rev/s), 9 Ghost spins slowly like its idle.
 //  • 9 Ghost renders upside-down + 50% transparent.
@@ -45,9 +44,9 @@ const HORDE_OFFSETS: [number, number, number][] = [
   [0, 0, 0.18], [-0.55, 0, -0.12], [0.55, 0, -0.12], [-0.3, 0, 0.5], [0.32, 0, -0.52],
 ];
 
-// Brighten + recolour a clone's materials (shared by every member), returning its colour uniforms.
-function setupMaterials(c: THREE.Group, opacity: number): ColUniforms[] {
-  const list: ColUniforms[] = [];
+// Brighten + recolour a clone's materials (the SAME shader the game uses), returning its uniforms.
+function setupMaterials(c: THREE.Group, opacity: number): RecolorUniforms[] {
+  const list: RecolorUniforms[] = [];
   c.traverse((o) => {
     const mesh = o as THREE.Mesh;
     mesh.frustumCulled = false;
@@ -61,24 +60,7 @@ function setupMaterials(c: THREE.Group, opacity: number): ColUniforms[] {
       if ('roughness' in m) m.roughness = 0.85;
       if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
       if (opacity < 1) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
-      const u: ColUniforms = { uHue: { value: 0 }, uSat: { value: 1 }, uTint: { value: new THREE.Color('#ffffff') }, uTintAmt: { value: 0 } };
-      m.customProgramCacheKey = () => `chalcol_${m.map ? 1 : 0}_${m.emissiveMap ? 1 : 0}`;
-      m.onBeforeCompile = (shader) => {
-        shader.uniforms.uHue = u.uHue; shader.uniforms.uSat = u.uSat;
-        shader.uniforms.uTint = u.uTint; shader.uniforms.uTintAmt = u.uTintAmt;
-        shader.fragmentShader = 'uniform float uHue;\nuniform float uSat;\nuniform vec3 uTint;\nuniform float uTintAmt;\n' + shader.fragmentShader;
-        shader.fragmentShader = shader.fragmentShader.replace(
-          '#include <dithering_fragment>',
-          '#include <dithering_fragment>\n{ vec3 _c = gl_FragColor.rgb;'
-          + ' if (uHue != 0.0) { vec3 _k = vec3(0.57735); float _cs = cos(uHue), _sn = sin(uHue); _c = _c*_cs + cross(_k,_c)*_sn + _k*dot(_k,_c)*(1.0-_cs); }'
-          + ' float _l = dot(_c, vec3(0.299,0.587,0.114));'
-          + ' _c = mix(vec3(_l), _c, uSat);'
-          + ' _c = mix(_c, uTint, uTintAmt);'
-          + ' gl_FragColor.rgb = clamp(_c, 0.0, 1.0); }',
-        );
-      };
-      m.needsUpdate = true;
-      list.push(u);
+      list.push(injectRecolor(m));
     });
   });
   return list;
@@ -89,14 +71,9 @@ function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset
   url: string; modelHeight: number; color: ColorMods; opacity: number; upsideDown: boolean; scaleMul: number; offset: [number, number, number];
 }) {
   const { scene, animations } = useGLTF(url);
-  const uniforms = useRef<ColUniforms[]>([]);
+  const uniforms = useRef<RecolorUniforms[]>([]);
   const cloned = useMemo(() => { const c = SkeletonUtils.clone(scene) as THREE.Group; uniforms.current = setupMaterials(c, opacity); return c; }, [scene, opacity]);
-  useEffect(() => {
-    for (const u of uniforms.current) {
-      u.uHue.value = (color.hue * Math.PI) / 180; u.uSat.value = color.sat / 100;
-      u.uTint.value.set(color.tint); u.uTintAmt.value = color.tintAmt / 100;
-    }
-  }, [color, cloned]);
+  useEffect(() => { for (const u of uniforms.current) setRecolor(u, color); }, [color, cloned]);
   const root = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, root);
   useEffect(() => {
