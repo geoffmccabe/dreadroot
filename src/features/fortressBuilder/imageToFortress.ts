@@ -79,7 +79,7 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
   // Multi-octave seeded variation: a broad swell + a finer wave reshape the WHOLE
   // skyline per rebuild (not just ±a couple blocks at the very top), plus a little
   // per-column noise. Precompute the wave params so the variation is smooth.
-  let a1 = 0, f1 = 1, p1 = 0, a2 = 0, f2 = 1, p2 = 0;
+  let a1 = 0, f1 = 1, p1 = 0, a2 = 0, f2 = 1, p2 = 0, greyOff = 0;
   if (rnd) {
     a1 = (0.12 + rnd() * 0.20) * maxBlockH;
     f1 = 1 + Math.floor(rnd() * 3);
@@ -87,13 +87,16 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
     a2 = (0.05 + rnd() * 0.10) * maxBlockH;
     f2 = 4 + Math.floor(rnd() * 5);
     p2 = rnd() * Math.PI * 2;
+    // Slide the facade horizontally per rebuild so the grey pattern (not just the
+    // heights) shifts across the whole wall.
+    greyOff = Math.floor((rnd() - 0.5) * W * 0.3);
   }
 
   const topH = new Array<number>(F).fill(0);
   const greyCol = new Array<number>(F).fill(0);
   for (let gx = 0; gx < F; gx++) {
     const c = colAt(gx);
-    greyCol[gx] = c;
+    greyCol[gx] = (((c + greyOff) % W) + W) % W;
     for (let r = 0; r < H; r++) {
       if (present[r][c]) {
         let h = Math.round((H - r) * heightScale);
@@ -136,6 +139,13 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const entry = opts.entry ?? null;
   const F = Math.max(1, Math.round(0.6 * D));
   const { gray, H } = grid;
+
+  // Per-rebuild facade variation so the grey pattern (the whole wall, not just the top
+  // edge) changes each Rebuild: a vertical shift of the sampled rows + a brightness
+  // shift of the tier mapping. 0 seed = neutral/faithful.
+  const sr = seed ? mulberry32((seed ^ 0x9e3779b9) >>> 0) : null;
+  const greyShift = sr ? (sr() - 0.5) * 0.3 : 0;          // ±0.15 brightness
+  const rowOff = sr ? Math.round((sr() - 0.5) * H * 0.25) : 0; // vertical facade shift
 
   const mk = (group: number) => applyFaceSym(baseProfile(grid, F, heightScale, groupSeed(seed, group)), F, faceSym, flip);
   // wallProfiles indexed by wall: 0 front, 1 right, 2 back, 3 left
@@ -190,8 +200,8 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
       }
       for (let y = 0; y < h; y++) {
         if (y >= carveLo && y <= carveHi) continue; // entry tunnel (through full thickness)
-        const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y / Math.max(heightScale, 1e-6))));
-        const tier = tierFor(gray[r][greyCol], levels);
+        const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y / Math.max(heightScale, 1e-6)) + rowOff));
+        const tier = tierFor(gray[r][greyCol] + greyShift, levels);
         const exOut = clamp(exOutArr[tier - 1] ?? 0, -T, 2);
         const exIn = clamp(exInArr[tier - 1] ?? 0, -T, 2);
         const dStart = -exOut;        // outer extent (negative = protrude; positive = recess)
