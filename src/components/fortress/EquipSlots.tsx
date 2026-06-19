@@ -50,46 +50,38 @@ function originToRpc(origin: CursorOrigin): { region: string; page: number; slot
   return { region: 'vault', page: origin.page, slot: origin.slot };
 }
 
-export function EquipSlots() {
+export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; itemId: string }>; onMoved: () => void | Promise<void> }) {
   const { user } = useAuth();
   const [equip, setEquip] = useState<EquipMap>(EMPTY);
   const cursorHeld = useCursorStack((s) => !!s.cursor);
 
-  const loadEquip = useCallback(async () => {
-    if (!user?.id) { setEquip(EMPTY); return; }
-    const { data: rows } = await sb.from('user_slots').select('slot,item_id').eq('user_id', user.id).eq('region', 'equip');
-    const ids = (rows || []).map((r) => r.item_id).filter(Boolean);
-    const defs: Record<string, EquipItem> = {};
-    if (ids.length) {
-      const { data: items } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { in: (k: string, v: string[]) => Promise<{ data: Array<{ id: string; name: string; item_number: number | null; tier: number | null; item_category: string; texture_url: string | null }> | null }> } };
-      }).from('items').select('id,name,item_number,tier,item_category,texture_url').in('id', ids);
-      for (const it of items || []) {
-        defs[it.id] = {
-          itemId: it.id, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category,
-          spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
-        };
-      }
-    }
-    const next: EquipMap = { ...EMPTY };
-    for (const r of rows || []) if (r.slot >= 1 && r.slot <= 4) next[r.slot] = defs[r.item_id] ?? null;
-    setEquip(next);
-  }, [user?.id]);
-
-  useEffect(() => { void loadEquip(); }, [loadEquip]);
-
-  // Realtime: reload when any of this user's equip rows change.
+  // Resolve item defs for the SHARED equip gear (owned by useUserData) and build the slot map. No
+  // private query/subscription anymore — equip changes arrive via the unified user_slots realtime.
+  const gearKey = gear.map((g) => `${g.slot}:${g.itemId}`).sort().join('|');
   useEffect(() => {
-    if (!user?.id) return;
-    const ch = supabase
-      .channel(`equip-${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_slots', filter: `user_id=eq.${user.id}` },
-        (payload: { new?: { region?: string }; old?: { region?: string } }) => {
-          if ((payload.new?.region ?? payload.old?.region) === 'equip') void loadEquip();
-        })
-      .subscribe();
-    return () => { void supabase.removeChannel(ch); };
-  }, [user?.id, loadEquip]);
+    let cancelled = false;
+    (async () => {
+      const ids = gear.map((g) => g.itemId).filter(Boolean);
+      const defs: Record<string, EquipItem> = {};
+      if (ids.length) {
+        const { data: items } = await (supabase as unknown as {
+          from: (t: string) => { select: (c: string) => { in: (k: string, v: string[]) => Promise<{ data: Array<{ id: string; name: string; item_number: number | null; tier: number | null; item_category: string; texture_url: string | null }> | null }> } };
+        }).from('items').select('id,name,item_number,tier,item_category,texture_url').in('id', ids);
+        for (const it of items || []) {
+          defs[it.id] = {
+            itemId: it.id, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category,
+            spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
+          };
+        }
+      }
+      if (cancelled) return;
+      const next: EquipMap = { ...EMPTY };
+      for (const g of gear) if (g.slot >= 1 && g.slot <= 4) next[g.slot] = defs[g.itemId] ?? null;
+      setEquip(next);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gearKey]);
 
   // Drive the active-weapon store from the weapon slot (slot 1). Guns only.
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
@@ -138,7 +130,7 @@ export function EquipSlots() {
         await equipTransfer(from, { region: 'equip', page: 0, slot: def.num });
         void playSound(DROP_SOUND, 0.5);
       } catch (err) { console.error('[equip] move failed', err); }
-      void loadEquip();
+      void onMoved();   // shared refresh → updates equip AND clears the source from inventory/QS
       return;
     }
     // No cursor + filled slot → unequip back to the first empty inventory slot.
@@ -149,7 +141,7 @@ export function EquipSlots() {
         await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst });
         void playSound(DROP_SOUND, 0.5);
       } catch (err) { console.error('[equip] unequip failed', err); }
-      void loadEquip();
+      void onMoved();   // shared refresh → updates equip AND the inventory destination
     }
   };
 

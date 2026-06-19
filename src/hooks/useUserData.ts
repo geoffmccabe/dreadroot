@@ -49,6 +49,9 @@ export const useUserData = () => {
   const [allTokenBalances, setAllTokenBalances] = useState<UserTokenBalance[]>([]);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
   const [equippedItems, setEquippedItems] = useState<Array<{ slot: number; itemId: string }>>([]);
+  // Equip region (gear: weapon/armor/boots/potion). Owned HERE so all four regions share one fetch +
+  // realtime, instead of EquipSlots keeping its own private query/subscription (which caused drift).
+  const [equippedGear, setEquippedGear] = useState<Array<{ slot: number; itemId: string }>>([]);
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
@@ -81,6 +84,8 @@ export const useUserData = () => {
       setProfile(null);
       setTokenBalance(null);
       setInventory([]);
+      setEquippedItems([]);
+      setEquippedGear([]);
       setUserRoles([]);
       setIsLoading(false);
       return;
@@ -226,6 +231,11 @@ export const useUserData = () => {
         .filter((s: any) => s.region === 'quick_select')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
       setEquippedItems(qsRows);
+      // Equip gear: derive from user_slots region='equip' (slots 1-4).
+      const equipRows = ((userSlotsData as any[]) ?? [])
+        .filter((s: any) => s.region === 'equip')
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+      setEquippedGear(equipRows);
       // Only update roles when the roles query actually succeeded. On a
       // transient error, KEEP the previous roles instead of wiping them to []
       // — a blip otherwise silently strips admin/superadmin powers mid-session.
@@ -436,6 +446,11 @@ export const useUserData = () => {
                 const filtered = prev.filter(e => e.slot !== row.slot);
                 return [...filtered, { slot: row.slot, itemId: row.item_id }];
               });
+            } else if (row.region === 'equip') {
+              setEquippedGear(prev => {
+                const filtered = prev.filter(e => e.slot !== row.slot);
+                return [...filtered, { slot: row.slot, itemId: row.item_id }];
+              });
             }
             // vault changes are read by useVaultData via its own select; not handled here.
           } else if (payload.eventType === 'DELETE') {
@@ -443,6 +458,8 @@ export const useUserData = () => {
               setInventory(prev => prev.filter(i => i.id !== row.id));
             } else if (row.region === 'quick_select') {
               setEquippedItems(prev => prev.filter(e => e.slot !== row.slot));
+            } else if (row.region === 'equip') {
+              setEquippedGear(prev => prev.filter(e => e.slot !== row.slot));
             }
           }
         }
@@ -1203,6 +1220,10 @@ export const useUserData = () => {
         .filter((s: any) => s.region === 'quick_select')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
       setEquippedItems(qsRows);
+      const equipRows = (((slotRes as any).data as any[]) ?? [])
+        .filter((s: any) => s.region === 'equip')
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+      setEquippedGear(equipRows);
     } catch (err) {
       console.error('[refetchInventoryAndQs] failed:', err);
     }
@@ -1241,6 +1262,7 @@ export const useUserData = () => {
     allTokenBalances,
     inventory,
     equippedItems,
+    equippedGear,
     userRoles,
     isLoading,
     buyBlock,

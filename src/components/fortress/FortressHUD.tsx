@@ -66,6 +66,7 @@ export function FortressHUD(props: FortressHUDProps) {
     isUnderwater = false,
     isOxygenCritical = false,
     equippedItems = [],
+    equippedGear = [],
     updateEquippedSlot,
     addItem,
     removeInventoryRow,
@@ -1034,7 +1035,7 @@ export function FortressHUD(props: FortressHUDProps) {
 
       {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
           old "R for crosshairs" instructions panel. */}
-      <EquipSlots />
+      <EquipSlots gear={equippedGear} onMoved={refetchInventoryAndQs} />
       <AmmoCounter />
 
       {/* Bottom-center hotbar + inventory grid + vault */}

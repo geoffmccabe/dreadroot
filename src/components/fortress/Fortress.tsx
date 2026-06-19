@@ -300,7 +300,7 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, applySwapOptimistic, applyTransferOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, equippedGear, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, applySwapOptimistic, applyTransferOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -2319,6 +2319,7 @@ export function Fortress() {
         jetBoostMax={jetBoostState.max}
         isGliding={jetBoostState.isGliding}
         equippedItems={equippedItems}
+        equippedGear={equippedGear}
         updateEquippedSlot={updateEquippedSlot}
         setEquippedSlotOptimistic={setEquippedSlotOptimistic}
         removeInventoryRowOptimistic={removeInventoryRowOptimistic}
