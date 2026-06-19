@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 import { AdminPanel } from '@/components/AdminPanel';
+import { FortressBuilderPanel } from '@/features/fortressBuilder/FortressBuilderPanel';
 import { UserPanel } from '@/components/UserPanel';
 import { Toaster } from '@/components/ui/toaster';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
@@ -171,6 +172,9 @@ export function FortressOverlays(props: FortressOverlaysProps) {
 
       {/* Tree Growth Diagnostics - Toggle with Shift+4 */}
       <FungalTreeDiagnostics plantedTrees={plantedTrees} />
+
+      {/* Fortress Builder (admin) - Toggle with Shift+B */}
+      <FortressBuilderPanel />
     </>
   );
 }
