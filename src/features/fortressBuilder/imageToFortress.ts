@@ -92,22 +92,29 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
     greyOff = Math.floor((rnd() - 0.5) * W * 0.3);
   }
 
+  // Bridge small interior gaps (windows/openings) up to ~6% of height; a larger gap
+  // means we've left the building and entered the sky.
+  const GAP = Math.max(2, Math.round(H * 0.06));
   const topH = new Array<number>(F).fill(0);
   const greyCol = new Array<number>(F).fill(0);
   for (let gx = 0; gx < F; gx++) {
     const c = colAt(gx);
     greyCol[gx] = (((c + greyOff) % W) + W) % W;
-    for (let r = 0; r < H; r++) {
-      if (present[r][c]) {
-        let h = Math.round((H - r) * heightScale);
-        if (rnd) {
-          const u = F > 1 ? gx / (F - 1) : 0;
-          h += Math.round(a1 * Math.sin(u * f1 * Math.PI + p1) + a2 * Math.sin(u * f2 * Math.PI + p2) + (rnd() - 0.5) * 4);
-        }
-        topH[gx] = Math.max(0, Math.min(maxBlockH, h));
-        break;
-      }
+    // Silhouette top = top of the structure CONNECTED up from the ground. Scanning
+    // from the bottom (instead of grabbing the highest present pixel anywhere) means
+    // mis-thresholded sky/cloud pixels above a real gap are ignored — never built.
+    let topRow = -1, gap = 0;
+    for (let r = H - 1; r >= 0; r--) {
+      if (present[r][c]) { topRow = r; gap = 0; }
+      else if (topRow !== -1 && ++gap > GAP) break;
     }
+    if (topRow === -1) continue; // empty column (all sky)
+    let h = Math.round((H - topRow) * heightScale);
+    if (rnd) {
+      const u = F > 1 ? gx / (F - 1) : 0;
+      h += Math.round(a1 * Math.sin(u * f1 * Math.PI + p1) + a2 * Math.sin(u * f2 * Math.PI + p2) + (rnd() - 0.5) * 4);
+    }
+    topH[gx] = Math.max(0, Math.min(maxBlockH, h));
   }
   return { topH, greyCol };
 }
