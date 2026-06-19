@@ -26,6 +26,7 @@ import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
 import { ChopFeedback } from './ChopFeedback';
 import { FortressBanners } from './FortressBanners';
+import { FortressForceField } from './FortressForceField';
 import { SceneReflections } from '@/components/SceneReflections';
 import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
@@ -1761,6 +1762,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           {/* <FortressParticles /> */}
           <BillboardWalls wallPositions={wallPositions} isMoveMode={isMoveMode} />
           <FortressBanners />
+          <FortressForceField />
         </>
       )}
       {isSiege && <ColliderDebugView />}
