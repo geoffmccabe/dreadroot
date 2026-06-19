@@ -15,6 +15,13 @@ export interface BuilderState {
   prompt: string;            // text prompt for rebuilds (drives AI image-gen in a later phase)
   barrierOn: boolean;        // show + enforce the 20-60-20 monster barrier around the preview
   rebuildSeed: number;       // bumped by "Rebuild" to get a different variation
+  faceSym: 'lr' | 'none';    // per-face symmetry
+  faceFlip: boolean;         // flip which half is the mirror source
+  wallSym: '4way' | '2way' | 'none'; // symmetry across the four walls
+  entryW: number;            // entry tunnel width (blocks); 0 = no entry
+  entryH: number;            // entry tunnel height (blocks)
+  entryWall: number;         // 0 front, 1 right, 2 back, 3 left
+  entryVert: number;         // lift the entry off the ground (0..5)
 }
 
 const initial: BuilderState = {
@@ -29,6 +36,13 @@ const initial: BuilderState = {
   prompt: '',
   barrierOn: false,
   rebuildSeed: 0,
+  faceSym: 'none',
+  faceFlip: false,
+  wallSym: '4way',
+  entryW: 4,
+  entryH: 5,
+  entryWall: 0,
+  entryVert: 0,
 };
 
 let state: BuilderState = initial;

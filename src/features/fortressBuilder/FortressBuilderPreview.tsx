@@ -64,7 +64,10 @@ function BarrierWalls({ D }: { D: number }) {
 }
 
 export function FortressBuilderPreview() {
-  const { isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed } = useBuilder();
+  const {
+    isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed,
+    faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert,
+  } = useBuilder();
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const centerRef = useRef<THREE.Vector3 | null>(null);
@@ -96,6 +99,11 @@ export function FortressBuilderPreview() {
       if (fwd.lengthSq() < 1e-6) fwd.set(0, 0, -1);
       fwd.normalize();
       const c = camera.position.clone().addScaledVector(fwd, 35);
+      // Snap to the integer voxel grid so preview blocks line up exactly with the
+      // game's blocks (the camera position is fractional). Blocks are placed at
+      // local x+0.5 etc, so an integer group center keeps them on whole cells.
+      c.x = Math.round(c.x);
+      c.z = Math.round(c.z);
       c.y = 0;
       centerRef.current = c;
     }
@@ -105,8 +113,12 @@ export function FortressBuilderPreview() {
   const F = Math.max(1, Math.round(0.6 * D));
   const grid = useMemo(() => (img ? imageToGrayGrid(img, F) : null), [img, F]);
   const result = useMemo(
-    () => (grid ? buildFortressVoxels(grid, { D, T, heightScale, seed: rebuildSeed }) : null),
-    [grid, D, T, heightScale, rebuildSeed]
+    () => (grid ? buildFortressVoxels(grid, {
+      D, T, heightScale, seed: rebuildSeed,
+      faceSym, faceFlip, wallSym,
+      entry: entryW > 0 ? { w: entryW, h: entryH, wall: entryWall, vert: entryVert } : null,
+    }) : null),
+    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert]
   );
 
   // Register/clear the dynamic monster-exclusion barrier (20-60-20 outer ring = D).

@@ -19,6 +19,26 @@ function Row({
   );
 }
 
+function Sel({
+  label, value, options, onChange,
+}: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-1" data-no-drag>
+      <Label className="text-xs">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full text-xs rounded p-1"
+        style={{ background: 'hsla(var(--hud-bg-dim))', border: '1px solid hsla(var(--hud-border))', color: 'hsl(var(--hud-text))' }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+const WALL_NAMES = ['Front', 'Right', 'Back', 'Left'];
+
 export function FortressBuilderPanel() {
   const { userRoles } = useUserData();
   const isAdmin = !!userRoles?.some((r: string) => r === 'admin' || r === 'superadmin');
@@ -97,6 +117,41 @@ export function FortressBuilderPanel() {
         <Row label={`Diameter: ${s.D} (fortress ${Math.round(0.6 * s.D)})`} min={20} max={100} step={1} value={s.D} onChange={(v) => builderStore.set({ D: v })} />
         <Row label={`Height: ${s.heightScale.toFixed(2)}×`} min={0.3} max={2} step={0.05} value={s.heightScale} onChange={(v) => builderStore.set({ heightScale: v })} />
         <Row label={`Wall thickness: ${s.T}`} min={1} max={5} step={1} value={s.T} onChange={(v) => builderStore.set({ T: v })} />
+
+        {/* Symmetry */}
+        <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Sel
+            label="Face symmetry"
+            value={s.faceSym}
+            options={[{ value: 'none', label: 'None' }, { value: 'lr', label: 'Left-Right' }]}
+            onChange={(v) => builderStore.set({ faceSym: v as 'lr' | 'none' })}
+          />
+          <Button size="sm" variant="outline" className="w-full" disabled={s.faceSym !== 'lr'} onClick={() => builderStore.set({ faceFlip: !s.faceFlip })}>
+            Flip {s.faceFlip ? '◀' : '▶'}
+          </Button>
+          <Sel
+            label="Wall symmetry"
+            value={s.wallSym}
+            options={[{ value: '4way', label: '4-Way (all same)' }, { value: '2way', label: '2-Way (opposite pairs)' }, { value: 'none', label: 'None (all different)' }]}
+            onChange={(v) => builderStore.set({ wallSym: v as '4way' | '2way' | 'none' })}
+          />
+        </div>
+
+        {/* Entry */}
+        <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Label className="text-xs font-semibold">Entry</Label>
+          <Row label={`Width: ${s.entryW || 'none'}`} min={0} max={16} step={1} value={s.entryW} onChange={(v) => builderStore.set({ entryW: v })} />
+          <Row label={`Height: ${s.entryH}`} min={1} max={16} step={1} value={s.entryH} onChange={(v) => builderStore.set({ entryH: v })} />
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Wall</Label>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" className="h-6 w-7 p-0" onClick={() => builderStore.set({ entryWall: (s.entryWall + 3) % 4 })}>←</Button>
+              <span className="text-xs w-12 text-center">{WALL_NAMES[s.entryWall]}</span>
+              <Button size="sm" variant="outline" className="h-6 w-7 p-0" onClick={() => builderStore.set({ entryWall: (s.entryWall + 1) % 4 })}>→</Button>
+            </div>
+          </div>
+          <Row label={`Vert (lift): ${s.entryVert}`} min={0} max={5} step={1} value={s.entryVert} onChange={(v) => builderStore.set({ entryVert: v })} />
+        </div>
 
         <div className="space-y-1">
           <Label className="text-xs">Tint</Label>
