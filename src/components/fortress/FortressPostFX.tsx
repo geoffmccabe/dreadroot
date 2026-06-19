@@ -9,7 +9,10 @@
 import { useMemo } from 'react';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
-const ENABLE_POSTFX = true;
+// DISABLED: the global composer caused full-screen flashing + FPS drop in play.
+// Re-enable only after the render conflict is resolved (likely vs SceneReflections /
+// another render-target pass) and gated to builder-only.
+const ENABLE_POSTFX = false;
 
 export function FortressPostFX() {
   const isMobile = useMemo(
