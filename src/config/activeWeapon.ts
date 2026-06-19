@@ -22,6 +22,16 @@ export interface ActiveWeaponStats {
   horizontalSpread: number | null;
   verticalSpread: number | null;
   recoilDuration: number | null;
+  // Phase 2 recoil (optional — fall back to defaults in the fire code if the
+  // weapon_stats columns aren't set yet).
+  recoilPitch?: number | null;     // degrees the view kicks UP per shot
+  recoilYaw?: number | null;       // degrees of random horizontal kick per shot
+  adsRecoilScale?: number | null;  // 0–1 recoil multiplier while aiming (default 0.4)
+  // Phase 3 ADS / zoom (optional).
+  scopedFov?: number | null;       // FOV when aiming (null → base − 25 default)
+  zoomSpeed?: number | null;       // FOV lerp rate (null → default)
+  isSniper?: boolean | null;       // hides arms at full zoom; uses scope overlay
+  scopeGraphicUrl?: string | null; // per-weapon full-screen scope overlay image
 }
 
 let active: ActiveWeaponStats | null = null;

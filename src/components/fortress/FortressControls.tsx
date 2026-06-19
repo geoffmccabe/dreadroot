@@ -10,6 +10,8 @@ import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
+import { getAiming } from '@/config/aimState';
+import { getBaseFov } from '@/config/fovSetting';
 import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
 import {
   DEBUG_LOGGING,
@@ -278,6 +280,14 @@ export function FirstPersonControls({
   // Shared single-shot fire fn, exposed via ref so the frame loop (no deps) can
   // call the same firing path the click handler uses.
   const fireWeaponShotRef = useRef<() => void>();
+  // Phase 2 camera recoil: transient view kick (radians) ADDED on top of the
+  // player's pitch/yaw and recovered toward 0 each frame, so it never corrupts
+  // the underlying aim. Positive pitch = up.
+  const recoilPitchRef = useRef(0);
+  const recoilYawRef = useRef(0);
+  // Phase 3 ADS: true while aiming down sights (hold right mouse). Drives FOV
+  // zoom, reduced recoil/spread, and the scope overlay.
+  const isAimingRef = useRef(false);
   const chopStartTimeRef = useRef(0);
   const chopCountRef = useRef(0);
   const choppingPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
@@ -992,6 +1002,18 @@ export function FirstPersonControls({
     const fireKey = aw?.fireSound ?? 'gunshot';
     playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
     consumeAmmo();
+
+    // Phase 2 — camera recoil: kick the view UP a touch + a small random
+    // horizontal jitter; the frame loop recovers it. Per-weapon overrides come
+    // from weapon_stats (camera_recoil_pitch/yaw) with sensible defaults so it
+    // works before those columns are filled. Reduced while aiming (ADS).
+    const DEG = Math.PI / 180;
+    const pitchKickDeg = aw?.recoilPitch ?? 1.1;
+    const yawKickDeg = aw?.recoilYaw ?? 0.45;
+    const adsScale = isAimingRef.current ? (aw?.adsRecoilScale ?? 0.4) : 1;
+    recoilPitchRef.current += pitchKickDeg * DEG * adsScale;
+    recoilYawRef.current += (Math.random() * 2 - 1) * yawKickDeg * DEG * adsScale;
+    needsCameraUpdate.current = true;
   }, [camera, onShoot]);
   fireWeaponShotRef.current = fireWeaponShot;
 
@@ -1857,10 +1879,41 @@ export function FirstPersonControls({
       // Note: useFrameCallCount only tracked in master loop now
       
       // Apply camera rotation if needed
+      // Phase 2 — recover camera recoil toward zero (frame-rate independent),
+      // and keep re-applying the camera while any recoil offset remains.
+      if (recoilPitchRef.current !== 0 || recoilYawRef.current !== 0) {
+        const k = 1 - Math.exp(-12 * delta);   // ~12/s recovery rate
+        recoilPitchRef.current -= recoilPitchRef.current * k;
+        recoilYawRef.current -= recoilYawRef.current * k;
+        if (Math.abs(recoilPitchRef.current) < 1e-4) recoilPitchRef.current = 0;
+        if (Math.abs(recoilYawRef.current) < 1e-4) recoilYawRef.current = 0;
+        needsCameraUpdate.current = true;
+      }
       if (needsCameraUpdate.current) {
-        eulerRef.current.set(pitch.current, yaw.current, 0);
+        eulerRef.current.set(pitch.current + recoilPitchRef.current, yaw.current + recoilYawRef.current, 0);
         camera.quaternion.setFromEuler(eulerRef.current);
         needsCameraUpdate.current = false;
+      }
+
+      // Phase 3 — ADS FOV zoom. When aiming (right mouse, combat mode) with a gun
+      // equipped, lerp FOV toward the weapon's scopedFov (default base−25);
+      // otherwise back to base. Driven here because FirstPersonArms (the old FOV
+      // owner) is disabled. isAimingRef mirrors the store for recoil scaling.
+      {
+        const aiming = getAiming();
+        isAimingRef.current = aiming;
+        if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
+          const pc = camera as THREE.PerspectiveCamera;
+          const awz = getActiveWeapon();
+          const base = getBaseFov();
+          const wantZoom = aiming && awz !== null;
+          const targetFov = wantZoom ? (awz?.scopedFov ?? Math.max(40, base - 25)) : base;
+          const rate = awz?.zoomSpeed ?? 10;
+          if (Math.abs(pc.fov - targetFov) > 0.05) {
+            pc.fov = THREE.MathUtils.damp(pc.fov, targetFov, rate, delta);
+            pc.updateProjectionMatrix();
+          }
+        }
       }
 
       const now = performance.now();

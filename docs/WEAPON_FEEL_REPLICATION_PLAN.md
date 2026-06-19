@@ -130,6 +130,21 @@ SQL delivered per-phase (copy/paste) when that phase is implemented — not all 
 
 ---
 
+## 4b. Status (shipped)
+- ✅ **Phase 1** (v4.75.0): automatic hold-to-fire + bullets share path; weapon-equipped disables chop.
+- ✅ **Phase 2a** (v4.76.0): camera recoil — view kicks up + random yaw per shot, recovers each frame;
+  per-weapon `camera_recoil_pitch/yaw`, reduced while aiming (`ads_recoil_scale`). 2b weapon-model kick = deferred polish.
+- ✅ **Phase 3** (v4.76.0): ADS zoom — right-mouse (combat mode) lerps FOV to `scoped_fov`
+  (default base−25) at `zoom_speed`; driven in FortressControls since FirstPersonArms is disabled.
+  Reuses FortressScene's existing aim state via new `aimState` store.
+- ✅ **Phase 4** (v4.76.0): per-weapon scope overlay (`ScopeOverlay.tsx`) — fades in `scope_graphic_url`,
+  or a generic tunnel-vision vignette+reticle for `is_sniper`, when aiming.
+- ⬜ Remaining: 2b weapon-model kick, spread (bulletsPerTap/spread multipliers), Phase 5 polish
+  (muzzle flash, shells, shake, sway, burst), hide-arms-at-full-zoom (arms currently disabled anyway).
+
+New optional `weapon_stats` columns these read (nullable; unset = sensible defaults):
+`camera_recoil_pitch, camera_recoil_yaw, ads_recoil_scale, scoped_fov, zoom_speed, is_sniper, scope_graphic_url`.
+
 ## 5. Recommended order & rationale
 1. **Phase 1** first — fixes the reported AK hold-to-fire bug, self-contained.
 2. **Phase 2a** — recoil is the headline "feel" ask; camera kick is the big win.

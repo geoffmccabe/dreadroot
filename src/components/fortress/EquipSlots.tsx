@@ -132,6 +132,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         projectile: (d.projectile as string) ?? null, bulletsPerTap: (d.bullets_per_tap as number) ?? null,
         horizontalSpread: (d.horizontal_spread as number) ?? null, verticalSpread: (d.vertical_spread as number) ?? null,
         recoilDuration: (d.recoil_duration as number) ?? null,
+        // Phase 2/3 (optional columns; undefined → null → fire code defaults).
+        recoilPitch: (d.camera_recoil_pitch as number) ?? null,
+        recoilYaw: (d.camera_recoil_yaw as number) ?? null,
+        adsRecoilScale: (d.ads_recoil_scale as number) ?? null,
+        scopedFov: (d.scoped_fov as number) ?? null,
+        zoomSpeed: (d.zoom_speed as number) ?? null,
+        isSniper: (d.is_sniper as boolean) ?? null,
+        scopeGraphicUrl: (d.scope_graphic_url as string) ?? null,
       });
     })();
     return () => { cancelled = true; };

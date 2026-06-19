@@ -36,6 +36,7 @@ import { WispBlock } from '@/components/WispBlock';
 
 import { FirstPersonControls } from './FortressControls';
 import { useActiveGame } from '@/config/activeGame';
+import { setAiming } from '@/config/aimState';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
@@ -1045,6 +1046,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       setIsAiming(false);
     }
   }, [crosshairsEnabled]);
+
+  // Publish aim state to the module store so the camera/FOV frame loop and the
+  // scope overlay can read it without prop-threading.
+  useEffect(() => { setAiming(isAiming); }, [isAiming]);
   
   // Audio
   const lastAudioTime = useRef(0);

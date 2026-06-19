@@ -64,6 +64,7 @@ import { FortressScene } from './FortressScene';
 import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
+import { ScopeOverlay } from './ScopeOverlay';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
@@ -2300,6 +2301,7 @@ export function Fortress() {
       <ChallengeCreatorPanel />
       <ChallengeBrowser />
       <ChallengeResultPanel />
+      <ScopeOverlay />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}
