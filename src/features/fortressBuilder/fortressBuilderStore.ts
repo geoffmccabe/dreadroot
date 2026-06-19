@@ -23,6 +23,12 @@ export interface BuilderState {
   entryWall: number;         // 0 front, 1 right, 2 back, 3 left
   entryVert: number;         // lift the entry off the ground (0..5)
   stairs: boolean;           // build stairs up to a lifted entry (outside + mirrored inside)
+  // Extrude: per grey tier (index 0..4), amount on the outer / inner face.
+  // + protrudes (max +2), - recesses into the wall (down to -wallThickness = through).
+  extrudeOut: number[];
+  extrudeIn: number[];
+  exTier: number;            // selected tier (0..4) in the panel
+  exFace: 'outside' | 'inside'; // which face the +/- buttons act on
 }
 
 const initial: BuilderState = {
@@ -45,6 +51,10 @@ const initial: BuilderState = {
   entryWall: 0,
   entryVert: 0,
   stairs: true,
+  extrudeOut: [0, 0, 0, 0, 0],
+  extrudeIn: [0, 0, 0, 0, 0],
+  exTier: 0,
+  exFace: 'outside',
 };
 
 let state: BuilderState = initial;

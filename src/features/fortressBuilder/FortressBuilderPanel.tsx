@@ -38,6 +38,7 @@ function Sel({
 }
 
 const WALL_NAMES = ['Front', 'Right', 'Back', 'Left'];
+const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a']; // matches the preview tiers
 
 export function FortressBuilderPanel() {
   const { userRoles } = useUserData();
@@ -67,6 +68,14 @@ export function FortressBuilderPanel() {
     const reader = new FileReader();
     reader.onload = (ev) => builderStore.set({ imageSrc: String(ev.target?.result || ''), imageName: f.name });
     reader.readAsDataURL(f);
+  };
+
+  const curExtrude = (s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn)[s.exTier] ?? 0;
+  const bumpExtrude = (delta: number) => {
+    const src = s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn;
+    const arr = [...src];
+    arr[s.exTier] = Math.max(-s.T, Math.min(2, (arr[s.exTier] ?? 0) + delta)); // out max +2, in down to -thickness
+    builderStore.set(s.exFace === 'outside' ? { extrudeOut: arr } : { extrudeIn: arr });
   };
 
   return (
@@ -183,6 +192,38 @@ export function FortressBuilderPanel() {
           {s.imageSrc ? `${s.blockCount.toLocaleString()} blocks` : 'Upload an image to begin'}
         </div>
         <div className="text-[10px] opacity-50">Shift+B toggles · preview builds ~35 blocks ahead of you</div>
+
+        {/* Extrude — push a chosen colour's blocks out (relief) or in (windows) */}
+        <div className="space-y-2 pt-2" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Label className="text-xs font-semibold">Extrude</Label>
+          <div className="flex items-center gap-1">
+            {TIER_GREY.map((c, i) => (
+              <button
+                key={i}
+                onClick={() => builderStore.set({ exTier: i })}
+                className="h-7 flex-1 rounded"
+                title={`Stone ${i + 1}`}
+                style={{
+                  background: c,
+                  outline: s.exTier === i ? '2px solid hsl(var(--hud-text-bright))' : '1px solid hsla(var(--hud-border))',
+                  outlineOffset: '-1px',
+                }}
+              />
+            ))}
+          </div>
+          <div className="flex gap-1">
+            <Button size="sm" variant={s.exFace === 'outside' ? 'default' : 'outline'} className="flex-1 h-7" onClick={() => builderStore.set({ exFace: 'outside' })}>Outside</Button>
+            <Button size="sm" variant={s.exFace === 'inside' ? 'default' : 'outline'} className="flex-1 h-7" onClick={() => builderStore.set({ exFace: 'inside' })}>Inside</Button>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <Button size="sm" variant="outline" className="h-7 w-9 p-0" onClick={() => bumpExtrude(-1)}>−</Button>
+            <span className="text-xs text-center flex-1">
+              {curExtrude > 0 ? `+${curExtrude} out` : curExtrude < 0 ? `${-curExtrude} in (recess)` : 'flush'}
+            </span>
+            <Button size="sm" variant="outline" className="h-7 w-9 p-0" onClick={() => bumpExtrude(1)}>+</Button>
+          </div>
+          <div className="text-[10px] opacity-50">+ protrudes up to 2 · − recesses up to wall thickness ({s.T}) — all the way = window</div>
+        </div>
       </div>
     </GamePanel>
   );

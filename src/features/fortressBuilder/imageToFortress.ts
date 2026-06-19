@@ -39,6 +39,11 @@ export interface FortressBuildOpts {
   wallSym?: WallSym;
   entry?: FortressEntry | null;
   stairs?: boolean; // step blocks up to the entry (outside + mirrored inside) when vert >= 2
+  // Per-tier extrude (index 0..4 = grey tier 1..5). Outer/inner face each:
+  //  + protrudes that face outward/inward (max +2); - recesses into the wall (down to
+  //  -T, i.e. all the way through -> windows/holes).
+  extrudeOut?: number[];
+  extrudeIn?: number[];
 }
 
 export interface FortressVoxel { x: number; y: number; z: number; tier: number; }
@@ -146,78 +151,90 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const entryHi = entry ? entryLo + entryW - 1 : -1;
   const inEntryColumns = (col: number) => entry !== null && col >= entryLo && col <= entryHi;
 
-  const voxels: FortressVoxel[] = [];
   const tierCounts = new Array<number>(levels + 1).fill(0);
   const half = Math.floor(F / 2);
   let maxHeight = 0;
 
-  for (let gx = 0; gx < F; gx++) {
-    for (let gz = 0; gz < F; gz++) {
-      const dist = Math.min(gx, F - 1 - gx, gz, F - 1 - gz);
-      if (dist >= T) continue; // hollow interior
+  const exOutArr = opts.extrudeOut ?? [];
+  const exInArr = opts.extrudeIn ?? [];
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
-      // Tallest adjoining wall wins at corners (and drives the facade column + grey).
-      let h = 0, col = gx, wall = 0;
-      const consider = (cand: number, c: number, w: number) => { if (cand > h) { h = cand; col = c; wall = w; } };
-      if (gz < T) consider(wallProfiles[0].topH[gx], gx, 0);          // front (along x)
-      if (gx >= F - T) consider(wallProfiles[1].topH[gz], gz, 1);     // right (along z)
-      if (gz >= F - T) consider(wallProfiles[2].topH[gx], gx, 2);     // back  (along x)
-      if (gx < T) consider(wallProfiles[3].topH[gz], gz, 3);          // left  (along z)
+  // Dedup voxels (wall corners + stairs overlap). Local coords may be negative or
+  // reach beyond the footprint (extrude protrusions, stairs), so offset before packing.
+  const OFF = 1500, MUL = 4096;
+  const occupied = new Map<number, number>(); // key -> tier
+  const place = (lx: number, y: number, lz: number, tier: number) => {
+    const k = ((lx + OFF) * MUL + (y + OFF)) * MUL + (lz + OFF);
+    if (!occupied.has(k)) occupied.set(k, tier);
+  };
+  // (w, column, depth) -> footprint (gx, gz). depth 0 = outer face, T-1 = inner face.
+  const coordFor = (w: number, col: number, d: number): [number, number] => {
+    if (w === 0) return [col, d];            // front: outer at gz 0, inward +z
+    if (w === 2) return [col, F - 1 - d];    // back:  outer at gz F-1
+    if (w === 3) return [d, col];            // left:  outer at gx 0
+    return [F - 1 - d, col];                 // right: outer at gx F-1
+  };
+
+  // Build each wall column-by-column with explicit thickness, applying per-tier
+  // extrude on the outer face (depth < 0 protrudes out) and inner face (depth > T-1).
+  for (let w = 0; w < 4; w++) {
+    const prof = wallProfiles[w];
+    for (let col = 0; col < F; col++) {
+      const h = prof.topH[col];
       if (h <= 0) continue;
-
-      // Entry tunnel: carve this cell's opening rows if it's on the entry wall.
-      let carveLo = -1, carveHi = -1;
-      if (entry) {
-        const onEntryWall =
-          (entry.wall === 0 && gz < T) || (entry.wall === 2 && gz >= F - T) ||
-          (entry.wall === 1 && gx >= F - T) || (entry.wall === 3 && gx < T);
-        const alongCol = (entry.wall === 0 || entry.wall === 2) ? gx : gz;
-        if (onEntryWall && inEntryColumns(alongCol)) {
-          carveLo = entry.vert;
-          carveHi = entry.vert + entry.h - 1;
-        }
-      }
-
       if (h > maxHeight) maxHeight = h;
-      const greyCol = wallProfiles[wall].greyCol[col];
-      const lx = gx - half, lz = gz - half;
+      const greyCol = prof.greyCol[col];
+      let carveLo = -1, carveHi = -1;
+      if (entry && entry.wall === w && inEntryColumns(col)) {
+        carveLo = entry.vert; carveHi = entry.vert + entry.h - 1;
+      }
       for (let y = 0; y < h; y++) {
-        if (y >= carveLo && y <= carveHi) continue; // entry tunnel
+        if (y >= carveLo && y <= carveHi) continue; // entry tunnel (through full thickness)
         const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y / Math.max(heightScale, 1e-6))));
         const tier = tierFor(gray[r][greyCol], levels);
-        voxels.push({ x: lx, y, z: lz, tier });
-        tierCounts[tier]++;
+        const exOut = clamp(exOutArr[tier - 1] ?? 0, -T, 2);
+        const exIn = clamp(exInArr[tier - 1] ?? 0, -T, 2);
+        const dStart = -exOut;        // outer extent (negative = protrude; positive = recess)
+        const dEnd = (T - 1) + exIn;  // inner extent (> T-1 = protrude inward; less = recess)
+        for (let d = dStart; d <= dEnd; d++) {
+          const [gx, gz] = coordFor(w, col, d);
+          place(gx - half, y, gz - half, tier);
+        }
       }
     }
   }
 
   // --- Stairs up to the entry (outside) + mirrored inside, when lifted >= 2 blocks ---
-  // Each step is a solid column to the ground (stone-stairs look), tier 3 (medium),
-  // same width as the entry. vert V -> (V-1) steps; nearest step is V-1 tall.
   if (opts.stairs && entry && entry.vert >= 2 && entryW > 0) {
     const V = entry.vert;
     const stairTier = Math.min(3, levels);
     const placeCol = (gx: number, gz: number, height: number) => {
-      if (gx < 0 || gx >= F || gz < 0 || gz >= F) {
-        // allow outside-footprint coords (stairs extend beyond the wall)
-      }
-      const lx = gx - half, lz = gz - half;
-      for (let y = 0; y < height; y++) { voxels.push({ x: lx, y, z: lz, tier: stairTier }); tierCounts[stairTier]++; }
+      for (let y = 0; y < height; y++) place(gx - half, y, gz - half, stairTier);
     };
-    // Wall geometry: along-axis columns = [entryLo, entryHi]; perp = into/out of the wall.
-    const horizontal = entry.wall === 0 || entry.wall === 2; // front/back run along x
-    const outerPerp = (entry.wall === 0 || entry.wall === 3) ? 0 : F - 1; // low edge or high edge
-    const outDir = (entry.wall === 0 || entry.wall === 3) ? -1 : 1;       // outward direction
-    const innerPerp = (entry.wall === 0 || entry.wall === 3) ? T : F - 1 - T; // first courtyard cell
+    const horizontal = entry.wall === 0 || entry.wall === 2;
+    const outerPerp = (entry.wall === 0 || entry.wall === 3) ? 0 : F - 1;
+    const outDir = (entry.wall === 0 || entry.wall === 3) ? -1 : 1;
+    const innerPerp = (entry.wall === 0 || entry.wall === 3) ? T : F - 1 - T;
     for (let d = 1; d <= V - 1; d++) {
       const height = V - d;
-      const outPerp = outerPerp + outDir * d;     // step in front of the wall
-      const inPerp = innerPerp - outDir * (d - 1); // mirrored step inside the courtyard
+      const outPerp = outerPerp + outDir * d;
+      const inPerp = innerPerp - outDir * (d - 1);
       for (let a = entryLo; a <= entryHi; a++) {
         if (horizontal) { placeCol(a, outPerp, height); placeCol(a, inPerp, height); }
         else { placeCol(outPerp, a, height); placeCol(inPerp, a, height); }
       }
     }
+  }
+
+  // Materialize dedup'd voxels.
+  const voxels: FortressVoxel[] = [];
+  for (const [k, tier] of occupied) {
+    const lz = (k % MUL) - OFF;
+    const k2 = Math.floor(k / MUL);
+    const y = (k2 % MUL) - OFF;
+    const lx = Math.floor(k2 / MUL) - OFF;
+    voxels.push({ x: lx, y, z: lz, tier });
+    tierCounts[tier]++;
   }
 
   return { voxels, F, maxHeight, tierCounts };
