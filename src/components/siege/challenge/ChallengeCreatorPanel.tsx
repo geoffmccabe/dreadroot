@@ -175,18 +175,23 @@ export function ChallengeCreatorPanel() {
   useEffect(() => { if (open && user?.id) fetchRoles(user.id).then(setRoles); }, [open, user?.id]);
 
   // ── Save / load ──────────────────────────────────────────────────────────────────────────────
+  // Snapshot of the last saved/loaded state; the Save button pulses whenever `ch` differs from it.
+  const savedJson = useRef<string | null>(null);
+  const markSaved = (c: Challenge) => { savedJson.current = JSON.stringify(c); };
   const newChallenge = () => {
     const fresh = clone(TEST_CHALLENGE); delete fresh.id;
     fresh.creator = user?.email?.split('@')[0] ?? fresh.creator;
     fresh.game = getActiveGame();
-    setCh(fresh); setSaveMsg('New challenge — unsaved');
+    setCh(fresh); markSaved(fresh); setSaveMsg('New challenge — unsaved');
   };
   const onSave = async () => {
     if (!user?.id) { setSaveMsg('Sign in to save'); return; }
     setSaveMsg('Saving…');
     const res = await saveChallenge(ch, user.id, ch.creator || user.email?.split('@')[0] || 'anon');
     if (res.error) { setSaveMsg('Error: ' + res.error); return; }
-    if (res.id && !ch.id) setCh((c) => ({ ...c, id: res.id }));
+    const saved = res.id && !ch.id ? { ...ch, id: res.id } : ch;
+    if (res.id && !ch.id) setCh(saved);
+    markSaved(saved);
     setSaveMsg('Saved ✓');
   };
   const onOpen = async () => {
@@ -199,7 +204,8 @@ export function ChallengeCreatorPanel() {
     // Prefer the DB COLUMNS (what the Browser/region queries actually filter on) over the embedded
     // JSON, and always land on a concrete game so a re-Save can't silently null it out (which would
     // hide the challenge from every game's Browser). Old rows with no game fall back to the active one.
-    setCh({ ...r.data, id: r.id, game: r.game ?? r.data.game ?? getActiveGame(), region: r.region ?? r.data.region });
+    const loaded = { ...r.data, id: r.id, game: r.game ?? r.data.game ?? getActiveGame(), region: r.region ?? r.data.region };
+    setCh(loaded); markSaved(loaded);
     setPicker(null); setSaveMsg(`Loaded "${r.name}"`);
   };
   const onDeleteRow = async (r: ChallengeRow) => {
@@ -287,9 +293,20 @@ export function ChallengeCreatorPanel() {
                setDragPos({ x: e.clientX, y: e.clientY });
              }}
              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
-          <MonsterThumb type={thumbType} color={thumbColor} size={60} />
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1} <span style={{ color: '#7fd0ff' }}>@ {fmtMS(startAt)}</span></span>
+          {/* The big floating preview shows ONLY while hovering this little square (not the whole card). */}
+          <div style={{ display: 'flex' }}
+               onMouseEnter={(e) => {
+                 const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
+                 if (cardEl) { const p = boxPos(cardEl.getBoundingClientRect()); setPreview({ wave: i, drop: di, x: p.x, y: p.y }); }
+               }}
+               onMouseLeave={() => setPreview((pp) => (pp && pp.wave === i && pp.drop === di ? null : pp))}>
+            <MonsterThumb type={thumbType} color={thumbColor} size={60} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#9fb4d0' }}><span style={{ color: '#5e7494' }}>⠿</span> Spawn {di + 1}</div>
+              <div style={{ fontSize: 11, color: '#7fd0ff', marginTop: 2 }}>@ {fmtMS(startAt)}</div>
+            </div>
             <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
           </div>
         </div>
@@ -360,6 +377,11 @@ export function ChallengeCreatorPanel() {
     );
   };
 
+  // Unsaved-changes flag: true when ch differs from the last saved/loaded snapshot (drives Save pulse).
+  const chJson = JSON.stringify(ch);
+  if (savedJson.current === null) savedJson.current = chJson;   // first render: current state is the baseline
+  const dirty = chJson !== savedJson.current;
+
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)' }}>
       <style>{`
@@ -378,19 +400,14 @@ export function ChallengeCreatorPanel() {
         .chal-scroll::-webkit-scrollbar-thumb:hover { background:hsla(210,35%,52%,0.9); }
         input[type=number].chal-num::-webkit-inner-spin-button, input[type=number].chal-num::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
         input[type=number].chal-num { -moz-appearance:textfield; appearance:textfield; }
+        @keyframes chalSavePulse { 0%,100% { box-shadow: 0 0 0 0 hsla(140,75%,55%,0); } 50% { box-shadow: 0 0 13px 3px hsla(140,75%,55%,0.8); } }
+        .chal-save-pulse { animation: chalSavePulse 1.15s ease-in-out infinite; }
       `}</style>
       <div style={{ width: '95vw', height: '95vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ ...CHROME, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Challenge Creator</div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
-            <button style={btn()} onClick={newChallenge}>＋ New</button>
-            <button style={btn()} onClick={onOpen}>📂 Open</button>
-            <button style={{ ...btn(true) }} onClick={onSave}>💾 Save</button>
-            <button style={{ ...btn(true), background: '#2e8b57' }} onClick={run}>▶ Run</button>
-            <button style={btn()} onClick={() => setCreatorOpen(false)}>✕ Close</button>
-          </div>
+          <button style={btn()} onClick={() => setCreatorOpen(false)}>✕ Close</button>
         </div>
 
         {/* General info — challenge-level (cost/pool live here, NOT per wave) */}
@@ -425,6 +442,14 @@ export function ChallengeCreatorPanel() {
                     </select>
                   </div>
                 )}
+              </div>
+              {/* Action buttons — under the economy row. Save pulses green when there are unsaved edits. */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+                <button style={btn()} onClick={newChallenge}>＋ New</button>
+                <button style={btn()} onClick={onOpen}>📂 Open</button>
+                <button className={dirty ? 'chal-save-pulse' : undefined} style={{ ...btn(true), background: dirty ? '#2e8b57' : undefined }} onClick={onSave}>💾 Save</button>
+                <button style={{ ...btn(true), background: '#3a6ea8' }} onClick={run}>▶ Run</button>
+                {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
               </div>
               {/* Region spawn coordinates (superadmin, only when this challenge IS a region spawner).
                   Defaults to the region's known coords; edit + Save to update where its monsters appear. */}
@@ -499,11 +524,6 @@ export function ChallengeCreatorPanel() {
                       const isDragging = drag?.wave === i && drag?.from === di;
                       return (
                         <div key={di} data-wave={i} data-spawn={di}
-                             onMouseEnter={(e) => {
-                               const p = boxPos((e.currentTarget as HTMLElement).getBoundingClientRect());
-                               setPreview({ wave: i, drop: di, x: p.x, y: p.y });
-                             }}
-                             onMouseLeave={() => setPreview((pp) => (pp && pp.wave === i && pp.drop === di ? null : pp))}
                              style={{ ...card, width: 220, flexShrink: 0, transition: 'opacity 0.12s, border-color 0.12s',
                                ...(startAt > wave.timeSec ? { borderColor: '#ff6b6b' } : {}),
                                ...(isHover && !isDragging ? { borderColor: '#5cc8ff', boxShadow: '0 0 0 2px #5cc8ff inset' } : {}),
