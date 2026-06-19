@@ -13,9 +13,12 @@ interface BlockPreviewProps {
   blockType: string;
   visible: boolean;
   existingBlocks?: Array<{ position_x: number; position_y: number; position_z: number }>;
+  // Admins/superadmins sculpting the fortress: skip the fortress + waterfall no-build
+  // zones so the cursor reads valid (white) where placement is now allowed.
+  bypassZoneRestrictions?: boolean;
 }
 
-export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, existingBlocks = [] }) => {
+export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, existingBlocks = [], bypassZoneRestrictions = false }) => {
   const meshRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
   const { camera, clock } = useThree();
@@ -63,8 +66,10 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
   // Store refs to props for use in frame callback
   const visibleRef = useRef(visible);
   const existingBlocksRef = useRef(existingBlocks);
+  const bypassRef = useRef(bypassZoneRestrictions);
   useEffect(() => { visibleRef.current = visible; }, [visible]);
   useEffect(() => { existingBlocksRef.current = existingBlocks; }, [existingBlocks]);
+  useEffect(() => { bypassRef.current = bypassZoneRestrictions; }, [bypassZoneRestrictions]);
 
   // Register with centralized frame loop instead of useFrame
   useEffect(() => {
@@ -76,7 +81,8 @@ export const BlockPreview: React.FC<BlockPreviewProps> = ({ blockType, visible, 
       const placementResult = calculatePlacementFast(
         camera,
         existingBlocksRef.current as any,
-        5
+        5,
+        bypassRef.current
       );
 
       // Update group position (so both mesh and text move together)

@@ -967,11 +967,17 @@ export function FirstPersonControls({
     }
     
     if (blockPlacementMode && onBlockPlace) {
+      // Admins/superadmins may sculpt the fortress: bypass the fortress + waterfall
+      // no-build zones (overlap/floating safety still enforced).
+      const canSculptFortress = userRolesRef.current?.some(
+        (r: string) => r === 'admin' || r === 'superadmin'
+      );
       // Use fast voxel raycast - ZERO allocations, O(ray length)
       const placementResult = calculatePlacementFast(
         camera,
         existingBlocks || [],
-        5
+        5,
+        canSculptFortress
       );
       
       if (placementResult.isValid) {

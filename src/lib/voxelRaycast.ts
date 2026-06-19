@@ -329,7 +329,10 @@ const _placementResult: PlacementTarget = {
 export function calculatePlacementFast(
   camera: THREE.Camera,
   blocks: PlacedBlock[],
-  maxDistance: number = 5
+  maxDistance: number = 5,
+  // When true (admin/superadmin sculpting the fortress), skip the fortress + waterfall
+  // no-build zone bans. Overlap/floating safety still applies.
+  bypassZoneRestrictions: boolean = false
 ): PlacementTarget {
   // Get camera direction
   _rayDir.set(0, 0, -1);
@@ -369,7 +372,7 @@ export function calculatePlacementFast(
   placeY = Math.max(0, placeY);
   
   // Validate placement
-  const validation = validatePlacementFast(placeX, placeY, placeZ, blocks);
+  const validation = validatePlacementFast(placeX, placeY, placeZ, blocks, bypassZoneRestrictions);
   
   _placementResult.x = placeX;
   _placementResult.y = placeY;
@@ -391,36 +394,41 @@ const _validationResult: ValidationResult = { isValid: false };
  * Validate block placement - O(1) checks
  */
 function validatePlacementFast(
-  x: number, 
-  y: number, 
-  z: number, 
-  blocks: PlacedBlock[]
+  x: number,
+  y: number,
+  z: number,
+  blocks: PlacedBlock[],
+  bypassZoneRestrictions: boolean = false
 ): ValidationResult {
   const blockLookup = ensureBlockLookup(blocks);
-  
-  // Check fortress proximity (center at 0, 0, -20, radius 30)
-  const fortressCenterX = 0;
-  const fortressCenterZ = -20;
-  const fortressMinDistance = 30;
-  
-  const dx = x - fortressCenterX;
-  const dz = z - fortressCenterZ;
-  const distSq = dx * dx + dz * dz;
-  
-  if (distSq < fortressMinDistance * fortressMinDistance) {
-    _validationResult.isValid = false;
-    _validationResult.reason = 'fortress';
-    return _validationResult;
-  }
-  
-  // Check waterfall blocking (x near 0, z > -6)
-  const waterfallZ = -6;
-  const waterfallBlockingWidth = 4;
-  
-  if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
-    _validationResult.isValid = false;
-    _validationResult.reason = 'waterfall';
-    return _validationResult;
+
+  // Zone bans (fortress no-build radius + waterfall) — skipped for admins sculpting
+  // the fortress. Overlap/floating safety below still applies.
+  if (!bypassZoneRestrictions) {
+    // Check fortress proximity (center at 0, 0, -20, radius 30)
+    const fortressCenterX = 0;
+    const fortressCenterZ = -20;
+    const fortressMinDistance = 30;
+
+    const dx = x - fortressCenterX;
+    const dz = z - fortressCenterZ;
+    const distSq = dx * dx + dz * dz;
+
+    if (distSq < fortressMinDistance * fortressMinDistance) {
+      _validationResult.isValid = false;
+      _validationResult.reason = 'fortress';
+      return _validationResult;
+    }
+
+    // Check waterfall blocking (x near 0, z > -6)
+    const waterfallZ = -6;
+    const waterfallBlockingWidth = 4;
+
+    if (Math.abs(x) < waterfallBlockingWidth / 2 && z > waterfallZ) {
+      _validationResult.isValid = false;
+      _validationResult.reason = 'waterfall';
+      return _validationResult;
+    }
   }
   
   // Check overlap - O(1)

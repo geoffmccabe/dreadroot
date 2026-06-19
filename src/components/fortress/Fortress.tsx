@@ -2251,10 +2251,11 @@ export function Fortress() {
         />
         
         {selectedBlockType && getBlockQuantity(selectedBlockType) > 0 && (
-          <BlockPreview 
+          <BlockPreview
             blockType={selectedBlockType}
             visible={true}
             existingBlocks={blocks || []}
+            bypassZoneRestrictions={userRoles.includes('admin') || userRoles.includes('superadmin')}
           />
         )}
         
