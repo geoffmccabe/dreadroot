@@ -98,6 +98,16 @@ export function FortressHUD(props: FortressHUDProps) {
   const selectedSlot = selectedSlotProp;
   const setSelectedSlot = onSelectSlot || (() => {});
 
+  // Triple-tap-to-equip (locked design): hitting a QA slot# three times
+  // within one second swaps that item into its correct Equip slot. Works
+  // from both the number keys and clicking the in-game hotbar tile. The
+  // resolver is assigned in the render body (below) so its closure always
+  // sees the latest itemDefs/handlers; these refs are stable and safe to
+  // call from the keydown effect defined just below.
+  const tripleTapRef = useRef<{ slot: number; count: number; first: number } | null>(null);
+  const registerSlotTapRef = useRef<(slotNum: number) => void>(() => {});
+  const TRIPLE_TAP_WINDOW_MS = 1000;
+
   // Keyboard listener for quick-select keys 1-6
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -106,6 +116,7 @@ export function FortressHUD(props: FortressHUDProps) {
       const num = parseInt(e.key);
       if (num >= 1 && num <= 6) {
         setSelectedSlot(num);
+        registerSlotTapRef.current(num);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -536,6 +547,47 @@ export function FortressHUD(props: FortressHUDProps) {
       setDebugStatus(`slot ERR: ${msg}`);
     }
   }, [cursor, slotClickHandlers, setCursor]);
+
+  // Resolve which equip slot a QA item belongs to and swap it in. Today
+  // only weapons resolve (flame glove by key/name, guns via weapon_stats)
+  // → Equip slot 1; other equip slots get categorized as that logic lands.
+  // Assigned every render so the closure sees current itemDefs/handlers.
+  registerSlotTapRef.current = (slotNum: number) => {
+    const now = Date.now();
+    const t = tripleTapRef.current;
+    if (t && t.slot === slotNum && now - t.first <= TRIPLE_TAP_WINDOW_MS) {
+      t.count += 1;
+      if (t.count < 3) return;
+      tripleTapRef.current = null;
+      const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find((e) => e.slot === slotNum);
+      if (!eq?.itemId) return;
+      const def = itemDefs.get(eq.itemId);
+      if (!def) return;
+      const itemId = eq.itemId;
+      void (async () => {
+        let target: number | null = null;
+        const isGlove = def.key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
+        if (isGlove) {
+          target = 1;
+        } else if (def.item_number != null) {
+          const { data } = await supabase
+            .from('weapon_stats')
+            .select('is_gun')
+            .eq('item_number', def.item_number)
+            .maybeSingle();
+          if (data?.is_gun) target = 1;
+        }
+        if (target == null) { setDebugStatus('triple-tap: not an equippable weapon'); return; }
+        const ok = await slotClickHandlers.equipTransfer(
+          { region: 'quick_select', page: 0, slot: slotNum },
+          { region: 'equip', page: 0, slot: target },
+        );
+        setDebugStatus(ok ? `triple-equip QS${slotNum}→E${target}` : 'triple-equip FAIL');
+      })();
+    } else {
+      tripleTapRef.current = { slot: slotNum, count: 1, first: now };
+    }
+  };
 
   // Which hotbar slot the pointer is currently hovering — used for
   // drop-target highlight + onPointerUp drop dispatch.
@@ -1239,6 +1291,7 @@ export function FortressHUD(props: FortressHUDProps) {
                           } else {
                             setSelectedSlot(p.slot);
                             if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                            registerSlotTapRef.current(p.slot);
                           }
                         }
                       };
