@@ -225,6 +225,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
             title={g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
             onPointerDown={(e) => startEquipDrag(def, e)}
             onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
+            onDragStart={(e) => e.preventDefault()}
             style={{
               width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
               background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
@@ -234,7 +235,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
             }}
           >
             {sprite ? (
-              <img src={sprite} alt={def.label} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35 }} />
+              <img src={sprite} alt={def.label} draggable={false} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35, WebkitUserDrag: 'none' } as React.CSSProperties} />
             ) : (
               <span style={{ fontSize: 24, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{def.glyph}</span>
             )}
