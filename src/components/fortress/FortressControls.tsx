@@ -5,6 +5,7 @@ import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (tempo
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
+import { triggerChop } from './chopFeedbackStore';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
@@ -2122,6 +2123,7 @@ export function FirstPersonControls({
                 chopCountRef.current++;
 
                 playSpatialSound(getSoundUrl('axe_chop', '/axe_chop.mp3'), 0, { baseVolume: 0.6 });
+                triggerChop(blockX, blockY, blockZ);
 
                 if (onTreeChopProgressRef.current) {
                   onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);
@@ -2155,6 +2157,7 @@ export function FirstPersonControls({
                 chopCountRef.current++;
 
                 playSpatialSound(getSoundUrl('axe_chop', '/axe_chop.mp3'), 0, { baseVolume: 0.6 });
+                triggerChop(blockX, blockY, blockZ);
 
                 if (onTreeChopProgressRef.current) {
                   onTreeChopProgressRef.current(chopCountRef.current, CHOPS_REQUIRED);

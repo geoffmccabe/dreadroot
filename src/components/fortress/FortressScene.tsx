@@ -24,6 +24,7 @@ import { ProceduralGround } from './ProceduralGround';
 import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
+import { ChopFeedback } from './ChopFeedback';
 import { SceneReflections } from '@/components/SceneReflections';
 import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
@@ -1738,6 +1739,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       />
       
       <MultiplayerPlayers players={players} />
+      <ChopFeedback />
       {/* Local player avatar hidden for now (the visible blue body) — re-enable by flipping this. */}
       {false && <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />}
       {/* FirstPersonArms DISABLED: it renders the y-bot SKINNED mesh, and a skinned
