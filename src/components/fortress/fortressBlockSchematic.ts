@@ -27,31 +27,19 @@ export interface FortressVoxel {
 export const FORTRESS_BLOCK_TYPE = 'fortress_block';
 export const FORTRESS_BLOCK_TEXTURE = '/cliff_texture_seamless.webp';
 
-// Battlement (merlon) layout on top of the walls: 2-wide stone teeth every 4 units
-// (2 on, 2 off), 2 blocks tall, flush at each corner. Grid-snapped so they sit on
-// integer voxels (the mesh used fractional centers; cosmetic teeth only).
-const MERLON_LEN = 2;
-const MERLON_PERIOD = 4; // 2 merlon + 2 gap
+// Battlement (merlon) layout on top of the walls: 2-wide stone teeth alternating
+// with 2-wide gaps (2 on, 2 off), 2 blocks tall, flush merlon at the start corner.
+// A coordinate is part of a merlon when the index of its 2-block pair is even.
+// This same parity rule is mirrored in the seeding SQL so code + DB stay in sync.
 const MERLON_HEIGHT = 2;
+const isMerlonX = (x: number): boolean => Math.floor((x + 20) / 2) % 2 === 0; // front/back edges (x -20..19)
+const isMerlonZ = (z: number): boolean => Math.floor((z + 40) / 2) % 2 === 0; // left/right edges (z -40..-9)
 
 /** Inclusive integer range [a, b]. */
 function range(a: number, b: number): number[] {
   const out: number[] = [];
   for (let v = a; v <= b; v++) out.push(v);
   return out;
-}
-
-/**
- * Start coordinates of each 2-long merlon along an edge spanning block-min coords
- * [lo, hi] inclusive. Always places a merlon flush at lo and at hi.
- */
-function merlonStarts(lo: number, hi: number): number[] {
-  const starts: number[] = [];
-  for (let s = lo; s <= hi - MERLON_LEN + 1; s += MERLON_PERIOD) starts.push(s);
-  const lastStart = hi - MERLON_LEN + 1;
-  if (starts.length === 0) starts.push(lo);
-  if (starts[starts.length - 1] !== lastStart) starts.push(lastStart);
-  return starts;
 }
 
 /**
@@ -112,23 +100,20 @@ export function generateFortressVoxels(): FortressVoxel[] {
   }
 
   // --- BATTLEMENTS (merlons), y = cliffH .. cliffH+1 ---
-  const top = cliffH;
-  const merlonY = range(top, top + MERLON_HEIGHT - 1);
-  // Front + back edges run along X over their wall's 2 z-columns.
-  for (const sx of merlonStarts(-halfW, halfW - 1)) {
-    for (const y of merlonY)
-      for (let dx = 0; dx < MERLON_LEN; dx++) {
-        for (const z of frontZcols) push(sx + dx, y, z);
-        for (const z of backZcols) push(sx + dx, y, z);
-      }
-  }
-  // Left + right edges run along Z over their wall's 2 x-columns.
-  for (const sz of merlonStarts(backZmin, frontZ - 1)) {
-    for (const y of merlonY)
-      for (let dz = 0; dz < MERLON_LEN; dz++) {
-        for (const x of leftWallX) push(x, y, sz + dz);
-        for (const x of rightWallX) push(x, y, sz + dz);
-      }
+  const merlonY = range(cliffH, cliffH + MERLON_HEIGHT - 1);
+  for (const y of merlonY) {
+    // Front + back edges run along X over their wall's 2 z-columns.
+    for (const x of backX) {
+      if (!isMerlonX(x)) continue;
+      for (const z of frontZcols) push(x, y, z);
+      for (const z of backZcols) push(x, y, z);
+    }
+    // Left + right edges run along Z over their wall's 2 x-columns.
+    for (const z of sideZ) {
+      if (!isMerlonZ(z)) continue;
+      for (const x of leftWallX) push(x, y, z);
+      for (const x of rightWallX) push(x, y, z);
+    }
   }
 
   return out;
