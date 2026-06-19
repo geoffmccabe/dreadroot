@@ -39,6 +39,7 @@ const NETWORK_LABELS: Record<string, string> = {
   solana: 'Solana',
   polygon: 'Polygon',
   arbitrum: 'Arbitrum',
+  wax: 'WAX',
 };
 export function networkLabel(network: string | null | undefined): string {
   if (!network || network === 'internal') return 'Game (Internal)';
