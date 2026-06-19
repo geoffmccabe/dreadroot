@@ -43,9 +43,13 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const GH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = GH / MODEL_H;
 
-  // Clone the rig (own skeleton) + make the materials faint & transparent (the ghost look).
+  // Clone the rig (own skeleton) + give it the ghost look via a FRESNEL rim: the silhouette edges
+  // go near-opaque and glow cyan (so it's always visible against the bright sky OR dark objects),
+  // while the interior stays faint/see-through. A uGhostFade uniform drives the death fade-out.
+  const fadeU = useRef<{ value: number }[]>([]);
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
+    const us: { value: number }[] = [];
     c.traverse((o) => {
       const mesh = o as THREE.Mesh;
       mesh.frustumCulled = false;
@@ -55,12 +59,27 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
-        m.transparent = true; m.opacity = OPACITY; m.depthWrite = false;
+        m.transparent = true; m.depthWrite = false;
         if ('metalness' in m) m.metalness = 0;
         if ('roughness' in m) m.roughness = 0.9;
+        const uFade = { value: 1 };
+        m.customProgramCacheKey = () => 'ghost-fresnel';
+        m.onBeforeCompile = (shader) => {
+          shader.uniforms.uGhostFade = uFade;
+          shader.fragmentShader = 'uniform float uGhostFade;\n' + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <dithering_fragment>',
+            '#include <dithering_fragment>\n'
+            + 'float _fr = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.0);\n'
+            + 'gl_FragColor.rgb += vec3(0.45, 0.8, 1.0) * _fr * 1.3;\n'                 // cyan rim glow
+            + 'gl_FragColor.a = clamp((0.22 + _fr * 0.72) * uGhostFade, 0.0, 0.96);',  // faint core, opaque edge
+          );
+        };
         m.needsUpdate = true;
+        us.push(uFade);
       });
     });
+    fadeU.current = us;
     return c;
   }, [scene]);
 
@@ -109,7 +128,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     // Death: fade out the materials, then despawn once.
     if (inst.dead) {
       fade.current = Math.max(0, 1 - (now - inst.deadAt) / DEATH_MS);
-      cloned.traverse((o) => { const mm = (o as THREE.Mesh).material as THREE.MeshStandardMaterial; if (mm) mm.opacity = OPACITY * fade.current; });
+      for (const u of fadeU.current) u.value = fade.current;
       g.position.set(cx.current, cy.current + GH / 2, cz.current);
       if (!inst.despawned && now - inst.deadAt > DEATH_MS) { inst.despawned = true; onDespawn?.(inst.id); }
       return;
