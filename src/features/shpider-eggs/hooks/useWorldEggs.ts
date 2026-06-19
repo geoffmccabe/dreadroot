@@ -148,7 +148,14 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
     } catch (err: any) {
       const reason = err?.message || err?.code || err?.details || String(err);
       console.warn('[WorldEggs] pickup failed:', err);
-      setDebugStatus(`egg: ERR ${reason.slice(0, 80)}`);
+      // Phantom egg: the server row is already gone (a missed realtime DELETE — see note below).
+      // Self-heal by dropping it from the local list so it disappears instead of erroring forever.
+      if (/not found/i.test(reason)) {
+        setEggs(prev => prev.filter(e => e.id !== target.id));
+        setDebugStatus('egg: already gone — removed');
+      } else {
+        setDebugStatus(`egg: ERR ${reason.slice(0, 80)}`);
+      }
       const r = (window as any).__rejectionSound;
       if (r) playRejectionSound(r);
       return null;
