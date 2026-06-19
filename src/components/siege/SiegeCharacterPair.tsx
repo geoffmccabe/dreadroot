@@ -25,9 +25,11 @@ const PAIR: { id: string; name: string }[] = [
 
 const SPACING = 2.5; // metres between characters
 
-// A NEW filename is the only reliable cache-bust; shiyang's good file is the v3 build
-// (rest==bind AND ibm=1), not the original shiyang.glb. Map id → actual file here.
-const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v3' };
+// shiyang's GOOD file is shiyang_v2 (bind-fixed only). The "v3" unit-normalize step
+// (ibm 100→1) actually CORRUPTED the rig — it blew the bind pose out to 3m wide and
+// stretched the fingers into spikes on Apple/Metal GPUs (clean on software GL, which is
+// why it fooled earlier tests). Proven by headless Metal-GPU render. Never re-normalize.
+const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v2' };
 
 function CharacterStand({ id, name, x, z }: { id: string; name: string; x: number; z: number }) {
   const file = GLB_FILE[id] ?? id;
