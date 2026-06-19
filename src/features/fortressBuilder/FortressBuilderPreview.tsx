@@ -15,6 +15,25 @@ import { frameLoop } from '@/lib/frameLoop';
 const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a'];
 const BUFFER = 60000; // fixed per-tier instance buffer (avoids mesh recreation on slider drag)
 
+// Emissive FRAME texture (bright border, black centre) — used as an emissiveMap so a
+// lit block glows only on its EDGES (recessed-LED / niche look), not the whole face.
+let _frameTex: THREE.CanvasTexture | null = null;
+function frameTexture(): THREE.CanvasTexture {
+  if (_frameTex) return _frameTex;
+  const s = 64, b = Math.round(s * 0.13);
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = s;
+  const ctx = cv.getContext('2d')!;
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, s, b); ctx.fillRect(0, s - b, s, b);
+  ctx.fillRect(0, 0, b, s); ctx.fillRect(s - b, 0, b, s);
+  _frameTex = new THREE.CanvasTexture(cv);
+  _frameTex.needsUpdate = true;
+  return _frameTex;
+}
+
 function TierMesh({
   voxels, grey, tint, texture,
 }: { voxels: FortressVoxel[]; grey: string; tint: string; texture: THREE.Texture }) {
@@ -51,7 +70,10 @@ function LightMesh({
 }: { lid: string; voxels: FortressVoxel[]; color: string; intensity: number; texture: THREE.Texture }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const geo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-  const mat = useMemo(() => new THREE.MeshLambertMaterial({ map: texture, emissive: new THREE.Color(0, 0, 0) }), [texture]);
+  // Stone block (map) whose EDGES glow via the emissive frame map — not the whole face.
+  const mat = useMemo(() => new THREE.MeshLambertMaterial({
+    map: texture, emissive: new THREE.Color(0, 0, 0), emissiveMap: frameTexture(), toneMapped: false,
+  }), [texture]);
   useEffect(() => () => { geo.dispose(); mat.dispose(); }, [geo, mat]);
   useEffect(() => { mat.emissive = new THREE.Color(color); mat.needsUpdate = true; }, [mat, color]);
 
@@ -71,7 +93,8 @@ function LightMesh({
     const unreg = frameLoop.register(`fb-light-${lid}`, (_d, t) => {
       // Torch-like flicker.
       const f = 0.72 + 0.28 * Math.sin(t * 11) * Math.sin(t * 6.3 + 1.7);
-      mat.emissiveIntensity = intensityRef.current * Math.max(0.25, f);
+      // x2.5 so the thin edge frame is bright enough to bloom; user intensity scales it.
+      mat.emissiveIntensity = intensityRef.current * 2.5 * Math.max(0.25, f);
     }, 64);
     return unreg;
   }, [mat, lid]);
