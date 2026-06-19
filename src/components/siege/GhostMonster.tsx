@@ -59,7 +59,11 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
-        m.transparent = true; m.depthWrite = false;
+        // depthWrite MUST stay true: with it off, where only sky is behind the ghost writes no depth
+        // and the sky background fills back over it → totally invisible vs sky (visible only when an
+        // opaque object's depth blocks the sky). The transparent Dark Lord boss writes depth for the
+        // same reason.
+        m.transparent = true; m.depthWrite = true;
         if ('metalness' in m) m.metalness = 0;
         if ('roughness' in m) m.roughness = 0.9;
         const uFade = { value: 1 };
