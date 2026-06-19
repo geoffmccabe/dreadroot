@@ -24,7 +24,7 @@ const OPACITY = 0.2;            // 20% visible → 20% damage taken (siegeHorde 
 const HP = 100;
 const HIT_R = 1.4;              // impact radius around the committed strike point — move farther than this to dodge
 const STRIKE_JITTER = 0.25;     // the strike lands within this radius of where you stood when the dive began
-const DIVE_SPEED = 9;           // m/s — slow descent you can watch + shoot
+const DIVE_SPEED = 10.8;        // m/s — slow descent you can watch + shoot (20% faster than 9)
 const WINDUP_MS = 700;          // telegraph: rears up over the strike point before dropping (a window to shoot it)
 const WINDUP_RISE = 4;          // metres it rises above the strike point during the wind-up
 
@@ -121,8 +121,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     radius: 6, height: 7, rev: 0.4, bobAmp: 1, bobFreq: 0.6, radAmp: 1, radFreq: 0.5,
     rerollAt: 0, mode: 'orbit' as 'orbit' | 'windup' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, windupUntil: 0, hitDone: false, yaw: 0,
     dtx: 0, dty: 0, dtz: 0,                                            // committed strike point for the current dive
-    lastHit: 0, wildUntil: 0, wildRerollAt: 0,                        // shot-mid-dive tumble
-    wvx: 0, wvy: 0, wvz: 0, wrx: Math.PI, wry: 0, wrz: 0,
+    lastHit: 0, wildUntil: 0, wildSpin: 0, wildYaw: 0,               // shot-mid-attack: fast spin about its own axis
     px: spawn[0], py: spawn[1] + BASE_H, pz: spawn[2], vx: 0, vy: 0, vz: 0,   // prev pos + velocity (for death physics)
     deathInit: false, deadFrom: 0, deathSpin: 0, deathAngle: 0,
   }).current;
@@ -151,7 +150,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       g.scale.setScalar(scale);
       if (!inst.despawned && (feet <= ground || now - m.deadFrom > 5000)) {
         inst.despawned = true;
-        fireGhostExplosion(cx.current, Math.max(ground, feet), cz.current, Math.max(0.9, GH / 3));
+        fireGhostExplosion(cx.current, Math.max(ground, feet), cz.current, Math.max(1.4, GH / 2.2));
         onDespawn?.(inst.id);
       }
       return;
@@ -164,7 +163,10 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     // 3s (a player defence: shoot it out of an attack).
     if (inst.hitAt && inst.hitAt !== m.lastHit) {
       m.lastHit = inst.hitAt;
-      if ((m.mode === 'dive' || m.mode === 'windup') && !m.hitDone) { m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000; }
+      if ((m.mode === 'dive' || m.mode === 'windup') && !m.hitDone) {
+        m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000;
+        m.wildSpin = (Math.random() < 0.5 ? 1 : -1) * 7.3;   // ~1/3 of the old chaotic tumble, one axis
+      }
     }
 
     const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
@@ -231,12 +233,9 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     // hit, spin fast on all axes (re-rolled every ~150ms) for 3s to telegraph it was struck.
     g.position.set(cx.current, cy.current + GH / 2, cz.current);
     if (now < m.wildUntil) {
-      if (now > m.wildRerollAt) {
-        m.wvx = (Math.random() * 2 - 1) * 22; m.wvy = (Math.random() * 2 - 1) * 22; m.wvz = (Math.random() * 2 - 1) * 22;
-        m.wildRerollAt = now + 120 + Math.random() * 180;
-      }
-      m.wrx += m.wvx * dt; m.wry += m.wvy * dt; m.wrz += m.wvz * dt;
-      g.rotation.set(m.wrx, m.wry, m.wrz);
+      // Struck: spin fast about its OWN vertical axis (1/3 the old tumble), still upside-down.
+      m.wildYaw += m.wildSpin * dt;
+      g.rotation.set(Math.PI, m.yaw + m.wildYaw, 0);
     } else {
       g.rotation.set(Math.PI, m.yaw + now * 0.0006, 0);
     }
