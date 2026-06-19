@@ -52,6 +52,7 @@ import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
 import { SmokeEffectsPanel } from './AdminPanel.SmokeEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { PoolManager } from '@/features/wallet/PoolManager';
+import { GatesManager } from '@/features/tokenGates/GatesManager';
 import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
 import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
 import { GifMigrationPanel } from './AdminPanel.GifMigration';
@@ -82,7 +83,7 @@ export function AdminPanel({
   const [npcSubtab, setNpcSubtab] = useState<NPCSubtab>('enemies');
   const [seedSubtab, setSeedSubtab] = useState<SeedSubtab>('ordinary');
   const [itemsSubtab, setItemsSubtab] = useState<ItemsSubtab>('all-items');
-  const [coinsSubtab, setCoinsSubtab] = useState<'pools' | 'divi' | 'waterfall' | 'solana'>('pools');
+  const [coinsSubtab, setCoinsSubtab] = useState<'pools' | 'gates' | 'divi' | 'waterfall' | 'solana'>('pools');
   const [worldsSubtab, setWorldsSubtab] = useState<WorldsSubtab>('worlds');
 
   // Resizable dialog width — drag the left edge to widen
@@ -199,8 +200,9 @@ export function AdminPanel({
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={coinsSubtab} onValueChange={(v) => setCoinsSubtab(v as typeof coinsSubtab)} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4">
+              <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
                 <TabsTrigger value="pools">Pools</TabsTrigger>
+                <TabsTrigger value="gates">Gates</TabsTrigger>
                 <TabsTrigger value="divi">Divi</TabsTrigger>
                 <TabsTrigger value="waterfall">Waterfall</TabsTrigger>
                 <TabsTrigger value="solana">Solana</TabsTrigger>
@@ -209,6 +211,12 @@ export function AdminPanel({
               <TabsContent value="pools" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-[calc(90vh-240px)] pr-4">
                   <PoolManager />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="gates" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <GatesManager />
                 </ScrollArea>
               </TabsContent>
 
