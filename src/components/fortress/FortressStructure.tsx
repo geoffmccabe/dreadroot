@@ -16,10 +16,7 @@ const MERLON = 2;
 // mesh walls so they don't double-draw over the blocks. The courtyard floor +
 // fortress colliders stay. Flip this back to true to restore the old hardcoded
 // walls (e.g. for a world that has no seeded fortress blocks).
-// TEMPORARILY true: the seeded fortress blocks are not rendering yet (debugging),
-// so keep the mesh on to avoid an invisible fortress. Flip back to false once the
-// placed 'fortress_block' blocks render correctly.
-const RENDER_MESH_WALLS = true;
+const RENDER_MESH_WALLS = false;
 
 /**
  * Merlon center offsets along a wall's top edge. Merlons (2-wide) alternate with
