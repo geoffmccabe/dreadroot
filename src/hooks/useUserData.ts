@@ -580,13 +580,9 @@ export const useUserData = () => {
     if (!user?.id || !currentTheme?.id || !tokenBalance) return false;
 
     try{
-      const { error } = await supabase
-        .from('user_token_balances')
-        .update({ blockchain_address: address })
-        .eq('user_id', user.id)
-        .eq('token_theme_id', currentTheme.id);
-
-      if (error) throw error;
+      // Routed through a SECURITY DEFINER RPC: the direct-update RLS policy was removed so a client
+      // can't write `coins`. This RPC only ever sets blockchain_address.
+      await worldStore.setBlockchainAddress(currentTheme.id, address);
 
       setTokenBalance(prev => prev ? { ...prev, blockchain_address: address } : null);
       

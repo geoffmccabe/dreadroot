@@ -1051,6 +1051,16 @@ export async function fundPool(
   throw error;
 }
 
+/** Set the caller's withdrawal address for a coin (touches ONLY blockchain_address — coins are
+ *  never client-writable). Routed through a SECURITY DEFINER RPC now that the direct-update RLS
+ *  policy is removed. */
+export async function setBlockchainAddress(tokenThemeId: string, address: string): Promise<void> {
+  const { error } = await supabase.rpc('set_blockchain_address', {
+    p_token_theme_id: tokenThemeId, p_address: address,
+  } as never);
+  if (error && !isMissingFunction(error)) throw error;
+}
+
 /** Admin: set (or clear) the game's deposit-wallet address for a coin's pool. */
 export async function setPoolAddress(tokenThemeId: string, address: string): Promise<void> {
   const { error } = await supabase.rpc('set_pool_address', {
@@ -1218,6 +1228,7 @@ export const worldStore = {
   spawnCoinDrop,
   fundPool,
   setPoolAddress,
+  setBlockchainAddress,
   pickupCoinDrop,
   rollShpiderEgg,
   spawnPetEgg,
