@@ -12,7 +12,8 @@ import { useSyncExternalStore } from 'react';
 export type CursorOrigin =
   | { region: 'inventory'; rowId: string; gridSlot: number; fullQuantity: number }
   | { region: 'hotbar'; slot: number }
-  | { region: 'vault'; page: number; slot: number; fullQuantity: number };
+  | { region: 'vault'; page: number; slot: number; fullQuantity: number }
+  | { region: 'equip'; slot: number };   // picked up FROM an equip slot (drag-out → inv/QS)
 
 export interface CursorStackPayload {
   itemId: string;

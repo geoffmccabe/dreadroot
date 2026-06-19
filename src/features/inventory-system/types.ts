@@ -59,6 +59,13 @@ export interface SlotClickHandlers {
     to:   { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
   ) => Promise<boolean>;
 
+  /** Move/swap with the equip region (one side must be 'equip'). Used when a cursor whose ORIGIN is
+   *  an equip slot is dropped onto inv/QS — routes to equip_transfer instead of transfer_slot. */
+  equipTransfer: (
+    from: { region: 'inventory' | 'quick_select' | 'vault' | 'equip'; page: number; slot: number },
+    to:   { region: 'inventory' | 'quick_select' | 'vault' | 'equip'; page: number; slot: number },
+  ) => Promise<boolean>;
+
   /** Eject the slot's item into the world at a position. Used when the
    *  cursor releases outside any panel — the item lands in the game. */
   ejectSlotToWorld: (

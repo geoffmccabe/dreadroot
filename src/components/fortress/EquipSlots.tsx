@@ -71,6 +71,7 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
 function originToRpc(origin: CursorOrigin): { region: string; page: number; slot: number } {
   if (origin.region === 'inventory') return { region: 'inventory', page: 0, slot: origin.gridSlot };
   if (origin.region === 'hotbar') return { region: 'quick_select', page: 0, slot: origin.slot };
+  if (origin.region === 'equip') return { region: 'equip', page: 0, slot: origin.slot };
   return { region: 'vault', page: origin.page, slot: origin.slot };
 }
 
@@ -181,6 +182,36 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     }
   };
 
+  // Drag OUT of an equip slot: pressing a filled slot and dragging lifts the item onto the cursor
+  // (origin = this equip slot), so releasing over an inv/QS tile routes through equip_transfer.
+  // A plain click (no drag) falls through to handlePointerUp's click-to-unequip.
+  const startEquipDrag = (def: SlotDef, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const item = equip[def.num];
+    if (!item) return;
+    const sx = e.clientX, sy = e.clientY;
+    let lifted = false;
+    function cleanup() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', cleanup);
+    }
+    function onMove(ev: PointerEvent) {
+      if (lifted) return;
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (dx * dx + dy * dy > 36) {   // ~6px drag threshold
+        lifted = true;
+        cursorStackApi.setCursor({
+          itemId: item.itemId, itemKey: '', quantity: 1, name: item.name, tier: item.tier,
+          spriteUrl: item.spriteUrl, nonStackable: true, origin: { region: 'equip', slot: def.num },
+        });
+        setEquip((prev) => ({ ...prev, [def.num]: null }));   // optimistic clear; reconciles on refetch
+        cleanup();
+      }
+    }
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', cleanup);
+  };
+
   return (
     <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'row', gap: 6 }}>
       {SLOTS.map((def) => {
@@ -191,7 +222,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         return (
           <div
             key={def.num}
-            title={g ? `${g.name} (click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
+            title={g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
+            onPointerDown={(e) => startEquipDrag(def, e)}
             onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
             style={{
               width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',

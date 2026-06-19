@@ -457,6 +457,18 @@ export function FortressHUD(props: FortressHUDProps) {
         return false;
       }
     },
+    equipTransfer: async (from, to) => {
+      // A cursor whose origin is an equip slot was dropped on inv/QS → route through equip_transfer
+      // (transfer_slot doesn't handle the equip region). Shared refetch reconciles equip + inv + QS.
+      try {
+        await worldStore.equipTransfer(from, to);
+        if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        return true;
+      } catch (err) {
+        console.error('[equipTransfer] failed:', err);
+        return false;
+      }
+    },
     ejectSlotToWorld: async (from) => {
       try {
         // Drop 2m in front of the player at FOOT level, not camera

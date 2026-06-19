@@ -208,7 +208,7 @@ export async function slotClick(
 // ── Region/slot helpers shared by performDrop and performSwap ─────────
 function regionOf(
   loc: CursorStackPayload['origin'] | SlotClickInput['location']
-): 'inventory' | 'quick_select' | 'vault' {
+): 'inventory' | 'quick_select' | 'vault' | 'equip' {
   if (loc.region === 'hotbar') return 'quick_select';
   return loc.region;
 }
@@ -232,9 +232,16 @@ async function performDrop(
   h: SlotClickHandlers,
 ): Promise<{ ok: boolean; reason?: string }> {
   const origin = cursor.origin;
+  const from = { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) };
+  const to = { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) };
+  // Any move touching the equip region goes through equip_transfer (not transfer_slot).
+  if (from.region === 'equip' || to.region === 'equip') {
+    const ok = await h.equipTransfer(from, to);
+    return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+  }
   const ok = await h.transferSlot(
-    { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
-    { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
+    from as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    to as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
     qty,
   );
   return { ok, reason: ok ? undefined : 'transferSlot rejected' };
@@ -247,9 +254,15 @@ async function performSwap(
   h: SlotClickHandlers,
 ): Promise<{ ok: boolean; reason?: string }> {
   const origin = cursor.origin;
+  const from = { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) };
+  const to = { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) };
+  if (from.region === 'equip' || to.region === 'equip') {
+    const ok = await h.equipTransfer(from, to);   // equip_transfer also handles the swap case
+    return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+  }
   const ok = await h.swapSlot(
-    { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) },
-    { region: regionOf(dst),    page: pageOf(dst),    slot: slotOf(dst) },
+    from as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    to as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
   );
   return { ok, reason: ok ? undefined : 'swapSlot rejected' };
 }
