@@ -91,8 +91,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
                             hitSound="/little_slap.mp3" missSound="/swoosh_miss_high.mp3" />
             </Suspense>
           )}
-          {/* One of each NEW FantasyRivals monster — also hidden during a challenge. */}
-          {!challengeActive && <SiegeMonsterParade />}
+          {/* SiegeMonsterParade (zombie, dfskeleton, skeletons, darklord, demonmale) disabled —
+              those are already in the game and don't need to load/display in the review area. */}
+          {/* {!challengeActive && <SiegeMonsterParade />} */}
           {/* Open-World ambient spawner: plays + loops any region-tagged Challenge at its coords. */}
           {!challengeActive && <RegionSpawnerRunner />}
         </>
