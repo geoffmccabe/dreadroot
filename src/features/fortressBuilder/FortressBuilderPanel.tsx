@@ -61,6 +61,14 @@ export function FortressBuilderPanel() {
     return () => window.removeEventListener('keydown', onKey);
   }, [isAdmin]);
 
+  // Snapshot state — MUST be declared before the early return below. React hooks must run in
+  // the same order every render; having these after `if (!isAdmin) return null` changed the hook
+  // count when admin status resolved → React error #310 → full white-screen crash.
+  const [snapName, setSnapName] = useState('');
+  const [snaps, setSnaps] = useState<Snapshot[]>([]);
+  const refreshSnaps = () => listSnapshots().then(setSnaps).catch(() => {});
+  useEffect(() => { if (s.isOpen) refreshSnaps(); }, [s.isOpen]);
+
   if (!isAdmin) return null;
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,11 +78,6 @@ export function FortressBuilderPanel() {
     reader.onload = (ev) => builderStore.set({ imageSrc: String(ev.target?.result || ''), imageName: f.name });
     reader.readAsDataURL(f);
   };
-
-  const [snapName, setSnapName] = useState('');
-  const [snaps, setSnaps] = useState<Snapshot[]>([]);
-  const refreshSnaps = () => listSnapshots().then(setSnaps).catch(() => {});
-  useEffect(() => { if (s.isOpen) refreshSnaps(); }, [s.isOpen]);
 
   const onSaveSnapshot = async () => {
     const name = snapName.trim();
