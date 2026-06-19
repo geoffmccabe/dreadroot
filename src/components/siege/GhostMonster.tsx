@@ -20,7 +20,9 @@ const MODEL_H = 1.803;          // intrinsic skeletonflesh height
 const BASE_H = 4;               // desired ghost height (m)
 const OPACITY = 0.2;            // 20% visible → 20% damage taken (siegeHorde scales by opacity)
 const HP = 100;
-const HIT_R = 2.6;              // dive contact radius (m)
+const HIT_R = 1.4;              // impact radius around the committed strike point — move farther than this to dodge
+const STRIKE_JITTER = 0.25;     // the strike lands within this radius of where you stood when the dive began
+const DIVE_SPEED = 21;          // m/s — half the old 42, so a dive is slow enough to side-step
 const DEATH_MS = 1600;          // fade-out window after death before despawn
 
 // Faint, fast-rising ghost smoke: 10s life, rises 3× base, low opacity, cool grey-blue.
@@ -115,6 +117,9 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     angle: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1,
     radius: 6, height: 7, rev: 0.4, bobAmp: 1, bobFreq: 0.6, radAmp: 1, radFreq: 0.5,
     rerollAt: 0, mode: 'orbit' as 'orbit' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, hitDone: false, yaw: 0,
+    dtx: 0, dty: 0, dtz: 0,                                            // committed strike point for the current dive
+    lastHit: 0, wildUntil: 0, wildRerollAt: 0,                        // shot-mid-dive tumble
+    wvx: 0, wvy: 0, wvz: 0, wrx: Math.PI, wry: 0, wrz: 0,
   }).current;
   const reroll = (now: number) => {
     m.radius = rnd([4, 9]); m.height = rnd([5, 9]); m.rev = rnd([0.25, 0.6]);
@@ -141,6 +146,12 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     if (m.rerollAt === 0) reroll(now);
     if (now > m.rerollAt) reroll(now);
 
+    // Shot mid-dive → cancel the strike, bounce back up, and tumble wildly for 3s (a player defence).
+    if (inst.hitAt && inst.hitAt !== m.lastHit) {
+      m.lastHit = inst.hitAt;
+      if (m.mode === 'dive' && !m.hitDone) { m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000; }
+    }
+
     const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
 
     // Decide the target the ghost is moving toward + the speed to chase it at.
@@ -152,21 +163,30 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       tx = px + Math.cos(m.angle) * r; tz = pz + Math.sin(m.angle) * r; ty = py + h;
       chase = 16 * SPD;
       if (m.diveAt === 0) m.diveAt = now + rnd([2500, 6000]);
-      if (now > m.diveAt) { m.mode = 'dive'; m.hitDone = false; m.diveEndsBy = now + 1500; }   // begin a dive
-    } else if (m.mode === 'dive') {
-      tx = px; ty = py + 0.3; tz = pz; chase = 42 * SPD;     // zoom straight down at the player
-      const dx = px - cx.current, dy = (py + 0.3) - cy.current, dz = pz - cz.current;
-      const dist = Math.hypot(dx, dy, dz);
-      if (!m.hitDone && dist < HIT_R) {                      // contact → 1-50 dmg, 2-5m knockback
-        m.hitDone = true;
-        const id2 = Math.max(0.001, dist);
-        dealPlayerDamage(rnd([1, 50]) * (mods?.damageMul ?? 1), dx / id2, dy / id2, dz / id2, rnd([2, 5]) * 6);
+      // Begin a dive (but not while still tumbling from a hit). COMMIT to a strike point NOW — where
+      // you are, +0.25m jitter — and dive THERE, so moving away during the descent dodges it.
+      if (now > m.diveAt && now > m.wildUntil) {
+        const ja = Math.random() * Math.PI * 2, jr = Math.sqrt(Math.random()) * STRIKE_JITTER;
+        m.dtx = px + Math.cos(ja) * jr; m.dtz = pz + Math.sin(ja) * jr; m.dty = py + 0.3;
+        m.mode = 'dive'; m.hitDone = false; m.diveEndsBy = now + 2200;
       }
-      if (m.hitDone || dist < HIT_R || now > m.diveEndsBy) m.mode = 'back';
+    } else if (m.mode === 'dive') {
+      tx = m.dtx; ty = m.dty; tz = m.dtz; chase = DIVE_SPEED * SPD;   // committed point, half-speed → dodgeable
+      const arrived = Math.hypot(m.dtx - cx.current, m.dty - cy.current, m.dtz - cz.current) < 0.7;
+      if (arrived || now > m.diveEndsBy) {
+        if (!m.hitDone) {                                             // hit ONLY if you're still near the strike point
+          m.hitDone = true;
+          if (Math.hypot(px - m.dtx, pz - m.dtz) < HIT_R) {
+            const ddx = px - cx.current, ddy = py - cy.current, ddz = pz - cz.current, dd = Math.max(0.001, Math.hypot(ddx, ddy, ddz));
+            dealPlayerDamage(rnd([1, 50]) * (mods?.damageMul ?? 1), ddx / dd, ddy / dd, ddz / dd, rnd([2, 5]) * 6);
+          }
+        }
+        m.mode = 'back';
+      }
     } else {
       m.angle += m.rev * Math.PI * 2 * m.dir * dt;            // climb back up to the orbit
       tx = px + Math.cos(m.angle) * m.radius; tz = pz + Math.sin(m.angle) * m.radius; ty = py + m.height;
-      chase = 38 * SPD;
+      chase = 30 * SPD;
       if (Math.hypot(tx - cx.current, ty - cy.current, tz - cz.current) < 1.5) { m.mode = 'orbit'; m.diveAt = now + rnd([2500, 6000]); }
     }
 
@@ -182,9 +202,19 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     // Write the hitbox (feet = center - GH/2) so bullets/flames hit the flying body.
     inst.x = cx.current; inst.z = cz.current; inst.y = cy.current - GH / 2; inst.yaw = m.yaw;
 
-    // Render: upside-down (rotate π on X), body centred on the fly point, spinning slowly in place.
+    // Render: body centred on the fly point. Normally upside-down + slow spin; while tumbling from a
+    // hit, spin fast on all axes (re-rolled every ~150ms) for 3s to telegraph it was struck.
     g.position.set(cx.current, cy.current + GH / 2, cz.current);
-    g.rotation.set(Math.PI, m.yaw + now * 0.0006, 0);
+    if (now < m.wildUntil) {
+      if (now > m.wildRerollAt) {
+        m.wvx = (Math.random() * 2 - 1) * 22; m.wvy = (Math.random() * 2 - 1) * 22; m.wvz = (Math.random() * 2 - 1) * 22;
+        m.wildRerollAt = now + 120 + Math.random() * 180;
+      }
+      m.wrx += m.wvx * dt; m.wry += m.wvy * dt; m.wrz += m.wvz * dt;
+      g.rotation.set(m.wrx, m.wry, m.wrz);
+    } else {
+      g.rotation.set(Math.PI, m.yaw + now * 0.0006, 0);
+    }
     g.scale.setScalar(scale);
   });
 
