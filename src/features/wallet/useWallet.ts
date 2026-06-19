@@ -1,10 +1,11 @@
-// useWallet — the player's MULTI-COIN wallet. Reads the asset registry (token_assets) + every
-// chain variant (token_themes) + the player's balances (user_token_balances), and groups them as
-// asset → per-chain holdings. Themes not yet linked to an asset are shown as their own asset, so
-// nothing is hidden during the registry migration. See docs/CURRENCY_LEDGER_PLAN.md.
+// useWallet — the player's MULTI-COIN holdings. Reads the asset registry (token_assets) + every
+// chain variant (token_themes) + the player's balances (user_token_balances), and returns a flat
+// list of holdings (each carrying its asset + chain variant). The view groups them chain-first.
+// Variants not yet linked to an asset are shown as their own asset, so nothing is hidden during the
+// registry migration. See docs/CURRENCY_LEDGER_PLAN.md.
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { TokenAsset, TokenVariant, WalletAssetGroup, WalletHolding } from './types';
+import type { TokenAsset, TokenVariant, WalletHolding } from './types';
 
 // token_assets + the new token_themes columns aren't in the generated types yet → cast through these.
 type AssetRow = TokenAsset & { is_active?: boolean };
@@ -12,17 +13,17 @@ type ThemeRow = TokenVariant & { is_active?: boolean };
 type BalRow = { token_theme_id: string; coins: number; blockchain_address: string | null };
 
 export interface UseWalletReturn {
-  groups: WalletAssetGroup[];
+  holdings: WalletHolding[];
   isLoading: boolean;
   refresh: () => Promise<void>;
 }
 
 export function useWallet(userId: string | null): UseWalletReturn {
-  const [groups, setGroups] = useState<WalletAssetGroup[]>([]);
+  const [holdings, setHoldings] = useState<WalletHolding[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!userId) { setGroups([]); setIsLoading(false); return; }
+    if (!userId) { setHoldings([]); setIsLoading(false); return; }
     setIsLoading(true);
     try {
       const [assetsRes, themesRes, balsRes] = await Promise.all([
@@ -37,10 +38,8 @@ export function useWallet(userId: string | null): UseWalletReturn {
 
       const assetById = new Map(assets.map((a) => [a.id, a]));
       const themeById = new Map(themes.map((t) => [t.id, t]));
-      const balByTheme = new Map(bals.map((b) => [b.token_theme_id, b]));
 
-      // A holding exists for every variant the player has a balance row in.
-      const groupMap = new Map<string, WalletAssetGroup>();
+      const out: WalletHolding[] = [];
       for (const bal of bals) {
         const variant = themeById.get(bal.token_theme_id);
         if (!variant) continue;                              // orphan balance (theme deactivated) — skip
@@ -53,21 +52,12 @@ export function useWallet(userId: string | null): UseWalletReturn {
           logo_url: variant.coin_image_url,
           sort_order: 9999,
         };
-        let g = groupMap.get(asset.id);
-        if (!g) { g = { asset, total: 0, holdings: [] }; groupMap.set(asset.id, g); }
-        const holding: WalletHolding = { variant, coins: bal.coins ?? 0, address: bal.blockchain_address };
-        g.holdings.push(holding);
-        g.total += holding.coins;
+        out.push({ variant, asset, coins: bal.coins ?? 0, address: bal.blockchain_address });
       }
-
-      const result = Array.from(groupMap.values());
-      // Assets by sort_order then symbol; within an asset, chain variants by label.
-      result.sort((a, b) => (a.asset.sort_order - b.asset.sort_order) || a.asset.symbol.localeCompare(b.asset.symbol));
-      result.forEach((g) => g.holdings.sort((x, y) => x.variant.network.localeCompare(y.variant.network)));
-      setGroups(result);
+      setHoldings(out);
     } catch (e) {
       console.error('[useWallet] load failed', e);
-      setGroups([]);
+      setHoldings([]);
     } finally {
       setIsLoading(false);
     }
@@ -75,5 +65,5 @@ export function useWallet(userId: string | null): UseWalletReturn {
 
   useEffect(() => { void load(); }, [load]);
 
-  return { groups, isLoading, refresh: load };
+  return { holdings, isLoading, refresh: load };
 }

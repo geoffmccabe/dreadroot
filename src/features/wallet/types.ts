@@ -1,5 +1,5 @@
-// Wallet types — the multi-coin view. An ASSET (brand: DIVI, USDT, points) groups its per-chain
-// VARIANTS (token_themes rows). A player holds a balance per variant. See docs/CURRENCY_LEDGER_PLAN.md.
+// Wallet types — the multi-coin view, organised CHAIN-FIRST: a network/chain is the section, and
+// the individual coins held on that chain are listed underneath. See docs/CURRENCY_LEDGER_PLAN.md.
 
 export type AssetKind = 'coin' | 'token' | 'points' | 'stablecoin';
 
@@ -26,19 +26,13 @@ export interface TokenVariant {
 
 export interface WalletHolding {
   variant: TokenVariant;
+  asset: TokenAsset;           // the brand this coin belongs to
   coins: number;
   address: string | null;      // on-chain address tied to this holding (if any)
 }
 
-export interface WalletAssetGroup {
-  asset: TokenAsset;
-  total: number;               // summed coins across the asset's variants
-  holdings: WalletHolding[];   // one per chain the player holds this asset on
-}
-
-// Pretty chain labels for the indented rows.
+// Pretty chain names for the section headers.
 const NETWORK_LABELS: Record<string, string> = {
-  internal: 'Game (internal)',
   ethereum: 'Ethereum',
   bsc: 'BNB Chain',
   base: 'Base',
@@ -47,6 +41,20 @@ const NETWORK_LABELS: Record<string, string> = {
   arbitrum: 'Arbitrum',
 };
 export function networkLabel(network: string | null | undefined): string {
-  if (!network) return NETWORK_LABELS.internal;            // pre-migration themes have no network column
+  if (!network || network === 'internal') return 'Game (Internal)';
   return NETWORK_LABELS[network] ?? (network.charAt(0).toUpperCase() + network.slice(1));
+}
+
+/** Section header for a chain group — appends "Chain/Network" so it's unmistakably a chain (the
+ *  internal game ledger is labelled plainly, as it isn't a chain). */
+export function chainSectionLabel(network: string | null | undefined): string {
+  if (!network || network === 'internal') return 'Game (Internal)';
+  return `${networkLabel(network)} Chain/Network`;
+}
+
+/** Display symbol — monetary instruments (coins/tokens/stablecoins) get a leading $ (e.g. $WATER);
+ *  points do not. */
+export function displaySymbol(asset: TokenAsset): string {
+  const monetary = asset.kind === 'coin' || asset.kind === 'token' || asset.kind === 'stablecoin';
+  return monetary ? `$${asset.symbol}` : asset.symbol;
 }
