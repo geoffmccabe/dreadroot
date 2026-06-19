@@ -46,7 +46,7 @@ export interface FortressBuildOpts {
   extrudeIn?: number[];
 }
 
-export interface FortressVoxel { x: number; y: number; z: number; tier: number; }
+export interface FortressVoxel { x: number; y: number; z: number; tier: number; light?: number; } // light: 0 none, 1 extrude (protruding), 2 inset (recess surface)
 export interface FortressBuildResult {
   voxels: FortressVoxel[];
   F: number;
@@ -163,9 +163,9 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   // reach beyond the footprint (extrude protrusions, stairs), so offset before packing.
   const OFF = 1500, MUL = 4096;
   const occupied = new Map<number, number>(); // key -> tier
-  const place = (lx: number, y: number, lz: number, tier: number) => {
+  const place = (lx: number, y: number, lz: number, tier: number, light = 0) => {
     const k = ((lx + OFF) * MUL + (y + OFF)) * MUL + (lz + OFF);
-    if (!occupied.has(k)) occupied.set(k, tier);
+    if (!occupied.has(k)) occupied.set(k, tier | (light << 4)); // pack tier (low) + light (high)
   };
   // (w, column, depth) -> footprint (gx, gz). depth 0 = outer face, T-1 = inner face.
   const coordFor = (w: number, col: number, d: number): [number, number] => {
@@ -197,8 +197,13 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
         const dStart = -exOut;        // outer extent (negative = protrude; positive = recess)
         const dEnd = (T - 1) + exIn;  // inner extent (> T-1 = protrude inward; less = recess)
         for (let d = dStart; d <= dEnd; d++) {
+          // Light tag: protruding cells (extrude relief) = 1; recessed face cells (inset) = 2.
+          let light = 0;
+          if (d < 0) light = 1;
+          else if (exOut < 0 && d === dStart) light = 2;
+          else if (exIn < 0 && d === dEnd) light = 2;
           const [gx, gz] = coordFor(w, col, d);
-          place(gx - half, y, gz - half, tier);
+          place(gx - half, y, gz - half, tier, light);
         }
       }
     }
@@ -228,12 +233,14 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
 
   // Materialize dedup'd voxels.
   const voxels: FortressVoxel[] = [];
-  for (const [k, tier] of occupied) {
+  for (const [k, packed] of occupied) {
+    const tier = packed & 15;
+    const light = packed >> 4;
     const lz = (k % MUL) - OFF;
     const k2 = Math.floor(k / MUL);
     const y = (k2 % MUL) - OFF;
     const lx = Math.floor(k2 / MUL) - OFF;
-    voxels.push({ x: lx, y, z: lz, tier });
+    voxels.push({ x: lx, y, z: lz, tier, light });
     tierCounts[tier]++;
   }
 

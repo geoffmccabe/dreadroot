@@ -223,6 +223,25 @@ export function FortressBuilderPanel() {
             <Button size="sm" variant="outline" className="h-7 w-9 p-0" onClick={() => bumpExtrude(1)}>+</Button>
           </div>
           <div className="text-[10px] opacity-50">+ protrudes up to 2 · − recesses up to wall thickness ({s.T}) — all the way = window</div>
+
+          {/* Lighting on lit parts (emissive, flickering) */}
+          <div className="space-y-2 pt-2">
+            <Label className="text-xs font-semibold">Lighting</Label>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant={s.extrudeLightOn ? 'default' : 'outline'} className="flex-1 h-6 text-xs" onClick={() => builderStore.set({ extrudeLightOn: !s.extrudeLightOn })}>
+                Extrude light {s.extrudeLightOn ? 'ON' : 'OFF'}
+              </Button>
+              <input type="color" value={s.extrudeLightColor} onChange={(e) => builderStore.set({ extrudeLightColor: e.target.value })} className="h-6 w-9 rounded" />
+            </div>
+            <Row label={`Extrude intensity: ${s.extrudeLightIntensity.toFixed(1)}`} min={0} max={3} step={0.1} value={s.extrudeLightIntensity} onChange={(v) => builderStore.set({ extrudeLightIntensity: v })} />
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant={s.insetLightOn ? 'default' : 'outline'} className="flex-1 h-6 text-xs" onClick={() => builderStore.set({ insetLightOn: !s.insetLightOn })}>
+                Inset light {s.insetLightOn ? 'ON' : 'OFF'}
+              </Button>
+              <input type="color" value={s.insetLightColor} onChange={(e) => builderStore.set({ insetLightColor: e.target.value })} className="h-6 w-9 rounded" />
+            </div>
+            <Row label={`Inset intensity: ${s.insetLightIntensity.toFixed(1)}`} min={0} max={3} step={0.1} value={s.insetLightIntensity} onChange={(v) => builderStore.set({ insetLightIntensity: v })} />
+          </div>
         </div>
       </div>
     </GamePanel>

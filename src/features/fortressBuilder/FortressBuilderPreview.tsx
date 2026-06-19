@@ -10,6 +10,7 @@ import { builderStore, useBuilder } from './fortressBuilderStore';
 import { buildFortressVoxels, type FortressVoxel } from './imageToFortress';
 import { loadImageEl, imageToGrayGrid } from './imageToGrayGrid';
 import { setBuilderBarrier } from '@/features/enemies/ai/fortressSafeZone';
+import { frameLoop } from '@/lib/frameLoop';
 
 const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a'];
 const BUFFER = 60000; // fixed per-tier instance buffer (avoids mesh recreation on slider drag)
@@ -44,6 +45,40 @@ function TierMesh({
   return <instancedMesh ref={meshRef} args={[geo, mat, BUFFER]} frustumCulled={false} castShadow receiveShadow />;
 }
 
+// Emissive, flickering blocks for lit extrude/inset parts.
+function LightMesh({
+  lid, voxels, color, intensity, texture,
+}: { lid: string; voxels: FortressVoxel[]; color: string; intensity: number; texture: THREE.Texture }) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const geo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  const mat = useMemo(() => new THREE.MeshLambertMaterial({ map: texture, emissive: new THREE.Color(0, 0, 0) }), [texture]);
+  useEffect(() => () => { geo.dispose(); mat.dispose(); }, [geo, mat]);
+  useEffect(() => { mat.emissive = new THREE.Color(color); mat.needsUpdate = true; }, [mat, color]);
+
+  useEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    const n = Math.min(voxels.length, BUFFER);
+    for (let i = 0; i < n; i++) { const v = voxels[i]; m.setPosition(v.x + 0.5, v.y + 0.5, v.z + 0.5); mesh.setMatrixAt(i, m); }
+    mesh.count = n;
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [voxels]);
+
+  const intensityRef = useRef(intensity);
+  useEffect(() => { intensityRef.current = intensity; }, [intensity]);
+  useEffect(() => {
+    const unreg = frameLoop.register(`fb-light-${lid}`, (_d, t) => {
+      // Torch-like flicker.
+      const f = 0.72 + 0.28 * Math.sin(t * 11) * Math.sin(t * 6.3 + 1.7);
+      mat.emissiveIntensity = intensityRef.current * Math.max(0.25, f);
+    }, 64);
+    return unreg;
+  }, [mat, lid]);
+
+  return <instancedMesh ref={meshRef} args={[geo, mat, BUFFER]} frustumCulled={false} />;
+}
+
 // Translucent barrier walls (20-60-20 outer ring = D), tall. Local to the preview
 // group (parent already sits at the build center, ground at y 0).
 function BarrierWalls({ D }: { D: number }) {
@@ -68,6 +103,8 @@ export function FortressBuilderPreview() {
     isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed,
     faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert, stairs,
     extrudeOut, extrudeIn,
+    extrudeLightOn, extrudeLightColor, extrudeLightIntensity,
+    insetLightOn, insetLightColor, insetLightIntensity,
   } = useBuilder();
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -144,19 +181,27 @@ export function FortressBuilderPreview() {
     builderStore.set({ blockCount: result?.voxels.length ?? 0 });
   }, [result]);
 
-  const byTier = useMemo(() => {
-    const g: FortressVoxel[][] = [[], [], [], [], []];
-    if (result) for (const v of result.voxels) g[Math.min(4, v.tier - 1)].push(v);
-    return g;
-  }, [result]);
+  const groups = useMemo(() => {
+    const tiers: FortressVoxel[][] = [[], [], [], [], []];
+    const lightExtrude: FortressVoxel[] = [];
+    const lightInset: FortressVoxel[] = [];
+    if (result) for (const v of result.voxels) {
+      if (v.light === 1 && extrudeLightOn) lightExtrude.push(v);
+      else if (v.light === 2 && insetLightOn) lightInset.push(v);
+      else tiers[Math.min(4, v.tier - 1)].push(v);
+    }
+    return { tiers, lightExtrude, lightInset };
+  }, [result, extrudeLightOn, insetLightOn]);
 
   if (!isOpen || !result || !texReady || !texRef.current || !centerRef.current) return null;
   const c = centerRef.current;
   return (
     <group position={[c.x, c.y, c.z]}>
-      {byTier.map((vox, i) => (
+      {groups.tiers.map((vox, i) => (
         <TierMesh key={i} voxels={vox} grey={TIER_GREY[i]} tint={tintHex} texture={texRef.current!} />
       ))}
+      <LightMesh lid="extrude" voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} texture={texRef.current!} />
+      <LightMesh lid="inset" voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} texture={texRef.current!} />
       {barrierOn && <BarrierWalls D={D} />}
     </group>
   );

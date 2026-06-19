@@ -29,6 +29,13 @@ export interface BuilderState {
   extrudeIn: number[];
   exTier: number;            // selected tier (0..4) in the panel
   exFace: 'outside' | 'inside'; // which face the +/- buttons act on
+  // Lighting on extruded/inset parts (emissive, flickering).
+  extrudeLightOn: boolean;
+  extrudeLightColor: string;
+  extrudeLightIntensity: number;
+  insetLightOn: boolean;
+  insetLightColor: string;
+  insetLightIntensity: number;
 }
 
 const initial: BuilderState = {
@@ -55,6 +62,12 @@ const initial: BuilderState = {
   extrudeIn: [0, 0, 0, 0, 0],
   exTier: 0,
   exFace: 'outside',
+  extrudeLightOn: false,
+  extrudeLightColor: '#7a4dff', // blue-purple
+  extrudeLightIntensity: 1.0,
+  insetLightOn: true,
+  insetLightColor: '#ff5a1f',   // red-orange
+  insetLightIntensity: 1.0,
 };
 
 let state: BuilderState = initial;
