@@ -22,6 +22,18 @@ export interface FortressBuildOpts {
   heightScale?: number;
   /** Number of grey tiers (default 5). */
   greyLevels?: number;
+  /** Variation seed: 0 = faithful; nonzero jitters the silhouette top a little for "different ideas". */
+  seed?: number;
+}
+
+// Tiny deterministic PRNG so a given seed always reproduces the same variation.
+function mulberry32(a: number) {
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 export interface FortressVoxel {
@@ -55,11 +67,20 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const colAt = (gx: number) => (W === F ? gx : Math.min(W - 1, Math.floor((gx / F) * W)));
 
   // Per-column top height (topmost present pixel), scaled.
+  const seed = opts.seed ?? 0;
+  const rnd = seed ? mulberry32(seed) : null;
+  const maxBlockH = Math.round(H * heightScale);
   const topH = new Array<number>(F).fill(0);
   for (let gx = 0; gx < F; gx++) {
     const c = colAt(gx);
     for (let r = 0; r < H; r++) {
-      if (present[r][c]) { topH[gx] = Math.round((H - r) * heightScale); break; }
+      if (present[r][c]) {
+        let h = Math.round((H - r) * heightScale);
+        // Seeded variation: nudge each column's top up/down a couple blocks.
+        if (rnd) h += Math.round((rnd() - 0.5) * 5);
+        topH[gx] = Math.max(0, Math.min(maxBlockH, h));
+        break;
+      }
     }
   }
 

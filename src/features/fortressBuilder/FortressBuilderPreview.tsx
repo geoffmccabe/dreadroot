@@ -9,6 +9,7 @@ import { useThree } from '@react-three/fiber';
 import { builderStore, useBuilder } from './fortressBuilderStore';
 import { buildFortressVoxels, type FortressVoxel } from './imageToFortress';
 import { loadImageEl, imageToGrayGrid } from './imageToGrayGrid';
+import { setBuilderBarrier } from '@/features/enemies/ai/fortressSafeZone';
 
 const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a'];
 const BUFFER = 60000; // fixed per-tier instance buffer (avoids mesh recreation on slider drag)
@@ -43,8 +44,27 @@ function TierMesh({
   return <instancedMesh ref={meshRef} args={[geo, mat, BUFFER]} frustumCulled={false} castShadow receiveShadow />;
 }
 
+// Translucent barrier walls (20-60-20 outer ring = D), tall. Local to the preview
+// group (parent already sits at the build center, ground at y 0).
+function BarrierWalls({ D }: { D: number }) {
+  const H = 400, half = D / 2;
+  const mat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0.45, 0.85, 1.0), transparent: true, opacity: 0.12,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
+  }), []);
+  useEffect(() => () => mat.dispose(), [mat]);
+  return (
+    <group position={[0, H / 2, 0]}>
+      <mesh position={[0, 0, half]} material={mat}><planeGeometry args={[D, H]} /></mesh>
+      <mesh position={[0, 0, -half]} material={mat}><planeGeometry args={[D, H]} /></mesh>
+      <mesh position={[-half, 0, 0]} rotation={[0, Math.PI / 2, 0]} material={mat}><planeGeometry args={[D, H]} /></mesh>
+      <mesh position={[half, 0, 0]} rotation={[0, Math.PI / 2, 0]} material={mat}><planeGeometry args={[D, H]} /></mesh>
+    </group>
+  );
+}
+
 export function FortressBuilderPreview() {
-  const { isOpen, imageSrc, D, T, heightScale, tintHex } = useBuilder();
+  const { isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed } = useBuilder();
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const centerRef = useRef<THREE.Vector3 | null>(null);
@@ -85,9 +105,20 @@ export function FortressBuilderPreview() {
   const F = Math.max(1, Math.round(0.6 * D));
   const grid = useMemo(() => (img ? imageToGrayGrid(img, F) : null), [img, F]);
   const result = useMemo(
-    () => (grid ? buildFortressVoxels(grid, { D, T, heightScale }) : null),
-    [grid, D, T, heightScale]
+    () => (grid ? buildFortressVoxels(grid, { D, T, heightScale, seed: rebuildSeed }) : null),
+    [grid, D, T, heightScale, rebuildSeed]
   );
+
+  // Register/clear the dynamic monster-exclusion barrier (20-60-20 outer ring = D).
+  useEffect(() => {
+    const c = centerRef.current;
+    if (isOpen && barrierOn && c) {
+      setBuilderBarrier({ minX: c.x - D / 2, maxX: c.x + D / 2, minZ: c.z - D / 2, maxZ: c.z + D / 2 });
+    } else {
+      setBuilderBarrier(null);
+    }
+    return () => setBuilderBarrier(null);
+  }, [isOpen, barrierOn, D]);
 
   // Publish block count back to the panel.
   useEffect(() => {
@@ -107,6 +138,7 @@ export function FortressBuilderPreview() {
       {byTier.map((vox, i) => (
         <TierMesh key={i} voxels={vox} grey={TIER_GREY[i]} tint={tintHex} texture={texRef.current!} />
       ))}
+      {barrierOn && <BarrierWalls D={D} />}
     </group>
   );
 }

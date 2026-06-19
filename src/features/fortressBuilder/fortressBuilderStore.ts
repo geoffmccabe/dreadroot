@@ -12,6 +12,9 @@ export interface BuilderState {
   heightScale: number;       // multiplies silhouette height
   tintHex: string;           // color tint over the grey tiers
   blockCount: number;        // published back by the preview
+  prompt: string;            // text prompt for rebuilds (drives AI image-gen in a later phase)
+  barrierOn: boolean;        // show + enforce the 20-60-20 monster barrier around the preview
+  rebuildSeed: number;       // bumped by "Rebuild" to get a different variation
 }
 
 const initial: BuilderState = {
@@ -23,6 +26,9 @@ const initial: BuilderState = {
   heightScale: 1,
   tintHex: '#ffffff',
   blockCount: 0,
+  prompt: '',
+  barrierOn: false,
+  rebuildSeed: 0,
 };
 
 let state: BuilderState = initial;

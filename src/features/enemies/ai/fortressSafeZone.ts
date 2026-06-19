@@ -30,14 +30,26 @@ export const NO_FIRE_MAX_Z = FSZ_MAX_Z + NO_FIRE_BUFFER;
 // Reusable return object for clampPositionOutsideFSZ (zero allocation)
 const _clampResult = { x: 0, z: 0 };
 
+// Optional DYNAMIC barrier (the Fortress Builder's 20-60-20 ring at the preview).
+// When set, enemies treat it like the FSZ: they can't enter and get clamped out.
+// Centralized here so every existing isPointInFSZ/clamp caller respects it for free.
+let _builderBarrier: { minX: number; maxX: number; minZ: number; maxZ: number } | null = null;
+export function setBuilderBarrier(b: { minX: number; maxX: number; minZ: number; maxZ: number } | null): void {
+  _builderBarrier = b;
+}
+const inBuilderBarrier = (x: number, z: number): boolean =>
+  !!_builderBarrier && x >= _builderBarrier.minX && x <= _builderBarrier.maxX &&
+  z >= _builderBarrier.minZ && z <= _builderBarrier.maxZ;
+
 /**
  * Check if a point is inside the Fortress Safe Zone.
  * Enemies cannot enter this zone; players inside are invisible to enemies;
  * weapons cannot be fired from inside this zone.
  */
 export function isPointInFSZ(x: number, _y: number, z: number): boolean {
-  return x >= FSZ_MIN_X && x <= FSZ_MAX_X &&
-         z >= FSZ_MIN_Z && z <= FSZ_MAX_Z;
+  return (x >= FSZ_MIN_X && x <= FSZ_MAX_X &&
+          z >= FSZ_MIN_Z && z <= FSZ_MAX_Z) ||
+         inBuilderBarrier(x, z);
 }
 
 /**
@@ -56,6 +68,18 @@ export function isPointInNoFireZone(x: number, _y: number, z: number): boolean {
 export function clampPositionOutsideFSZ(x: number, z: number): { x: number; z: number } {
   _clampResult.x = x;
   _clampResult.z = z;
+
+  // Dynamic builder barrier — push to its nearest edge if inside.
+  if (inBuilderBarrier(x, z) && _builderBarrier) {
+    const b = _builderBarrier;
+    const dL = x - b.minX, dR = b.maxX - x, dB = z - b.minZ, dF = b.maxZ - z;
+    const m = Math.min(dL, dR, dB, dF);
+    if (m === dL) _clampResult.x = b.minX - 0.1;
+    else if (m === dR) _clampResult.x = b.maxX + 0.1;
+    else if (m === dB) _clampResult.z = b.minZ - 0.1;
+    else _clampResult.z = b.maxZ + 0.1;
+    return _clampResult;
+  }
 
   // Not inside FSZ — return as-is
   if (x < FSZ_MIN_X || x > FSZ_MAX_X || z < FSZ_MIN_Z || z > FSZ_MAX_Z) {
