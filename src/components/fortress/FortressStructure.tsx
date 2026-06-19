@@ -10,6 +10,14 @@ interface FortressStructureProps {
 // Crenellation (battlement) cube size — "2x2 square blocks on top".
 const MERLON = 2;
 
+// The mesh fortress walls + battlements were converted to real, superadmin-owned
+// placed blocks (see fortressBlockSchematic.ts + scripts/seed_fortress_blocks.sql):
+// ~5844 blocks fill the exact same volumes in Default World. We stop drawing the
+// mesh walls so they don't double-draw over the blocks. The courtyard floor +
+// fortress colliders stay. Flip this back to true to restore the old hardcoded
+// walls (e.g. for a world that has no seeded fortress blocks).
+const RENDER_MESH_WALLS = false;
+
 /**
  * Merlon center offsets along a wall's top edge. Merlons (2-wide) alternate with
  * gaps so the top reads as a serrated castle battlement. A merlon sits flush at
@@ -181,8 +189,12 @@ export function FortressStructure({
     return texture;
   }, [grassTexture, cliffW, courtyardDepth]);
 
-  // Wait for textures before rendering
-  if (!grassTexture || !frontTexture || !topTexture || !sideTexture || !backTexture || !courtyardTexture) {
+  // Wait for textures before rendering. The courtyard floor only needs grass;
+  // the cliff-derived wall textures are only required when drawing the mesh walls.
+  if (!grassTexture || !courtyardTexture) {
+    return null;
+  }
+  if (RENDER_MESH_WALLS && (!frontTexture || !topTexture || !sideTexture || !backTexture)) {
     return null;
   }
 
@@ -193,6 +205,9 @@ export function FortressStructure({
     <group>
       {/* Ground is now rendered by ProceduralGround component */}
 
+      {/* Walls + battlements are now real placed blocks — see RENDER_MESH_WALLS above. */}
+      {RENDER_MESH_WALLS && (
+        <>
       {/* Front wall - Left pillar */}
       <mesh position={[-(cliffW / 2 + openingHalfW) / 2, cliffH / 2, frontZ]} castShadow receiveShadow>
         <boxGeometry args={[cliffW / 2 - openingHalfW, cliffH, frontT]} />
@@ -236,6 +251,8 @@ export function FortressStructure({
           <Crenellations axis="x" min={-cliffW / 2} max={cliffW / 2} perp={backZ} top={cliffH} material={merlonMaterial} />
           <Crenellations axis="z" min={backZ} max={frontZ} perp={-cliffW / 2 + 1} top={cliffH} material={merlonMaterial} />
           <Crenellations axis="z" min={backZ} max={frontZ} perp={cliffW / 2 - 1} top={cliffH} material={merlonMaterial} />
+        </>
+      )}
         </>
       )}
 
