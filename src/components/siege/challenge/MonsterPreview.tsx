@@ -16,8 +16,12 @@ import { DarkLordFlame } from '../DarkLordFlame';
 import type { ColorMods } from './challengeTypes';
 
 const FALLBACK = '/siege/monsters/skeletonlight.glb';                 // type 6 (horde) has no CFG
-const urlFor = (type: number) => CFG[type as MType]?.url ?? FALLBACK;
-const heightFor = (type: number) => CFG[type as MType]?.modelHeight ?? 1.795;
+// Types without a CFG entry (6 = horde, 9 = Ghost) get a model here so the preview isn't blank.
+const PREVIEW_MODEL: Record<number, { url: string; h: number }> = {
+  9: { url: '/siege/monsters/skeletonflesh.glb', h: 1.803 },        // Ghost (rendered upside-down + faint in-game)
+};
+const urlFor = (type: number) => PREVIEW_MODEL[type]?.url ?? CFG[type as MType]?.url ?? FALLBACK;
+const heightFor = (type: number) => PREVIEW_MODEL[type]?.h ?? CFG[type as MType]?.modelHeight ?? 1.795;
 const flamesFor = (type: number) => CFG[type as MType]?.bodyFlames;
 const TARGET = 1.4;   // normalized model height (world units); body centred on the origin
 

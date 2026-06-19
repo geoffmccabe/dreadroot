@@ -3,10 +3,11 @@
 // monster's definition lives in a single place. Type 6 is the "bloody skeleton horde": it has no
 // fixed CFG entry — each mob is a random per-individual override (Ov) from makeHordeMember().
 import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
+import { GhostMonster } from './GhostMonster';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
-export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 export type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
                    desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -72,6 +73,7 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 6, name: 'Bloody Skeleton (horde)',  baseHeight: 1.8,  baseHealth: 50 },
   { id: 7, name: 'Spintroll',                baseHeight: 3.0,  baseHealth: 200 },
   { id: 8, name: 'Red Demon',                baseHeight: 4.0,  baseHealth: 1000 },
+  { id: 9, name: 'Ghost',                    baseHeight: 4.0,  baseHealth: 100 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
@@ -82,6 +84,8 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, riseFromG
   type: MType; spawn: [number, number, number]; id?: string;
   onDespawn?: (id: string) => void; ov?: Ov; mods?: MonsterMods; riseFromGround?: boolean;
 }) {
+  // Type 9 = the Ghost — its own self-contained flying/upside-down/transparent component (not CFG-driven).
+  if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
   const m = CFG[type];
   const o = ov;
   if (!m && !o) return null;

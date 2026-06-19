@@ -85,7 +85,7 @@ export function SiegeSpawner() {
         if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the test challenge
         else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
-        else if (k >= '1' && k <= '7') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }
+        else if (k >= '1' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
         else clearStage();
         return;
       }
