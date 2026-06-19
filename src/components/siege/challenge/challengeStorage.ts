@@ -46,9 +46,10 @@ export async function listAllChallenges(): Promise<ChallengeRow[]> {
   return (data ?? []) as ChallengeRow[];
 }
 
-/** Every playable challenge for ONE game — the Challenge Browser list (region spawners excluded). */
+/** Every playable challenge for ONE game — the Challenge Browser list (region spawners excluded).
+ *  Ordered by creation (oldest first) so the Browser is stable as challenges are edited. */
 export async function listGameChallenges(game: string): Promise<ChallengeRow[]> {
-  const { data } = await tbl().select(COLS).eq('game', game).is('region', null).order('updated_at', { ascending: false }).limit(500);
+  const { data } = await tbl().select(COLS).eq('game', game).is('region', null).order('created_at', { ascending: true }).limit(500);
   return (data ?? []) as ChallengeRow[];
 }
 

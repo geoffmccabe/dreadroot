@@ -35,11 +35,11 @@ export const defaultColor = (type: number): ColorMods => (type === 6 ? COLOR_BLO
 // Per-type preview behaviour, matching the in-game look:
 //  • 7 Spintroll spins fast (its in-game ~3.5 rev/s), 9 Ghost spins slowly like its idle.
 //  • 9 Ghost renders upside-down + 50% transparent.
-//  • 2 Mushroom Grunt + 6 Bloody Skeleton are HORDES — show 5 in a cluster, not one.
+//  • 1 Demon Horde + 2 Mushroom Grunt + 6 Bloody Skeleton are HORDES — show 5 in a cluster, not one.
 const spinRate = (type: number) => (type === 7 ? 22 : type === 9 ? 0.9 : 0.5);   // rad/s
 const isUpsideDown = (type: number) => type === 9;
 const opacityFor = (type: number) => (type === 9 ? 0.5 : 1);
-const countFor = (type: number) => (type === 2 || type === 6 ? 5 : 1);
+const countFor = (type: number) => (type === 1 || type === 2 || type === 6 ? 5 : 1);
 const HORDE_OFFSETS: [number, number, number][] = [
   [0, 0, 0.18], [-0.55, 0, -0.12], [0.55, 0, -0.12], [-0.3, 0, 0.5], [0.32, 0, -0.52],
 ];

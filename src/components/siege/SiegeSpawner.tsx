@@ -19,7 +19,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
-import { fireChallengeToggle } from './challenge/challengeControl';
 import { toggleCreator } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
@@ -82,7 +81,7 @@ export function SiegeSpawner() {
       if (k === '!') { e.preventDefault(); e.stopPropagation(); stage.current = 'type'; arm(); return; }
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
-        if (k === 'c' || k === 'C') { fireChallengeToggle(); clearStage(); }   // !c → start/stop the test challenge
+        if (k === 'c' || k === 'C') { toggleBrowser(); clearStage(); }         // !c → open the Challenge Browser (pick one)
         else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k >= '1' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
