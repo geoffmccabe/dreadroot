@@ -272,6 +272,12 @@ export function FirstPersonControls({
   const CHOP_INTERVAL_MS = 350; // Time between chops (like Minecraft)
   const CHOPS_REQUIRED = 5; // Number of chops to trigger modal
   const leftMouseDownRef = useRef(false);
+  // Automatic-weapon hold-to-fire (Phase 1): true while the fire button is held
+  // on an is_automatic gun. The frame loop repeat-fires at the weapon's cooldown.
+  const autoFiringRef = useRef(false);
+  // Shared single-shot fire fn, exposed via ref so the frame loop (no deps) can
+  // call the same firing path the click handler uses.
+  const fireWeaponShotRef = useRef<() => void>();
   const chopStartTimeRef = useRef(0);
   const chopCountRef = useRef(0);
   const choppingPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
@@ -956,6 +962,39 @@ export function FirstPersonControls({
   
   handleWheelRef.current = handleWheel;
 
+  // Fire ONE round from the equipped weapon. Self-gated by the weapon's
+  // shootCooldown (so the auto-fire frame loop can call it every frame and it
+  // only fires when due). Shared by the click handler (semi-auto) and the
+  // frame-loop repeat (automatic). No-fire-zone, ammo, sound + consume all here.
+  const fireWeaponShot = useCallback(() => {
+    if (!onShoot) return;
+    // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot.
+    if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
+      playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
+      return;
+    }
+    const now = Date.now();
+    const aw = getActiveWeapon();
+    const cooldownMs = aw ? aw.shootCooldown * 1000 : FIRE_RATE_LIMIT;
+    if (now - lastFireTime.current < cooldownMs) return;
+    if (!canFire()) {
+      if (!getAmmo().reloading) {
+        playSpatialSound(getSoundUrl(aw?.emptySound ?? 'empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
+      }
+      return;
+    }
+    lastFireTime.current = now;
+    shootDirectionRef.current.set(0, 0, -1);
+    shootDirectionRef.current.applyQuaternion(camera.quaternion);
+    shootDirectionRef.current.normalize();
+    shootOriginRef.current.copy(camera.position);
+    onShoot(shootOriginRef.current, shootDirectionRef.current);
+    const fireKey = aw?.fireSound ?? 'gunshot';
+    playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
+    consumeAmmo();
+  }, [camera, onShoot]);
+  fireWeaponShotRef.current = fireWeaponShot;
+
   const handleClick = useCallback(() => {
     if (!isLocked.current) {
       gl.domElement.requestPointerLock();
@@ -1107,46 +1146,11 @@ export function FirstPersonControls({
         return; // Will fire pentabullet or cancel on mouseup
       }
 
-      // Check if player is in no-fire zone (FSZ + 1 chunk buffer)
-      if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
-        // Play empty gun click sound instead of shooting
-        playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
-        return;
-      }
+      // Automatic weapons fire on mousedown + frame-loop repeat (hold-to-fire),
+      // NOT on the click event — otherwise a tap would double-fire.
+      if (getActiveWeapon()?.isAutomatic) return;
 
-      const now = Date.now();
-      // Fire rate = the equipped SW weapon's shootCooldown (sec→ms); falls back to
-      // the default when no weapon is equipped.
-      const aw = getActiveWeapon();
-      const cooldownMs = aw ? aw.shootCooldown * 1000 : FIRE_RATE_LIMIT;
-      if (now - lastFireTime.current < cooldownMs) return;
-
-      // Ammo gate: a reloading or empty clip blocks the shot (empty → click sound).
-      if (!canFire()) {
-        if (!getAmmo().reloading) {
-          playSpatialSound(getSoundUrl(aw?.emptySound ?? 'empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
-        }
-        return;
-      }
-      lastFireTime.current = now;
-
-      // Calculate shoot direction from camera orientation
-      shootDirectionRef.current.set(0, 0, -1);
-      shootDirectionRef.current.applyQuaternion(camera.quaternion);
-      shootDirectionRef.current.normalize();
-
-      // Bullet starts exactly at camera position - no offset needed
-      // The bullet will travel in the exact direction the camera is facing
-      shootOriginRef.current.copy(camera.position);
-
-      onShoot(shootOriginRef.current, shootDirectionRef.current);
-
-      // Play the equipped SW weapon's fire sound (cached in game_sounds); falls back
-      // to the default gunshot when no weapon is equipped.
-      const fireKey = aw?.fireSound ?? 'gunshot';
-      playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
-
-      consumeAmmo(); // spend a round (no-op for weapons without a clip)
+      fireWeaponShot();
     }
   }, [gl, showCrosshairs, onShoot, camera, blockPlacementMode, treePlacementMode, fungalPlacementMode, widePlacementMode, onBlockPlace, onTreePlace, onFungalTreePlace, onWideTreePlace, existingBlocks, selectedBlockType, showOwnershipOutline, hoveredBlockId, onBlockRemove, setHoveredBlockId]);
   
@@ -1675,11 +1679,16 @@ export function FirstPersonControls({
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
 
-      // Start flame glove or pentabullet charge if in shooting mode
+      // Start flame glove, automatic rapid-fire, or pentabullet charge (shooting mode).
       if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         if (isFlameGloveSelected && onFlameStart) {
           // Flame Glove selected — start flamethrower
           onFlameStart();
+        } else if (getActiveWeapon()?.isAutomatic) {
+          // Automatic weapon: hold to rapid-fire. Fire the first round now; the
+          // frame loop repeats at the weapon's cooldown. No pentabullet charge.
+          autoFiringRef.current = true;
+          fireWeaponShotRef.current?.();
         } else {
           pentabulletChargeStartRef.current = performance.now();
         }
@@ -1709,6 +1718,7 @@ export function FirstPersonControls({
       }
 
       leftMouseDownRef.current = false;
+      autoFiringRef.current = false;   // stop automatic rapid-fire
       chopCountRef.current = 0;
       choppingPositionRef.current = null;
       pentabulletChargeStartRef.current = null;
@@ -1815,6 +1825,9 @@ export function FirstPersonControls({
   // Pentabullet refs
   const onPentabulletChargeChangeRef = useRef(onPentabulletChargeChange);
   const showCrosshairsRef = useRef(showCrosshairs);
+  // Frame-loop mirror of the flame-glove flag (used to disable chopping when a
+  // weapon is equipped — see the chop gate below).
+  const isFlameGloveSelectedRef = useRef(isFlameGloveSelected);
   
   // Phase 2B: Throttle for chunk loading updates (separate from broadcast)
   const lastChunkUpdateRef = useRef(0);
@@ -1835,6 +1848,7 @@ export function FirstPersonControls({
   useEffect(() => { onHarvestFruitRef.current = onHarvestFruit; }, [onHarvestFruit]);
   useEffect(() => { onPentabulletChargeChangeRef.current = onPentabulletChargeChange; }, [onPentabulletChargeChange]);
   useEffect(() => { showCrosshairsRef.current = showCrosshairs; }, [showCrosshairs]);
+  useEffect(() => { isFlameGloveSelectedRef.current = isFlameGloveSelected; }, [isFlameGloveSelected]);
 
 
   // Movement and collision frame loop - register with centralized loop
@@ -2078,8 +2092,11 @@ export function FirstPersonControls({
       // Tree chopping detection - hold left mouse on owned tree blocks (not in shooting mode)
       // Skip if actively harvesting a fruit
       // IMPORTANT: Must use showCrosshairsRef.current, not showCrosshairs, because this is in a frame loop
-      // Debug: Log every 500ms when holding left mouse to trace chopping flow
-      if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current) {
+      // Conflict rule: a weapon equipped in E1 (a gun, or the flame glove) DISABLES
+      // block/tree chopping — empty the equip slot to chop. Prevents left-click
+      // doing double-duty as fire AND chop.
+      const noWeaponEquipped = getActiveWeapon() === null && !isFlameGloveSelectedRef.current;
+      if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current && noWeaponEquipped) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
         if (meshesArray.length > 0) {
@@ -2188,6 +2205,13 @@ export function FirstPersonControls({
         chopCountRef.current = 0;
       }
       
+      // Automatic-weapon hold-to-fire: repeat-fire while held (Phase 1). The shot
+      // fn self-gates on the weapon's shootCooldown, so calling it every frame
+      // produces the correct cadence.
+      if (autoFiringRef.current && showCrosshairsRef.current) {
+        fireWeaponShotRef.current?.();
+      }
+
       // Pentabullet charging logic (only in shooting mode with mouse held)
       if (leftMouseDownRef.current && showCrosshairsRef.current && pentabulletChargeStartRef.current) {
         const chargeTime = (now - pentabulletChargeStartRef.current) / 1000;
