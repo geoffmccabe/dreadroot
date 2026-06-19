@@ -12,6 +12,8 @@ import * as THREE from 'three';
 import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { useSmokeTrail } from './siegeSmoke';
+import { sampleHeight } from './terrainHeight';
+import { fireGhostExplosion } from './GhostExplosion';
 import { FIRE_SMOKE, registerRecipe } from '@/effects/recipes';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
@@ -22,8 +24,9 @@ const OPACITY = 0.2;            // 20% visible → 20% damage taken (siegeHorde 
 const HP = 100;
 const HIT_R = 1.4;              // impact radius around the committed strike point — move farther than this to dodge
 const STRIKE_JITTER = 0.25;     // the strike lands within this radius of where you stood when the dive began
-const DIVE_SPEED = 21;          // m/s — half the old 42, so a dive is slow enough to side-step
-const DEATH_MS = 1600;          // fade-out window after death before despawn
+const DIVE_SPEED = 9;           // m/s — slow descent you can watch + shoot
+const WINDUP_MS = 700;          // telegraph: rears up over the strike point before dropping (a window to shoot it)
+const WINDUP_RISE = 4;          // metres it rises above the strike point during the wind-up
 
 // Faint, fast-rising ghost smoke: 10s life, rises 3× base, low opacity, cool grey-blue.
 registerRecipe({ ...FIRE_SMOKE, code: 'ghost-smoke', lifetime: 10.0, rise: 3.0, spawnRate: 55,
@@ -116,10 +119,12 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const m = useRef({
     angle: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1,
     radius: 6, height: 7, rev: 0.4, bobAmp: 1, bobFreq: 0.6, radAmp: 1, radFreq: 0.5,
-    rerollAt: 0, mode: 'orbit' as 'orbit' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, hitDone: false, yaw: 0,
+    rerollAt: 0, mode: 'orbit' as 'orbit' | 'windup' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, windupUntil: 0, hitDone: false, yaw: 0,
     dtx: 0, dty: 0, dtz: 0,                                            // committed strike point for the current dive
     lastHit: 0, wildUntil: 0, wildRerollAt: 0,                        // shot-mid-dive tumble
     wvx: 0, wvy: 0, wvz: 0, wrx: Math.PI, wry: 0, wrz: 0,
+    px: spawn[0], py: spawn[1] + BASE_H, pz: spawn[2], vx: 0, vy: 0, vz: 0,   // prev pos + velocity (for death physics)
+    deathInit: false, deadFrom: 0, deathSpin: 0, deathAngle: 0,
   }).current;
   const reroll = (now: number) => {
     m.radius = rnd([4, 9]); m.height = rnd([5, 9]); m.rev = rnd([0.25, 0.6]);
@@ -127,29 +132,39 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     m.rerollAt = now + rnd([6000, 12000]);
   };
 
-  const fade = useRef(1);
-
   useFrame((_, dt) => {
     const g = group.current; if (!g) return;
     const now = performance.now();
     const SPD = V.current!.speed * (mods?.speedMul ?? 1);
 
-    // Death: fade out the materials, then despawn once.
+    // Death: keep its last trajectory, add gravity + a random 0-1 rev/s tumble, and fall. When it
+    // reaches the ground, burst a transparent-black ghost explosion and despawn.
     if (inst.dead) {
-      fade.current = Math.max(0, 1 - (now - inst.deadAt) / DEATH_MS);
-      for (const u of fadeU.current) u.value = fade.current;
+      if (!m.deathInit) { m.deathInit = true; m.deadFrom = now; m.deathSpin = Math.random() * Math.PI * 2; }
+      m.vy -= 18 * dt;                                                   // gravity
+      cx.current += m.vx * dt; cy.current += m.vy * dt; cz.current += m.vz * dt;
+      m.deathAngle += m.deathSpin * dt;
+      const ground = sampleHeight(cx.current, cz.current) ?? spawn[1];
+      const feet = cy.current - GH / 2;
       g.position.set(cx.current, cy.current + GH / 2, cz.current);
-      if (!inst.despawned && now - inst.deadAt > DEATH_MS) { inst.despawned = true; onDespawn?.(inst.id); }
+      g.rotation.set(Math.PI + m.deathAngle, m.yaw, m.deathAngle * 0.6);
+      g.scale.setScalar(scale);
+      if (!inst.despawned && (feet <= ground || now - m.deadFrom > 5000)) {
+        inst.despawned = true;
+        fireGhostExplosion(cx.current, Math.max(ground, feet), cz.current, Math.max(0.9, GH / 3));
+        onDespawn?.(inst.id);
+      }
       return;
     }
 
     if (m.rerollAt === 0) reroll(now);
     if (now > m.rerollAt) reroll(now);
 
-    // Shot mid-dive → cancel the strike, bounce back up, and tumble wildly for 3s (a player defence).
+    // Shot during the wind-up OR the dive → cancel the strike, bounce back up, and tumble wildly for
+    // 3s (a player defence: shoot it out of an attack).
     if (inst.hitAt && inst.hitAt !== m.lastHit) {
       m.lastHit = inst.hitAt;
-      if (m.mode === 'dive' && !m.hitDone) { m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000; }
+      if ((m.mode === 'dive' || m.mode === 'windup') && !m.hitDone) { m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000; }
     }
 
     const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
@@ -163,13 +178,18 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       tx = px + Math.cos(m.angle) * r; tz = pz + Math.sin(m.angle) * r; ty = py + h;
       chase = 16 * SPD;
       if (m.diveAt === 0) m.diveAt = now + rnd([2500, 6000]);
-      // Begin a dive (but not while still tumbling from a hit). COMMIT to a strike point NOW — where
-      // you are, +0.25m jitter — and dive THERE, so moving away during the descent dodges it.
+      // Begin a wind-up (but not while still tumbling from a hit). COMMIT to a strike point NOW —
+      // where you are, +0.25m jitter — then rear up over it before dropping straight down on it, so
+      // moving away during the telegraph + descent dodges it.
       if (now > m.diveAt && now > m.wildUntil) {
         const ja = Math.random() * Math.PI * 2, jr = Math.sqrt(Math.random()) * STRIKE_JITTER;
         m.dtx = px + Math.cos(ja) * jr; m.dtz = pz + Math.sin(ja) * jr; m.dty = py + 0.3;
-        m.mode = 'dive'; m.hitDone = false; m.diveEndsBy = now + 2200;
+        m.mode = 'windup'; m.hitDone = false; m.windupUntil = now + WINDUP_MS;
       }
+    } else if (m.mode === 'windup') {
+      // Rear up directly above the strike point (a clear tell + a window to shoot it), then drop.
+      tx = m.dtx; ty = m.dty + WINDUP_RISE; tz = m.dtz; chase = 11 * SPD;
+      if (now > m.windupUntil) { m.mode = 'dive'; m.diveEndsBy = now + 2600; }
     } else if (m.mode === 'dive') {
       tx = m.dtx; ty = m.dty; tz = m.dtz; chase = DIVE_SPEED * SPD;   // committed point, half-speed → dodgeable
       const arrived = Math.hypot(m.dtx - cx.current, m.dty - cy.current, m.dtz - cz.current) < 0.7;
@@ -194,6 +214,11 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     const mvx = tx - cx.current, mvy = ty - cy.current, mvz = tz - cz.current;
     const md = Math.hypot(mvx, mvy, mvz);
     if (md > 0.0001) { const step = Math.min(md, chase * dt); cx.current += mvx / md * step; cy.current += mvy / md * step; cz.current += mvz / md * step; }
+
+    // Track velocity (for the death fall to inherit the current trajectory).
+    const idt = 1 / Math.max(dt, 0.001);
+    m.vx = (cx.current - m.px) * idt; m.vy = (cy.current - m.py) * idt; m.vz = (cz.current - m.pz) * idt;
+    m.px = cx.current; m.py = cy.current; m.pz = cz.current;
 
     // Face the player (yaw), smoothed.
     const wantYaw = Math.atan2(px - cx.current, pz - cz.current);

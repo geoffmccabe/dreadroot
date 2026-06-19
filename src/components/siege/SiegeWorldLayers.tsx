@@ -24,6 +24,7 @@ import { ChallengeRunner } from './challenge/ChallengeRunner';
 import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
+import { GhostExplosions } from './GhostExplosion';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -55,6 +56,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <CombatTelemetryProbe />
       {/* Floating combat damage numbers (Unity FloatingDamageText port). */}
       <DamageNumbers />
+      {/* Ghost death blasts (transparent-black explosion + heat-haze refraction). */}
+      <GhostExplosions />
 
       {terrainReady && (
         <>
