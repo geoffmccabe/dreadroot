@@ -47,7 +47,7 @@ export function ItemTileVisual({ occupant, spriteSize = 42 }: ItemTileVisualProp
           T{occupant.tier}
         </span>
       )}
-      {occupant.spriteUrl && (
+      {occupant.spriteUrl ? (
         <img
           src={occupant.spriteUrl}
           alt={occupant.name}
@@ -59,6 +59,17 @@ export function ItemTileVisual({ occupant, spriteSize = 42 }: ItemTileVisualProp
             pointerEvents: 'none',
           }}
         />
+      ) : (
+        // No sprite uploaded for this item yet (e.g. shpider eggs): show its NAME so the tile is
+        // never an invisible/empty-looking slot. Applies to every sprite-less item, everywhere.
+        <span style={{
+          width: spriteSize, height: spriteSize, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          textAlign: 'center', fontSize: 8, fontWeight: 700, lineHeight: 1.1, color: 'white',
+          fontFamily: 'var(--hud-font)', textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.9)',
+          padding: 3, overflow: 'hidden', pointerEvents: 'none',
+        }}>
+          {occupant.name}
+        </span>
       )}
       {occupant.quantity > 1 && (
         <span style={{
