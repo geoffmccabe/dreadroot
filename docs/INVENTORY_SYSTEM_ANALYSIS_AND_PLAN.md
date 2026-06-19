@@ -99,15 +99,21 @@ region/slot (default replica identity) → stale views / duplication.
   using `equip_transfer` (or fold equip into `transfer_slot`) under the hood. One refresh path
   updates all four regions.
 
-**Phase 2 — Single active-weapon model + interactions (once base is right):**
-- One resolver: active weapon = the equipped weapon slot. Sound, damage, and flame all read it.
-- Remove the QA-selection weapon/flame path; QA "use" = consumables only.
-- E1 acceptance by `weapon_stats.is_gun` (not the `item_category` string), WITH a "can't put that
-  there" message instead of a silent reject.
-- Implement the three move-to-equip interactions: triple-click QA slot#, ESC + triple-click, drag.
+**Phase 2 — Single active-weapon model + interactions (once base is right):** ✅ active-weapon model done
+- ✅ One resolver: bullet tier = player level; fire sound = `getActiveWeapon()` (E1); flame glove now
+  reads E1 (`selectedItemDef` repointed from QA selection to `equippedGear` slot 1, v4.72.0). The
+  flame-glove-in-QA-plays-gun-sound bug is fixed: flame only fires when the glove is in E1.
+- ✅ QA "use" no longer drives weapon behavior — a weapon is only active in Equip.
+- ✅ E1 acceptance by `weapon_stats.is_gun` / `flame_glove` key, WITH a toast on reject (v4.68.3).
+- Move-to-equip interactions:
+  - ✅ Drag QA→Equip and drag Equip→QA/inv (v4.70.0, cursor-stack integrated).
+  - ✅ Triple-tap QA slot# (number key OR in-game hotbar click) → quick-equip weapon to E1 (v4.73.0).
+  - ⬜ ESC + triple-click (inventory-open SlotGrid; that path is cursor-pickup mode — separate wiring).
+  - ⬜ Non-weapon equip-slot resolution (armor→2/boots→3/potion→4) once category data exists; triple-tap
+    currently resolves only weapons → E1.
 
 **Phase 3 — Polish:** upload real egg/weapon sprites; remove the egg pickup cooldown if undesired;
-verify Vault parity through the unified path.
+verify Vault parity through the unified path. ⬜ pending.
 
 ---
 
