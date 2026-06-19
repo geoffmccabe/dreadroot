@@ -35,25 +35,27 @@ const ROW: [string, string, number][] = [
   ['zombiewretch', 'Zombie Wretch', 1.782],
 ];
 
-const SPACING = 2.6;
+const SPACING = 2.2;   // metres between monsters
+const PER_ROW = 5;     // compact grid so all fit in view (not a 47 m-wide row)
 
 export function SiegeNewMonsterLineup() {
-  const n = ROW.length;
-  // A clear row ~9 m in front of spawn (beyond the character pair at +4), centered on spawn X.
+  // A compact grid right in front of spawn, next to the Shi Yang/Thorn pair (which is at +4).
   const cx = SIEGE_SPAWN_POINT[0];
-  const cz = SIEGE_SPAWN_POINT[2] + 9;
+  const cz0 = SIEGE_SPAWN_POINT[2] + 6;
   const placed = useMemo(() => ROW.map(([id, name, mh], i) => {
-    const x = cx + (i - (n - 1) / 2) * SPACING;
-    const y = sampleHeight(x, cz) ?? SIEGE_SPAWN_POINT[1];
-    return { id, name, mh, x, y };
-  }), [cx, cz, n]);
+    const col = i % PER_ROW, row = Math.floor(i / PER_ROW);
+    const x = cx + (col - (PER_ROW - 1) / 2) * SPACING;
+    const z = cz0 + row * SPACING;
+    const y = sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1];
+    return { id, name, mh, x, y, z };
+  }), [cx, cz0]);
 
   return (
     <Suspense fallback={null}>
-      {placed.map(({ id, name, mh, x, y }) => (
+      {placed.map(({ id, name, mh, x, y, z }) => (
         <group key={id}>
           <MonsterEnemy
-            spawn={[x, y, cz]}
+            spawn={[x, y, z]}
             url={`/siege/monsters/${id}.glb`}
             modelHeight={mh}
             height={mh}        /* natural size for review (scale 1) */
@@ -61,7 +63,7 @@ export function SiegeNewMonsterLineup() {
             wanderRadius={0}
             health={300}
           />
-          <Billboard position={[x, y + mh + 0.6, cz]}>
+          <Billboard position={[x, y + mh + 0.6, z]}>
             <Text fontSize={0.3} color="#ffffff" anchorX="center" outlineWidth={0.03} outlineColor="#000000">
               {name}
             </Text>
