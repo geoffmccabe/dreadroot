@@ -11,7 +11,6 @@ import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
 import { getAiming } from '@/config/aimState';
-import { getBaseFov } from '@/config/fovSetting';
 import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
 import {
   DEBUG_LOGGING,
@@ -288,6 +287,12 @@ export function FirstPersonControls({
   // Phase 3 ADS: true while aiming down sights (hold right mouse). Drives FOV
   // zoom, reduced recoil/spread, and the scope overlay.
   const isAimingRef = useRef(false);
+  // FOV is only managed DURING an aim cycle so we never drift the resting FOV
+  // (the camera spawns at 70; getBaseFov defaults to 75 — don't force it).
+  // restFovRef = the FOV to return to (captured when aiming starts); adsActiveRef
+  // = an aim transition is in progress (zooming in, or easing back out).
+  const restFovRef = useRef(0);
+  const adsActiveRef = useRef(false);
   const chopStartTimeRef = useRef(0);
   const chopCountRef = useRef(0);
   const choppingPositionRef = useRef<{ x: number; y: number; z: number } | null>(null);
@@ -1890,27 +1895,36 @@ export function FirstPersonControls({
         needsCameraUpdate.current = true;
       }
       if (needsCameraUpdate.current) {
-        eulerRef.current.set(pitch.current + recoilPitchRef.current, yaw.current + recoilYawRef.current, 0);
+        // Clamp the recoil-augmented pitch to just under ±90° so a kick while
+        // aiming near vertical can't flip the camera over the pole.
+        const PITCH_LIMIT = Math.PI / 2 - 0.01;
+        const appliedPitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch.current + recoilPitchRef.current));
+        eulerRef.current.set(appliedPitch, yaw.current + recoilYawRef.current, 0);
         camera.quaternion.setFromEuler(eulerRef.current);
         needsCameraUpdate.current = false;
       }
 
-      // Phase 3 — ADS FOV zoom. When aiming (right mouse, combat mode) with a gun
-      // equipped, lerp FOV toward the weapon's scopedFov (default base−25);
-      // otherwise back to base. Driven here because FirstPersonArms (the old FOV
-      // owner) is disabled. isAimingRef mirrors the store for recoil scaling.
+      // Phase 3 — ADS FOV zoom. Only touch the FOV during an aim cycle so the
+      // resting FOV is never altered. On aim-in, capture the current FOV as the
+      // rest value and zoom to the weapon's scopedFov (default rest−25); on
+      // release, ease back to that exact rest value, then stop managing FOV.
       {
         const aiming = getAiming();
         isAimingRef.current = aiming;
-        if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) {
-          const pc = camera as THREE.PerspectiveCamera;
+        const pc = camera as THREE.PerspectiveCamera;
+        if (pc.isPerspectiveCamera) {
           const awz = getActiveWeapon();
-          const base = getBaseFov();
           const wantZoom = aiming && awz !== null;
-          const targetFov = wantZoom ? (awz?.scopedFov ?? Math.max(40, base - 25)) : base;
-          const rate = awz?.zoomSpeed ?? 10;
-          if (Math.abs(pc.fov - targetFov) > 0.05) {
-            pc.fov = THREE.MathUtils.damp(pc.fov, targetFov, rate, delta);
+          if (wantZoom) {
+            if (!adsActiveRef.current) { restFovRef.current = pc.fov; adsActiveRef.current = true; }
+            const target = awz?.scopedFov ?? Math.max(40, restFovRef.current - 25);
+            const rate = awz?.zoomSpeed ?? 10;
+            pc.fov = THREE.MathUtils.damp(pc.fov, target, rate, delta);
+            pc.updateProjectionMatrix();
+          } else if (adsActiveRef.current) {
+            const target = restFovRef.current;
+            pc.fov = THREE.MathUtils.damp(pc.fov, target, getActiveWeapon()?.zoomSpeed ?? 10, delta);
+            if (Math.abs(pc.fov - target) < 0.05) { pc.fov = target; adsActiveRef.current = false; }
             pc.updateProjectionMatrix();
           }
         }
