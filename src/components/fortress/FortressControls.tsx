@@ -778,7 +778,8 @@ export function FirstPersonControls({
         keys.current.e = true;
         break;
       case 'KeyF':
-        // Harvest nearest fruit
+        if (event.repeat) break;   // one pickup/harvest per press — repeats double-fired egg pickup
+        // Harvest nearest fruit (egg pickup takes priority, handled in the callback)
         if (onHarvestFruitRef.current) {
           onHarvestFruitRef.current();
         }

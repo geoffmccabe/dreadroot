@@ -35,6 +35,7 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
   const [eggs, setEggs] = useState<WorldEgg[]>([]);
   const eggsRef = useRef<WorldEgg[]>([]);
   useEffect(() => { eggsRef.current = eggs; }, [eggs]);
+  const pickingUp = useRef(false);   // in-flight guard: a second F-press can't race the first (→ "not found")
 
   // Initial fetch + realtime subscription (owner-scoped via RLS).
   useEffect(() => {
@@ -119,6 +120,8 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
       return null;
     }
 
+    if (pickingUp.current) return null;   // a pickup is already running — ignore the repeat press
+
     const target = findClosestEgg();
     if (!target) {
       // Out-of-range: compute distance to closest egg so the HUD line
@@ -140,6 +143,7 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
       return null;
     }
 
+    pickingUp.current = true;
     try {
       await worldStore.pickupEgg(target.id);
       setEggs(prev => prev.filter(e => e.id !== target.id));
@@ -148,8 +152,9 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
     } catch (err: any) {
       const reason = err?.message || err?.code || err?.details || String(err);
       console.warn('[WorldEggs] pickup failed:', err);
-      // Phantom egg: the server row is already gone (a missed realtime DELETE — see note below).
-      // Self-heal by dropping it from the local list so it disappears instead of erroring forever.
+      // 'not found' = the server row is already gone (a missed realtime DELETE, or a lost race with a
+      // double-press the in-flight guard now prevents). Drop it from the local list so it doesn't
+      // error forever — it's gone server-side either way and the inventory row was already created.
       if (/not found/i.test(reason)) {
         setEggs(prev => prev.filter(e => e.id !== target.id));
         setDebugStatus('egg: already gone — removed');
@@ -159,6 +164,8 @@ export function useWorldEggs({ userId, cameraRef }: UseWorldEggsOptions) {
       const r = (window as any).__rejectionSound;
       if (r) playRejectionSound(r);
       return null;
+    } finally {
+      pickingUp.current = false;
     }
   }, [findClosestEgg, userId, cameraRef]);
 
