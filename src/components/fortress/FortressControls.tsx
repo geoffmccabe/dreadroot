@@ -988,6 +988,25 @@ export function FirstPersonControls({
           placementResult.z
         );
         onBlockPlace(position);
+
+        // If we placed a block inside our own column (e.g. at our feet), stand on
+        // TOP of it instead of getting embedded. Deterministic at placement time —
+        // the generic per-frame push-out can mis-pick a sideways/down direction.
+        const pHeight = keys.current.ctrl ? 0.8 : 1.6; // crawling : standing
+        const pRadius = 0.3;
+        const blockTop = placementResult.y + 1;
+        const feetY = camera.position.y - pHeight;
+        const cx = placementResult.x + 0.5;
+        const cz = placementResult.z + 0.5;
+        const horizOverlap =
+          Math.abs(camera.position.x - cx) < 0.5 + pRadius &&
+          Math.abs(camera.position.z - cz) < 0.5 + pRadius;
+        const vertOverlap = blockTop > feetY && placementResult.y < camera.position.y;
+        if (horizOverlap && vertOverlap) {
+          camera.position.y = blockTop + pHeight + 0.005;
+          velocity.current.y = 0;
+          onGround.current = true;
+        }
       } else {
         // Play rejection sound
         try {
