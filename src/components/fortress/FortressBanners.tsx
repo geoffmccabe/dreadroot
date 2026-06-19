@@ -11,7 +11,7 @@ import { frameLoop } from '@/lib/frameLoop';
 const BANNER_W = 4.0;
 const BANNER_H = 15;
 const BANNER_Y = 10;     // centered on the 20m-tall front wall
-const BANNER_Z = -6.95;  // 0.05m in front of the front face (front blocks end at z = -7)
+const BANNER_Z = -6.90;  // 0.10m in front of the front face (front blocks end at z = -7)
 
 // Two banners each side of the gate (gate opening is x in [-2, 2]).
 const BANNERS = [
@@ -31,6 +31,13 @@ function Banner({
   uTime: React.MutableRefObject<{ value: number }>;
 }) {
   const [tex, setTex] = useState<THREE.Texture | null>(null);
+
+  // Per-banner randomization so the four don't flutter in lockstep: a phase offset
+  // plus a speed multiplier within ±10%. Stable for the life of this banner.
+  const { phase, speed } = useMemo(() => ({
+    phase: Math.random() * Math.PI * 2,
+    speed: 1 + (Math.random() * 0.2 - 0.1),
+  }), []);
 
   useEffect(() => {
     let disposed = false;
@@ -68,14 +75,18 @@ function Banner({
          // 0 at the top edge (pinned), 1 at the bottom. Squared so flutter grows toward the hem.
          float drape = clamp((topY - transformed.y) / bH, 0.0, 1.0);
          drape = drape * drape;
-         float w1 = sin(transformed.y * 1.1 + uTime * 2.0 + transformed.x * 0.9);
-         float w2 = sin(transformed.y * 0.55 - uTime * 1.3 + transformed.x * 0.4);
-         transformed.z += drape * 0.35 * w1;   // billow in/out from the wall
-         transformed.x += drape * 0.12 * w2;   // slight sideways ripple`
+         // Per-banner phase + speed (baked) keep the four out of sync.
+         float ph = uTime * ${speed.toFixed(3)} + ${phase.toFixed(3)};
+         float w1 = sin(transformed.y * 1.1 + ph * 2.0 + transformed.x * 0.9);
+         float w2 = sin(transformed.y * 0.55 - ph * 1.3 + transformed.x * 0.4);
+         // OUTWARD-ONLY billow (0..amp, toward the player) so it never swings back
+         // through the wall and vanishes.
+         transformed.z += drape * 0.35 * (0.5 + 0.5 * w1);
+         transformed.x += drape * 0.12 * w2;   // slight sideways ripple
       );
     };
     return m;
-  }, [tex, uTime]);
+  }, [tex, uTime, phase, speed]);
 
   useEffect(() => () => { material?.dispose(); }, [material]);
   useEffect(() => () => { tex?.dispose(); }, [tex]);
