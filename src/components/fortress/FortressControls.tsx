@@ -46,6 +46,7 @@ const _inspectorPos = new THREE.Vector3();
 const _inspectorDir = new THREE.Vector3();
 const _inspectorDistVec = new THREE.Vector3();
 const _sdbgDir = new THREE.Vector3();   // scratch: camera look dir for the siege debug readout
+const _spreadWorldUp = new THREE.Vector3(0, 1, 0);   // constant world-up for spread basis
 
 export function FirstPersonControls({
   onShoot,
@@ -1003,7 +1004,38 @@ export function FirstPersonControls({
     shootDirectionRef.current.applyQuaternion(camera.quaternion);
     shootDirectionRef.current.normalize();
     shootOriginRef.current.copy(camera.position);
-    onShoot(shootOriginRef.current, shootDirectionRef.current);
+
+    // Phase 5 — spread + multi-pellet. Fire bulletsPerTap pellets, each offset
+    // within the weapon's spread cone. Spread tightens to zero when aiming
+    // (except shotguns/multi-pellet, which always spread) and doubles while
+    // moving (hip-fire run-and-gun is inaccurate, like SWU).
+    const pellets = Math.max(1, aw?.bulletsPerTap ?? 1);
+    const isShotgun = pellets > 1;
+    const DEG2 = Math.PI / 180;
+    const movingSq = velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z;
+    let spreadScale = 1;
+    if (isAimingRef.current && !isShotgun) spreadScale = 0;       // aimed = pinpoint
+    else if (movingSq > 1) spreadScale = 2;                       // moving = wide
+    const hSpread = (aw?.horizontalSpread ?? 0) * spreadScale * DEG2;
+    const vSpread = (aw?.verticalSpread ?? 0) * spreadScale * DEG2;
+
+    if (pellets === 1 && hSpread === 0 && vSpread === 0) {
+      onShoot(shootOriginRef.current, shootDirectionRef.current);
+    } else {
+      const base = shootDirectionRef.current;
+      const right = new THREE.Vector3().crossVectors(base, _spreadWorldUp).normalize();
+      const realUp = new THREE.Vector3().crossVectors(right, base).normalize();
+      for (let i = 0; i < pellets; i++) {
+        const dir = new THREE.Vector3().copy(base);
+        if (hSpread > 0 || vSpread > 0) {
+          dir.addScaledVector(right, Math.tan((Math.random() * 2 - 1) * hSpread));
+          dir.addScaledVector(realUp, Math.tan((Math.random() * 2 - 1) * vSpread));
+          dir.normalize();
+        }
+        onShoot(shootOriginRef.current, dir);
+      }
+    }
+
     const fireKey = aw?.fireSound ?? 'gunshot';
     playSpatialSound(getSoundUrl(fireKey, '/space_gunshot.mp3'), 0, { baseVolume: 0.3 });
     consumeAmmo();
