@@ -29,6 +29,7 @@ import { FortressBanners } from './FortressBanners';
 import { FortressForceField } from './FortressForceField';
 import { ForceFieldMoire } from './ForceFieldMoire';
 import { FortressBuilderPreview } from '@/features/fortressBuilder/FortressBuilderPreview';
+import { FortressPostFX } from './FortressPostFX';
 import { SceneReflections } from '@/components/SceneReflections';
 import { FPSCounter, FPSCounterHandle, RenderTimer } from '@/components/FPSCounter';
 import { WispBlock } from '@/components/WispBlock';
@@ -1745,6 +1746,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <MultiplayerPlayers players={players} />
       <ChopFeedback />
       <FortressBuilderPreview />
+      <FortressPostFX />
       {/* Local player avatar hidden for now (the visible blue body) — re-enable by flipping this. */}
       {false && <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />}
       {/* FirstPersonArms DISABLED: it renders the y-bot SKINNED mesh, and a skinned
