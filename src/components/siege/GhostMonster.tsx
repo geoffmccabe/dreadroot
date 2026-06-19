@@ -25,8 +25,6 @@ const HP = 100;
 const HIT_R = 1.4;              // impact radius around the committed strike point — move farther than this to dodge
 const STRIKE_JITTER = 0.25;     // the strike lands within this radius of where you stood when the dive began
 const DIVE_SPEED = 10.8;        // m/s — slow descent you can watch + shoot (20% faster than 9)
-const WINDUP_MS = 700;          // telegraph: rears up over the strike point before dropping (a window to shoot it)
-const WINDUP_RISE = 4;          // metres it rises above the strike point during the wind-up
 
 // Faint, fast-rising ghost smoke: 10s life, rises 3× base, low opacity, cool grey-blue.
 registerRecipe({ ...FIRE_SMOKE, code: 'ghost-smoke', lifetime: 10.0, rise: 3.0, spawnRate: 55,
@@ -119,7 +117,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const m = useRef({
     angle: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1,
     radius: 6, height: 7, rev: 0.4, bobAmp: 1, bobFreq: 0.6, radAmp: 1, radFreq: 0.5,
-    rerollAt: 0, mode: 'orbit' as 'orbit' | 'windup' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, windupUntil: 0, hitDone: false, yaw: 0,
+    rerollAt: 0, mode: 'orbit' as 'orbit' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, hitDone: false, yaw: 0,
     dtx: 0, dty: 0, dtz: 0,                                            // committed strike point for the current dive
     lastHit: 0, wildUntil: 0, wildSpin: 0, wildYaw: 0,               // shot-mid-attack: fast spin about its own axis
     px: spawn[0], py: spawn[1] + BASE_H, pz: spawn[2], vx: 0, vy: 0, vz: 0,   // prev pos + velocity (for death physics)
@@ -163,7 +161,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
     // 3s (a player defence: shoot it out of an attack).
     if (inst.hitAt && inst.hitAt !== m.lastHit) {
       m.lastHit = inst.hitAt;
-      if ((m.mode === 'dive' || m.mode === 'windup') && !m.hitDone) {
+      if (m.mode === 'dive' && !m.hitDone) {
         m.hitDone = true; m.mode = 'back'; m.wildUntil = now + 3000;
         m.wildSpin = (Math.random() < 0.5 ? 1 : -1) * 7.3;   // ~1/3 of the old chaotic tumble, one axis
       }
@@ -180,18 +178,13 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       tx = px + Math.cos(m.angle) * r; tz = pz + Math.sin(m.angle) * r; ty = py + h;
       chase = 16 * SPD;
       if (m.diveAt === 0) m.diveAt = now + rnd([2500, 6000]);
-      // Begin a wind-up (but not while still tumbling from a hit). COMMIT to a strike point NOW —
-      // where you are, +0.25m jitter — then rear up over it before dropping straight down on it, so
-      // moving away during the telegraph + descent dodges it.
+      // Begin a dive (but not while still tumbling from a hit). COMMIT to a strike point NOW — where
+      // you are, +0.25m jitter — and drop straight down on it from above, so moving away dodges it.
       if (now > m.diveAt && now > m.wildUntil) {
         const ja = Math.random() * Math.PI * 2, jr = Math.sqrt(Math.random()) * STRIKE_JITTER;
         m.dtx = px + Math.cos(ja) * jr; m.dtz = pz + Math.sin(ja) * jr; m.dty = py + 0.3;
-        m.mode = 'windup'; m.hitDone = false; m.windupUntil = now + WINDUP_MS;
+        m.mode = 'dive'; m.hitDone = false; m.diveEndsBy = now + 2600;
       }
-    } else if (m.mode === 'windup') {
-      // Rear up directly above the strike point (a clear tell + a window to shoot it), then drop.
-      tx = m.dtx; ty = m.dty + WINDUP_RISE; tz = m.dtz; chase = 11 * SPD;
-      if (now > m.windupUntil) { m.mode = 'dive'; m.diveEndsBy = now + 2600; }
     } else if (m.mode === 'dive') {
       tx = m.dtx; ty = m.dty; tz = m.dtz; chase = DIVE_SPEED * SPD;   // committed point, half-speed → dodgeable
       const arrived = Math.hypot(m.dtx - cx.current, m.dty - cy.current, m.dtz - cz.current) < 0.7;
