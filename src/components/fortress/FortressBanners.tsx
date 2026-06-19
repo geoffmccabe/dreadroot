@@ -7,27 +7,32 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { frameLoop } from '@/lib/frameLoop';
 
-// Banner art is 577x2166 (aspect ~0.266). At 15m tall that's ~4m wide.
-const BANNER_W = 4.0;
+// Banners are 15m tall; width = 15 × (imgW/imgH). The 1-4 art is 577x2166 (~4m wide);
+// banner_5 is 887x1774 (~7.5m wide) and sits in the centre over the gate.
 const BANNER_H = 15;
 const BANNER_Y = 10;     // centered on the 20m-tall front wall
 const BANNER_Z = -6.90;  // 0.10m in front of the front face (front blocks end at z = -7)
 
-// Two banners each side of the gate (gate opening is x in [-2, 2]).
+// Five banners across the 40-wide front (x -20..20). The wide centre banner is at x=0;
+// the other four are re-spaced symmetrically with even gaps and stay clear of the edges
+// (outermost edge at 17.25, ~2.75m margin).
 const BANNERS = [
-  { url: '/fortress_banner_1.webp', x: -15 },
-  { url: '/fortress_banner_2.webp', x: -7 },
-  { url: '/fortress_banner_3.webp', x: 7 },
-  { url: '/fortress_banner_4.webp', x: 15 },
+  { url: '/fortress_banner_1.webp', x: -15.25, w: 4.0 },
+  { url: '/fortress_banner_2.webp', x: -8.5, w: 4.0 },
+  { url: '/fortress_banner_5.webp', x: 0, w: 7.5 },
+  { url: '/fortress_banner_3.webp', x: 8.5, w: 4.0 },
+  { url: '/fortress_banner_4.webp', x: 15.25, w: 4.0 },
 ];
 
 function Banner({
   url,
   x,
+  w,
   uTime,
 }: {
   url: string;
   x: number;
+  w: number;
   uTime: React.MutableRefObject<{ value: number }>;
 }) {
   const [tex, setTex] = useState<THREE.Texture | null>(null);
@@ -94,7 +99,7 @@ function Banner({
   if (!material) return null;
   return (
     <mesh position={[x, BANNER_Y, BANNER_Z]} material={material} castShadow={false} receiveShadow={false}>
-      <planeGeometry args={[BANNER_W, BANNER_H, 8, 28]} />
+      <planeGeometry args={[w, BANNER_H, 8, 28]} />
     </mesh>
   );
 }
@@ -112,7 +117,7 @@ export function FortressBanners() {
   return (
     <group>
       {BANNERS.map((b) => (
-        <Banner key={b.url} url={b.url} x={b.x} uTime={uTime} />
+        <Banner key={b.url} url={b.url} x={b.x} w={b.w} uTime={uTime} />
       ))}
     </group>
   );
