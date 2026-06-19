@@ -47,6 +47,7 @@ const BODY =
   + ' if (uHue != 0.0) { vec3 _k = vec3(0.57735); float _cs = cos(uHue), _sn = sin(uHue); _c = _c*_cs + cross(_k,_c)*_sn + _k*dot(_k,_c)*(1.0-_cs); }'
   + ' float _l = dot(_c, vec3(0.299,0.587,0.114));'
   + ' _c = mix(vec3(_l), _c, uSat);'
+  + ' _c = clamp(_c, 0.0, 1.0);'   // keep blend inputs in [0,1] — saturation>1 can push a channel negative, and soft-light sqrt(neg) = NaN
   + ' _c = mix(_c, _cmBlend(_c, uTint, uBlend), uTintAmt);'
   + ' gl_FragColor.rgb = clamp(_c, 0.0, 1.0); }';
 
