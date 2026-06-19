@@ -83,7 +83,7 @@ function Banner({
          // through the wall and vanishes.
          transformed.z += drape * 0.35 * (0.5 + 0.5 * w1);
          transformed.x += drape * 0.12 * w2;   // slight sideways ripple
-      );
+      `);
     };
     return m;
   }, [tex, uTime, phase, speed]);
