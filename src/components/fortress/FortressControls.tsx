@@ -1009,17 +1009,29 @@ export function FirstPersonControls({
     // within the weapon's spread cone. Spread tightens to zero when aiming
     // (except shotguns/multi-pellet, which always spread) and doubles while
     // moving (hip-fire run-and-gun is inaccurate, like SWU).
+    //
+    // IMPORTANT: weapon_stats.horizontal_spread/vertical_spread are SWU
+    // SCREEN-SPACE PIXEL offsets (Unity applies them via ScreenPointToRay), NOT
+    // degrees. Convert px → ray tangent offset through the camera focal length
+    // so accuracy matches SWU. focal = (viewportHeightPx/2) / tan(vFOV/2);
+    // tan(angle) = pixels / focal.
     const pellets = Math.max(1, aw?.bulletsPerTap ?? 1);
     const isShotgun = pellets > 1;
-    const DEG2 = Math.PI / 180;
     const movingSq = velocity.current.x * velocity.current.x + velocity.current.z * velocity.current.z;
     let spreadScale = 1;
     if (isAimingRef.current && !isShotgun) spreadScale = 0;       // aimed = pinpoint
     else if (movingSq > 1) spreadScale = 2;                       // moving = wide
-    const hSpread = (aw?.horizontalSpread ?? 0) * spreadScale * DEG2;
-    const vSpread = (aw?.verticalSpread ?? 0) * spreadScale * DEG2;
+    const pcam = camera as THREE.PerspectiveCamera;
+    const vFov = (pcam.isPerspectiveCamera ? pcam.fov : 70) * Math.PI / 180;
+    const viewportH = typeof window !== 'undefined' ? window.innerHeight : 1080;
+    const focalPx = (Math.max(1, viewportH) / 2) / Math.tan(vFov / 2);
+    const hSpreadPx = (aw?.horizontalSpread ?? 0) * spreadScale;
+    const vSpreadPx = (aw?.verticalSpread ?? 0) * spreadScale;
+    // Safety: cap the tangent offset so a stray/huge DB value can never send a
+    // bullet sideways or backwards (~0.3 tan ≈ 17°).
+    const MAX_TAN = 0.3;
 
-    if (pellets === 1 && hSpread === 0 && vSpread === 0) {
+    if (pellets === 1 && hSpreadPx === 0 && vSpreadPx === 0) {
       onShoot(shootOriginRef.current, shootDirectionRef.current);
     } else {
       const base = shootDirectionRef.current;
@@ -1027,9 +1039,11 @@ export function FirstPersonControls({
       const realUp = new THREE.Vector3().crossVectors(right, base).normalize();
       for (let i = 0; i < pellets; i++) {
         const dir = new THREE.Vector3().copy(base);
-        if (hSpread > 0 || vSpread > 0) {
-          dir.addScaledVector(right, Math.tan((Math.random() * 2 - 1) * hSpread));
-          dir.addScaledVector(realUp, Math.tan((Math.random() * 2 - 1) * vSpread));
+        if (hSpreadPx > 0 || vSpreadPx > 0) {
+          const hx = THREE.MathUtils.clamp(((Math.random() * 2 - 1) * hSpreadPx) / focalPx, -MAX_TAN, MAX_TAN);
+          const vy = THREE.MathUtils.clamp(((Math.random() * 2 - 1) * vSpreadPx) / focalPx, -MAX_TAN, MAX_TAN);
+          dir.addScaledVector(right, hx);
+          dir.addScaledVector(realUp, vy);
           dir.normalize();
         }
         onShoot(shootOriginRef.current, dir);
