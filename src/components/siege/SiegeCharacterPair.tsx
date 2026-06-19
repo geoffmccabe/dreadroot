@@ -25,8 +25,13 @@ const PAIR: { id: string; name: string }[] = [
 
 const SPACING = 2.5; // metres between characters
 
+// A NEW filename is the only reliable cache-bust; shiyang's good file is the v3 build
+// (rest==bind AND ibm=1), not the original shiyang.glb. Map id → actual file here.
+const GLB_FILE: Record<string, string> = { shiyang: 'shiyang_v3' };
+
 function CharacterStand({ id, name, x, z }: { id: string; name: string; x: number; z: number }) {
-  const { scene, animations } = useGLTF(`/siege/characters/${id}.glb?v=${APP_VERSION}`);
+  const file = GLB_FILE[id] ?? id;
+  const { scene, animations } = useGLTF(`/siege/characters/${file}.glb?v=${APP_VERSION}`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
