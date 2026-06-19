@@ -144,11 +144,15 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         return; // wrong type for this slot — now with feedback instead of a silent reject
       }
       const from = originToRpc(cur.origin);
-      cursorStackApi.setCursor(null);
       try {
         await equipTransfer(from, { region: 'equip', page: 0, slot: def.num });
+        cursorStackApi.setCursor(null);   // clear the cursor only AFTER a successful move
         void playSound(DROP_SOUND, 0.5);
-      } catch (err) { console.error('[equip] move failed', err); }
+      } catch (err: unknown) {
+        const e = err as { message?: string; code?: string; details?: string };
+        toast({ title: 'Equip failed', description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
+        console.error('[equip] move failed', err);
+      }
       void onMoved();   // shared refresh → updates equip AND clears the source from inventory/QS
       return;
     }
@@ -159,7 +163,11 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       try {
         await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst });
         void playSound(DROP_SOUND, 0.5);
-      } catch (err) { console.error('[equip] unequip failed', err); }
+      } catch (err: unknown) {
+        const e = err as { message?: string; code?: string; details?: string };
+        toast({ title: 'Unequip failed', description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
+        console.error('[equip] unequip failed', err);
+      }
       void onMoved();   // shared refresh → updates equip AND the inventory destination
     }
   };
