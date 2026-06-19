@@ -995,10 +995,19 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         g.rotation.x -= s.spinX * delta;
       } else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
     } else if (inst.headshotAt) {
-      // Headshot recoil: a fast 15° backward heel-pivot lean + snap back, all within 0.1s.
-      const ht = (now - inst.headshotAt) / 100;   // 0..1 over 1/10s
-      if (ht < 1) { g.rotation.order = 'YXZ'; g.rotation.x = -(15 * Math.PI / 180) * Math.sin(Math.PI * ht); }
-      else if (g.rotation.x !== 0) g.rotation.x = 0;
+      // Headshot recoil-lean: a backward heel-pivot lean that snaps back over
+      // 0.15s (pivots at the feet — the model origin — like the death topple).
+      // Amplitude scales with the biped's height: 30° at ≤1m, falling linearly to
+      // 0° at 8m, and nothing at ≥8m (big bosses don't flinch from a headshot).
+      const leanDeg = H >= 8 ? 0 : Math.min(30, Math.max(0, 30 * (8 - H) / 7));
+      const ht = (now - inst.headshotAt) / 150;   // 0..1 over 0.15s
+      if (ht < 1 && leanDeg > 0) {
+        g.rotation.order = 'YXZ';
+        g.rotation.x = -(leanDeg * Math.PI / 180) * Math.sin(Math.PI * ht);   // 0 → peak → 0
+      } else {
+        if (g.rotation.x !== 0) g.rotation.x = 0;
+        inst.headshotAt = 0;   // animation done — clear so it stays clean + re-triggers next hit
+      }
     }
 
     me.y = s.y;
