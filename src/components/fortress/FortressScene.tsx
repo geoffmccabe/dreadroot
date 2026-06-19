@@ -48,6 +48,7 @@ import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
 import { SiegeCharacterPair } from '@/components/siege/SiegeCharacterPair';
+import { SiegeNewMonsterLineup } from '@/components/siege/SiegeNewMonsterLineup';
 import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
@@ -1783,6 +1784,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Standalone diagnostic: Thorn + Shi Yang standing side-by-side near spawn, animated
           (idle), with name tags — walk up to compare arm/hand distortion. No dropdown/avatar. */}
       {isSiege && <SiegeCharacterPair />}
+      {/* Review row of freshly-imported Synty monsters (Goblin War Camp + Boss Zombies) near spawn. */}
+      {isSiege && <SiegeNewMonsterLineup />}
       {isSiege ? (
         <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
       ) : (
