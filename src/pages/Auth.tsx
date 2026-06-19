@@ -109,10 +109,6 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-black">
-      {/* Build version, visible right on the start page (no need to load the game to check). */}
-      <div className="absolute bottom-3 right-4 z-30 font-mono text-xs text-white/55 pointer-events-none select-none">
-        v{APP_VERSION}
-      </div>
       <style>{`
 @keyframes authBlackPulse{0%,100%{opacity:.75}50%{opacity:.60}}
 @keyframes dreadrootCrossfade{0%,100%{opacity:0}50%{opacity:1}}
@@ -187,13 +183,19 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
             style={{ animation: 'dreadrootCrossfade 10s ease-in-out infinite' }}
           />
         </div>
-        <Button
-          type="button"
-          onClick={onStart ?? signInWithSSO}
-          className="h-12 px-10 text-lg font-bold tracking-widest"
-        >
-          {onStart ? 'START GAME' : 'LOGIN'}
-        </Button>
+        <div className="flex flex-col items-center gap-2">
+          <Button
+            type="button"
+            onClick={onStart ?? signInWithSSO}
+            className="h-12 px-10 text-lg font-bold tracking-widest"
+          >
+            {onStart ? 'START GAME' : 'LOGIN'}
+          </Button>
+          {/* Build version, small, right under the button. */}
+          <span className="font-mono text-xs text-white/55 select-none pointer-events-none">
+            v{APP_VERSION}
+          </span>
+        </div>
       </div>
     </div>
   );
