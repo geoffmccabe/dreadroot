@@ -1,7 +1,8 @@
 // Fortress Builder panel — uses the shared GamePanel shell (drag/resize/glow/blur,
 // matches the User Panel). Always mounted so it owns the Shift+B hotkey (admins only).
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useUserData } from '@/hooks/useUserData';
+import { saveSnapshot, listSnapshots, deleteSnapshot, type Snapshot } from './fortressBuilderSnapshots';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -70,6 +71,23 @@ export function FortressBuilderPanel() {
     reader.readAsDataURL(f);
   };
 
+  const [snapName, setSnapName] = useState('');
+  const [snaps, setSnaps] = useState<Snapshot[]>([]);
+  const refreshSnaps = () => listSnapshots().then(setSnaps).catch(() => {});
+  useEffect(() => { if (s.isOpen) refreshSnaps(); }, [s.isOpen]);
+
+  const onSaveSnapshot = async () => {
+    const name = snapName.trim();
+    if (!name) return;
+    const { isOpen, blockCount, ...state } = s; // drop transient fields
+    void isOpen; void blockCount;
+    await saveSnapshot({ name, createdAt: Date.now(), state });
+    setSnapName('');
+    refreshSnaps();
+  };
+  const onLoadSnapshot = (snap: Snapshot) => builderStore.set(snap.state as Partial<typeof s>);
+  const onDeleteSnapshot = async (name: string) => { await deleteSnapshot(name); refreshSnaps(); };
+
   const curExtrude = (s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn)[s.exTier] ?? 0;
   const bumpExtrude = (delta: number) => {
     const src = s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn;
@@ -121,6 +139,39 @@ export function FortressBuilderPanel() {
           >
             Rebuild (try a different idea)
           </Button>
+        </div>
+
+        {/* Saved creations */}
+        <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Label className="text-xs font-semibold">Saved creations</Label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={snapName}
+              onChange={(e) => setSnapName(e.target.value)}
+              placeholder="name this creation"
+              className="flex-1 text-xs rounded p-1"
+              style={{ background: 'hsla(var(--hud-bg-dim))', border: '1px solid hsla(var(--hud-border))', color: 'hsl(var(--hud-text))' }}
+            />
+            <Button size="sm" className="h-7" disabled={!snapName.trim()} onClick={onSaveSnapshot}>Save</Button>
+          </div>
+          {snaps.length > 0 && (
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {snaps.map((sn) => (
+                <div key={sn.name} className="flex items-center gap-1 text-xs">
+                  <button
+                    className="flex-1 text-left truncate px-1 py-0.5 rounded hover:opacity-80"
+                    style={{ background: 'hsla(var(--hud-bg-dim))' }}
+                    onClick={() => onLoadSnapshot(sn)}
+                    title="Load this creation"
+                  >
+                    {sn.name}
+                  </button>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onDeleteSnapshot(sn.name)} title="Delete">✕</Button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <Row label={`Diameter: ${s.D} (fortress ${Math.round(0.6 * s.D)})`} min={20} max={100} step={1} value={s.D} onChange={(v) => builderStore.set({ D: v })} />

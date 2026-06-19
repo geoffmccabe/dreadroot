@@ -50,7 +50,7 @@ const initial: BuilderState = {
   prompt: '',
   barrierOn: false,
   rebuildSeed: 0,
-  faceSym: 'none',
+  faceSym: 'lr',
   faceFlip: false,
   wallSym: '4way',
   entryW: 4,
@@ -58,7 +58,9 @@ const initial: BuilderState = {
   entryWall: 0,
   entryVert: 0,
   stairs: true,
-  extrudeOut: [0, 0, 0, 0, 0],
+  // Default nice combo: recess the 2nd-lightest tier (idx1) by 1 (lit niche), and
+  // extrude the 2nd-darkest tier (idx3) outward by 1 (relief).
+  extrudeOut: [0, -1, 0, 1, 0],
   extrudeIn: [0, 0, 0, 0, 0],
   exTier: 0,
   exFace: 'outside',
