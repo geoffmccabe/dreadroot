@@ -6,6 +6,7 @@ import { setActiveWeapon } from '@/config/activeWeapon';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
 import { playSound } from '@/lib/spatialAudio';
+import { getSoundUrl } from '@/hooks/useGameSounds';
 import { useToast } from '@/hooks/use-toast';
 
 // The four equip slots are a REAL region ('equip') in the unified user_slots system,
@@ -14,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 
 const HUD_DIM = 'hsl(var(--hud-text-dim))';
 const T1_BOOTS = '/rocket_boots_t1_256px.webp';
-const DROP_SOUND = '/enemy_hitting_ground.mp3';
+const EQUIP_FALLBACK = '/wooden_thud_sound.mp3';   // soft "place" sound for non-weapons / no reload clip
 
 // equip slot number ↔ gear type (and accepted item_category per slot).
 interface SlotDef { num: number; type: string; label: string; glyph: string; cats: string[]; }
@@ -38,26 +39,33 @@ const sb = supabase as unknown as {
   };
 };
 
-// Whether an item may go in a given equip slot. item_category is a BROAD field (block/item/seed/…)
-// that most weapons don't tag as 'weapon', so the weapon slot ALSO accepts anything the game treats
-// as a weapon: a row in weapon_stats (the same source the active-weapon system uses) or the flame
-// glove by key. Other slots use the explicit item_category match.
-async function canAcceptInSlot(def: SlotDef, itemId: string): Promise<boolean> {
+// Resolve a drop: whether the item fits the slot, its display def (for an instant optimistic tile),
+// and the weapon's reload-sound key (so equipping a weapon plays its reload clip). item_category is a
+// BROAD field (block/item/seed/…) that most weapons don't tag 'weapon', so the weapon slot ALSO
+// accepts anything the game treats as a weapon: a weapon_stats row (same source the active-weapon
+// system uses) or the flame glove by key. One items query + (weapon only) one weapon_stats query.
+async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean; item: EquipItem | null; reloadKey: string | null }> {
   const { data: it } = await (supabase as unknown as {
-    from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { item_category: string | null; item_number: number | null; key: string | null } | null }> } } };
-  }).from('items').select('item_category,item_number,key').eq('id', itemId).maybeSingle();
-  if (!it) return false;
-  if (it.item_category && def.cats.includes(it.item_category)) return true;
+    from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { item_category: string | null; item_number: number | null; key: string | null; name: string; tier: number | null; texture_url: string | null } | null }> } } };
+  }).from('items').select('item_category,item_number,key,name,tier,texture_url').eq('id', itemId).maybeSingle();
+  if (!it) return { ok: false, item: null, reloadKey: null };
+  const item: EquipItem = {
+    itemId, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category ?? '',
+    spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
+  };
+  if (it.item_category && def.cats.includes(it.item_category)) return { ok: true, item, reloadKey: null };
   if (def.type === 'weapon') {
-    if (it.key === 'flame_glove' || (it.key ?? '').includes('glove')) return true;
+    const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
     if (it.item_number != null) {
       const { data: ws } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number } | null }> } } };
-      }).from('weapon_stats').select('item_number').eq('item_number', it.item_number).maybeSingle();
-      return !!ws;
+        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number; reload_sound: string | null } | null }> } } };
+      }).from('weapon_stats').select('item_number,reload_sound').eq('item_number', it.item_number).maybeSingle();
+      if (ws || isGlove) return { ok: true, item, reloadKey: ws?.reload_sound ?? null };
+    } else if (isGlove) {
+      return { ok: true, item, reloadKey: null };
     }
   }
-  return false;
+  return { ok: false, item, reloadKey: null };
 }
 
 function originToRpc(origin: CursorOrigin): { region: string; page: number; slot: number } {
@@ -136,39 +144,38 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     return null;
   }, [user?.id]);
 
+  const reportFail = (title: string, err: unknown) => {
+    const e = err as { message?: string; code?: string; details?: string };
+    toast({ title, description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
+    console.error('[equip]', title, err);
+  };
+
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
     if (cur) {
-      if (!(await canAcceptInSlot(def, cur.itemId))) {
-        toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 });
-        return; // wrong type for this slot — now with feedback instead of a silent reject
-      }
+      const r = await resolveDrop(def, cur.itemId);
+      if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
+      // OPTIMISTIC: show the item in the slot + play the equip sound + clear the cursor INSTANTLY;
+      // the DB move + shared reconcile happen in the background, so it feels immediate.
+      setEquip((prev) => ({ ...prev, [def.num]: r.item }));
+      cursorStackApi.setCursor(null);
+      void playSound(r.reloadKey ? getSoundUrl(r.reloadKey, EQUIP_FALLBACK) : EQUIP_FALLBACK, 0.6);
       const from = originToRpc(cur.origin);
-      try {
-        await equipTransfer(from, { region: 'equip', page: 0, slot: def.num });
-        cursorStackApi.setCursor(null);   // clear the cursor only AFTER a successful move
-        void playSound(DROP_SOUND, 0.5);
-      } catch (err: unknown) {
-        const e = err as { message?: string; code?: string; details?: string };
-        toast({ title: 'Equip failed', description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
-        console.error('[equip] move failed', err);
-      }
-      void onMoved();   // shared refresh → updates equip AND clears the source from inventory/QS
+      try { await equipTransfer(from, { region: 'equip', page: 0, slot: def.num }); }
+      catch (err) { reportFail('Equip failed', err); }
+      void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
       return;
     }
-    // No cursor + filled slot → unequip back to the first empty inventory slot.
+    // No cursor + filled slot → unequip back to the first empty inventory slot (instant + bg move).
     if (equip[def.num]) {
+      const removed = equip[def.num];
+      setEquip((prev) => ({ ...prev, [def.num]: null }));   // optimistic clear
+      void playSound(EQUIP_FALLBACK, 0.5);
       const dst = await firstEmptyInventorySlot();
-      if (dst == null) return; // inventory full
-      try {
-        await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst });
-        void playSound(DROP_SOUND, 0.5);
-      } catch (err: unknown) {
-        const e = err as { message?: string; code?: string; details?: string };
-        toast({ title: 'Unequip failed', description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
-        console.error('[equip] unequip failed', err);
-      }
-      void onMoved();   // shared refresh → updates equip AND the inventory destination
+      if (dst == null) { setEquip((prev) => ({ ...prev, [def.num]: removed })); toast({ title: 'Inventory full', duration: 2000 }); return; }
+      try { await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst }); }
+      catch (err) { setEquip((prev) => ({ ...prev, [def.num]: removed })); reportFail('Unequip failed', err); }
+      void onMoved();
     }
   };
 
