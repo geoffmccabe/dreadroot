@@ -382,7 +382,10 @@ export function Fortress() {
   const [selectedItemDef, setSelectedItemDef] = useState<SelectedItemDef>({ itemNumber: null, tier: null, name: null, itemId: null });
 
   useEffect(() => {
-    const eq = equippedItems.find((e: { slot: number; itemId: string }) => e.slot === selectedSlot);
+    // Weapon behavior (flame glove) reads the EQUIPPED weapon slot (E1), NOT
+    // the QA selection. QA/Inventory are consumables-only; a weapon is only
+    // active once moved to Equip slot 1. This is the single active-weapon model.
+    const eq = equippedGear.find((e: { slot: number; itemId: string }) => e.slot === 1);
     if (!eq) {
       setSelectedItemDef({ itemNumber: null, tier: null, name: null, itemId: null });
       return;
@@ -419,7 +422,7 @@ export function Fortress() {
       }
     };
     fetchDef();
-  }, [selectedSlot, equippedItems]);
+  }, [equippedGear]);
 
   // Resolve grenade item UUIDs → tier. Forged grenades live in
   // user_inventory as { item_type: 'item', item_id: <items.id> }, so we
