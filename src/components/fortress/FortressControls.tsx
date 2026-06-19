@@ -381,7 +381,16 @@ export function FirstPersonControls({
     };
     return () => { delete (window as any).__applyPlayerSpin; };
   }, []);
-  
+
+  // Lets the Siege "Jump To" apply a saved view ANGLE (yaw/pitch). Sets the controller's own refs
+  // so it sticks — setting camera.rotation alone gets overwritten on the next mouse move.
+  useEffect(() => {
+    (window as any).__siegeSetView = (yawRad: number, pitchRad = 0) => {
+      yaw.current = yawRad; pitch.current = pitchRad; needsCameraUpdate.current = true;
+    };
+    return () => { delete (window as any).__siegeSetView; };
+  }, []);
+
   // Initialize fortress colliders on mount
   // NOTE: We no longer clear the grid here because block colliders from useChunkLoader
   // may already be present and clearing them causes collision bugs

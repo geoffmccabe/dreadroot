@@ -19,6 +19,8 @@ export interface SiegeTeleport {
   slot: number;
   name: string;
   pos: [number, number, number]; // engine coords (X = -UnityX); Y a touch above ground
+  yaw?: number;                  // facing (radians) applied on jump; undefined = keep current facing
+  pitch?: number;                // look up/down (radians); usually 0
 }
 
 // Centroids measured from the exported placement data; Y nudged up so you drop
