@@ -25,9 +25,11 @@ const MODELS = [
   'city_SM_Bld_Advanced_01',
   'city_SM_Prop_Box_RobotParts_01',
 ];
+// Grid PITCH (12 m) exceeds the largest model footprint (~7 m truck) + margin, so nothing
+// overlaps. Centred on spawn (0,0,0) and spread across all quadrants so they're visible
+// whichever way you're facing; no model sits on the spawn point itself.
 const COLS = 4;
-const GAP = 7;            // metres between models
-const Z0 = -10;           // first row this far in front of spawn (0,0,0)
+const PITCH = 12;
 
 function ShowcaseModel({ file, x, z }: { file: string; x: number; z: number }) {
   const { scene } = useGLTF(`/siege/scifi/${file}.gltf`);
@@ -50,9 +52,9 @@ export function SciFiShowcase() {
   return (
     <Suspense fallback={null}>
       {MODELS.map((f, i) => {
-        const col = i % COLS, row = Math.floor(i / COLS);
-        const x = (col - (COLS - 1) / 2) * GAP;
-        const z = Z0 - row * GAP;
+        const col = i % COLS, row = Math.floor(i / COLS);   // 4 cols × 3 rows
+        const x = (col - (COLS - 1) / 2) * PITCH;            // -18, -6, 6, 18
+        const z = (row - 1) * PITCH;                         // -12, 0, 12 (around spawn)
         return <ShowcaseModel key={f} file={f} x={x} z={z} />;
       })}
     </Suspense>
