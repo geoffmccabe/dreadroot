@@ -50,6 +50,7 @@ import { UsersList } from './AdminPanel.UsersList';
 import { BlocksList } from './AdminPanel.BlocksList';
 import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
 import { SmokeEffectsPanel } from './AdminPanel.SmokeEffectsPanel';
+import { LightsEffectsPanel } from './AdminPanel.LightsEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { PoolManager } from '@/features/wallet/PoolManager';
 import { GatesManager } from '@/features/tokenGates/GatesManager';
@@ -402,9 +403,10 @@ export function AdminPanel({
 
           <TabsContent value="effects" className="mt-4 flex-1 overflow-hidden">
             <Tabs defaultValue="flame" className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-2 flex-shrink-0 mb-4">
+              <TabsList className="grid w-full grid-cols-3 flex-shrink-0 mb-4">
                 <TabsTrigger value="flame">Flame</TabsTrigger>
                 <TabsTrigger value="smoke">Smoke / VFX</TabsTrigger>
+                <TabsTrigger value="lights">Lights</TabsTrigger>
               </TabsList>
               <TabsContent value="flame" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-full pr-4">
@@ -414,6 +416,11 @@ export function AdminPanel({
               <TabsContent value="smoke" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-full pr-4">
                   <SmokeEffectsPanel />
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="lights" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full pr-4">
+                  <LightsEffectsPanel />
                 </ScrollArea>
               </TabsContent>
             </Tabs>
