@@ -1226,7 +1226,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   });
 
   const sel = showHitboxes && getEditUrl() === c.url ? getSelectedBox() : null;
-  const bpct = effectiveBullseyePct(inst.bullseyePct ?? 0);   // gold box size after the global factor
+  // Gold box size — computed from render values (not the imperatively-set
+  // inst.bullseyePct) so it always draws, × the global factor.
+  const bpct = effectiveBullseyePct(bullseyePct(Math.max(H, hitbox.body.hx * 2, hitbox.body.hz * 2)));
   return (
    <>
     <group ref={group} scale={scale}>
