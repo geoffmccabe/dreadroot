@@ -189,12 +189,16 @@ export function SiegeNewMonsterLineup() {
   const extraProps = (mon: Mon): Partial<MonsterConfig> => {
     if (mon.glb !== 'elementalgolem') return {};
     return {
-      kiteMin: 30, kiteMax: 50, rangedRange: 50, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
+      clips: { attack: 'weapon_strike1' },        // throw uses Attack #1
+      kiteMin: 50, kiteMax: 100, rangedRange: 100, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
       onRangedAttack: (ox, oy, oz) => {
         if (Math.random() < 0.5) return;            // 50% chance per 1-3 s window
-        const p = camera.position;
-        throwBoulder(ox, oy, oz, p.x, p.y - 1.6, p.z, 30 + Math.random() * 30,
-          { dmgMin: 50, dmgMax: 200, kbMin: 5, kbMax: 20 });
+        // Release the boulder ~50% of the way through the attack animation.
+        setTimeout(() => {
+          const p = camera.position;
+          throwBoulder(ox, oy, oz, p.x, p.y - 1.6, p.z, 30 + Math.random() * 30,
+            { dmgMin: 50, dmgMax: 200, kbMin: 5, kbMax: 20 });
+        }, 500);
       },
     };
   };
