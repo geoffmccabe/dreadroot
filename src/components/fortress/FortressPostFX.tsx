@@ -7,7 +7,8 @@
 // only genuinely bright things (emissive lights, sun glints) do. Flip ENABLE_POSTFX
 // off to remove the whole pipeline instantly if it ever needs to go.
 import { useMemo } from 'react';
-import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
+import { ToneMappingMode } from 'postprocessing';
 
 const ENABLE_POSTFX = true;
 
@@ -27,14 +28,18 @@ export function FortressPostFX() {
       <Bloom
         mipmapBlur
         intensity={isMobile ? 0.6 : 0.9}
-        // High threshold so the bright animated SKY/clouds do NOT bloom (that caused the
-        // screen-wide flashing as the day-night cycle crossed the threshold). Only the
-        // emissive light edges (rendered unclamped > 1) and the sun exceed this.
+        // High threshold so ordinary stone/ground/sky does NOT bloom — only genuinely
+        // bright emissives (glow materials rendered unclamped > 1) and the sun exceed it.
         luminanceThreshold={0.92}
-        // Low smoothing avoids a temporal feedback pulse on the threshold edge.
-        luminanceSmoothing={0.025}
-        radius={0.7}
+        // A SOFT threshold ramp (was 0.025) so pixels crossing the edge fade in/out of
+        // bloom instead of popping on/off every frame — that popping is the flicker.
+        luminanceSmoothing={0.3}
+        radius={0.8}
       />
+      {/* Tone-map LAST so the final image is clamped (ACES). Without it the composer
+          output is raw HDR — any unclamped/NaN pixel (e.g. a shader edge case) can blow
+          out or, through mipmapBlur, flash the whole screen black. */}
+      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
   );
 }
