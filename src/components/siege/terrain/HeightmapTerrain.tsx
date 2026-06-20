@@ -9,23 +9,24 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WorldDefinition } from '@/config/worldDefinition';
 import { setDynamicHeightProvider } from '../terrainHeight';
-import { toRenderSpace } from '@/lib/renderSpace';
+import { toRenderSpace, toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import { enqueueJob } from '@/lib/budgetedWork';
 import {
   CELL_M, SAMPLES, SAMPLE_M, cellKey, cellOf, getHeight, getSampleAt,
   setBaseline, clearField, consumeDirtyCells, loadField,
 } from './heightField';
-import { registerTerrainMesh, unregisterTerrainMesh } from './terrainMeshRegistry';
 import { loadMap } from './mapPersistence';
 import { setBrushState } from './terrainBrushState';
 
-const VIEW_CELLS = 4;          // load radius in cells (4×128 = 512 m of editable detail)
+const VIEW_CELLS = 3;          // load radius in cells (3×128 = 384 m of editable detail) — mobile-friendly
 const TEX_REPEAT_M = 6;
+const KEY_OFF = 32768;         // matches heightField cellKey packing
 
 // Height/slope tint so sculpted hills read clearly (grass → rock on height + steepness).
 const GRASS = new THREE.Color(0x5c7a3a);
 const GRASS_HI = new THREE.Color(0x6f8a48);
 const ROCK = new THREE.Color(0x6d6660);
+const scratchColor = new THREE.Color(); // reused — no per-vertex/per-frame allocation
 function tint(y: number, base: number, slopeUp: number, out: THREE.Color) {
   out.lerpColors(GRASS, GRASS_HI, Math.min(1, Math.max(0, (y - base) / 40)));
   if (slopeUp < 0.82) out.lerp(ROCK, Math.min(1, (0.82 - slopeUp) / 0.5));
@@ -42,6 +43,12 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
   }, []);
+
+  // ONE material shared by every cell (vertex-colored) — not one per cell.
+  const cellMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, metalness: 0 }),
+    [grass],
+  );
 
   // Cell index range allowed by world bounds (null = unbounded).
   const range = useMemo(() => {
@@ -86,29 +93,30 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
       loadField(saved.heightField);
       setBrushState({ waterOn: saved.water.on, waterLevel: saved.water.level });
       // Rebuild any cells already streamed so they reflect the loaded heights.
-      for (const m of loaded.current.values()) { groupRef.current?.remove(m); unregisterTerrainMesh(m); m.geometry.dispose(); }
+      for (const m of loaded.current.values()) { groupRef.current?.remove(m); m.geometry.dispose(); }
       loaded.current.clear();
     })();
     return () => {
       alive = false;
       setDynamicHeightProvider(null);
       clearField();
-      for (const m of loaded.current.values()) { unregisterTerrainMesh(m); m.geometry.dispose(); }
+      for (const m of loaded.current.values()) { m.geometry.dispose(); }
       loaded.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id, baseY]);
 
+  // Build a cell's geometry once (on stream-in). Allocation only happens here, never per frame.
   const buildGeometry = (cx: number, cz: number): THREE.BufferGeometry => {
     const verts = new Float32Array(SAMPLES * SAMPLES * 3);
     const uvs = new Float32Array(SAMPLES * SAMPLES * 2);
+    const colors = new Float32Array(SAMPLES * SAMPLES * 3);
     const baseX = cx * CELL_M, baseZ = cz * CELL_M;
     for (let iz = 0; iz < SAMPLES; iz++) {
       for (let ix = 0; ix < SAMPLES; ix++) {
         const i = iz * SAMPLES + ix;
         const wx = baseX + ix * SAMPLE_M, wz = baseZ + iz * SAMPLE_M;
-        const [rx, ry, rz] = toRenderSpace(wx, getSampleAt(wx, wz), wz);
-        verts[i * 3] = rx; verts[i * 3 + 1] = ry; verts[i * 3 + 2] = rz;
+        verts[i * 3] = toRenderX(wx); verts[i * 3 + 1] = toRenderY(getSampleAt(wx, wz)); verts[i * 3 + 2] = toRenderZ(wz);
         uvs[i * 2] = wx / TEX_REPEAT_M; uvs[i * 2 + 1] = wz / TEX_REPEAT_M;
       }
     }
@@ -121,34 +129,53 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const normal = geo.getAttribute('normal');
-    const colors = new Float32Array(SAMPLES * SAMPLES * 3);
-    const c = new THREE.Color();
-    for (let i = 0; i < SAMPLES * SAMPLES; i++) {
-      tint(verts[i * 3 + 1], baseY, normal.getY(i), c);
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    paintColors(geo);
     return geo;
+  };
+
+  // Recolor from current heights + normals, in place (no allocation).
+  const paintColors = (geo: THREE.BufferGeometry) => {
+    const pos = geo.getAttribute('position'), normal = geo.getAttribute('normal');
+    const color = geo.getAttribute('color') as THREE.BufferAttribute;
+    for (let i = 0; i < SAMPLES * SAMPLES; i++) {
+      tint(pos.getY(i), baseY, normal.getY(i), scratchColor);
+      color.setXYZ(i, scratchColor.r, scratchColor.g, scratchColor.b);
+    }
+    color.needsUpdate = true;
+  };
+
+  // Brush feedback: update an existing cell's heights IN PLACE — only Y + normals + colors
+  // change (X/Z/UV/index are fixed), so zero per-frame allocation while sculpting.
+  const refreshGeometry = (geo: THREE.BufferGeometry, cx: number, cz: number) => {
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    const baseX = cx * CELL_M, baseZ = cz * CELL_M;
+    for (let iz = 0; iz < SAMPLES; iz++)
+      for (let ix = 0; ix < SAMPLES; ix++) {
+        const i = iz * SAMPLES + ix;
+        pos.setY(i, toRenderY(getSampleAt(baseX + ix * SAMPLE_M, baseZ + iz * SAMPLE_M)));
+      }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    paintColors(geo);
   };
 
   const addCell = (key: number, cx: number, cz: number) => {
     if (loaded.current.has(key) || !groupRef.current) return;
-    const mat = new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, metalness: 0 });
-    const mesh = new THREE.Mesh(buildGeometry(cx, cz), mat);
+    const mesh = new THREE.Mesh(buildGeometry(cx, cz), cellMat);
     mesh.userData.ground = true;
     mesh.userData.terrainCell = key;
     groupRef.current.add(mesh);
     loaded.current.set(key, mesh);
-    registerTerrainMesh(mesh);
   };
 
   const inRange = (cx: number, cz: number) =>
     !range || (cx >= range.cx0 && cx <= range.cx1 && cz >= range.cz0 && cz <= range.cz1);
 
   const cam = useThree((s) => s.camera);
+  const dropScratch = useRef<number[]>([]); // reused each frame — no per-frame array alloc
   useFrame(() => {
     if (!groupRef.current) return;
     const ccx = cellOf(cam.position.x), ccz = cellOf(cam.position.z);
@@ -163,28 +190,24 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
       }
 
     // Unload far cells (decode key → cell indices, inverse of cellKey).
-    const drop: number[] = [];
+    const drop = dropScratch.current; drop.length = 0;
     for (const key of loaded.current.keys()) {
-      const cx = Math.floor(key / 65536) - 32768;
-      const cz = (key % 65536) - 32768;
+      const cx = Math.floor(key / 65536) - KEY_OFF;
+      const cz = (key % 65536) - KEY_OFF;
       if (Math.abs(cx - ccx) > VIEW_CELLS + 1 || Math.abs(cz - ccz) > VIEW_CELLS + 1) drop.push(key);
     }
     for (const key of drop) {
       const mesh = loaded.current.get(key)!;
       groupRef.current.remove(mesh);
-      unregisterTerrainMesh(mesh);
       mesh.geometry.dispose();
       loaded.current.delete(key);
     }
 
-    // Rebuild edited cells that are currently loaded (brush feedback).
+    // Brush feedback: refresh edited cells IN PLACE (no geometry realloc, no GC churn).
     for (const key of consumeDirtyCells()) {
       const mesh = loaded.current.get(key);
       if (!mesh) continue;
-      const cx = Math.floor(key / 65536) - 32768;
-      const cz = (key % 65536) - 32768;
-      mesh.geometry.dispose();
-      mesh.geometry = buildGeometry(cx, cz);
+      refreshGeometry(mesh.geometry, Math.floor(key / 65536) - KEY_OFF, (key % 65536) - KEY_OFF);
     }
   });
 

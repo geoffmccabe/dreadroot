@@ -30,6 +30,11 @@ export function toRenderSpace(x: number, y: number, z: number, out?: THREE.Vecto
   return [rx, ry, rz];
 }
 
+/** Scalar world→render per axis — allocation-free for hot loops (per-vertex terrain). */
+export function toRenderX(x: number): number { return x - originX; }
+export function toRenderY(y: number): number { return y - originY; }
+export function toRenderZ(z: number): number { return z - originZ; }
+
 /** Render → world (inverse of toRenderSpace). */
 export function toWorldSpace(x: number, y: number, z: number): [number, number, number] {
   return [x + originX, y + originY, z + originZ];
