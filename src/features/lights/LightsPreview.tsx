@@ -27,7 +27,7 @@ export function LightsPreview() {
   if (!previewOn) return null;
   return (
     <group ref={groupRef}>
-      <GameLight def={def} />
+      <GameLight def={def} idSuffix="preview" />
     </group>
   );
 }

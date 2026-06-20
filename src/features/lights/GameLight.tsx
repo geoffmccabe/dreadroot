@@ -57,13 +57,17 @@ export function GameLight({ def, idSuffix = '' }: { def: LightDef; idSuffix?: st
   }), [def.fogColor, def.fogStrength]);
   useEffect(() => () => fogMat.dispose(), [fogMat]);
 
-  // Emitter disc material (glows via bloom).
+  // Emitter disc material (glows). emitterIntensity is NOT a dep — it's driven each
+  // frame by the flicker loop (or set in the effect below), so changing it must not
+  // rebuild the material (that would force a shader recompile / hitch).
   const emitterMat = useMemo(() => {
     const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(def.emitterColor) });
-    applyGlow(m, { color: def.emitterColor, intensity: def.emitterIntensity });
+    applyGlow(m, { color: def.emitterColor, intensity: emitI });
     return m;
-  }, [def.emitterColor, def.emitterIntensity]);
+  }, [def.emitterColor]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { emitterMatRef.current = emitterMat; return () => emitterMat.dispose(); }, [emitterMat]);
+  // Apply intensity changes in-place (no recompile) when not flickering.
+  useEffect(() => { if (flick <= 0 && emitterMatRef.current) emitterMatRef.current.emissiveIntensity = emitI; }, [emitI, flick]);
   // Emitter disc faces along the beam.
   const discQuat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir), [dir]);
 
