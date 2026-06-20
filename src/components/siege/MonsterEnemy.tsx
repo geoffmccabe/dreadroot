@@ -19,6 +19,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
 import { getHitboxFor, subscribeHitboxes, type MonsterHitbox } from './hitboxConfig';
+import { bullseyePct } from '@/features/bullseye/bullseyeZone';
 import { registerEditable, getEditUrl, getSelectedBox, subscribeEditor } from './hitboxEditor';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage, getLastSprayHitAt } from './spray/sprayAttackSystem';
@@ -202,6 +203,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // (e.g. forward onto the face) while riding the bone.
   const headRestLocal = useRef<{ x: number; y: number; z: number } | null>(null);
   const headWireRef = useRef<THREE.Mesh>(null);   // the !hb head wireframe (world-space, bone-followed)
+  const bullsWireRef = useRef<THREE.Mesh>(null);  // the !hb bullseye wireframe (nested in the head box)
   const group = useRef<THREE.Group>(null);
   const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
   const { actions, names, mixer } = useAnimations(animations, group);
@@ -332,6 +334,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     inst.bpRadius = Math.max(reach(hitbox.body), reach(hitbox.head), inst.radius);
     inst.bpTop = Math.max(hitbox.body.ly + hitbox.body.hy, hitbox.head.ly + hitbox.head.hy, H);
     inst.bpBottom = Math.min(hitbox.body.ly - hitbox.body.hy, hitbox.head.ly - hitbox.head.hy, 0);
+    // Bullseye box pct, by max dimension (max of height + footprint width/depth).
+    const maxDim = Math.max(H, hitbox.body.hx * 2, hitbox.body.hz * 2);
+    inst.bullseyePct = bullseyePct(maxDim);
   }, [hitbox, inst, H]);
   // Register with the editor so the box of the monster nearest the camera is edited.
   useEffect(
@@ -491,6 +496,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (!inst.headBoxWorld) inst.headBoxWorld = { x: 0, y: 0, z: 0 };
       inst.headBoxWorld.x = wx; inst.headBoxWorld.y = wy; inst.headBoxWorld.z = wz;
       if (headWireRef.current) { headWireRef.current.position.set(wx, wy, wz); headWireRef.current.rotation.y = yaw; }
+      if (bullsWireRef.current) { bullsWireRef.current.position.set(wx, wy, wz); bullsWireRef.current.rotation.y = yaw; }   // nested, same center
     };
     // Debug pause (PPP): freeze movement AND animation in place so hitboxes can be
     // inspected. timeScale=0 stops the mixer; the early return skips all AI/physics.
@@ -1232,11 +1238,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             <boxGeometry args={[hitbox.body.hx * 2, hitbox.body.hy * 2, hitbox.body.hz * 2]} />
             <meshBasicMaterial color={sel === 'body' ? '#ffe000' : '#22ff55'} wireframe transparent opacity={0.55} depthTest={false} />
           </mesh>
-          {/* No head bone → static head box here (the bone-followed sibling is skipped). */}
+          {/* No head bone → static head + bullseye boxes here (sibling versions skipped). */}
           {!headBone && (
             <mesh position={[hitbox.head.lx, hitbox.head.ly, hitbox.head.lz]} renderOrder={1000}>
               <boxGeometry args={[hitbox.head.hx * 2, hitbox.head.hy * 2, hitbox.head.hz * 2]} />
               <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
+            </mesh>
+          )}
+          {!headBone && (inst.bullseyePct ?? 0) > 0 && (
+            <mesh position={[hitbox.head.lx, hitbox.head.ly, hitbox.head.lz]} renderOrder={1001}>
+              <boxGeometry args={[hitbox.head.hx * 2 * (inst.bullseyePct ?? 0), hitbox.head.hy * 2 * (inst.bullseyePct ?? 0), hitbox.head.hz * 2 * (inst.bullseyePct ?? 0)]} />
+              <meshBasicMaterial color="#ffd000" wireframe transparent opacity={0.95} depthTest={false} />
             </mesh>
           )}
         </group>
@@ -1259,6 +1271,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       <mesh ref={headWireRef} renderOrder={1000}>
         <boxGeometry args={[hitbox.head.hx * 2, hitbox.head.hy * 2, hitbox.head.hz * 2]} />
         <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
+      </mesh>
+    )}
+    {showHitboxes && headBone && (inst.bullseyePct ?? 0) > 0 && (
+      <mesh ref={bullsWireRef} renderOrder={1001}>
+        <boxGeometry args={[hitbox.head.hx * 2 * (inst.bullseyePct ?? 0), hitbox.head.hy * 2 * (inst.bullseyePct ?? 0), hitbox.head.hz * 2 * (inst.bullseyePct ?? 0)]} />
+        <meshBasicMaterial color="#ffd000" wireframe transparent opacity={0.95} depthTest={false} />
       </mesh>
     )}
    </>

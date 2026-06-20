@@ -126,15 +126,27 @@ Each phase ships behind config so unset monsters are unaffected.
 
 ---
 
-## 5. Gaps / decisions needed (see chat)
-1. Bullseye = special death, or 4× + topple-then-recover-if-alive?
-2. Topple rotation: 450° (full flip + flat) as written, or simpler 90° to flat?
-3. Bullseye box shape: cube of pct×head-width, or head box scaled by pct?
-4. "Max dimension" source = max(height, footprint) — confirm.
-5. Blood emit origin = traced EXIT point — confirm (vs impact point, dir away).
-6. Should normal headshots also bleed (scaled down), or bullseye only?
-7. Player feedback on a bullseye (special hitmarker/crosshair flash)?
-8. Performance caps (max concurrent droplets/decals) — propose sane defaults.
+## 5. Decisions (LOCKED)
+1. **4× damage. Stun 2s, then get back up if not killed** (not an instant death).
+2. **Topple = 450°** (a full 360° flip + the final 90° to land flat), pivoting at
+   the feet about the horizontal axis ⟂ to the bullet's horizontal direction.
+   Direction = bullet dir → front shot lands on BACK, back shot lands on FACE.
+3. **Bullseye box = the head box scaled by pct on all axes** (a cube only if the
+   head box is a cube). Rides the same bone-followed head center.
+4. Max dimension = **max(height, footprint)**.
+5. Blood emits from the **traced EXIT point**.
+6. **Bullseye blood is fully variable** per monster: color, opacity (0..1), and
+   other effects — e.g. robot = translucent golden-green, demon boss = opaque
+   black. Default = red, ~70% opaque.
+7. **Normal headshots do NOT bleed** — bullseye only.
+8. **Player feedback** = a floating "BULLSEYE" text indicator above the head, just
+   under the points/damage number (plus the monster's reaction). (P1 done.)
+9. **No performance caps needed** — can't bullseye more than one monster in the window.
+10. **Multiplayer**: damage is server-safe. Blood seen by everyone = STRETCH GOAL
+    (P5 ships client-side first).
+11. **Blood spray size scales with BULLET size** (all bullets identical today → one
+    size; future big-bullet guns can scale it). Default color red, ~70% opacity.
+12. **Water + lava**: blood leaves NO trace (no decal).
 
 ## REMINDER TO USER
 ➡️ **You still owe me the bullseye SOUND file** (for Phase 4). Ping me when ready.
