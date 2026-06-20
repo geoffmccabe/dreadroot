@@ -1,0 +1,27 @@
+// terrainBrushState — shared state between the styled panel (outside Canvas) and the
+// in-Canvas brush controller. Mirrors the activeGame/activeMap store pattern.
+import { useSyncExternalStore } from 'react';
+import type { BrushMode } from './heightField';
+
+export interface BrushState {
+  enabled: boolean;   // build mode on/off (when off, normal play is untouched)
+  mode: BrushMode;    // raise | lower | smooth | flat
+  radius: number;     // brush radius (meters)
+  strength: number;   // meters/second at full strength
+  edge: number;       // edge-blur softness 0 (hard) .. 1 (soft)
+}
+
+let state: BrushState = { enabled: false, mode: 'raise', radius: 12, strength: 10, edge: 0.5 };
+const subs = new Set<() => void>();
+
+export function getBrushState(): BrushState { return state; }
+export function setBrushState(patch: Partial<BrushState>): void {
+  state = { ...state, ...patch };
+  subs.forEach((f) => f());
+}
+export function useBrushState(): BrushState {
+  return useSyncExternalStore(
+    (cb) => { subs.add(cb); return () => { subs.delete(cb); }; },
+    getBrushState, getBrushState,
+  );
+}

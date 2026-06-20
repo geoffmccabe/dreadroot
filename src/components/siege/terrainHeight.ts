@@ -18,12 +18,23 @@ export function setTiles(t: HeightTile[]) {
   tiles.push(...t);
 }
 
+// Dynamic provider for EDITABLE maps (heightField). When set it is the authority —
+// the brush edits it and the player/coins/boulders follow it live. Static gltf-terrain
+// maps leave it null and keep using the tile path below. One sampler, both worlds.
+type HeightProvider = (x: number, z: number) => number | null;
+let dynamicProvider: HeightProvider | null = null;
+export function setDynamicHeightProvider(fn: HeightProvider | null) { dynamicProvider = fn; }
+
 export function hasTerrain() {
-  return tiles.length > 0;
+  return tiles.length > 0 || dynamicProvider != null;
 }
 
 /** Ground height at world (x,z), or null if outside all tiles. Bilinear. */
 export function sampleHeight(x: number, z: number): number | null {
+  if (dynamicProvider) {
+    const h = dynamicProvider(x, z);
+    if (h != null) return h;
+  }
   for (const t of tiles) {
     if (x < t.posX || x >= t.posX + t.sizeX || z < t.posZ || z >= t.posZ + t.sizeZ) continue;
     const fx = ((x - t.posX) / t.sizeX) * (t.res - 1);

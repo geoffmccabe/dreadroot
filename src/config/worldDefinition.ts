@@ -13,7 +13,8 @@ export type Vec3 = [number, number, number];
 
 /** How the ground is produced for this world. */
 export type GroundKind =
-  | 'flat'          // a flat plane (placeholder for 1a; size from `flatSize`)
+  | 'flat'          // a static flat plane (size from bounds/`flatSize`)
+  | 'heightmap'     // editable chunked GPU heightmap (128 m cells, 1 m samples) + brush
   | 'gltf-terrain'; // a glTF/mesh terrain loaded from `terrainUrl` (real SW terrain)
 
 export interface GroundConfig {
@@ -199,7 +200,7 @@ export const STARBLINK_WORLD: WorldDefinition = {
   // no inline coord literals elsewhere — the flat plane + spatial-bounds checks read
   // this). flatSize is derived from bounds by FlatGroundLayer.
   bounds: { min: [-10000, -10000], max: [10000, 10000] },
-  ground: { kind: 'flat', surfaceY: 0 },
+  ground: { kind: 'heightmap', surfaceY: 0 }, // starts flat at y=0; sculpt with the terrain brush
   spawn: { position: [0, 3, 0], yaw: 0 },
   props: undefined,
 };

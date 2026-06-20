@@ -8,6 +8,7 @@ import { ChallengePointsCounter } from '@/components/siege/challenge/ChallengePo
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
+import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -867,6 +868,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <SiegeDebugOverlay />
       {/* Siege Worlds quick-travel menu (Ctrl/Cmd+T) — shows only when armed. */}
       <SiegeTeleportMenu />
+      {/* Terrain builder panel — shows only on editable (heightmap) siege maps. */}
+      <TerrainBrushPanel />
       {/* Siege Worlds inspect-view animation panel (game CSS) — shows only in inspect. */}
       <SiegeAnimPanel />
       {/* Flying coin animations */}
