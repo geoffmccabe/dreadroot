@@ -16,6 +16,12 @@ import { APP_VERSION } from '@/version';
 
 // [glb name, display name, intrinsic modelHeight]
 const ROW: [string, string, number][] = [
+  // Fantasy Rivals — retargeted humanoid anims (idle/walk/run/attack/hit/death). Shown first so
+  // the M-cycle label reflects their clip names.
+  ['barbariangiant', 'Barbarian Giant', 2.7], ['mutant', 'Mutant', 2.3],
+  ['pigbutcher', 'Pig Butcher', 2.1], ['slayer', 'Slayer', 2.0],
+  ['elementalgolem', 'Elemental Golem', 2.6], ['fortgolem', 'Fort Golem', 2.7],
+  ['mechanicalgolem', 'Mechanical Golem', 2.6], ['forestguardian', 'Forest Guardian', 2.3],
   ['goblinarcherf', 'Goblin Archer F', 1.792], ['goblinarcherm', 'Goblin Archer M', 1.791],
   ['goblinbeasttamer', 'Goblin Beast Tamer', 1.799], ['goblincook', 'Goblin Cook', 1.798],
   ['goblinking', 'Goblin King', 1.791], ['goblinknight', 'Goblin Knight', 1.795],
