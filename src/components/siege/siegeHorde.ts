@@ -13,7 +13,9 @@ import {
   type FlameAttachPoint,
   type BurnFollower,
 } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { spawnDamageNumber, DN_RED, DN_WHITE, DN_YELLOW } from './damageNumbers';
+import { spawnDamageNumber, DN_RED, DN_WHITE } from './damageNumbers';
+
+const BULLSEYE_PURPLE = '#cc50ff';   // bright purple for the bullseye points + label
 import { rayHitsBox, type MonsterHitbox } from './hitboxConfig';
 import { effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
 
@@ -162,8 +164,9 @@ enemyCombatRegistry.register<DemonInstance>({
       // it (both above the head). Normal/headshot numbers sit on the head as before.
       const numY = info.isBullseye ? d.height * 1.25 : d.height * (info.isHeadshot ? 0.92 : 0.6);
       spawnDamageNumber(d.x, d.y + numY, d.z, String(Math.round(dealt)),
-        info.isBullseye ? DN_YELLOW : info.isHeadshot ? DN_RED : DN_WHITE);
-      if (info.isBullseye) spawnDamageNumber(d.x, d.y + d.height * 1.08, d.z, 'BULLSEYE', DN_YELLOW);
+        info.isBullseye ? BULLSEYE_PURPLE : info.isHeadshot ? DN_RED : DN_WHITE);
+      // 'BULLSEYE' label well above the points number (clear of it), bright purple.
+      if (info.isBullseye) spawnDamageNumber(d.x, d.y + d.height * 1.6, d.z, 'BULLSEYE', BULLSEYE_PURPLE);
     }
     const now = performance.now();
     if (info.isBullseye) {

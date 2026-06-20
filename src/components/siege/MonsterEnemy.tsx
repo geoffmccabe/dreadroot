@@ -533,6 +533,32 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // round(initialHealth/10) at the body.
     if (inst.dead && !s.killFired) { s.killFired = true; void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
 
+    // ── BULLSEYE DEATH: a bullseye that KILLS plays the same dramatic feet-pivot
+    //    spin-fall as the stagger (360°+90° to flat, back/face by direction), then
+    //    lies flat and sinks into the ground → despawn. Overrides the per-monster
+    //    death style so every bullseye kill gets the signature fall. ──
+    if (inst.dead && inst.bullseyeAt) {
+      const td = now - inst.deadAt;
+      const sign = inst.bullseyeSign ?? -1;
+      const FLAT = Math.PI / 2;
+      const FALL = 1000, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;
+      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      g.rotation.order = 'YXZ';
+      g.rotation.z = 0;
+      if (td < FALL) {
+        const e = td / FALL, eo = e * e * (3 - 2 * e);       // smoothstep — visible spin
+        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;     // 360° + 90° to flat over 1s
+      } else {
+        g.rotation.x = sign * FLAT;                          // flat corpse
+      }
+      const yOff = td >= LIE_END ? -H * Math.min(1, (td - LIE_END) / SINK) : 0;
+      g.position.set(s.x, s.y + yOff, s.z);
+      inst.x = s.x; inst.y = s.y + yOff; inst.z = s.z;
+      play(clips.idle);
+      if (!inst.despawned && td > SINK_END) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+      return;
+    }
+
     // ── SPINTROLL custom death: spin-down (2s) → stand (1s) → topple straight back → lie (3s)
     //    → sink into the ground (3s) → despawn. Pivots at the feet (model origin), not the mesh
     //    middle, so it falls onto its back without sinking through the floor. ──
@@ -1117,13 +1143,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const sign = inst.bullseyeSign ?? -1;
       const FLAT = Math.PI / 2;                            // 90° = lying flat
       g.rotation.order = 'YXZ';
-      if (bt < 0.7) {
-        const e = bt / 0.7, eo = 1 - (1 - e) * (1 - e);   // ease-out (snappy fall)
+      g.rotation.z = 0;
+      if (bt < 1.0) {
+        const e = bt, eo = e * e * (3 - 2 * e);            // smoothstep — visible spin over 1s
         g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;  // spin 360° + 90° to flat
       } else if (bt < 2.0) {
         g.rotation.x = sign * FLAT;                        // hold flat (stunned)
-      } else if (bt < 2.3) {
-        const e = (bt - 2.0) / 0.3, eo = e * e * (3 - 2 * e);
+      } else if (bt < 2.4) {
+        const e = (bt - 2.0) / 0.4, eo = e * e * (3 - 2 * e);
         g.rotation.x = sign * FLAT * (1 - eo);             // stand back up
       } else {
         g.rotation.x = 0;

@@ -28,15 +28,15 @@ const overrides: Record<string, MonsterHitbox> = (() => {
 // everyone on every device; localStorage overrides take precedence. Tuned in-world
 // then committed here. reddemon.glb tuned on the 1.8m Demon Horde (÷1.8 to normalize).
 const BAKED: Record<string, MonsterHitbox> = {
-  // Head boxes extended UP by 15% of total height (top +0.15 → ly & hy each +0.075).
-  '/siege/monsters/reddemon.glb': {
+  // Exact tuned values (normalized ÷ tuned height). No extension — earlier I
+  // over-extended the head by 15% of MONSTER height (huge vs a small head box).
+  '/siege/monsters/reddemon.glb': {  // tuned on the 1.8m Demon Horde (÷1.8)
     body: { lx: 0.0278, ly: 0.4727, lz: 0.0556, hx: 0.1802, hy: 0.2782, hz: 0.1246 },
-    head: { lx: 0.0278, ly: 0.8147, lz: 0.1944, hx: 0.0667, hy: 0.1695, hz: 0.0691 },
+    head: { lx: 0.0278, ly: 0.7397, lz: 0.1944, hx: 0.0667, hy: 0.0945, hz: 0.0691 },
   },
-  // Giant Skeleton (#3) — tuned on the 6m instance (÷6 to normalize).
-  '/siege/monsters/dfskeleton.glb': {
+  '/siege/monsters/dfskeleton.glb': {  // Giant Skeleton (#3), tuned on the 6m instance (÷6)
     body: { lx: -0.0083, ly: 0.4890, lz: 0.0083, hx: 0.1278, hy: 0.3973, hz: 0.1111 },
-    head: { lx: -0.0417, ly: 0.9835, lz: 0.1917, hx: 0.0945, hy: 0.1778, hz: 0.0861 },
+    head: { lx: -0.0417, ly: 0.9085, lz: 0.1917, hx: 0.0945, hy: 0.1028, hz: 0.0861 },
   },
 };
 

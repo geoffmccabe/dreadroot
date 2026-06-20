@@ -44,11 +44,12 @@ export function useSupporterStatus(userId: string | null): SupporterStatus {
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [tRes, rRes, bRes, balRes, nftRes, subRes] = await Promise.all([
+      const [tRes, rRes, bRes, balRes, extRes, nftRes, subRes] = await Promise.all([
         supabase.from('supporter_tiers' as never).select('*').eq('is_active', true).order('level'),
         supabase.from('supporter_requirements' as never).select('*'),
         supabase.from('supporter_benefits' as never).select('*').eq('enabled', true).order('sort_order'),
         userId ? supabase.from('user_token_balances').select('token_theme_id, coins').eq('user_id', userId) : Promise.resolve({ data: [] }),
+        userId ? supabase.from('user_external_holdings' as never).select('token_theme_id, amount').eq('user_id', userId) : Promise.resolve({ data: [] }),
         userId ? supabase.from('user_nft_holdings' as never).select('collection, schema_name, template_id, asset_count').eq('user_id', userId) : Promise.resolve({ data: [] }),
         userId ? supabase.from('user_subscriptions' as never).select('tier_id, status, paid_until').eq('user_id', userId) : Promise.resolve({ data: [] }),
       ]);
@@ -57,6 +58,10 @@ export function useSupporterStatus(userId: string | null): SupporterStatus {
       const allReqs = (rRes.data as unknown as SupporterRequirement[]) ?? [];
       const allBenefits = (bRes.data as unknown as SupporterBenefit[]) ?? [];
       const balByTheme = new Map(((balRes.data as unknown as BalRow[]) ?? []).map((b) => [b.token_theme_id, b.coins ?? 0]));
+      // On-chain (external) holdings count toward a token requirement too — take the larger of the
+      // in-game spendable balance and the real on-chain amount (they're separate wallets, never summed).
+      const extByTheme = new Map(((extRes.data as unknown as { token_theme_id: string; amount: number }[]) ?? []).map((e) => [e.token_theme_id, e.amount ?? 0]));
+      const heldOf = (themeId: string) => Math.max(balByTheme.get(themeId) ?? 0, extByTheme.get(themeId) ?? 0);
       const nfts = ((nftRes.data as unknown as NftHolding[]) ?? []);
       const now = Date.now();
       const activeSub = new Set(((subRes.data as unknown as UserSubscription[]) ?? [])
@@ -64,7 +69,7 @@ export function useSupporterStatus(userId: string | null): SupporterStatus {
         .map((s) => s.tier_id));
 
       const satisfied = (r: SupporterRequirement) => r.gate_kind === 'token'
-        ? !!r.token_theme_id && (balByTheme.get(r.token_theme_id) ?? 0) >= r.min_amount
+        ? !!r.token_theme_id && heldOf(r.token_theme_id) >= r.min_amount
         : nftCount(nfts, r) >= r.nft_min_count;
 
       let level = 0;

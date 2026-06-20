@@ -20,6 +20,7 @@ export function SupportersAdmin() {
   const [coins, setCoins] = useState<{ id: string; label: string }[]>([]);
   const [chains, setChains] = useState<string[]>([]);
   const [amt, setAmt] = useState<Record<string, string>>({});
+  const [pid, setPid] = useState<Record<string, { stripe: string; paypal: string }>>({});
 
   const load = useCallback(async () => {
     const [tRes, vRes, aRes] = await Promise.all([
@@ -44,6 +45,22 @@ export function SupportersAdmin() {
     await supabase.from('supporter_tiers' as never).update({ monthly_usd: v } as never).eq('id', tier.id);
     await load();
   };
+
+  const savePid = async (tier: SupporterTier) => {
+    const cur = pid[tier.id];
+    if (!cur) return;
+    await supabase.from('supporter_tiers' as never)
+      .update({ stripe_price_id: cur.stripe.trim() || null, paypal_plan_id: cur.paypal.trim() || null } as never)
+      .eq('id', tier.id);
+    await load();
+  };
+  const pidVal = (tier: SupporterTier, k: 'stripe' | 'paypal') =>
+    pid[tier.id]?.[k] ?? (k === 'stripe' ? tier.stripe_price_id : tier.paypal_plan_id) ?? '';
+  const setPidVal = (tier: SupporterTier, k: 'stripe' | 'paypal', val: string) =>
+    setPid((m) => ({ ...m, [tier.id]: {
+      stripe: k === 'stripe' ? val : pidVal(tier, 'stripe'),
+      paypal: k === 'paypal' ? val : pidVal(tier, 'paypal'),
+    } }));
 
   return (
     <div className="space-y-4 p-1">
@@ -72,6 +89,20 @@ export function SupportersAdmin() {
                 onBlur={() => saveAmount(tier)}
               />
               <span className="text-xs text-foreground/60 tabular-nums">now: ${tier.monthly_usd}</span>
+            </div>
+          </div>
+
+          {/* Payment processor ids — set after creating the recurring product in Stripe / PayPal */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex items-center gap-1.5 flex-1">
+              <span className="text-xs text-foreground/70 w-24">Stripe price</span>
+              <Input className="h-8 text-sm" placeholder="price_…"
+                value={pidVal(tier, 'stripe')} onChange={(e) => setPidVal(tier, 'stripe', e.target.value)} onBlur={() => savePid(tier)} />
+            </div>
+            <div className="flex items-center gap-1.5 flex-1">
+              <span className="text-xs text-foreground/70 w-24">PayPal plan</span>
+              <Input className="h-8 text-sm" placeholder="P-…"
+                value={pidVal(tier, 'paypal')} onChange={(e) => setPidVal(tier, 'paypal', e.target.value)} onBlur={() => savePid(tier)} />
             </div>
           </div>
 
