@@ -8,11 +8,17 @@ import { useSyncExternalStore } from 'react';
 
 let hitboxes = false;
 let paused = false;
+// TEMP (testing): when true, ANY headshot counts as a bullseye, so the bullseye
+// effects are easy to trigger without hitting the tiny gold box. Toggle with `!ba`.
+let bullseyeAnyHead = true;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
 export const getSiegeHitboxes = (): boolean => hitboxes;
 export const toggleSiegeHitboxes = (): void => { hitboxes = !hitboxes; emit(); };
+
+export const getBullseyeAnyHead = (): boolean => bullseyeAnyHead;
+export const toggleBullseyeAnyHead = (): boolean => { bullseyeAnyHead = !bullseyeAnyHead; emit(); return bullseyeAnyHead; };
 
 export const getMonstersPaused = (): boolean => paused;
 export const setMonstersPaused = (v: boolean): void => { if (v === paused) return; paused = v; emit(); };

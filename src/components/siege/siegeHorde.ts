@@ -18,6 +18,7 @@ import { spawnDamageNumber, DN_RED, DN_WHITE } from './damageNumbers';
 const BULLSEYE_PURPLE = '#cc50ff';   // bright purple for the bullseye points + label
 import { rayHitsBox, type MonsterHitbox } from './hitboxConfig';
 import { effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
+import { getBullseyeAnyHead } from './siegeDebugToggles';
 
 export interface DemonInstance {
   id: string;
@@ -136,6 +137,7 @@ enemyCombatRegistry.register<DemonInstance>({
     const ox2 = d.headBoxWorld ? 0 : hb.head.lx, oy2 = d.headBoxWorld ? 0 : hb.head.ly, oz2 = d.headBoxWorld ? 0 : hb.head.lz;
     const headBox = { lx: ox2, ly: oy2, lz: oz2, hx: hb.head.hx, hy: hb.head.hy, hz: hb.head.hz };
     if (rayHitsBox(headBox, cx, cy, cz, d.yaw, ox, oy, oz, ux, uy, uz, len)) {
+      if (getBullseyeAnyHead()) return { hit: true, zone: 'bullseye' as const };   // TEMP testing: any head = bullseye
       if (pct > 0) {
         const bull = { lx: ox2, ly: oy2, lz: oz2, hx: hb.head.hx * pct, hy: hb.head.hy * pct, hz: hb.head.hz * pct };
         if (rayHitsBox(bull, cx, cy, cz, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, zone: 'bullseye' as const };
