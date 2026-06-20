@@ -54,6 +54,7 @@ import { LightsEffectsPanel } from './AdminPanel.LightsEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { PoolManager } from '@/features/wallet/PoolManager';
 import { GatesManager } from '@/features/tokenGates/GatesManager';
+import { SupportersAdmin } from '@/features/supporters/SupportersAdmin';
 import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
 import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
 import { GifMigrationPanel } from './AdminPanel.GifMigration';
@@ -85,6 +86,7 @@ export function AdminPanel({
   const [seedSubtab, setSeedSubtab] = useState<SeedSubtab>('ordinary');
   const [itemsSubtab, setItemsSubtab] = useState<ItemsSubtab>('all-items');
   const [coinsSubtab, setCoinsSubtab] = useState<'pools' | 'gates' | 'divi' | 'waterfall' | 'solana'>('pools');
+  const [usersSubtab, setUsersSubtab] = useState<'users' | 'supporters'>('users');
   const [worldsSubtab, setWorldsSubtab] = useState<WorldsSubtab>('worlds');
 
   // Resizable dialog width — drag the left edge to widen
@@ -280,9 +282,22 @@ export function AdminPanel({
           </TabsContent>
 
           <TabsContent value="users" className="mt-4 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-4">
-              <UsersList />
-            </ScrollArea>
+            <Tabs value={usersSubtab} onValueChange={(v) => setUsersSubtab(v as typeof usersSubtab)} className="flex flex-col h-full">
+              <TabsList className="grid w-full grid-cols-2 flex-shrink-0 mb-4">
+                <TabsTrigger value="users">Users</TabsTrigger>
+                <TabsTrigger value="supporters">Supporters</TabsTrigger>
+              </TabsList>
+              <TabsContent value="users" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full pr-4">
+                  <UsersList />
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="supporters" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-full pr-4">
+                  <SupportersAdmin />
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="blocks" className="mt-4 flex-1 overflow-hidden">
