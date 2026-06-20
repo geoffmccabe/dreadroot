@@ -78,9 +78,35 @@ export interface PropClass {
 }
 
 export interface WorldDefinition {
-  /** Stable id; matches the `worlds` table row / GAME_ID-scoped world. */
+  /**
+   * Stable id; matches the `worlds` table row id / GAME_ID-scoped world. This same
+   * id scopes ALL content (placed_blocks.world_id, object placements), keys the L2
+   * Durable Object instance (?instance=<id>), and selects the rendered map. ONE id,
+   * everywhere — never a second parallel identifier.
+   */
   id: string;
   name: string;
+
+  /**
+   * Which game owns this map (e.g. 'siege-worlds') — mirrors the `worlds.game`
+   * column so named maps are game-scoped in the shared DB. Omitted = current GAME_ID.
+   */
+  gameId?: string;
+
+  /**
+   * Map creator. null = org-owned (the built-in maps). Mirrors the future
+   * `worlds.owner_id` so "anyone can build" persists with an owner from day one
+   * (same null-means-org pattern as l2_instances.host_user_id in the L123 plan).
+   */
+  ownerId?: string | null;
+
+  /**
+   * Stable NUMERIC id for the binary wire format (snapshot header `worldId` is u32).
+   * The string `id` above is canonical for content/DB/DO addressing; this is the
+   * compact integer the netcode packs. DB rows map their uuid→this. Lock it in now
+   * so the string↔u32 boundary is decided in data, not patched in the hot path.
+   */
+  wireId?: number;
 
   /**
    * World rendering kind — the engine supports BOTH:
@@ -138,6 +164,9 @@ export interface WorldDefinition {
 export const SIEGE_TEST_WORLD: WorldDefinition = {
   id: 'siege-test',
   name: 'Siege Worlds',
+  gameId: 'siege-worlds',
+  ownerId: null, // org-owned built-in map
+  wireId: 1,
   kind: 'siege',
   meshColliders: true, // SWW uses BVH mesh colliders for rocks/mountains
   bounds: null, // 4×4 grid of 500m tiles ≈ 2000×2000, but never hardcoded here
@@ -161,10 +190,16 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
 export const STARBLINK_WORLD: WorldDefinition = {
   id: 'starblink',
   name: 'Starblink',
+  gameId: 'siege-worlds',
+  ownerId: null, // org-owned built-in map (player-made maps set their creator)
+  wireId: 2,
   kind: 'siege',
   meshColliders: false,
-  bounds: null,
-  ground: { kind: 'flat', surfaceY: 0, flatSize: 10000 },
+  // ±10 km = 10× SWW. bounds is the AUTHORITATIVE extent (Track 7 forward-compat:
+  // no inline coord literals elsewhere — the flat plane + spatial-bounds checks read
+  // this). flatSize is derived from bounds by FlatGroundLayer.
+  bounds: { min: [-10000, -10000], max: [10000, 10000] },
+  ground: { kind: 'flat', surfaceY: 0 },
   spawn: { position: [0, 3, 0], yaw: 0 },
   props: undefined,
 };
