@@ -154,13 +154,13 @@ function BoulderField() {
   const camera = useThree((s) => s.camera);
   const POOL = 24;
   const refs = useRef<(THREE.Mesh | null)[]>([]);
-  const geo = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []); // r=1 → 2 m diameter
-  const mat = useMemo(() => {
-    const t = getGlobalAtlasTexture();
-    let map: THREE.Texture | null = null;
-    if (t) { map = t.clone(); map.wrapS = map.wrapT = THREE.RepeatWrapping; map.repeat.set(6, 6); map.needsUpdate = true; }
-    return new THREE.MeshStandardMaterial({ color: 0x8a8a8a, map, roughness: 0.95, metalness: 0 });
-  }, []);
+  // Use the baked rock mesh (Apocalypse SM_Env_Rock_01, stretched round, ~2 m) instead of a sphere.
+  const { scene } = useGLTF(`/siege/monsters/boulder.glb?v=${APP_VERSION}`);
+  const { geo, mat } = useMemo(() => {
+    let g: THREE.BufferGeometry | null = null, m: THREE.Material | null = null;
+    scene.traverse((o) => { const me = o as THREE.Mesh; if (me.isMesh && !g) { g = me.geometry; m = me.material as THREE.Material; } });
+    return { geo: g ?? new THREE.SphereGeometry(1, 16, 12), mat: m ?? new THREE.MeshStandardMaterial({ color: 0x8a8a8a }) };
+  }, [scene]);
   useFrame((_, dt) => {
     updateBoulders(dt, camera.position.x, camera.position.y - 1.6, camera.position.z);
     const bs = getBoulders();
