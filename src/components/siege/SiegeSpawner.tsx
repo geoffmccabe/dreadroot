@@ -22,6 +22,7 @@ import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMon
 import { toggleCreator } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
+import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused } from './siegeDebugToggles';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -29,9 +30,10 @@ type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov
 export function SiegeSpawner() {
   const camera = useThree((s) => s.camera);
   const [demons, setDemons] = useState<Demon[]>([]);
-  const stage = useRef<'idle' | 'type' | 'qty'>('idle');
+  const stage = useRef<'idle' | 'type' | 'qty' | 'hbwait'>('idle');
   const stageTimer = useRef<number | null>(null);
   const spamUntil = useRef(0);
+  const pTaps = useRef<number[]>([]);   // recent 'P' press times for the triple-P pause gesture
   const pendingType = useRef<MType>(1);
   const lastType = useRef<MType>(1);
 
@@ -74,6 +76,17 @@ export function SiegeSpawner() {
       const el = document.activeElement?.tagName;
       if (el === 'INPUT' || el === 'TEXTAREA' || el === 'SELECT') return;   // don't capture typing
       const k = e.key;
+      // PAUSE gesture: P three times within 1s freezes all monsters; any P while
+      // frozen unfreezes. Kept separate from the "!" command stages.
+      if ((k === 'p' || k === 'P') && stage.current === 'idle') {
+        e.preventDefault(); e.stopPropagation();
+        const t = performance.now();
+        if (getMonstersPaused()) { setMonstersPaused(false); pTaps.current = []; return; }
+        pTaps.current = pTaps.current.filter((x) => t - x < 1000);
+        pTaps.current.push(t);
+        if (pTaps.current.length >= 3) { setMonstersPaused(true); pTaps.current = []; }
+        return;
+      }
       // Spam "0" within 2s of the last spawn → +10 more of the same type.
       if (k === '0' && stage.current === 'idle' && performance.now() < spamUntil.current) {
         e.preventDefault(); e.stopPropagation(); spawn(10, lastType.current); return;
@@ -83,9 +96,16 @@ export function SiegeSpawner() {
         e.preventDefault(); e.stopPropagation();
         if (k === 'c' || k === 'C') { toggleBrowser(); clearStage(); }         // !c → open the Challenge Browser (pick one)
         else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
+        else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k >= '1' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
         else clearStage();
+        return;
+      }
+      if (stage.current === 'hbwait') {
+        e.preventDefault(); e.stopPropagation();
+        if (k === 'b' || k === 'B') toggleSiegeHitboxes();   // !hb → toggle body + head hitbox wireframes
+        clearStage();
         return;
       }
       if (stage.current === 'qty') {
