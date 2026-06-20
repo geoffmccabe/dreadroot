@@ -22,7 +22,7 @@ import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMon
 import { toggleCreator } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
-import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused } from './siegeDebugToggles';
+import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused, toggleBullseyeAnyHead } from './siegeDebugToggles';
 import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hitboxEditor';
 import { exportHitboxes } from './hitboxConfig';
 
@@ -117,6 +117,7 @@ export function SiegeSpawner() {
         if (k === 'c' || k === 'C') { toggleBrowser(); clearStage(); }         // !c → open the Challenge Browser (pick one)
         else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
+        else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k >= '1' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
         else clearStage();

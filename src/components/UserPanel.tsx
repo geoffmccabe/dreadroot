@@ -41,6 +41,7 @@ import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
 import { WalletList } from '@/features/wallet/WalletList';
 import { GameWalletPanel } from '@/features/wallet/GameWalletPanel';
 import { WaxWalletPanel } from '@/features/wallet/WaxWalletPanel';
+import { ExternalWalletsPanel } from '@/features/wallet/ExternalWalletsPanel';
 import { SupportLevelPanel } from '@/features/supporters/SupportLevelPanel';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
@@ -620,6 +621,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             {/* Wax / Alien Worlds wallet, embedded from LW-SSO (docs/WAX_WALLET_IFRAME_PLAN.md).
                 Per-user: loads the linked Wax account, captures it from the iframe on connect. */}
             <WaxWalletPanel userId={user?.id ?? null} />
+
+            {/* Link Ethereum + Divi addresses so the holdings sync can verify on-chain tokens/NFTs
+                for token-gating + supporter tiers (Wax is linked via the embed above). */}
+            <ExternalWalletsPanel userId={user?.id ?? null} />
 
             <Card className="p-4">
               <div className="space-y-2">

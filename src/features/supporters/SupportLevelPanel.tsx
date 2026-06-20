@@ -29,7 +29,7 @@ export function SupportLevelPanel({ userId }: { userId: string | null }) {
   async function syncHoldings() {
     setSyncing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('sync-wax-holdings', { body: {} });
+      const { data, error } = await supabase.functions.invoke('sync-holdings', { body: {} });
       if (error || data?.error) alert(`Sync failed: ${error?.message ?? data?.error}`);
       await refresh();
     } catch (e) {
@@ -76,7 +76,7 @@ export function SupportLevelPanel({ userId }: { userId: string | null }) {
         <span className="text-sm font-bold text-foreground">Support Level</span>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={syncing || !userId}
-            onClick={syncHoldings} title="Pull your latest on-chain WAX holdings">
+            onClick={syncHoldings} title="Pull your latest on-chain holdings (Wax, Ethereum, Divi)">
             {syncing ? '…' : '↻ Sync'}
           </Button>
           <Badge>{isLoading ? '…' : levelName(currentLevel)}</Badge>

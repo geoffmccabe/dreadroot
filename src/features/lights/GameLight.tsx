@@ -11,7 +11,7 @@ import type { LightDef } from './lightTypes';
 
 const DEG = Math.PI / 180;
 
-export function GameLight({ def }: { def: LightDef }) {
+export function GameLight({ def, idSuffix = '' }: { def: LightDef; idSuffix?: string }) {
   const spotRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
   const emitterMatRef = useRef<THREE.MeshStandardMaterial>(null);
@@ -35,7 +35,7 @@ export function GameLight({ def }: { def: LightDef }) {
   const flick = def.flicker;
   useEffect(() => {
     if (flick <= 0) return;
-    const unreg = frameLoop.register(`gamelight-${def.code}`, (_d, t) => {
+    const unreg = frameLoop.register(`gamelight-${def.code}-${idSuffix}`, (_d, t) => {
       const f = 1 - flick + flick * Math.sin(t * 11) * Math.sin(t * 6.7 + 1.3);
       if (spotRef.current) spotRef.current.intensity = baseI * f;
       if (emitterMatRef.current) emitterMatRef.current.emissiveIntensity = emitI * f;
