@@ -29,13 +29,16 @@ export interface BuilderState {
   extrudeIn: number[];
   exTier: number;            // selected tier (0..4) in the panel
   exFace: 'outside' | 'inside'; // which face the +/- buttons act on
-  // Lighting on extruded/inset parts (emissive, flickering).
+  // Lighting on extruded/inset parts. The sides emit a glow (emissive) AND real point
+  // lights wash the wall they were extruded from. Spread = how far that wash reaches.
   extrudeLightOn: boolean;
   extrudeLightColor: string;
   extrudeLightIntensity: number;
+  extrudeLightSpread: number;
   insetLightOn: boolean;
   insetLightColor: string;
   insetLightIntensity: number;
+  insetLightSpread: number;
 }
 
 const initial: BuilderState = {
@@ -67,9 +70,11 @@ const initial: BuilderState = {
   extrudeLightOn: false,
   extrudeLightColor: '#7a4dff', // blue-purple
   extrudeLightIntensity: 1.0,
+  extrudeLightSpread: 10,
   insetLightOn: true,
   insetLightColor: '#ff5a1f',   // red-orange
   insetLightIntensity: 1.0,
+  insetLightSpread: 8,
 };
 
 let state: BuilderState = initial;
