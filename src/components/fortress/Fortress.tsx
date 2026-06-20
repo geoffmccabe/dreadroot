@@ -65,7 +65,6 @@ import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { ScopeOverlay } from './ScopeOverlay';
-import { setBullseyeFactor } from '@/features/bullseye/bullseyeZone';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
@@ -379,12 +378,6 @@ export function Fortress() {
   }, [lightningSettings.fogEnabled]);
 
   // Derive selected item definition from hotbar slot + equipped items
-  // Superadmins get a DOUBLE-size bullseye box (a role-based aim perk). Items/
-  // devices can add their own factors via setBullseyeFactor (multiplied together).
-  useEffect(() => {
-    setBullseyeFactor('role', userRoles?.includes('superadmin') ? 2 : 1);
-  }, [userRoles]);
-
   // Cache fetched item defs by itemId to avoid async lag on weapon switching
   const itemDefCacheRef = useRef<Map<string, SelectedItemDef>>(new Map());
   const [selectedItemDef, setSelectedItemDef] = useState<SelectedItemDef>({ itemNumber: null, tier: null, name: null, itemId: null });

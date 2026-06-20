@@ -6,7 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = "https://ditecxjpkgbqkeckebzb.supabase.co";
-const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRpdGVjeGpwa2dicWtlY2tlYnpiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1ODU0ODA0MywiZXhwIjoyMDc0MTI0MDQzfQ.cn5mzW8NONwHbWfndrta_yISvYsKMELAw3YzAekVB5s";
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
