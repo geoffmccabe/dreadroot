@@ -18,8 +18,9 @@ const GROUP = 'citydemo';
 const COLLIDER_RATIO = 0.5;   // decimate collider geometry to half (BVH is for blocking, not pixels)
 const PER_JOB = 40;           // meshes registered per budgeted tick
 
+// Draco-compressed (51MB→9MB to fit Cloudflare's 25MB/file limit); decode via local /draco/.
 export function CityDemo() {
-  const { scene } = useGLTF('/siege/scifi_demo/city_demo.gltf');
+  const { scene } = useGLTF('/siege/scifi_demo/city_demo.gltf', '/draco/');
 
   const root = useMemo(() => {
     const model = scene.clone(true);
@@ -68,4 +69,4 @@ export function CityDemo() {
   return <primitive object={root} />;
 }
 
-useGLTF.preload('/siege/scifi_demo/city_demo.gltf');
+useGLTF.preload('/siege/scifi_demo/city_demo.gltf', '/draco/');
