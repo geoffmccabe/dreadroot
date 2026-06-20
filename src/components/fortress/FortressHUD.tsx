@@ -109,6 +109,9 @@ export function FortressHUD(props: FortressHUDProps) {
   const tripleTapRef = useRef<{ slot: number; count: number; first: number } | null>(null);
   const registerSlotTapRef = useRef<(slotNum: number) => void>(() => {});
   const TRIPLE_TAP_WINDOW_MS = 1000;
+  // Inventory triple-click → quick-equip the weapon there to E1.
+  const invTapRef = useRef<{ slot: number; count: number; first: number; itemId: string | null } | null>(null);
+  const resolveAndEquipRef = useRef<(region: 'quick_select' | 'inventory', slot: number, itemId: string) => void>(() => {});
 
   // Keyboard listener for quick-select keys 1-6
   useEffect(() => {
@@ -538,6 +541,26 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
+    // INVENTORY triple-click → quick-equip the weapon there to E1 (the cursor
+    // pickup is local-only, so the item is still in the inventory DB the whole
+    // time; on the 3rd click we just clear the cursor and equip from inventory).
+    if (input.location.region === 'inventory' && input.button === 'left' && !input.shift && !input.doubleClick) {
+      const slot = input.location.gridSlot;
+      const t0 = Date.now();
+      const it = invTapRef.current;
+      if (it && it.slot === slot && t0 - it.first <= TRIPLE_TAP_WINDOW_MS) {
+        it.count += 1;
+        if (it.count >= 3) {
+          invTapRef.current = null;
+          const itemId = it.itemId ?? input.occupant?.itemId ?? null;
+          setCursor(null);
+          if (itemId) resolveAndEquipRef.current('inventory', slot, itemId);
+          return;   // skip the normal pickup on the 3rd click
+        }
+      } else {
+        invTapRef.current = { slot, count: 1, first: t0, itemId: input.occupant?.itemId ?? null };
+      }
+    }
     try {
       const result = await slotClick(input, cursor, slotClickHandlers);
       setCursor(result.cursorAfter);
@@ -550,6 +573,29 @@ export function FortressHUD(props: FortressHUDProps) {
       setDebugStatus(`slot ERR: ${msg}`);
     }
   }, [cursor, slotClickHandlers, setCursor]);
+
+  // Shared quick-equip: resolve a weapon (gun via weapon_stats, or the flame glove)
+  // and move/swap it into E1. Used by the QA triple-tap and the inventory triple-click.
+  resolveAndEquipRef.current = (region, slot, itemId) => {
+    const def = itemDefs.get(itemId);
+    if (!def) return;
+    void (async () => {
+      let target: number | null = null;
+      const isGlove = def.key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
+      if (isGlove) {
+        target = 1;
+      } else if (def.item_number != null) {
+        const { data } = await supabase.from('weapon_stats').select('is_gun').eq('item_number', def.item_number).maybeSingle();
+        if (data?.is_gun) target = 1;
+      }
+      if (target == null) { setDebugStatus('quick-equip: not a weapon'); return; }
+      const ok = await slotClickHandlers.equipTransfer(
+        { region, page: 0, slot },
+        { region: 'equip', page: 0, slot: target },
+      );
+      setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
+    })();
+  };
 
   // Resolve which equip slot a QA item belongs to and swap it in. Today
   // only weapons resolve (flame glove by key/name, guns via weapon_stats)
@@ -564,29 +610,7 @@ export function FortressHUD(props: FortressHUDProps) {
       tripleTapRef.current = null;
       const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find((e) => e.slot === slotNum);
       if (!eq?.itemId) return;
-      const def = itemDefs.get(eq.itemId);
-      if (!def) return;
-      const itemId = eq.itemId;
-      void (async () => {
-        let target: number | null = null;
-        const isGlove = def.key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
-        if (isGlove) {
-          target = 1;
-        } else if (def.item_number != null) {
-          const { data } = await supabase
-            .from('weapon_stats')
-            .select('is_gun')
-            .eq('item_number', def.item_number)
-            .maybeSingle();
-          if (data?.is_gun) target = 1;
-        }
-        if (target == null) { setDebugStatus('triple-tap: not an equippable weapon'); return; }
-        const ok = await slotClickHandlers.equipTransfer(
-          { region: 'quick_select', page: 0, slot: slotNum },
-          { region: 'equip', page: 0, slot: target },
-        );
-        setDebugStatus(ok ? `triple-equip QS${slotNum}→E${target}` : 'triple-equip FAIL');
-      })();
+      resolveAndEquipRef.current('quick_select', slotNum, eq.itemId);
     } else {
       tripleTapRef.current = { slot: slotNum, count: 1, first: now };
     }
