@@ -35,7 +35,7 @@ export const DEFAULT_BLOOD: BloodConfig = {
   dropletSize: 0.035,
   sizeVar: 0.5,
   gravity: 13,
-  dragK: 0.5,                // ~30→5 m/s in ~0.3s, terminal ~5 m/s
+  dragK: 0.25,               // halved air friction → droplets travel ~2× farther
   decalSize: 0.18,
   fadeSeconds: 10,
 };

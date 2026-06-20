@@ -554,7 +554,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    death style so every bullseye kill gets the signature fall. ──
     if (inst.dead && inst.bullseyeAt) {
       const td = now - inst.deadAt;
-      const FALL = 1000, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;
+      const FALL = 500, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;   // fall 2× faster
       const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
       const e = Math.min(1, td / FALL), eo = e * e * (3 - 2 * e);
       bullseyeQuat(g.quaternion, inst.yaw, 0, eo * HALF_PI, inst.bullseyeDirX ?? 0, inst.bullseyeDirZ ?? 1);   // no spin — just fall flat
@@ -1148,8 +1148,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (inst.bullseyeAt && !inst.dead && !s.tumbling) {
       const bt = (now - inst.bullseyeAt) / 1000;          // seconds since the bullseye
       const bdx = inst.bullseyeDirX ?? 0, bdz = inst.bullseyeDirZ ?? 1;
-      if (bt < 1.0) {                                       // FALL flat (no spin) toward the bullet dir
-        const e = bt, eo = e * e * (3 - 2 * e);
+      if (bt < 0.5) {                                       // FALL flat (no spin) toward bullet dir — 2× faster
+        const e = bt / 0.5, eo = e * e * (3 - 2 * e);
         bullseyeQuat(g.quaternion, inst.yaw, 0, eo * HALF_PI, bdx, bdz);
       } else if (bt < 2.0) {                               // HOLD flat (stunned)
         bullseyeQuat(g.quaternion, inst.yaw, 0, HALF_PI, bdx, bdz);
