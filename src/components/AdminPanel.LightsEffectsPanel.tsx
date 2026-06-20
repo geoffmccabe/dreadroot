@@ -83,6 +83,19 @@ export function LightsEffectsPanel() {
   const Grid = ({ fields }: { fields: FieldDef[] }) => (
     <div className="grid grid-cols-2 gap-x-4 gap-y-2">{fields.map((f) => <Field key={f.key} f={f} />)}</div>
   );
+  const Sel = ({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) => (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full text-xs rounded p-1"
+        style={{ background: 'hsla(var(--hud-bg-dim))', border: '1px solid hsla(var(--hud-border))', color: 'hsl(var(--hud-text))' }}
+      >
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
   const Color = ({ k, label }: { k: 'color' | 'fogColor' | 'emitterColor'; label: string }) => (
     <div className="flex items-center gap-2">
       <Label className="text-xs flex-1">{label}</Label>
