@@ -153,7 +153,6 @@ export function useEnemySpawnerIntegration({
       }
     }
 
-    console.log(`[EnemySpawnerIntegration] Built ${rules.length} spawn rules`);
     return rules;
   }, [shwarmDefinitions, shombieDefinitions]);
 
