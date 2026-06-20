@@ -1107,6 +1107,29 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         g.rotation.x -= s.spinX * delta;
       } else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
     }
+    // BULLSEYE topple — a feet-pivot spin-fall: a full 360° + the final 90° to
+    // land flat (sign −1 = on its back from a front shot, +1 = on its face from
+    // behind), HOLD flat for the 2s stun, then stand up (only if still alive — a
+    // bullseye KILL lets the normal death animation take over). Drives g.rotation.x
+    // like the death topple (pivots at the feet). Takes priority over the lean.
+    if (inst.bullseyeAt && !inst.dead && !s.tumbling) {
+      const bt = (now - inst.bullseyeAt) / 1000;          // seconds since the bullseye
+      const sign = inst.bullseyeSign ?? -1;
+      const FLAT = Math.PI / 2;                            // 90° = lying flat
+      g.rotation.order = 'YXZ';
+      if (bt < 0.7) {
+        const e = bt / 0.7, eo = 1 - (1 - e) * (1 - e);   // ease-out (snappy fall)
+        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;  // spin 360° + 90° to flat
+      } else if (bt < 2.0) {
+        g.rotation.x = sign * FLAT;                        // hold flat (stunned)
+      } else if (bt < 2.3) {
+        const e = (bt - 2.0) / 0.3, eo = e * e * (3 - 2 * e);
+        g.rotation.x = sign * FLAT * (1 - eo);             // stand back up
+      } else {
+        g.rotation.x = 0;
+        inst.bullseyeAt = 0;                               // done — resume normal
+      }
+    }
     // Headshot recoil: BEND THE UPPER BODY BACK at the waist (spine bone) and
     // snap back over 0.15s. Applied here — AFTER the animation mixer has posed
     // the skeleton this frame — so it overrides the idle/walk/HIT clip instead of
@@ -1114,7 +1137,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // to 0° at 8m, none ≥8m. The bend axis is the model's WORLD-space horizontal
     // "right", converted into the bone's local space, so it always tilts straight
     // back regardless of the rig's baked rest orientation.
-    if (inst.headshotAt && waistBone && !s.tumbling) {
+    if (inst.headshotAt && !inst.bullseyeAt && waistBone && !s.tumbling) {
       const ht = (now - inst.headshotAt) / 300;   // 0..1 over 0.3s
       const leanDeg = H >= 8 ? 0 : Math.min(45, Math.max(0, 45 * (8 - H) / 7));
       if (ht < 1 && leanDeg > 0) {
