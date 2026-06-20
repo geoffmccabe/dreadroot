@@ -275,6 +275,11 @@ export function FortressScene({
   // Which siege MAP is rendered (Bleakrock SWW, Starblink, or a future named map).
   const activeMapId = useActiveMapId();
   const activeWorld = useMemo(() => getWorldDefinition(activeMapId), [activeMapId]);
+  // Builder sandbox maps (flat/heightmap, e.g. Starblink) are BLANK — none of the SWW
+  // review/diagnostic content (monster row, character pair, collider debug, spawner) which
+  // is only for inspecting the real SWW open world. isSiegeReview = real SWW map only.
+  const isBuilderMap = activeWorld.ground.kind === 'flat' || activeWorld.ground.kind === 'heightmap';
+  const isSiegeReview = isSiege && !isBuilderMap;
   // Spawn comes from the active map's WorldDefinition (no hardcoded point).
   const siegeSpawn = useMemo(() => new THREE.Vector3(...activeWorld.spawn.position), [activeWorld]);
   // useThree() camera — MUST be declared before the live-swap effect below, which reads
@@ -292,20 +297,23 @@ export function FortressScene({
   const [worldSwapTarget, setWorldSwapTarget] = useState<THREE.Vector3 | null>(null);
   useEffect(() => {
     const gameChanged = prevGameRef.current !== activeGame;
-    const mapChanged = prevMapRef.current !== activeMapId;
-    if (!gameChanged && !mapChanged) return;
     const wasGame = prevGameRef.current; // null only on first mount
-    if (activeGame === 'siege-worlds') {
-      // Entering Siege from elsewhere remembers the Dreadroot spot; entering OR switching
-      // maps drops the player at the active map's spawn (siegeSpawn tracks the map).
-      if (gameChanged && wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
-      setWorldSwapTarget(siegeSpawn.clone());
-    } else if (gameChanged && wasGame) {
-      setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
+    // GAME entry owns the spawn (into Siege → the open-world spawn; back → Dreadroot spot).
+    // MAP changes do NOT force a spawn — those come from SiegeTeleport, which sets the
+    // player's position itself (so teleporting to an area lands you THERE, not at the map's
+    // default spawn). This is why activeMap isn't a dependency here.
+    if (gameChanged) {
+      if (activeGame === 'siege-worlds') {
+        if (wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
+        setWorldSwapTarget(siegeSpawn.clone());
+      } else if (wasGame) {
+        setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
+      }
+      prevGameRef.current = activeGame;
     }
-    prevGameRef.current = activeGame;
     prevMapRef.current = activeMapId;
-  }, [activeGame, activeMapId, camera, siegeSpawn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeGame, camera]);
 
   // Pond system for swimming
   const worldPonds = useWorldPonds(currentWorldId);
@@ -1790,8 +1798,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           <ForceFieldMoire />
         </>
       )}
-      {isSiege && <ColliderDebugView />}
-      {isSiege && <SiegeSpawner />}
+      {isSiegeReview && <ColliderDebugView />}
+      {isSiegeReview && <SiegeSpawner />}
       {isSiege && <BullseyeTestTracer />}
       {isSiege && <LaserProbe />}
       {isSiege && <VoxelizeTool />}
@@ -1802,9 +1810,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {false && isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
       {/* Standalone diagnostic: Thorn + Shi Yang standing side-by-side near spawn, animated
           (idle), with name tags — walk up to compare arm/hand distortion. No dropdown/avatar. */}
-      {isSiege && <SiegeCharacterPair />}
+      {isSiegeReview && <SiegeCharacterPair />}
       {/* Review row of freshly-imported Synty monsters (Goblin War Camp + Boss Zombies) near spawn. */}
-      {isSiege && <SiegeNewMonsterLineup />}
+      {isSiegeReview && <SiegeNewMonsterLineup />}
       {isSiege ? (
         <SiegeWorldLayers world={activeWorld} />
       ) : (

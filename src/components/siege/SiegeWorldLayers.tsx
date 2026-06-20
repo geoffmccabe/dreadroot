@@ -90,8 +90,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
-          {/* Press "I" to show a floating grid of every game item over spawn. */}
-          <SiegeItemGrid />
+          {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
+          {!isBlank && <SiegeItemGrid />}
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}

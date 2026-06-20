@@ -21,6 +21,8 @@ export interface SiegeTeleport {
   pos: [number, number, number]; // engine coords (X = -UnityX); Y a touch above ground
   yaw?: number;                  // facing (radians) applied on jump; undefined = keep current facing
   pitch?: number;                // look up/down (radians); usually 0
+  mapId?: string;                // which world/map this area lives in (default 'siege-test').
+                                 // The map is intrinsic to the area — jumping here switches to it.
 }
 
 // Centroids measured from the exported placement data; Y nudged up so you drop
@@ -40,4 +42,6 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 6, name: 'Gauntlet',      pos: [-1484, 82, 690] },
   { slot: 7, name: 'Shanty',        pos: [-394, 32, 744] },
   { slot: 8, name: 'Jungle',        pos: [-733, 29, 651] },
+  // Builder sandbox — its OWN map (flat editable terrain), reached like any other area.
+  { slot: 9, name: 'Starblink',     pos: [0, 3, 0], mapId: 'starblink' },
 ];

@@ -211,17 +211,6 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
 };
 
-/**
- * Map-jump slots for the Ctrl/Cmd+J armed menu. Digits 1-8 are SWW teleport pads
- * (SiegeTeleport); these higher keys switch the active MAP (and teleport to its
- * spawn). Kept tiny for now; a real map picker replaces this when player-made maps
- * arrive.
- */
-export const SIEGE_MAP_JUMPS: { code: string; key: string; id: string; name: string }[] = [
-  { code: 'Digit0', key: '0', id: 'starblink', name: 'Starblink' },
-  { code: 'Digit9', key: '9', id: 'siege-test', name: 'Bleakrock (SWW)' },
-];
-
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {
   if (id && SIEGE_WORLDS[id]) return SIEGE_WORLDS[id];
   return SIEGE_TEST_WORLD;
