@@ -64,10 +64,13 @@ export interface DemonInstance {
   // Bullseye box = head box scaled by this pct (0 = none). Centered on the same
   // bone-followed head center. Written by MonsterEnemy.
   bullseyePct?: number;
-  // Bullseye topple: set on a bullseye hit. bullseyeAt drives the 450° spin-fall
-  // in MonsterEnemy; bullseyeSign = +1 fall on face / -1 fall on back.
+  // Bullseye topple: set on a bullseye hit. bullseyeAt drives the spin-fall in
+  // MonsterEnemy (360° pirouette about vertical + 90° tip to flat). bullseyeDirX/Z
+  // = the bullet's horizontal direction → the body tips THAT way (front shot →
+  // back, behind → face).
   bullseyeAt?: number;
-  bullseyeSign?: number;
+  bullseyeDirX?: number;
+  bullseyeDirZ?: number;
   // World center of the head box AFTER bone-follow (rides the skull through the
   // animation). Written by MonsterEnemy each frame; refineBulletHit tests the head
   // box here instead of the static local offset. Undefined → no head bone → static.
@@ -176,7 +179,8 @@ enemyCombatRegistry.register<DemonInstance>({
       // headshot lean). Fall direction by bullet vs facing: into the front → fall
       // back; from behind → fall on face.
       d.bullseyeAt = now;
-      d.bullseyeSign = (info.knockbackDirX * Math.sin(d.yaw) + info.knockbackDirZ * Math.cos(d.yaw)) > 0 ? 1 : -1;
+      d.bullseyeDirX = info.knockbackDirX;
+      d.bullseyeDirZ = info.knockbackDirZ;
       d.stunUntil = Math.max(d.stunUntil, now + 2000);
     } else if (info.isHeadshot) {
       d.headshotAt = now;   // triggers the quick body recoil-lean in MonsterEnemy

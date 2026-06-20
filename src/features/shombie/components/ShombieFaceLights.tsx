@@ -29,6 +29,7 @@ const FALLBACK: LightDef = {
   angleDeg: 24,
   range: 24,
   pitchDeg: 4,
+  shadowSize: 512, // keep the single shadow-caster cheap
   emitterColor: '#bfe6ff',
   emitterIntensity: 2.0,
   emitterSize: 0.35,
@@ -55,23 +56,46 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
     const pos = new THREE.Vector3();
     const q = new THREE.Quaternion();
     const Z = new THREE.Vector3(0, 0, -1);
-    const unreg = frameLoop.register('shombie-face-lights', () => {
-      const list = shombiesRef.current.filter((s) => s.isActive);
-      list.sort((a, b) => a.position.distanceToSquared(camera.position) - b.position.distanceToSquared(camera.position));
+    // Reused selection buffers — the nearest POOL shombies, chosen in one O(n) pass
+    // (no filter/sort, no per-frame allocation) and re-picked at ~5Hz, not 60Hz.
+    const chosen: (ShombieInstance | null)[] = new Array(POOL).fill(null);
+    const bestDist = new Float64Array(POOL);
+    let sinceSelect = 1e9;
+
+    const unreg = frameLoop.register('shombie-face-lights', (delta) => {
+      sinceSelect += delta;
+      if (sinceSelect >= 0.2) {
+        sinceSelect = 0;
+        for (let k = 0; k < POOL; k++) { chosen[k] = null; bestDist[k] = Infinity; }
+        const all = shombiesRef.current;
+        const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+        for (let n = 0; n < all.length; n++) {
+          const s = all[n];
+          if (!s.isActive) continue;
+          const dx = s.position.x - cx, dy = s.position.y - cy, dz = s.position.z - cz;
+          const d = dx * dx + dy * dy + dz * dz;
+          // Insert into the small sorted top-K (POOL=4, so this inner loop is tiny).
+          if (d >= bestDist[POOL - 1]) continue;
+          let j = POOL - 1;
+          while (j > 0 && bestDist[j - 1] > d) { bestDist[j] = bestDist[j - 1]; chosen[j] = chosen[j - 1]; j--; }
+          bestDist[j] = d; chosen[j] = s;
+        }
+      }
+      // Track the chosen lights every frame so they move smoothly.
       for (let i = 0; i < POOL; i++) {
         const g = groupRefs[i].current;
         if (!g) continue;
-        const s = list[i];
-        if (!s) { g.position.set(0, -10000, 0); continue; } // park unused slots offscreen
+        const s = chosen[i];
+        if (!s || !s.isActive) { g.position.set(0, -10000, 0); continue; }
         const sc = s.scale || 1;
         const speed = Math.hypot(s.velocity.x, s.velocity.z);
-        if (speed > 0.05) fwd.set(s.velocity.x / speed, 0, s.velocity.z / speed); // walk direction
-        else fwd.copy(lastFacing[i]);                                             // keep last when idle
+        if (speed > 0.05) fwd.set(s.velocity.x / speed, 0, s.velocity.z / speed);
+        else fwd.copy(lastFacing[i]);
         lastFacing[i].copy(fwd);
-        const headY = s.position.y + 1.7 * sc; // head part offset
-        pos.set(s.position.x + fwd.x * 0.3 * sc, headY, s.position.z + fwd.z * 0.3 * sc); // front of the head block
+        const headY = s.position.y + 1.7 * sc;
+        pos.set(s.position.x + fwd.x * 0.3 * sc, headY, s.position.z + fwd.z * 0.3 * sc);
         g.position.copy(pos);
-        q.setFromUnitVectors(Z, fwd); // GameLight's -z points along the walk direction
+        q.setFromUnitVectors(Z, fwd);
         g.quaternion.copy(q);
       }
     }, 35);

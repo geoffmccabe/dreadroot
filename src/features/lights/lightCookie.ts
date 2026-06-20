@@ -4,12 +4,19 @@
 // rimSoftness) so dragging the sliders doesn't allocate a texture every frame.
 import * as THREE from 'three';
 
+// Bounded LRU so scrubbing the rim sliders can't leak thousands of GPU textures.
 const cache = new Map<string, THREE.CanvasTexture>();
+const MAX_CACHE = 16;
 
 export function cookieTexture(rimDarkness: number, rimSoftness: number): THREE.CanvasTexture {
-  const key = `${rimDarkness.toFixed(2)}|${rimSoftness.toFixed(2)}`;
+  // 1-decimal key: finer is not visually meaningful and bounds the variety.
+  const key = `${rimDarkness.toFixed(1)}|${rimSoftness.toFixed(1)}`;
   const hit = cache.get(key);
-  if (hit) return hit;
+  if (hit) { cache.delete(key); cache.set(key, hit); return hit; } // touch (LRU)
+  if (cache.size >= MAX_CACHE) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (oldest !== undefined) { cache.get(oldest)?.dispose(); cache.delete(oldest); }
+  }
 
   const S = 128;
   const cv = document.createElement('canvas');

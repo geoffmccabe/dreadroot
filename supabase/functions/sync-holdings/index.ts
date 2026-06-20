@@ -39,13 +39,15 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const [linkRes, themeRes, reqRes] = await Promise.all([
+  const [linkRes, themeRes, reqRes, divigoRes] = await Promise.all([
     admin.from('user_wallet_links').select('chain, account').eq('user_id', user.id),
     admin.from('token_themes').select('id, ticker_symbol, blockchain, contract_address'),
     admin.from('supporter_requirements').select('gate_kind, nft_chain, nft_collection, nft_schema, nft_template_id'),
+    admin.from('user_divigo_links').select('app_token').eq('user_id', user.id).maybeSingle(),
   ])
   const links = ((linkRes.data as { chain: string; account: string }[]) ?? []).filter((l) => l.account)
-  if (!links.length) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
+  const divigoToken = (divigoRes.data as { app_token?: string } | null)?.app_token ?? null
+  if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
   const themes = (themeRes.data as ThemeRow[]) ?? []
   const reqs = (reqRes.data as ReqRow[]) ?? []
 
@@ -102,6 +104,24 @@ Deno.serve(async (req) => {
     }
   }
 
+  // DiviGo custodial balance — authoritative (Telegram-verified) and includes coins the on-chain RPC
+  // can't see. pushExt keeps the largest amount per theme, so this never double-counts a self-custody
+  // Divi address; it just ensures custodial holders also qualify.
+  if (divigoToken) {
+    const slug = Deno.env.get('DIVIGO_APP_SLUG') ?? '', secret = Deno.env.get('DIVIGO_APP_SECRET') ?? ''
+    if (slug && secret) {
+      try {
+        const d = await fetch(`${SSO}/api/oauth/divigo/balance`, {
+          headers: { 'X-LW-App-Slug': slug, 'X-LW-App-Secret': secret, Authorization: `Bearer ${divigoToken}` },
+        }).then((r) => r.json())
+        const divi = Number((d?.balances ?? {}).divi ?? 0)
+        if (divi > 0) pushExt(findTheme('divi', 'DIVI', null), 'divigo', 'divigo', divi)
+      } catch (e) {
+        console.error('[sync-holdings] divigo balance failed', (e as Error).message)
+      }
+    }
+  }
+
   // Replace both mirrors for this user (so sold-off assets drop out).
   await admin.from('user_nft_holdings').delete().eq('user_id', user.id)
   if (nftAcc.length) await admin.from('user_nft_holdings').insert(nftAcc)
@@ -109,5 +129,6 @@ Deno.serve(async (req) => {
   const extRows = Array.from(extByKey.values())
   if (extRows.length) await admin.from('user_external_holdings').insert(extRows)
 
-  return json({ ok: true, chains: links.map((l) => l.chain), tokens: extRows.length, nfts: nftAcc.length })
+  const chains = [...links.map((l) => l.chain), ...(divigoToken ? ['divigo'] : [])]
+  return json({ ok: true, chains, tokens: extRows.length, nfts: nftAcc.length })
 })
