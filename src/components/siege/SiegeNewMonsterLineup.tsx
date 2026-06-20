@@ -1,116 +1,97 @@
-// SiegeNewMonsterLineup — review row of the freshly-imported Synty monsters (Goblin War Camp +
-// Boss Zombies) near spawn. Uses a SIMPLE direct-play renderer (clone + useAnimations, play one
-// chosen clip) — NOT MonsterEnemy — so we (a) control exactly which clip plays and (b) can cycle
-// through every clip with a key to see which animations look right.
-//
-// Press  M  to cycle the animation for ALL monsters at once; the current clip name shows on screen.
-// glb URLs are cache-busted with ?v=APP_VERSION so re-converted models actually reload.
-import { Suspense, useEffect, useMemo, useRef } from 'react';
-import { useSyncExternalStore } from 'react';
+// SiegeNewMonsterLineup — the curated FantasyRivals monster set for Siege Worlds.
+//  • A review row at Bleakrock spawn: each monster at its chosen height, on the ground, with a
+//    floating name tag. Press M to cycle ONLY the kept animations (the ones confirmed good).
+//  • Spawn command: type  @ <monster#> # <qty>  (e.g. @6#3 = three Elemental Golems) to drop
+//    active monsters at the camera. Health = 50 × height. Bigger monsters walk with slower
+//    animation (so they don't skate).
+// Once these basics are confirmed, they get wired into the Challenge Creator.
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useGLTF, useAnimations, Billboard, Text } from '@react-three/drei';
+import { useThree } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { SIEGE_SPAWN_POINT } from './siegeAreas';
 import { APP_VERSION } from '@/version';
+import { MonsterEnemy } from './MonsterEnemy';
 
-// [glb name, display name, intrinsic modelHeight]
-const ROW: [string, string, number][] = [
-  // Fantasy Rivals — retargeted humanoid anims (idle/walk/run/attack/hit/death). Shown first so
-  // the M-cycle label reflects their clip names.
-  ['barbariangiant', 'Barbarian Giant', 2.7], ['mutant', 'Mutant', 2.3],
-  ['pigbutcher', 'Pig Butcher', 2.1], ['slayer', 'Slayer', 2.0],
-  ['elementalgolem', 'Elemental Golem', 2.6], ['fortgolem', 'Fort Golem', 2.7],
-  ['mechanicalgolem', 'Mechanical Golem', 2.6], ['forestguardian', 'Forest Guardian', 2.3],
-  ['goblinarcherf', 'Goblin Archer F', 1.792], ['goblinarcherm', 'Goblin Archer M', 1.791],
-  ['goblinbeasttamer', 'Goblin Beast Tamer', 1.799], ['goblincook', 'Goblin Cook', 1.798],
-  ['goblinking', 'Goblin King', 1.791], ['goblinknight', 'Goblin Knight', 1.795],
-  ['goblinprisoner1', 'Goblin Prisoner 1', 1.797], ['goblinprisoner2', 'Goblin Prisoner 2', 1.791],
-  ['goblinprisoner3', 'Goblin Prisoner 3', 1.791], ['goblinranger', 'Goblin Ranger', 1.797],
-  ['goblinshaman', 'Goblin Shaman', 1.803], ['goblinwarrior', 'Goblin Warrior', 1.804],
-  ['goblinwizard', 'Goblin Wizard', 1.793], ['goblinking2', 'Goblin King 2', 1.824],
-  ['goblintroll', 'Goblin Troll', 1.825], ['zombieblobber', 'Zombie Blobber', 1.831],
-  ['zombiebrute', 'Zombie Brute', 1.845], ['zombieslobber', 'Zombie Slobber', 1.831],
-  ['zombiewretch', 'Zombie Wretch', 1.782],
+// id (for @ command) | glb | display name | height m | walk speed m/s | animSpeed (anim playback)
+// All glbs are ~2.0 m intrinsic, so render scale = height/2. Bigger ⇒ slower animSpeed (no skating).
+type Mon = { id: number; glb: string; name: string; height: number; speed: number; animSpeed: number };
+const MONSTERS: Mon[] = [
+  { id: 1, glb: 'slayer',          name: 'Slayer',           height: 2.0,  speed: 3.0, animSpeed: 1.0 },
+  { id: 2, glb: 'pigbutcher',      name: 'Pig Butcher',      height: 2.2,  speed: 2.8, animSpeed: 1.0 },
+  { id: 3, glb: 'mutant',          name: 'Mutant',           height: 2.6,  speed: 3.2, animSpeed: 1.0 },
+  { id: 4, glb: 'forestguardian',  name: 'Forest Guardian',  height: 3.5,  speed: 2.5, animSpeed: 0.85 },
+  { id: 5, glb: 'barbariangiant',  name: 'Barbarian Giant',  height: 6.0,  speed: 2.6, animSpeed: 0.65 },
+  { id: 6, glb: 'elementalgolem',  name: 'Elemental Golem',  height: 8.0,  speed: 2.2, animSpeed: 0.55 },
+  { id: 7, glb: 'mechanicalgolem', name: 'Mechanical Golem', height: 10.0, speed: 2.4, animSpeed: 0.5 },
+  { id: 8, glb: 'fortgolem',       name: 'Fort Golem',       height: 12.0, speed: 2.0, animSpeed: 0.45 },
 ];
-const SPACING = 2.2, PER_ROW = 5;
+const INTRINSIC = 2.0;
+const healthFor = (h: number) => Math.round(50 * h);
+// Only these animations are kept for cycling (the confirmed-good ones).
+const KEEP = ['idle', 'walk', 'run', 'weapon_strike1', 'punch', 'swipe', 'hit', 'death'];
 
-// ── global clip-cycle state (press M) ──
-let clipIdx = 0;
-let clipLabel = '';
+// ── M-cycle state ──
+let clipIdx = 0, clipLabel = '';
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
-function useClipIdx() {
-  return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => clipIdx);
-}
+function useClipIdx() { return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => clipIdx); }
 
-function ReviewMonster({ id, name, mh, x, y, z, first }: { id: string; name: string; mh: number; x: number; y: number; z: number; first: boolean }) {
-  const { scene, animations } = useGLTF(`/siege/monsters/${id}.glb?v=${APP_VERSION}`);
+function ReviewMonster({ mon, x, z, first }: { mon: Mon; x: number; z: number; first: boolean }) {
+  const { scene, animations } = useGLTF(`/siege/monsters/${mon.glb}.glb?v=${APP_VERSION}`);
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
-    // Brighten like MonsterEnemy: clone each material and feed the base-color map into emissive so
-    // the model self-illuminates and the texture is visible regardless of scene lighting (without
-    // this the Synty palette washes out to pure white under the world lights).
     c.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!(mesh as THREE.Mesh).isMesh) return;
-      const arr = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-      const cloned2 = arr.map((mm) => (mm as THREE.Material).clone());
-      mesh.material = Array.isArray(mesh.material) ? cloned2 : cloned2[0];
-      cloned2.forEach((mm) => {
-        const m = mm as THREE.MeshStandardMaterial;
-        if ('emissive' in m && m.map) {
-          m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; m.needsUpdate = true;
-        }
-      });
+      const m = o as THREE.Mesh; if (!(m as THREE.Mesh).isMesh) return;
+      const arr = Array.isArray(m.material) ? m.material : [m.material];
+      const cl = arr.map((mm) => (mm as THREE.Material).clone());
+      m.material = Array.isArray(m.material) ? cl : cl[0];
+      cl.forEach((mm) => { const s = mm as THREE.MeshStandardMaterial; if ('emissive' in s && s.map) { s.emissive = new THREE.Color(0xffffff); s.emissiveMap = s.map; s.emissiveIntensity = 0.5; s.needsUpdate = true; } });
     });
     return c;
   }, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
   const idx = useClipIdx();
+  const keep = useMemo(() => KEEP.filter((k) => names.includes(k)), [names]);
+  const y = useMemo(() => sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1], [x, z]);
+  const scale = mon.height / INTRINSIC;
 
   useEffect(() => {
-    if (!names.length) return;
-    const clip = names[idx % names.length];
-    if (first) { clipLabel = `${(idx % names.length) + 1}/${names.length}  ${clip}`; emit(); }
+    if (!keep.length) return;
+    const clip = keep[idx % keep.length];
+    if (first) { clipLabel = `${mon.name}: ${clip}  (${(idx % keep.length) + 1}/${keep.length})`; emit(); }
     const a = actions[clip];
-    Object.values(actions).forEach((x) => { if (x && x !== a) x.fadeOut(0.15); });
+    Object.values(actions).forEach((q) => { if (q && q !== a) q.fadeOut(0.15); });
     a?.reset().fadeIn(0.15).play();
-  }, [actions, names, idx, first]);
+  }, [actions, keep, idx, first, mon.name]);
 
   return (
     <group>
-      <group ref={group} position={[x, y, z]}><primitive object={cloned} /></group>
-      <Billboard position={[x, y + mh + 0.6, z]}>
-        <Text fontSize={0.3} color="#ffffff" anchorX="center" outlineWidth={0.03} outlineColor="#000000">{name}</Text>
+      <group ref={group} position={[x, y, z]} scale={scale}><primitive object={cloned} /></group>
+      <Billboard position={[x, y + mon.height + 0.5, z]}>
+        <Text fontSize={Math.max(0.4, mon.height * 0.12)} color="#ffffff" anchorX="center" outlineWidth={0.04} outlineColor="#000000">{mon.name}</Text>
       </Billboard>
     </group>
   );
 }
 
-// DOM key handler: press M to cycle; a big clip-name label flashes for 3s on each change.
+// Press M to cycle kept animations; big 3s name label.
 function useCyclePanel() {
   useEffect(() => {
-    // big center flash (3s)
     const flash = document.createElement('div');
-    flash.style.cssText = 'position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:10001;background:rgba(10,12,16,.92);border:2px solid #5a7cff;border-radius:12px;padding:14px 32px;font:700 24px sans-serif;color:#fff;box-shadow:0 4px 22px rgba(0,0,0,.6);opacity:0;transition:opacity .2s;pointer-events:none;text-align:center';
-    // small persistent hint
+    flash.style.cssText = 'position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:10001;background:rgba(10,12,16,.92);border:2px solid #5a7cff;border-radius:12px;padding:14px 32px;font:700 22px sans-serif;color:#fff;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center';
     const hint = document.createElement('div');
-    hint.textContent = 'Press M to cycle monster animation';
+    hint.textContent = 'M = cycle animation   •   @<#>#<qty> = spawn (e.g. @6#3)';
     hint.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:10000;background:rgba(10,12,16,.7);border:1px solid #3a4456;border-radius:6px;padding:5px 12px;font:13px sans-serif;color:#aab4c4';
     let hideT: ReturnType<typeof setTimeout>;
-    const show = () => {
-      flash.textContent = clipLabel || 'loading…';
-      flash.style.opacity = '1';
-      clearTimeout(hideT);
-      hideT = setTimeout(() => { flash.style.opacity = '0'; }, 3000);
-    };
+    const show = () => { flash.textContent = clipLabel || 'loading…'; flash.style.opacity = '1'; clearTimeout(hideT); hideT = setTimeout(() => { flash.style.opacity = '0'; }, 3000); };
     subs.add(show);
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'KeyM') return;
-      const t = (e.target as HTMLElement | null)?.tagName;
-      if (t === 'INPUT' || t === 'TEXTAREA') return;
+      const t = (e.target as HTMLElement | null)?.tagName; if (t === 'INPUT' || t === 'TEXTAREA') return;
       clipIdx++; emit();
     };
     window.addEventListener('keydown', onKey);
@@ -119,22 +100,80 @@ function useCyclePanel() {
   }, []);
 }
 
+let spawnSeq = 0;
+type Spawned = { key: number; mon: Mon; pos: [number, number, number] };
+
+// @ <monster#> # <qty>  staged keyboard parser → spawn active monsters at the camera.
+function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void) {
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    let stage: 'idle' | 'mon' | 'qty' = 'idle';
+    let mon = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const reset = () => { stage = 'idle'; mon = 0; if (timer) { clearTimeout(timer); timer = null; } };
+    const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(reset, 4000); };
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const k = e.key;
+      if (stage === 'idle') { if (k === '@') { stage = 'mon'; arm(); } return; }
+      if (k === '#') { arm(); return; } // optional separator
+      if (stage === 'mon') {
+        const d = parseInt(k, 10);
+        if (d >= 1 && d <= MONSTERS.length) { mon = d; stage = 'qty'; arm(); } else reset();
+        return;
+      }
+      if (stage === 'qty') {
+        const d = parseInt(k, 10);
+        if (!isNaN(d)) {
+          const qty = d === 0 ? 10 : d;
+          const m = MONSTERS.find((mm) => mm.id === mon);
+          if (m) {
+            const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0;
+            if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
+            for (let i = 0; i < qty; i++) {
+              const ox = camera.position.x + fwd.x * 6 + (i - qty / 2) * (m.height * 0.8);
+              const oz = camera.position.z + fwd.z * 6;
+              const oy = sampleHeight(ox, oz) ?? camera.position.y - 1.6;
+              add(m, [ox, oy, oz]);
+            }
+          }
+        }
+        reset();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); if (timer) clearTimeout(timer); };
+  }, [camera, add]);
+}
+
 export function SiegeNewMonsterLineup() {
   useCyclePanel();
+  const [spawned, setSpawned] = useState<Spawned[]>([]);
+  const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
+    setSpawned((s) => [...s, { key: spawnSeq++, mon, pos }]);
+  }, []);
+  useSpawnCommand(add);
+
+  // Review row at Bleakrock, spaced so big monsters don't overlap.
   const cx = SIEGE_SPAWN_POINT[0];
-  const cz0 = SIEGE_SPAWN_POINT[2] + 6;
-  const placed = useMemo(() => ROW.map(([id, name, mh], i) => {
-    const col = i % PER_ROW, row = Math.floor(i / PER_ROW);
-    const x = cx + (col - (PER_ROW - 1) / 2) * SPACING;
-    const z = cz0 + row * SPACING;
-    const y = sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1];
-    return { id, name, mh, x, y, z };
-  }), [cx, cz0]);
+  const cz = SIEGE_SPAWN_POINT[2] + 8;
+  const placed = useMemo(() => {
+    let x = cx;
+    const half = MONSTERS.map((m) => Math.max(1.2, m.height * 0.35));
+    const total = half.reduce((a, h) => a + 2 * h + 2.5, 0);
+    x = cx - total / 2;
+    return MONSTERS.map((m, i) => { x += half[i] + 1.25; const px = x; x += half[i] + 1.25; return { m, x: px }; });
+  }, [cx]);
 
   return (
     <Suspense fallback={null}>
-      {placed.map((p, i) => (
-        <ReviewMonster key={p.id} {...p} first={i === 0} />
+      {placed.map(({ m, x }, i) => (
+        <ReviewMonster key={m.glb} mon={m} x={x} z={cz} first={i === 0} />
+      ))}
+      {spawned.map((s) => (
+        <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
+          modelHeight={INTRINSIC} height={s.mon.height} speed={s.mon.speed} animSpeed={s.mon.animSpeed}
+          health={healthFor(s.mon.height)} gait="climb" />
       ))}
     </Suspense>
   );
