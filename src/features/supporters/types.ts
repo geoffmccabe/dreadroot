@@ -8,6 +8,8 @@ export interface SupporterTier {
   monthly_usd: number;
   is_active: boolean;
   sort_order: number;
+  stripe_price_id: string | null;   // Stripe recurring Price id (price_…)
+  paypal_plan_id: string | null;    // PayPal Billing Plan id (P-…)
 }
 
 export type MatchMode = 'or' | 'and';   // per-requirement: 'or' alone qualifies; 'and' = must meet all 'and' rows

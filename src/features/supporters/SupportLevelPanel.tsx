@@ -23,6 +23,25 @@ function benefitText(b: SupporterBenefit): string {
 export function SupportLevelPanel({ userId }: { userId: string | null }) {
   const { tiers, currentLevel, isLoading } = useSupporterStatus(userId);
   const [coinLabel, setCoinLabel] = useState<Map<string, string>>(new Map());
+  const [busy, setBusy] = useState<string | null>(null); // `${tierId}:${provider}` while redirecting
+
+  async function subscribe(tierId: string, provider: 'stripe' | 'paypal') {
+    setBusy(`${tierId}:${provider}`);
+    try {
+      const { data, error } = await supabase.functions.invoke('subscribe-checkout', {
+        body: { tier_id: tierId, provider },
+      });
+      if (error || !data?.url) {
+        alert(`Could not start checkout: ${error?.message ?? data?.error ?? 'unknown error'}`);
+        setBusy(null);
+        return;
+      }
+      window.location.href = data.url as string;
+    } catch (e) {
+      alert(`Checkout failed: ${(e as Error).message}`);
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     supabase.from('token_themes').select('id, ticker_symbol, display_name').then(({ data }) => {
@@ -80,9 +99,17 @@ export function SupportLevelPanel({ userId }: { userId: string | null }) {
             )}
 
             {!ts.qualifies && ts.tier.monthly_usd > 0 && (
-              <Button size="sm" variant="outline" className="h-7 mt-2" disabled title="Subscriptions coming soon">
-                Subscribe ${ts.tier.monthly_usd}/mo
-              </Button>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs text-foreground/60">Subscribe ${ts.tier.monthly_usd}/mo:</span>
+                <Button size="sm" variant="outline" className="h-7" disabled={!!busy}
+                  onClick={() => subscribe(ts.tier.id, 'stripe')}>
+                  {busy === `${ts.tier.id}:stripe` ? '…' : 'Card'}
+                </Button>
+                <Button size="sm" variant="outline" className="h-7" disabled={!!busy}
+                  onClick={() => subscribe(ts.tier.id, 'paypal')}>
+                  {busy === `${ts.tier.id}:paypal` ? '…' : 'PayPal'}
+                </Button>
+              </div>
             )}
           </div>
         );
