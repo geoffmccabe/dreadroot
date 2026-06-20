@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { worldStore } from '@/services/worldStore';
+import { supabase } from '@/integrations/supabase/client';
+import { startDivigoConnect } from './divigoConnect';
 
 interface ChainField { chain: string; label: string; placeholder: string; valid: (v: string) => boolean; }
 const FIELDS: ChainField[] = [
@@ -18,12 +20,15 @@ export function ExternalWalletsPanel({ userId }: { userId: string | null }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [divigoLinked, setDivigoLinked] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    if (!userId) { setSaved({}); return; }
+    if (!userId) { setSaved({}); setDivigoLinked(false); return; }
     Promise.all(FIELDS.map((f) => worldStore.getWalletLink(f.chain).then((a) => [f.chain, a] as const)))
       .then((pairs) => { if (alive) setSaved(Object.fromEntries(pairs.filter(([, a]) => a).map(([c, a]) => [c, a as string]))); });
+    supabase.from('user_divigo_links' as never).select('verified').eq('user_id', userId).maybeSingle()
+      .then(({ data }) => { if (alive) setDivigoLinked(!!(data as { verified?: boolean } | null)?.verified); });
     return () => { alive = false; };
   }, [userId]);
 
@@ -56,6 +61,20 @@ export function ExternalWalletsPanel({ userId }: { userId: string | null }) {
           </div>
         </div>
       ))}
+
+      {/* DiviGo verified link — proves wallet control (Telegram) + reads custodial DIVI the RPC can't see. */}
+      <div className="pt-2 border-t border-foreground/10 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-foreground/80">DiviGo (verified)</span>
+          {divigoLinked && <span className="text-[11px] text-emerald-400">✓ Connected</span>}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-foreground/55 leading-snug">Confirm ownership in Telegram &amp; count your custodial DIVI toward tiers.</p>
+          <Button size="sm" variant="outline" className="h-8 shrink-0" disabled={!userId} onClick={startDivigoConnect}>
+            {divigoLinked ? 'Reconnect' : 'Connect'}
+          </Button>
+        </div>
+      </div>
     </Card>
   );
 }
