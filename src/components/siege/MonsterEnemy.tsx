@@ -186,30 +186,6 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   }, [cloned]);
   const group = useRef<THREE.Group>(null);
   const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
-  // Per-monster BOX hitboxes (reactive to editor edits). Re-render on either the
-  // hitbox-config change (recompute boxes) or the editor selection change (highlight).
-  const [hbVersion, setHbVersion] = useState(0);
-  useEffect(() => subscribeHitboxes(() => setHbVersion((v) => v + 1)), []);
-  const [, setEditTick] = useState(0);
-  useEffect(() => subscribeEditor(() => setEditTick((v) => v + 1)), []);
-  const hitbox: MonsterHitbox = useMemo(
-    () => getHitboxFor(c.url, inst.radius, H, inst.headFrac),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [c.url, inst.radius, H, inst.headFrac, hbVersion],
-  );
-  // Publish the boxes + an enclosing broad-phase cylinder to the combat instance.
-  useEffect(() => {
-    inst.hitboxes = hitbox;
-    const reach = (b: MonsterHitbox['body']) => Math.hypot(Math.abs(b.lx) + b.hx, Math.abs(b.lz) + b.hz);
-    inst.bpRadius = Math.max(reach(hitbox.body), reach(hitbox.head), inst.radius);
-    inst.bpTop = Math.max(hitbox.body.ly + hitbox.body.hy, hitbox.head.ly + hitbox.head.hy, H);
-    inst.bpBottom = Math.min(hitbox.body.ly - hitbox.body.hy, hitbox.head.ly - hitbox.head.hy, 0);
-  }, [hitbox, inst, H]);
-  // Register with the editor so the box of the monster nearest the camera is edited.
-  useEffect(
-    () => registerEditable({ url: c.url, radius: inst.radius, height: H, headFrac: inst.headFrac, pos: () => ({ x: inst.x, z: inst.z }) }),
-    [c.url, inst, H],
-  );
   const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
   // Per-demon variation for the zombie horde (stable): size ±10%, speed +0-10%, animation
@@ -318,6 +294,32 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
+
+  // Per-monster BOX hitboxes (reactive to editor edits). MUST be after `inst`/`H`
+  // exist. Re-render on a hitbox-config change (recompute boxes) or an editor
+  // selection change (highlight). (showHitboxes hook is declared earlier.)
+  const [hbVersion, setHbVersion] = useState(0);
+  useEffect(() => subscribeHitboxes(() => setHbVersion((v) => v + 1)), []);
+  const [, setEditTick] = useState(0);
+  useEffect(() => subscribeEditor(() => setEditTick((v) => v + 1)), []);
+  const hitbox: MonsterHitbox = useMemo(
+    () => getHitboxFor(c.url, inst.radius, H, inst.headFrac),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [c.url, inst.radius, H, inst.headFrac, hbVersion],
+  );
+  // Publish the boxes + an enclosing broad-phase cylinder to the combat instance.
+  useEffect(() => {
+    inst.hitboxes = hitbox;
+    const reach = (b: MonsterHitbox['body']) => Math.hypot(Math.abs(b.lx) + b.hx, Math.abs(b.lz) + b.hz);
+    inst.bpRadius = Math.max(reach(hitbox.body), reach(hitbox.head), inst.radius);
+    inst.bpTop = Math.max(hitbox.body.ly + hitbox.body.hy, hitbox.head.ly + hitbox.head.hy, H);
+    inst.bpBottom = Math.min(hitbox.body.ly - hitbox.body.hy, hitbox.head.ly - hitbox.head.hy, 0);
+  }, [hitbox, inst, H]);
+  // Register with the editor so the box of the monster nearest the camera is edited.
+  useEffect(
+    () => registerEditable({ url: c.url, radius: inst.radius, height: H, headFrac: inst.headFrac, pos: () => ({ x: inst.x, z: inst.z }) }),
+    [c.url, inst, H],
+  );
   useSmokeTrail(inst, !!cfg.smokeTrail);
   const bossMats = useRef<THREE.MeshStandardMaterial[]>([]);   // boss: faded each frame to inst.opacity
   // Bone-attach for burns: a hit point locks to the nearest skeleton bone so the
