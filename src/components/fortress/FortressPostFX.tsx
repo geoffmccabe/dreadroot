@@ -9,10 +9,7 @@
 import { useMemo } from 'react';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
-// DISABLED: the global composer caused full-screen flashing + FPS drop in play.
-// Re-enable only after the render conflict is resolved (likely vs SceneReflections /
-// another render-target pass) and gated to builder-only.
-const ENABLE_POSTFX = false;
+const ENABLE_POSTFX = true;
 
 export function FortressPostFX() {
   const isMobile = useMemo(
@@ -29,10 +26,14 @@ export function FortressPostFX() {
     <EffectComposer multisampling={isMobile ? 0 : 4}>
       <Bloom
         mipmapBlur
-        intensity={isMobile ? 0.5 : 0.85}
-        luminanceThreshold={0.7}
-        luminanceSmoothing={0.2}
-        radius={0.6}
+        intensity={isMobile ? 0.6 : 0.9}
+        // High threshold so the bright animated SKY/clouds do NOT bloom (that caused the
+        // screen-wide flashing as the day-night cycle crossed the threshold). Only the
+        // emissive light edges (rendered unclamped > 1) and the sun exceed this.
+        luminanceThreshold={0.92}
+        // Low smoothing avoids a temporal feedback pulse on the threshold edge.
+        luminanceSmoothing={0.025}
+        radius={0.7}
       />
     </EffectComposer>
   );
