@@ -50,6 +50,7 @@ export {
 // Components
 export { ShombieRenderer } from './components/ShombieRenderer';
 export type { ShombieRendererHandle } from './components/ShombieRenderer';
+export { ShombieFaceLights } from './components/ShombieFaceLights';
 export { ShombieDesignPanel } from './components/ShombieDesignPanel';
 
 // Hooks
