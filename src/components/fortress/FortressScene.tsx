@@ -36,6 +36,7 @@ import { WispBlock } from '@/components/WispBlock';
 
 import { FirstPersonControls } from './FortressControls';
 import { useActiveGame } from '@/config/activeGame';
+import { useActiveMapId } from '@/config/activeMap';
 import { setAiming } from '@/config/aimState';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
@@ -43,14 +44,13 @@ import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
 import { fireChallengeLose } from '@/components/siege/challenge/challengeControl';
 import { sdbg } from '@/components/siege/siegeDebug';
-import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { LaserProbe } from '@/components/siege/LaserProbe';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
 import { SiegeCharacterPair } from '@/components/siege/SiegeCharacterPair';
 import { SiegeNewMonsterLineup } from '@/components/siege/SiegeNewMonsterLineup';
-import { SIEGE_TEST_WORLD } from '@/config/worldDefinition';
+import { getWorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
 import { DynamicSky, SkyHandle } from './FortressSky';
@@ -270,7 +270,11 @@ export function FortressScene({
   // HUD, lighting, sky) is world-agnostic and shared. Gated so Dreadroot is untouched.
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
-  const siegeSpawn = useMemo(() => new THREE.Vector3(...SIEGE_SPAWN_POINT), []); // Bleakrock — start where the action is
+  // Which siege MAP is rendered (Bleakrock SWW, Starblink, or a future named map).
+  const activeMapId = useActiveMapId();
+  const activeWorld = useMemo(() => getWorldDefinition(activeMapId), [activeMapId]);
+  // Spawn comes from the active map's WorldDefinition (no hardcoded point).
+  const siegeSpawn = useMemo(() => new THREE.Vector3(...activeWorld.spawn.position), [activeWorld]);
   // useThree() camera — MUST be declared before the live-swap effect below, which reads
   // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
   // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)
@@ -282,18 +286,24 @@ export function FortressScene({
   // controls' respawn-teleport. On first mount we only teleport if booting into Siege.
   const drReturnPosRef = useRef<THREE.Vector3 | null>(null);
   const prevGameRef = useRef<string | null>(null);
+  const prevMapRef = useRef<string | null>(null);
   const [worldSwapTarget, setWorldSwapTarget] = useState<THREE.Vector3 | null>(null);
   useEffect(() => {
-    if (prevGameRef.current === activeGame) return;
-    const wasIn = prevGameRef.current; // null only on first mount
+    const gameChanged = prevGameRef.current !== activeGame;
+    const mapChanged = prevMapRef.current !== activeMapId;
+    if (!gameChanged && !mapChanged) return;
+    const wasGame = prevGameRef.current; // null only on first mount
     if (activeGame === 'siege-worlds') {
-      if (wasIn && wasIn !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
+      // Entering Siege from elsewhere remembers the Dreadroot spot; entering OR switching
+      // maps drops the player at the active map's spawn (siegeSpawn tracks the map).
+      if (gameChanged && wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
       setWorldSwapTarget(siegeSpawn.clone());
-    } else if (wasIn) {
+    } else if (gameChanged && wasGame) {
       setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
     }
     prevGameRef.current = activeGame;
-  }, [activeGame, camera, siegeSpawn]);
+    prevMapRef.current = activeMapId;
+  }, [activeGame, activeMapId, camera, siegeSpawn]);
 
   // Pond system for swimming
   const worldPonds = useWorldPonds(currentWorldId);
@@ -1792,7 +1802,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Review row of freshly-imported Synty monsters (Goblin War Camp + Boss Zombies) near spawn. */}
       {isSiege && <SiegeNewMonsterLineup />}
       {isSiege ? (
-        <SiegeWorldLayers world={SIEGE_TEST_WORLD} />
+        <SiegeWorldLayers world={activeWorld} />
       ) : (
         <CameraTrackedBlocks
           showOwnershipOutline={showOwnershipOutline && blockPlacementMode}

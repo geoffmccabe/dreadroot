@@ -5,6 +5,7 @@
 import { useSyncExternalStore } from 'react';
 import { Card } from '@/components/ui/card';
 import { SIEGE_TELEPORTS } from './siegeAreas';
+import { SIEGE_MAP_JUMPS } from '@/config/worldDefinition';
 import { isTeleportArmed, subscribeTeleport } from './teleportStore';
 import { useActiveGame } from '@/config/activeGame';
 
@@ -19,6 +20,14 @@ export function SiegeTeleportMenu() {
         {SIEGE_TELEPORTS.map((t) => (
           <div key={t.slot} className="text-muted-foreground">
             <b className="text-foreground">{t.slot}</b>&nbsp; {t.name}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 pt-2 border-t border-border/40 font-bold text-primary">⊹ Maps:</div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-left">
+        {SIEGE_MAP_JUMPS.map((m) => (
+          <div key={m.id} className="text-muted-foreground">
+            <b className="text-foreground">{m.key}</b>&nbsp; {m.name}
           </div>
         ))}
       </div>

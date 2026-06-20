@@ -144,16 +144,47 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
   ground: { kind: 'gltf-terrain', surfaceY: 0 },
   // Player start on Bleakrock (the Mushrooms island) — same spot the Challenge uses, so testers
   // begin where the action is. The start modal then offers Challenge vs Open World.
-  spawn: { position: [-1039, 27, 1108], yaw: 0 },
+  // (Exactly SIEGE_SPAWN_POINT so the map-driven spawn matches the legacy hardcoded one.)
+  spawn: { position: [-1048.998, 31.12, 1062.865], yaw: 0 },
   // Sea level from Client.cs WATER_HEIGHT=22 (depth to ~9.8). Walk-the-bottom, no swim yet.
   water: [{ min: [-2000, 9.8, -214], max: [0, 22, 1786], surfaceY: 22, movement: 'walk-bottom' }],
   props: undefined,
 };
 
-/** Registry of known SW worlds (later: load from the `worlds` table). */
+/**
+ * Starblink — a blank flat map, 10× SWW in every direction (20 km), grass at y=0.
+ * The canvas for the in-world builder (drop-in objects/monsters) and the terrain
+ * brush. No SWW props, no ambient enemies, no mesh colliders — just ground + spawn.
+ * 'flat' ground is rendered by FlatGroundLayer; Phase 1D swaps it for a chunked,
+ * brush-editable GPU heightmap. Players will later author unlimited such named maps.
+ */
+export const STARBLINK_WORLD: WorldDefinition = {
+  id: 'starblink',
+  name: 'Starblink',
+  kind: 'siege',
+  meshColliders: false,
+  bounds: null,
+  ground: { kind: 'flat', surfaceY: 0, flatSize: 10000 },
+  spawn: { position: [0, 3, 0], yaw: 0 },
+  props: undefined,
+};
+
+/** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
+  [STARBLINK_WORLD.id]: STARBLINK_WORLD,
 };
+
+/**
+ * Map-jump slots for the Ctrl/Cmd+J armed menu. Digits 1-8 are SWW teleport pads
+ * (SiegeTeleport); these higher keys switch the active MAP (and teleport to its
+ * spawn). Kept tiny for now; a real map picker replaces this when player-made maps
+ * arrive.
+ */
+export const SIEGE_MAP_JUMPS: { code: string; key: string; id: string; name: string }[] = [
+  { code: 'Digit0', key: '0', id: 'starblink', name: 'Starblink' },
+  { code: 'Digit9', key: '9', id: 'siege-test', name: 'Bleakrock (SWW)' },
+];
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {
   if (id && SIEGE_WORLDS[id]) return SIEGE_WORLDS[id];

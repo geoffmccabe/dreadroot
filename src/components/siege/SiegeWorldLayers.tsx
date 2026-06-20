@@ -10,6 +10,7 @@ import type { WorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from './terrainHeight';
 import { setCoinGroundSampler } from '@/features/coinDrops/coinGround';
 import { TerrainLayer } from './TerrainLayer';
+import { FlatGroundLayer } from './FlatGroundLayer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -35,19 +36,26 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
   // monsters are in the world.
   const challengeActive = useSyncExternalStore(subscribeChallenge, selectActive, selectActive);
+  // Flat maps (e.g. Starblink) are blank builder canvases: a flat plane instead of the
+  // SWW heightfield, and NONE of the SWW-specific scenery/enemies/regions.
+  const isFlat = world.ground.kind === 'flat';
+  // Reset terrain-ready when the map kind changes so the new ground re-signals.
+  useEffect(() => { setTerrainReady(false); }, [world.id]);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}
-      <TerrainLayer onReady={() => setTerrainReady(true)} />
+      {isFlat
+        ? <FlatGroundLayer world={world} onReady={() => setTerrainReady(true)} />
+        : <TerrainLayer onReady={() => setTerrainReady(true)} />}
       <WaterLayer world={world} />
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}
       <SprayAttackRenderer />
       {/* Dark, cold horror fog + dimming scrim that fades in as you approach Bleakrock. */}
-      <BleakrockLighting />
+      {!isFlat && <BleakrockLighting />}
       {/* Underwater murk + breath/drowning damage below the sea surface. */}
       {world.water?.[0]?.surfaceY != null && <UnderwaterEffect level={world.water[0].surfaceY} />}
       {/* Challenge wave engine. Start/stop the test challenge with the "!c" command. */}
@@ -61,16 +69,19 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
 
       {terrainReady && (
         <>
-          <Suspense fallback={null}>
-            <WorldObjectsLayer meshColliders={world.meshColliders} />
-          </Suspense>
-          {world.meshColliders && <MeshColliderPlayer />}
+          {/* SWW scenery + colliders — only on the real terrain map, not flat canvases. */}
+          {!isFlat && (
+            <Suspense fallback={null}>
+              <WorldObjectsLayer meshColliders={world.meshColliders} />
+            </Suspense>
+          )}
+          {!isFlat && world.meshColliders && <MeshColliderPlayer />}
           {/* Press "I" to show a floating grid of every game item over spawn. */}
           <SiegeItemGrid />
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}
-          {!challengeActive && (
+          {!isFlat && !challengeActive && (
             <Suspense fallback={null}>
               {/* The BIG Red Demon (npcType 8) — now strikes for real (committed swipe). */}
               <MonsterEnemy spawn={[-400, 26, 705]} url="/siege/monsters/reddemon.glb"
@@ -95,7 +106,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               those are already in the game and don't need to load/display in the review area. */}
           {/* {!challengeActive && <SiegeMonsterParade />} */}
           {/* Open-World ambient spawner: plays + loops any region-tagged Challenge at its coords. */}
-          {!challengeActive && <RegionSpawnerRunner />}
+          {!isFlat && !challengeActive && <RegionSpawnerRunner />}
         </>
       )}
     </>

@@ -10,6 +10,13 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SIEGE_TELEPORTS } from './siegeAreas';
 import { setTeleportArmed } from './teleportStore';
+import { SIEGE_MAP_JUMPS } from '@/config/worldDefinition';
+import { setActiveMapId } from '@/config/activeMap';
+import { getActiveGame, setActiveGame } from '@/config/activeGame';
+
+const MAP_JUMP_BY_CODE: Record<string, string> = Object.fromEntries(
+  SIEGE_MAP_JUMPS.map((m) => [m.code, m.id]),
+);
 
 const LS = 'sw_teleports_v2';
 type Vec3 = [number, number, number];
@@ -54,6 +61,14 @@ export function SiegeTeleport() {
       }
       if (!armed) return;
       if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
+      // Map jump (switch the whole world): 0=Starblink, 9=Bleakrock/SWW. FortressScene
+      // teleports the player to the new map's spawn when the active map changes.
+      if (MAP_JUMP_BY_CODE[e.code]) {
+        e.preventDefault(); e.stopPropagation();
+        if (getActiveGame() !== 'siege-worlds') setActiveGame('siege-worlds');
+        setActiveMapId(MAP_JUMP_BY_CODE[e.code]);
+        disarm(); return;
+      }
       if (/^Digit[1-8]$/.test(e.code)) {
         e.preventDefault(); e.stopPropagation();
         const slot = parseInt(e.code.slice(5), 10);
