@@ -33,9 +33,11 @@ animations, sounds, and behavior changes. Built so it's reusable and fun to exte
   headshot, but we take the bullseye result.)
 - `!hb` shows it as a third box (gold) nested in the red head box.
 
-OPEN: bullseye box shape — a CUBE whose side = pct×(head box width), or the head
-box scaled by pct on all 3 axes? (Plan assumes: scale all 3 half-extents by pct,
-so it's a mini centered head box.)
+- **Global SIZE FACTOR** (`bullseyeZone.setBullseyeFactor(name, mult)`): named
+  contributors multiplied together scale the box. **Superadmin = 2×** (wired in
+  Fortress from userRoles). A future "Bullseye device" item could add 1.5×, etc.
+  Clamped so the box never exceeds the head box. Applies to both detection + the
+  gold `!hb` box, so what you see = what you hit.
 
 ---
 

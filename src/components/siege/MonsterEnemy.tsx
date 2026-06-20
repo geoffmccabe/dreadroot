@@ -19,7 +19,7 @@ import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
 import { getHitboxFor, subscribeHitboxes, type MonsterHitbox } from './hitboxConfig';
-import { bullseyePct } from '@/features/bullseye/bullseyeZone';
+import { bullseyePct, useBullseyeFactor, effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
 import { registerEditable, getEditUrl, getSelectedBox, subscribeEditor } from './hitboxEditor';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage, getLastSprayHitAt } from './spray/sprayAttackSystem';
@@ -206,6 +206,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const bullsWireRef = useRef<THREE.Mesh>(null);  // the !hb bullseye wireframe (nested in the head box)
   const group = useRef<THREE.Group>(null);
   const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
+  useBullseyeFactor();                       // re-render the gold box when the size factor changes (role/items)
   const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
   // Per-demon variation for the zombie horde (stable): size ±10%, speed +0-10%, animation
@@ -1225,6 +1226,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   });
 
   const sel = showHitboxes && getEditUrl() === c.url ? getSelectedBox() : null;
+  const bpct = effectiveBullseyePct(inst.bullseyePct ?? 0);   // gold box size after the global factor
   return (
    <>
     <group ref={group} scale={scale}>
@@ -1245,9 +1247,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
               <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
             </mesh>
           )}
-          {!headBone && (inst.bullseyePct ?? 0) > 0 && (
+          {!headBone && bpct > 0 && (
             <mesh position={[hitbox.head.lx, hitbox.head.ly, hitbox.head.lz]} renderOrder={1001}>
-              <boxGeometry args={[hitbox.head.hx * 2 * (inst.bullseyePct ?? 0), hitbox.head.hy * 2 * (inst.bullseyePct ?? 0), hitbox.head.hz * 2 * (inst.bullseyePct ?? 0)]} />
+              <boxGeometry args={[hitbox.head.hx * 2 * bpct, hitbox.head.hy * 2 * bpct, hitbox.head.hz * 2 * bpct]} />
               <meshBasicMaterial color="#ffd000" wireframe transparent opacity={0.95} depthTest={false} />
             </mesh>
           )}
@@ -1273,9 +1275,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
       </mesh>
     )}
-    {showHitboxes && headBone && (inst.bullseyePct ?? 0) > 0 && (
+    {showHitboxes && headBone && bpct > 0 && (
       <mesh ref={bullsWireRef} renderOrder={1001}>
-        <boxGeometry args={[hitbox.head.hx * 2 * (inst.bullseyePct ?? 0), hitbox.head.hy * 2 * (inst.bullseyePct ?? 0), hitbox.head.hz * 2 * (inst.bullseyePct ?? 0)]} />
+        <boxGeometry args={[hitbox.head.hx * 2 * bpct, hitbox.head.hy * 2 * bpct, hitbox.head.hz * 2 * bpct]} />
         <meshBasicMaterial color="#ffd000" wireframe transparent opacity={0.95} depthTest={false} />
       </mesh>
     )}

@@ -15,6 +15,7 @@ import {
 } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { spawnDamageNumber, DN_RED, DN_WHITE, DN_YELLOW } from './damageNumbers';
 import { rayHitsBox, type MonsterHitbox } from './hitboxConfig';
+import { effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
 
 export interface DemonInstance {
   id: string;
@@ -117,7 +118,7 @@ enemyCombatRegistry.register<DemonInstance>({
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-6) return null;
     const ux = dx / len, uy = dy / len, uz = dz / len;
-    const pct = d.bullseyePct ?? 0;
+    const pct = effectiveBullseyePct(d.bullseyePct ?? 0);   // base × global size factor (role/items)
     // Head box center: the BONE-FOLLOWED world center if present (rides the skull),
     // else the static local center. The bullseye box is the head box × pct at the
     // SAME center — test it first (smaller); if hit → bullseye (4×), else headshot.
