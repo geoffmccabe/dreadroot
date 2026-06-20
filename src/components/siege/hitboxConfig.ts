@@ -32,6 +32,11 @@ const BAKED: Record<string, MonsterHitbox> = {
     body: { lx: 0.0278, ly: 0.4727, lz: 0.0556, hx: 0.1802, hy: 0.2782, hz: 0.1246 },
     head: { lx: 0.0278, ly: 0.7397, lz: 0.1944, hx: 0.0667, hy: 0.0945, hz: 0.0691 },
   },
+  // Giant Skeleton (#3) — tuned on the 6m instance (÷6 to normalize).
+  '/siege/monsters/dfskeleton.glb': {
+    body: { lx: -0.0083, ly: 0.4890, lz: 0.0083, hx: 0.1278, hy: 0.3973, hz: 0.1111 },
+    head: { lx: -0.0417, ly: 0.9085, lz: 0.1917, hx: 0.0945, hy: 0.1028, hz: 0.0861 },
+  },
 };
 
 const scaleBox = (b: HBox, k: number): HBox => ({ lx: b.lx * k, ly: b.ly * k, lz: b.lz * k, hx: b.hx * k, hy: b.hy * k, hz: b.hz * k });
