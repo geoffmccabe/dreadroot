@@ -35,9 +35,19 @@ export function CityDemo() {
   }, [scene]);
 
   useEffect(() => {
-    // Collect every mesh + its world matrix, then register BVH colliders in the background.
+    // Collect SOLID meshes + world matrix for BVH colliders. EXCLUDE backdrop/decor meshes
+    // (planet, sky, far background buildings, holograms, billboards, neon, glass) — those
+    // are huge or non-physical and were creating giant invisible walls around the city.
+    const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
     const meshes: THREE.Mesh[] = [];
-    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+    root.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const matName = mats.map((x) => (x as THREE.Material)?.name ?? '').join(',').toLowerCase();
+      if (SKIP.test(matName) || SKIP.test((m.name ?? '').toLowerCase())) return;
+      meshes.push(m);
+    });
 
     let i = 0;
     const inputs: MeshInstanceInput[] = [];

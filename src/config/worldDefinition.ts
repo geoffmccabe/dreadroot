@@ -218,7 +218,7 @@ export const CITY_DEMO_WORLD: WorldDefinition = {
   kind: 'siege',
   meshColliders: false, // the city wires its own colliders via CityDemo
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
-  ground: { kind: 'flat', surfaceY: 0, flatSize: 1500 },
+  ground: { kind: 'heightmap', surfaceY: 0 }, // same editable grass terrain as Starblink
   spawn: { position: [0, 3, 0], yaw: 0 },
   props: undefined,
 };

@@ -1864,6 +1864,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {!isSiege && <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />}
       
+      {/* DreadRoot enemies + eggs — gated OFF in Siege so they never leak into
+          Starblink / City Demo (their logic is already !isSiege; this stops lingering
+          renders from a prior DreadRoot session). */}
+      {!isSiege && (<>
       {/* Shwarm Renderer */}
       <ShwarmRenderer ref={shwarmRendererRef} shwarms={shwarms} universalFlameRef={universalFlameRef} />
 
@@ -1907,6 +1911,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Dropped pet-shpider eggs in the world (owner-scoped). */}
       <WorldEggRenderer eggs={worldEggs} definitions={shpiderDefinitions} cameraRef={cameraRef} />
+      </>)}
 
       {/* Grenade explosion FX — shockwave ring + bright flash. Sits
           on top of the existing flame plumes for the "concussion"
@@ -1962,11 +1967,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         adminSeeAll={isAdmin && fruitVisibility}
       />
 
-      {/* Wide Tree Glow Lights */}
-      <WideTreeLights plantedTrees={plantedTrees} />
+      {/* Wide Tree Glow Lights (DreadRoot trees) */}
+      {!isSiege && <WideTreeLights plantedTrees={plantedTrees} />}
 
-      {/* Glowing-block point lights — single fixed-count pool */}
-      <GlowLightPool />
+      {/* Glowing-block point lights — DreadRoot glow blocks; gated OFF in Siege so their
+          glow doesn't illuminate Starblink / City terrain. */}
+      {!isSiege && <GlowLightPool />}
 
       {/* Tree Info Labels */}
       {!isSiege && (

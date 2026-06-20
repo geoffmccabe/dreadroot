@@ -34616,14 +34616,11 @@
 			"name":"Mat_PolygonScifi_Hologram_Outlines",
 			"pbrMetallicRoughness":{
 				"baseColorFactor":[
-					1,
-					1,
-					1,
+					0.0003035269910469651,
+					0,
+					0,
 					0
 				],
-				"baseColorTexture":{
-					"index":10
-				},
 				"roughnessFactor":0.5527864098548889
 			}
 		},
@@ -34642,7 +34639,7 @@
 			"name":"Mat_PolygonSciFi_Planet_Background",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":11
+					"index":10
 				},
 				"roughnessFactor":0.5527864098548889
 			}
@@ -85068,31 +85065,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":0
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
 					"source":2
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
-					"source":0
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
-					"source":0
 				}
 			},
 			"sampler":0
@@ -85116,23 +85089,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":4
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
-					"source":0
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
-					"source":0
+					"source":2
 				}
 			},
 			"sampler":0
@@ -85144,13 +85101,45 @@
 				}
 			},
 			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":6
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":6
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":2
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":7
+				}
+			},
+			"sampler":0
 		}
 	],
 	"images":[
 		{
 			"mimeType":"image/webp",
-			"name":"PolygonScifi_01_A",
-			"uri":"PolygonScifi_01_A.webp"
+			"name":"PolygonSciFi_Road_01",
+			"uri":"PolygonSciFi_Road_01.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -85159,8 +85148,18 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"PolygonScifi_01_A",
+			"uri":"PolygonScifi_01_A.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"Signs",
 			"uri":"Signs.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonScifi_Background_Building_Emissive",
+			"uri":"PolygonScifi_Background_Building_Emissive.webp"
 		},
 		{
 			"mimeType":"image/webp",
