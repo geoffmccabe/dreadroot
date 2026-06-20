@@ -55,7 +55,7 @@ export function SiegeTeleport() {
       }
       if (!armed) return;
       if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
-      if (/^Digit[1-9]$/.test(e.code)) {
+      if (/^Digit[0-9]$/.test(e.code)) {
         e.preventDefault(); e.stopPropagation();
         const slot = parseInt(e.code.slice(5), 10);
         if (e.shiftKey) {                                       // SAVE current spot + facing

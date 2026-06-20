@@ -15,6 +15,7 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
+import { CityDemo } from './scifi/CityDemo';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -37,7 +38,13 @@ import { useSyncExternalStore } from 'react';
 const selectActive = () => getChallengeState().active;
 
 export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
-  const [terrainReady, setTerrainReady] = useState(false);
+  // Track WHICH world is ready (not a bare bool). Derived at render → switching maps makes
+  // terrainReady instantly false for the new world with NO effect, avoiding the effect-order
+  // race where the parent's reset ran AFTER the child ground's onReady and clobbered it to
+  // false (which silently hid everything in this block — incl. the sci-fi showcase).
+  const [readyWorld, setReadyWorld] = useState<string | null>(null);
+  const terrainReady = readyWorld === world.id;
+  const signalReady = () => setReadyWorld(world.id);
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
   // monsters are in the world.
   const challengeActive = useSyncExternalStore(subscribeChallenge, selectActive, selectActive);
@@ -46,18 +53,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const kind = world.ground.kind;
   const isHeightmap = kind === 'heightmap';
   const isBlank = kind === 'flat' || isHeightmap;
-  // Reset terrain-ready when the map kind changes so the new ground re-signals.
-  useEffect(() => { setTerrainReady(false); }, [world.id]);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}
       {isHeightmap
-        ? <HeightmapTerrain world={world} onReady={() => setTerrainReady(true)} />
+        ? <HeightmapTerrain world={world} onReady={signalReady} />
         : kind === 'flat'
-          ? <FlatGroundLayer world={world} onReady={() => setTerrainReady(true)} />
-          : <TerrainLayer onReady={() => setTerrainReady(true)} />}
+          ? <FlatGroundLayer world={world} onReady={signalReady} />
+          : <TerrainLayer onReady={signalReady} />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}
@@ -95,6 +100,13 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
+          {/* Baked Synty city demo + its BVH colliders (City Demo map only). */}
+          {world.id === 'city-demo' && (
+            <Suspense fallback={null}>
+              <CityDemo />
+              <MeshColliderPlayer />
+            </Suspense>
+          )}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}

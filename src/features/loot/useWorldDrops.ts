@@ -17,6 +17,9 @@ interface ItemDef {
 
 interface UseWorldDropsOptions {
   userId: string | null;
+  /** When false, the system is fully inert (no fetch, no realtime, no drops). Siege Worlds
+   *  has its own loot; DreadRoot world_drops must not bleed into it (or into Starblink). */
+  enabled?: boolean;
 }
 
 function rowToDrop(
@@ -39,7 +42,7 @@ function rowToDrop(
   };
 }
 
-export function useWorldDrops({ userId }: UseWorldDropsOptions) {
+export function useWorldDrops({ userId, enabled = true }: UseWorldDropsOptions) {
   const [drops, setDrops] = useState<DroppedWorldItem[]>([]);
   const dropsRef = useRef<DroppedWorldItem[]>([]);
   useEffect(() => { dropsRef.current = drops; }, [drops]);
@@ -64,7 +67,7 @@ export function useWorldDrops({ userId }: UseWorldDropsOptions) {
 
   // Initial fetch + realtime subscription.
   useEffect(() => {
-    if (!userId) {
+    if (!userId || !enabled) {
       setDrops([]);
       return;
     }
@@ -118,7 +121,7 @@ export function useWorldDrops({ userId }: UseWorldDropsOptions) {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchItemDef]);
+  }, [userId, enabled, fetchItemDef]);
 
   /** Spawn a world drop via RPC. Realtime INSERT will populate state.
    *  The local itemDefs cache is also primed so the realtime payload

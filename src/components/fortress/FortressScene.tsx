@@ -382,6 +382,7 @@ export function FortressScene({
   const { rollDrop, isLoaded: dropTablesLoaded } = useDropTableCache();
   const { drops: droppedItems, dropsRef: droppedItemsRef, spawnDrop, pickupDrop } = useWorldDrops({
     userId: currentUserId ?? null,
+    enabled: !isSiege,   // DreadRoot/Pinkland loot must not bleed into Siege/Starblink
   });
   useLootPickup({
     droppedItemsRef,
@@ -1934,8 +1935,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         />
       )}
 
-      {/* Dropped Loot Items */}
-      <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />
+      {/* Dropped Loot Items (DreadRoot/Pinkland only — Siege has its own loot) */}
+      {!isSiege && <DroppedItemRenderer items={droppedItems} userId={currentUserId ?? null} cameraRef={cameraRef} />}
       {/* Floating coin drops (docs/COIN_DROPS.md) */}
       <FloatingCoinManager userId={currentUserId ?? null} />
 

@@ -205,10 +205,29 @@ export const STARBLINK_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/**
+ * City Demo — the fully-baked Synty SciFi City scene on a flat map, with BVH colliders.
+ * A showcase/walkthrough map (teleport slot 0), separate from the Starblink builder.
+ */
+export const CITY_DEMO_WORLD: WorldDefinition = {
+  id: 'city-demo',
+  name: 'City Demo',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 3,
+  kind: 'siege',
+  meshColliders: false, // the city wires its own colliders via CityDemo
+  bounds: { min: [-1500, -1500], max: [1500, 1500] },
+  ground: { kind: 'flat', surfaceY: 0, flatSize: 1500 },
+  spawn: { position: [0, 3, 0], yaw: 0 },
+  props: undefined,
+};
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
+  [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

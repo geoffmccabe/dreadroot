@@ -44,4 +44,6 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 8, name: 'Jungle',        pos: [-733, 29, 651] },
   // Builder sandbox — its OWN map (flat editable terrain), reached like any other area.
   { slot: 9, name: 'Starblink',     pos: [0, 3, 0], mapId: 'starblink' },
+  // Baked Synty city showcase — its own flat map with BVH colliders.
+  { slot: 0, name: 'City Demo',     pos: [0, 3, 0], mapId: 'city-demo' },
 ];
