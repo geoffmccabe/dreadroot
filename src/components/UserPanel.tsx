@@ -41,6 +41,7 @@ import { DiviBalance } from '@/features/marketplace/components/DiviBalance';
 import { WalletList } from '@/features/wallet/WalletList';
 import { GameWalletPanel } from '@/features/wallet/GameWalletPanel';
 import { WaxWalletPanel } from '@/features/wallet/WaxWalletPanel';
+import { SupportLevelPanel } from '@/features/supporters/SupportLevelPanel';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
@@ -515,6 +516,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                 </div>
               </div>
             </Card>
+
+            {/* Support Level — token/NFT-gated or subscription tiers (docs/SUPPORTER_TIERS_PLAN.md) */}
+            <SupportLevelPanel userId={user?.id ?? null} />
 
             <Card className="p-4">
               <div className="space-y-3">
