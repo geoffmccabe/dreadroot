@@ -23,6 +23,8 @@ import { toggleCreator } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused } from './siegeDebugToggles';
+import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hitboxEditor';
+import { exportHitboxes } from './hitboxConfig';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -84,8 +86,26 @@ export function SiegeSpawner() {
         if (getMonstersPaused()) { setMonstersPaused(false); pTaps.current = []; return; }
         pTaps.current = pTaps.current.filter((x) => t - x < 1000);
         pTaps.current.push(t);
-        if (pTaps.current.length >= 3) { setMonstersPaused(true); pTaps.current = []; }
+        if (pTaps.current.length >= 3) { setMonstersPaused(true); pTaps.current = []; markEditTarget(camera.position.x, camera.position.z); }
         return;
+      }
+      // HITBOX EDIT MODE — only while frozen (PPP). Edits the box of the monster
+      // type nearest the camera. j/l=∓X i/k=±Y u/o=∓Z (Shift=resize), b=body/head,
+      // n=reset, x=export. Axes are the monster's own (z = its facing).
+      if (getMonstersPaused() && stage.current === 'idle') {
+        const cx = camera.position.x, cz = camera.position.z, sh = e.shiftKey, lk = k.toLowerCase();
+        let handled = true;
+        if (lk === 'b') toggleSelectedBox();
+        else if (lk === 'n') resetNearest(cx, cz);
+        else if (lk === 'x') exportHitboxes();
+        else if (lk === 'j') applyEdit(cx, cz, 'x', -1, sh);
+        else if (lk === 'l') applyEdit(cx, cz, 'x', 1, sh);
+        else if (lk === 'i') applyEdit(cx, cz, 'y', 1, sh);
+        else if (lk === 'k') applyEdit(cx, cz, 'y', -1, sh);
+        else if (lk === 'u') applyEdit(cx, cz, 'z', -1, sh);
+        else if (lk === 'o') applyEdit(cx, cz, 'z', 1, sh);
+        else handled = false;
+        if (handled) { e.preventDefault(); e.stopPropagation(); return; }
       }
       // Spam "0" within 2s of the last spawn → +10 more of the same type.
       if (k === '0' && stage.current === 'idle' && performance.now() < spamUntil.current) {

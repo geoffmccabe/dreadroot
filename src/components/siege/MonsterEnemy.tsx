@@ -6,7 +6,7 @@
 // NOTE: combat (taking player bullets / dealing damage) is intentionally NOT here yet — it
 // will arrive with the shared Dreadroot weapon/combat system, not a bespoke one.
 
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -18,6 +18,8 @@ import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
+import { getHitboxFor, subscribeHitboxes, type MonsterHitbox } from './hitboxConfig';
+import { registerEditable, getEditUrl, getSelectedBox, subscribeEditor } from './hitboxEditor';
 import { useBossAura } from './darkLordAura';
 import { dealPlayerDamage, getLastSprayHitAt } from './spray/sprayAttackSystem';
 import { dropSiegeDivi } from './siegeCoinDrops';
@@ -183,7 +185,31 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     return (spine ?? hips) as THREE.Bone | null;
   }, [cloned]);
   const group = useRef<THREE.Group>(null);
-  const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision cylinders
+  const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
+  // Per-monster BOX hitboxes (reactive to editor edits). Re-render on either the
+  // hitbox-config change (recompute boxes) or the editor selection change (highlight).
+  const [hbVersion, setHbVersion] = useState(0);
+  useEffect(() => subscribeHitboxes(() => setHbVersion((v) => v + 1)), []);
+  const [, setEditTick] = useState(0);
+  useEffect(() => subscribeEditor(() => setEditTick((v) => v + 1)), []);
+  const hitbox: MonsterHitbox = useMemo(
+    () => getHitboxFor(c.url, inst.radius, H, inst.headFrac),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [c.url, inst.radius, H, inst.headFrac, hbVersion],
+  );
+  // Publish the boxes + an enclosing broad-phase cylinder to the combat instance.
+  useEffect(() => {
+    inst.hitboxes = hitbox;
+    const reach = (b: MonsterHitbox['body']) => Math.hypot(Math.abs(b.lx) + b.hx, Math.abs(b.lz) + b.hz);
+    inst.bpRadius = Math.max(reach(hitbox.body), reach(hitbox.head), inst.radius);
+    inst.bpTop = Math.max(hitbox.body.ly + hitbox.body.hy, hitbox.head.ly + hitbox.head.hy, H);
+    inst.bpBottom = Math.min(hitbox.body.ly - hitbox.body.hy, hitbox.head.ly - hitbox.head.hy, 0);
+  }, [hitbox, inst, H]);
+  // Register with the editor so the box of the monster nearest the camera is edited.
+  useEffect(
+    () => registerEditable({ url: c.url, radius: inst.radius, height: H, headFrac: inst.headFrac, pos: () => ({ x: inst.x, z: inst.z }) }),
+    [c.url, inst, H],
+  );
   const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
   // Per-demon variation for the zombie horde (stable): size ±10%, speed +0-10%, animation
@@ -1141,22 +1167,26 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   return (
     <group ref={group} scale={scale}>
       <primitive object={cloned} />
-      {/* !hb debug: the ACTUAL collision cylinders. Rendered in a scale-cancelling
-          child (the group is scaled by `scale`) so they're in world metres, matching
-          siegeHorde.getHitbox: body = feet→feet+H radius `inst.radius`; head = top
-          `headFrac` of that. depthTest off so they show through the model. */}
-      {showHitboxes && (
-        <group scale={1 / scale}>
-          <mesh position={[0, H / 2, 0]} renderOrder={999}>
-            <cylinderGeometry args={[inst.radius, inst.radius, H, 20, 1, true]} />
-            <meshBasicMaterial color="#22ff55" wireframe transparent opacity={0.5} depthTest={false} />
-          </mesh>
-          <mesh position={[0, H - (inst.headFrac * H) / 2, 0]} renderOrder={1000}>
-            <cylinderGeometry args={[inst.radius * 1.02, inst.radius * 1.02, inst.headFrac * H, 20, 1, true]} />
-            <meshBasicMaterial color="#ff2233" wireframe transparent opacity={0.85} depthTest={false} />
-          </mesh>
-        </group>
-      )}
+      {/* !hb debug: the ACTUAL collision BOXES (the exact geometry the bullet test
+          uses). Rendered in a scale-cancelling child (the group is scaled) so they're
+          in world metres, and inside the group so they rotate with the monster's
+          facing. Green = body, red = head; the box being edited turns yellow. */}
+      {showHitboxes && (() => {
+        const sel = getEditUrl() === c.url ? getSelectedBox() : null;
+        const b = hitbox.body, h = hitbox.head;
+        return (
+          <group scale={1 / scale}>
+            <mesh position={[b.lx, b.ly, b.lz]} renderOrder={999}>
+              <boxGeometry args={[b.hx * 2, b.hy * 2, b.hz * 2]} />
+              <meshBasicMaterial color={sel === 'body' ? '#ffe000' : '#22ff55'} wireframe transparent opacity={0.55} depthTest={false} />
+            </mesh>
+            <mesh position={[h.lx, h.ly, h.lz]} renderOrder={1000}>
+              <boxGeometry args={[h.hx * 2, h.hy * 2, h.hz * 2]} />
+              <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
+            </mesh>
+          </group>
+        );
+      })()}
       {/* Body fire: one procedural flame shell per spec, wrapping the body. The inner group
           cancels the model scale so flames are sized in world metres; being a child means they
           follow the body automatically as it moves/teleports/spins. */}

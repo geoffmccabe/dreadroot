@@ -14,6 +14,7 @@ import {
   type BurnFollower,
 } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { spawnDamageNumber, DN_RED, DN_WHITE } from './damageNumbers';
+import { rayHitsBox, type MonsterHitbox } from './hitboxConfig';
 
 export interface DemonInstance {
   id: string;
@@ -50,6 +51,12 @@ export interface DemonInstance {
   // Set by MonsterEnemy: attach a world hit point to the nearest skeleton bone so
   // an ongoing burn rides the animation (gait bob + turn). Undefined until ready.
   attach?: (x: number, y: number, z: number) => BurnFollower | null;
+  // Per-monster BOX hitboxes (LOCAL space) + a precomputed broad-phase cylinder
+  // that encloses them. Written by MonsterEnemy each time the boxes change; read
+  // by getHitbox (broad-phase) + refineBulletHit (exact box test). Undefined →
+  // fall back to the legacy radius/height cylinder.
+  hitboxes?: MonsterHitbox;
+  bpRadius?: number; bpTop?: number; bpBottom?: number;
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -85,10 +92,27 @@ enemyCombatRegistry.register<DemonInstance>({
   type: 'reddemon',
   getActiveEnemies: () => siegeDemons,
   getId: (d) => d.id,
+  // Broad-phase cylinder for the bullet raycast. When per-monster boxes are set,
+  // use the precomputed enclosing cylinder (bp*) so no box hit is ever missed;
+  // refineBulletHit then narrows the actual hit to the box. Else legacy cylinder.
   getHitbox: (d): EnemyHitbox | null => d.dead ? null : {
     centerX: d.x, centerZ: d.z,
-    bottomY: d.y, topY: d.y + d.height,
-    radius: d.radius,
+    bottomY: d.y + (d.bpBottom ?? 0),
+    topY: d.y + (d.bpTop ?? d.height),
+    radius: d.bpRadius ?? d.radius,
+  },
+  // Narrow a broad-phase cylinder hit to the actual boxes: head box → headshot,
+  // body box → body hit, neither → miss (the cylinder was a false positive).
+  // ox..oz = ray origin (prev bullet pos), dx..dz = segment vector for this step.
+  refineBulletHit: (d, ox, oy, oz, dx, dy, dz) => {
+    const hb = d.hitboxes;
+    if (!hb || d.dead) return null;   // no boxes → keep the legacy cylinder/headFrac path
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) return null;
+    const ux = dx / len, uy = dy / len, uz = dz / len;
+    if (rayHitsBox(hb.head, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: true };
+    if (rayHitsBox(hb.body, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: false };
+    return { hit: false, isHeadshot: false };
   },
   // Fire keeps burning on the body through the death animation (getHitbox goes
   // null at death so weapons stop hitting it, but the corpse is still on screen

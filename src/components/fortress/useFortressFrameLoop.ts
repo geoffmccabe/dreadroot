@@ -701,8 +701,18 @@ export function useFortressFrameLoop({
           // the enemy along this step (so you can't shoot a monster through a wall,
           // and a monster in front of a wall still takes the hit).
           const _enemyHit = enemyCombatRegistry.raycastBullet(prevBX, prevBY, prevBZ, bx, by, bz, _raycastResult);
+          // Per-monster box refinement (siege): narrow the broad-phase cylinder hit to
+          // the real boxes. A box MISS turns this into a non-hit (bullet flies on); a
+          // hit carries the authoritative headshot flag (overrides the headFrac rule).
+          let _enemyHit2 = _enemyHit;
+          let _refinedHS: boolean | null = null;
+          if (_enemyHit) {
+            const _rf = _raycastResult.adapter?.refineBulletHit?.(
+              _raycastResult.enemy, prevBX, prevBY, prevBZ, bx - prevBX, by - prevBY, bz - prevBZ);
+            if (_rf) { if (!_rf.hit) _enemyHit2 = false; else _refinedHS = _rf.isHeadshot; }
+          }
           let _wallBlocks = wallDist !== null;
-          if (_enemyHit && _wallBlocks) {
+          if (_enemyHit2 && _wallBlocks) {
             const _eX = _raycastResult.hitX - prevBX, _eY = _raycastResult.hitY - prevBY, _eZ = _raycastResult.hitZ - prevBZ;
             _wallBlocks = (wallDist as number) < Math.sqrt(_eX * _eX + _eY * _eY + _eZ * _eZ);
           }
@@ -717,7 +727,7 @@ export function useFortressFrameLoop({
             const _wc = { colors: _twd.colors, size: _twd.burn_width * _pw, height: _twd.burn_height * _pw, duration: _twd.burn_time * _pw, tier: bullet.tier };
             if (useNebulaForBulletImpacts && nebulaImpactsRef.current) nebulaImpactsRef.current.spawnImpact(_scratchGroundPos, _wc);
             else if (bulletImpactsRef.current) bulletImpactsRef.current.spawnImpact(_scratchGroundPos, _wc);
-          } else if (_enemyHit) {
+          } else if (_enemyHit2) {
             const adapter = _raycastResult.adapter!;
             const enemy = _raycastResult.enemy!;
             const hitX = _raycastResult.hitX;
@@ -743,7 +753,7 @@ export function useFortressFrameLoop({
               baseDamage: getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE,
             });
             const finalDamage = hitResolved.damage;
-            const isHeadshot = hitResolved.isHeadshot;
+            const isHeadshot = _refinedHS !== null ? _refinedHS : hitResolved.isHeadshot;
 
             const bulletDamageInfo = {
               damage: finalDamage,

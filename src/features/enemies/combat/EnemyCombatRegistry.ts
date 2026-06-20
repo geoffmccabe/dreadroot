@@ -94,6 +94,17 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
   /** Apply damage. Returns true if the enemy died as a result. */
   applyDamage: (enemy: TEnemy, info: DamageInfo) => boolean;
 
+  /** Optional: narrow a broad-phase cylinder hit to the enemy's real box
+   *  hitboxes. Given the bullet segment (origin + delta this step), returns
+   *  whether it actually hit and whether it was a headshot — or null to keep the
+   *  default cylinder + headFrac logic. `{hit:false}` means the cylinder was a
+   *  false positive and the bullet should pass through. */
+  refineBulletHit?: (
+    enemy: TEnemy,
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number,
+  ) => { hit: boolean; isHeadshot: boolean } | null;
+
   /** Optional: true if this hit harmlessly bounced off (no damage dealt) — e.g.
    *  the walapa shrugs off sub-T7 bullets. Lets the caller skip score/effects
    *  that should only fire on a real hit. Defaults to false when omitted. */
