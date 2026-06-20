@@ -83,13 +83,24 @@ function ReviewMonster({ id, name, mh, x, y, z, first }: { id: string; name: str
   );
 }
 
-// DOM key handler + on-screen current-clip label.
+// DOM key handler: press M to cycle; a big clip-name label flashes for 3s on each change.
 function useCyclePanel() {
   useEffect(() => {
-    const lbl = document.createElement('div');
-    lbl.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10000;background:rgba(10,12,16,.82);border:1px solid #3a4456;border-radius:8px;padding:7px 14px;font:13px sans-serif;color:#dfe6f0';
-    const render = () => { lbl.textContent = `Monster anim — press M to cycle:  ${clipLabel || '(loading…)'}`; };
-    subs.add(render); render();
+    // big center flash (3s)
+    const flash = document.createElement('div');
+    flash.style.cssText = 'position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:10001;background:rgba(10,12,16,.92);border:2px solid #5a7cff;border-radius:12px;padding:14px 32px;font:700 24px sans-serif;color:#fff;box-shadow:0 4px 22px rgba(0,0,0,.6);opacity:0;transition:opacity .2s;pointer-events:none;text-align:center';
+    // small persistent hint
+    const hint = document.createElement('div');
+    hint.textContent = 'Press M to cycle monster animation';
+    hint.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:10000;background:rgba(10,12,16,.7);border:1px solid #3a4456;border-radius:6px;padding:5px 12px;font:13px sans-serif;color:#aab4c4';
+    let hideT: ReturnType<typeof setTimeout>;
+    const show = () => {
+      flash.textContent = clipLabel || 'loading…';
+      flash.style.opacity = '1';
+      clearTimeout(hideT);
+      hideT = setTimeout(() => { flash.style.opacity = '0'; }, 3000);
+    };
+    subs.add(show);
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'KeyM') return;
       const t = (e.target as HTMLElement | null)?.tagName;
@@ -97,8 +108,8 @@ function useCyclePanel() {
       clipIdx++; emit();
     };
     window.addEventListener('keydown', onKey);
-    document.body.appendChild(lbl);
-    return () => { window.removeEventListener('keydown', onKey); subs.delete(render); lbl.remove(); };
+    document.body.appendChild(flash); document.body.appendChild(hint);
+    return () => { window.removeEventListener('keydown', onKey); subs.delete(show); clearTimeout(hideT); flash.remove(); hint.remove(); };
   }, []);
 }
 
