@@ -57,10 +57,19 @@ export function resetHitboxFor(url: string): void {
   emit();
 }
 
-/** Dump all overrides to the console as pasteable JSON (to bake into code). */
+/** Export all saved overrides: copy to the clipboard AND log to the console, with
+ *  a count so you can confirm what's saved. Press `x` in edit mode. */
 export function exportHitboxes(): void {
+  const urls = Object.keys(overrides);
+  const json = JSON.stringify(overrides, null, 2);
+  const header = `[siege hitboxes] ${urls.length} saved: ${urls.join(', ') || '(none)'}`;
   // eslint-disable-next-line no-console
-  console.log('[siege hitboxes] copy/paste these overrides:\n' + JSON.stringify(overrides, null, 2));
+  console.log(header + '\n' + json);
+  try {
+    navigator.clipboard?.writeText(json);
+    // eslint-disable-next-line no-console
+    console.log('[siege hitboxes] ✅ copied to clipboard — paste it to save permanently.');
+  } catch { /* clipboard may be blocked; the console log above still has it */ }
 }
 
 // ── Ray vs oriented box (the monster's local box, rotated by yaw, at world pos) ──
