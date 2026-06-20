@@ -306,6 +306,8 @@ export function FortressScene({
       if (activeGame === 'siege-worlds') {
         if (wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
         setWorldSwapTarget(siegeSpawn.clone());
+        // Drop any DreadRoot block colliders so they aren't invisible walls in Siege maps.
+        worldCollisionGrid.clearVoxels();
       } else if (wasGame) {
         setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
       }

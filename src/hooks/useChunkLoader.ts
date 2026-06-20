@@ -6,6 +6,7 @@ import { getChunkKey, CHUNK_SIZE } from '@/lib/chunkManager';
 import { fogState, EXTRA_VIEW_CHUNKS } from '@/lib/fogConfig';
 import { blockDB, CachedChunk } from '@/hooks/useIndexedDB';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { getActiveGame } from '@/config/activeGame';
 import { initLogStep, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { enqueueJob, clearPendingJobs } from '@/lib/budgetedWork';
 import {
@@ -119,6 +120,9 @@ interface UseChunkLoaderProps {
  * Same name/signature as before so all call sites are unchanged.
  */
 const ensureBlockCollider = (block: PlacedBlock): void => {
+  // Siege has no voxel blocks — never add DreadRoot block colliders there (they'd be
+  // invisible walls in Starblink/City). Siege colliders come from meshColliders/inserts.
+  if (getActiveGame() === 'siege-worlds') return;
   const shouldTime = (Math.random() * 32) < 1;
   const t0 = shouldTime ? performance.now() : 0;
   worldCollisionGrid.addVoxel(block.position_x, block.position_y, block.position_z);

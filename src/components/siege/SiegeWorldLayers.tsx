@@ -63,6 +63,15 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
         : kind === 'flat'
           ? <FlatGroundLayer world={world} onReady={signalReady} />
           : <TerrainLayer onReady={signalReady} />}
+      {/* Builder/blank maps (Starblink, City Demo) drop the SWW horror fog, so faces away
+          from the sun go near-black with only the base ambient. Add bright fill light so
+          all object textures read clearly (esp. the tall city buildings). */}
+      {isBlank && (
+        <>
+          <ambientLight intensity={0.7} />
+          <hemisphereLight args={['#ffffff', '#b9c4d0', 0.6]} />
+        </>
+      )}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}

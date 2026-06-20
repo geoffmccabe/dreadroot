@@ -224,6 +224,17 @@ class SpatialHashGrid {
     return false;
   }
   
+  /** Clear ONLY the voxel field (DreadRoot blocks), leaving inserted box colliders
+   *  (Siege objects/monsters) intact. Used when switching to a game that has no voxel
+   *  blocks (Siege) so DreadRoot blocks don't remain as invisible colliders. */
+  clearVoxels(): void {
+    this.voxelCols.clear();
+    this.voxelBoxes.clear();
+    this._voxelCount = 0;
+    this.generation++;
+    this.invalidateCache();
+  }
+
   clear(): void {
     const name = this.opts?.name ?? 'CollisionGrid';
     console.log(`[${name}] Clearing ${this.colliderCells.size} colliders`);
