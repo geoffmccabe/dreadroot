@@ -91,7 +91,7 @@ import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
 import { useShnakeSystem, useShnakeMovement, ShnakeRenderer, ShnakeRendererHandle } from '@/features/shnake';
-import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
+import { useShombieSystem, ShombieRenderer, ShombieRendererHandle, ShombieFaceLights, SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT } from '@/features/shombie';
 import { useShroomerSystem, ShroomerRenderer, ShroomerRendererHandle } from '@/features/shroomer';
 import { useVortaxSystem, VortaxRenderer, VortaxRendererHandle } from '@/features/vortax';
 import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '@/features/walapa';
@@ -1871,6 +1871,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       
       {/* Shombie Renderer - uses UniversalFlameRenderer for head fires */}
       <ShombieRenderer ref={shombieRendererRef} shombies={shombies} universalFlameRef={universalFlameRef} />
+      <ShombieFaceLights shombies={shombies} />
 
       {/* Shroomer Renderer - shombie clone with mushroom geometry */}
       <ShroomerRenderer ref={shroomerRendererRef} shroomers={shroomers} universalFlameRef={universalFlameRef} />

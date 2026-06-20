@@ -288,6 +288,7 @@ export function FortressBuilderPanel() {
               <input type="color" value={s.extrudeLightColor} onChange={(e) => builderStore.set({ extrudeLightColor: e.target.value })} className="h-6 w-9 rounded" />
             </div>
             <Row label={`Extrude intensity: ${s.extrudeLightIntensity.toFixed(1)}`} min={0} max={3} step={0.1} value={s.extrudeLightIntensity} onChange={(v) => builderStore.set({ extrudeLightIntensity: v })} />
+            <Row label={`Extrude spread: ${s.extrudeLightSpread.toFixed(0)}m`} min={2} max={24} step={1} value={s.extrudeLightSpread} onChange={(v) => builderStore.set({ extrudeLightSpread: v })} />
             <div className="flex items-center gap-2">
               <Button size="sm" variant={s.insetLightOn ? 'default' : 'outline'} className="flex-1 h-6 text-xs" onClick={() => builderStore.set({ insetLightOn: !s.insetLightOn })}>
                 Inset light {s.insetLightOn ? 'ON' : 'OFF'}
@@ -295,6 +296,7 @@ export function FortressBuilderPanel() {
               <input type="color" value={s.insetLightColor} onChange={(e) => builderStore.set({ insetLightColor: e.target.value })} className="h-6 w-9 rounded" />
             </div>
             <Row label={`Inset intensity: ${s.insetLightIntensity.toFixed(1)}`} min={0} max={3} step={0.1} value={s.insetLightIntensity} onChange={(v) => builderStore.set({ insetLightIntensity: v })} />
+            <Row label={`Inset spread: ${s.insetLightSpread.toFixed(0)}m`} min={2} max={24} step={1} value={s.insetLightSpread} onChange={(v) => builderStore.set({ insetLightSpread: v })} />
           </div>
         </div>
       </div>
