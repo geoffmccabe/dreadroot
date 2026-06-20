@@ -25,6 +25,7 @@ import { getChallengeState, subscribeChallenge } from './challenge/challengeStor
 import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused, toggleBullseyeAnyHead } from './siegeDebugToggles';
 import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hitboxEditor';
 import { exportHitboxes } from './hitboxConfig';
+import { suppressQA } from '@/config/qaGuard';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -71,6 +72,7 @@ export function SiegeSpawner() {
       setDemons((d) => [...d, ...add]);
       lastType.current = type;
       spamUntil.current = performance.now() + 2000;
+      suppressQA();   // a trailing digit must not leak into the QA number keys for ~1s
       console.log(`[SiegeSpawner] +${count} type-${type}`);
     };
 

@@ -11,6 +11,8 @@ import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
 import { getAiming } from '@/config/aimState';
+import { isQASuppressed } from '@/config/qaGuard';
+import { flashCenter } from '@/config/centerFlash';
 import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
 import {
   DEBUG_LOGGING,
@@ -628,6 +630,7 @@ export function FirstPersonControls({
         // Skipped while in any placement / spawn mode so number keys
         // still mean what they used to in those flows.
         if (onUseHotbarSlot && event.code >= 'Digit1' && event.code <= 'Digit6') {
+          if (isQASuppressed()) break;   // trailing digit from a spawn command — ignore
           const slot = parseInt(event.code.replace('Digit', ''));
           event.preventDefault();
           onUseHotbarSlot(slot);
@@ -983,6 +986,10 @@ export function FirstPersonControls({
   // frame-loop repeat (automatic). No-fire-zone, ammo, sound + consume all here.
   const fireWeaponShot = useCallback(() => {
     if (!onShoot) return;
+    // A weapon must be EQUIPPED in E1 to shoot — no E1 gun = no fire (no default
+    // shot), flash a warning each attempt. (Flame glove = non-gun → handled by the
+    // flame path, never reaches here.)
+    if (!getActiveWeapon()) { flashCenter('NO WEAPON EQUIPPED'); return; }
     // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot.
     if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });

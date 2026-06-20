@@ -31,6 +31,7 @@ import {
   type SlotClickHandlers,
   type SlotOccupant,
 } from '@/features/inventory-system';
+import { isQASuppressed } from '@/config/qaGuard';
 
 // (The old bottom-right "R for crosshairs" InstructionsPanel was removed and
 // replaced by <EquipSlots/> — see the render below.)
@@ -116,6 +117,7 @@ export function FortressHUD(props: FortressHUDProps) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const num = parseInt(e.key);
       if (num >= 1 && num <= 6) {
+        if (isQASuppressed()) return;   // trailing digit from a spawn command — ignore
         setSelectedSlot(num);
         registerSlotTapRef.current(num);
       }
