@@ -7,12 +7,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { lookupNftName } from './nftLookup';
 import type { SupporterRequirement } from './types';
+
+const NFT_CHAINS = ['ethereum', 'wax', 'solana', 'base', 'bsc', 'polygon'];
 
 export function TierRequirementsEditor({ tierId, coins }: { tierId: string; coins: { id: string; label: string }[] }) {
   const [reqs, setReqs] = useState<SupporterRequirement[]>([]);
   const [kind, setKind] = useState<'token' | 'nft'>('token');
-  const [form, setForm] = useState<Record<string, string>>({ match_mode: 'or', token_theme_id: '', min_amount: '', nft_collection: '', nft_schema: '', nft_template_id: '', nft_min_count: '1' });
+  const [form, setForm] = useState<Record<string, string>>({ match_mode: 'or', token_theme_id: '', min_amount: '', nft_chain: 'ethereum', nft_collection: '', nft_name: '', nft_schema: '', nft_template_id: '', nft_min_count: '1' });
+  const [looking, setLooking] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -23,6 +27,16 @@ export function TierRequirementsEditor({ tierId, coins }: { tierId: string; coin
 
   const setF = (k: string, v: string) => setForm((m) => ({ ...m, [k]: v }));
 
+  // Auto-fill the NFT collection name from the SSO contract registry when a contract is entered.
+  const lookupName = async () => {
+    if (kind !== 'nft' || !form.nft_collection.trim()) return;
+    setLooking(true);
+    try {
+      const res = await lookupNftName(form.nft_chain, form.nft_collection);
+      if (res?.found && res.name) setForm((m) => ({ ...m, nft_name: res.name as string }));
+    } finally { setLooking(false); }
+  };
+
   const add = async () => {
     setBusy(true);
     try {
@@ -31,12 +45,17 @@ export function TierRequirementsEditor({ tierId, coins }: { tierId: string; coin
         if (!form.token_theme_id) { setBusy(false); return; }
         row.token_theme_id = form.token_theme_id; row.min_amount = parseFloat(form.min_amount) || 0;
       } else {
-        row.nft_collection = form.nft_collection || null; row.nft_schema = form.nft_schema || null;
+        if (!form.nft_collection.trim()) { setBusy(false); return; }
+        row.nft_chain = form.nft_chain || null;
+        row.nft_collection = form.nft_collection.trim() || null;
+        row.nft_name = form.nft_name || null;
+        row.nft_schema = form.nft_schema || null;
         row.nft_template_id = form.nft_template_id ? parseInt(form.nft_template_id, 10) : null;
         row.nft_min_count = parseInt(form.nft_min_count, 10) || 1;
       }
-      await supabase.from('supporter_requirements' as never).insert(row as never);
-      setForm({ match_mode: form.match_mode, token_theme_id: '', min_amount: '', nft_collection: '', nft_schema: '', nft_template_id: '', nft_min_count: '1' });
+      const { error } = await supabase.from('supporter_requirements' as never).insert(row as never);
+      if (error) { console.error('[supporter_requirements] insert failed', error); alert(`Could not save: ${error.message}`); return; }
+      setForm((m) => ({ ...m, token_theme_id: '', min_amount: '', nft_collection: '', nft_name: '', nft_schema: '', nft_template_id: '', nft_min_count: '1' }));
       await load();
     } finally { setBusy(false); }
   };
@@ -56,7 +75,7 @@ export function TierRequirementsEditor({ tierId, coins }: { tierId: string; coin
             <span>
               {r.gate_kind === 'token'
                 ? `≥ ${r.min_amount} ${coinLabel(r.token_theme_id)}`
-                : `own ≥ ${r.nft_min_count} NFT [${r.nft_collection ?? 'any'}${r.nft_schema ? '/' + r.nft_schema : ''}${r.nft_template_id ? '#' + r.nft_template_id : ''}]`}
+                : `own ≥ ${r.nft_min_count} ${r.nft_name || r.nft_collection || 'NFT'}${r.nft_chain ? ` (${r.nft_chain})` : ''}`}
             </span>
           </div>
           <Button size="sm" variant="ghost" className="h-6 px-2" onClick={() => del(r.id)}>✕</Button>
@@ -82,10 +101,14 @@ export function TierRequirementsEditor({ tierId, coins }: { tierId: string; coin
           </>
         ) : (
           <>
-            <Input className="h-7 text-xs w-36" placeholder="collection" value={form.nft_collection} onChange={(e) => setF('nft_collection', e.target.value)} />
-            <Input className="h-7 text-xs w-24" placeholder="schema" value={form.nft_schema} onChange={(e) => setF('nft_schema', e.target.value)} />
-            <Input className="h-7 text-xs w-24" placeholder="template" value={form.nft_template_id} onChange={(e) => setF('nft_template_id', e.target.value)} />
-            <Input className="h-7 text-xs w-16" type="number" placeholder="#" value={form.nft_min_count} onChange={(e) => setF('nft_min_count', e.target.value)} />
+            <select className="text-xs border rounded px-1 py-1 bg-background" value={form.nft_chain} onChange={(e) => setF('nft_chain', e.target.value)}>
+              {NFT_CHAINS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <Input className="h-7 text-xs w-44" placeholder="contract / collection" value={form.nft_collection}
+                   onChange={(e) => setF('nft_collection', e.target.value)} onBlur={lookupName} />
+            <Input className="h-7 text-xs w-32" placeholder={looking ? 'looking up…' : 'name (auto)'}
+                   value={form.nft_name} onChange={(e) => setF('nft_name', e.target.value)} />
+            <Input className="h-7 text-xs w-14" type="number" placeholder="#" value={form.nft_min_count} onChange={(e) => setF('nft_min_count', e.target.value)} />
           </>
         )}
         <Button size="sm" className="h-7" disabled={busy} onClick={add}>Add</Button>

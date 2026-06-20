@@ -20,7 +20,9 @@ export interface SupporterRequirement {
   gate_kind: GateKind;
   token_theme_id: string | null;
   min_amount: number;
-  nft_collection: string | null;
+  nft_collection: string | null;   // EVM contract address, or WAX AtomicAssets collection
+  nft_chain: string | null;         // 'ethereum' | 'wax' | 'solana' | …
+  nft_name: string | null;          // collection name, auto-filled from the SSO contract registry
   nft_schema: string | null;
   nft_template_id: number | null;
   nft_min_count: number;

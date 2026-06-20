@@ -102,49 +102,41 @@ export function exportHitboxes(): void {
 
 // ── Ray vs oriented box (the monster's local box, rotated by yaw, at world pos) ──
 // Transforms the world ray into the monster's local frame, then does a slab AABB
-// test. Returns true if the segment [0,len] enters the box. Zero allocation.
-export function rayHitsBox(
+// test. Returns the ENTRY distance t along [0,len] (≥0) on hit, else -1. Zero alloc.
+export function rayBoxEntryT(
   box: HBox,
   mx: number, my: number, mz: number, yaw: number,   // monster world pos + facing yaw
   ox: number, oy: number, oz: number,                // ray origin (world)
   dx: number, dy: number, dz: number,                // ray direction (world, unit)
   len: number,
-): boolean {
-  // World → local: translate by -monster, rotate by -yaw about Y.
+): number {
   const cos = Math.cos(-yaw), sin = Math.sin(-yaw);
   const rx = ox - mx, ry = oy - my, rz = oz - mz;
-  // local origin (rotate about Y): x' = x*cos + z*sin ; z' = -x*sin + z*cos
   let lox = rx * cos + rz * sin;
   let loy = ry;
   let loz = -rx * sin + rz * cos;
-  let ldx = dx * cos + dz * sin;
-  let ldy = dy;
-  let ldz = -dx * sin + dz * cos;
-  // Shift into box-center space.
+  const ldx = dx * cos + dz * sin;
+  const ldy = dy;
+  const ldz = -dx * sin + dz * cos;
   lox -= box.lx; loy -= box.ly; loz -= box.lz;
 
-  // Slab test.
   let tmin = 0, tmax = len;
-  // X
-  if (Math.abs(ldx) < 1e-8) { if (lox < -box.hx || lox > box.hx) return false; }
-  else {
-    let t1 = (-box.hx - lox) / ldx, t2 = (box.hx - lox) / ldx;
-    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
-    if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return false;
-  }
-  // Y
-  if (Math.abs(ldy) < 1e-8) { if (loy < -box.hy || loy > box.hy) return false; }
-  else {
-    let t1 = (-box.hy - loy) / ldy, t2 = (box.hy - loy) / ldy;
-    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
-    if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return false;
-  }
-  // Z
-  if (Math.abs(ldz) < 1e-8) { if (loz < -box.hz || loz > box.hz) return false; }
-  else {
-    let t1 = (-box.hz - loz) / ldz, t2 = (box.hz - loz) / ldz;
-    if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; }
-    if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return false;
-  }
-  return true;
+  if (Math.abs(ldx) < 1e-8) { if (lox < -box.hx || lox > box.hx) return -1; }
+  else { let t1 = (-box.hx - lox) / ldx, t2 = (box.hx - lox) / ldx; if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return -1; }
+  if (Math.abs(ldy) < 1e-8) { if (loy < -box.hy || loy > box.hy) return -1; }
+  else { let t1 = (-box.hy - loy) / ldy, t2 = (box.hy - loy) / ldy; if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return -1; }
+  if (Math.abs(ldz) < 1e-8) { if (loz < -box.hz || loz > box.hz) return -1; }
+  else { let t1 = (-box.hz - loz) / ldz, t2 = (box.hz - loz) / ldz; if (t1 > t2) { const tt = t1; t1 = t2; t2 = tt; } if (t1 > tmin) tmin = t1; if (t2 < tmax) tmax = t2; if (tmin > tmax) return -1; }
+  return tmin;
+}
+
+/** Boolean form: does the segment [0,len] enter the box? */
+export function rayHitsBox(
+  box: HBox,
+  mx: number, my: number, mz: number, yaw: number,
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  len: number,
+): boolean {
+  return rayBoxEntryT(box, mx, my, mz, yaw, ox, oy, oz, dx, dy, dz, len) >= 0;
 }

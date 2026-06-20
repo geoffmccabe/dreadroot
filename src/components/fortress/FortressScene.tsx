@@ -42,6 +42,7 @@ import { setAiming } from '@/config/aimState';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
+import { BullseyeTestTracer } from '@/components/siege/BullseyeTestTracer';
 import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
 import { fireChallengeLose } from '@/components/siege/challenge/challengeControl';
 import { sdbg } from '@/components/siege/siegeDebug';
@@ -1791,6 +1792,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       )}
       {isSiege && <ColliderDebugView />}
       {isSiege && <SiegeSpawner />}
+      {isSiege && <BullseyeTestTracer />}
       {isSiege && <LaserProbe />}
       {isSiege && <VoxelizeTool />}
       {isSiege && <SiegeExplosion ref={siegeExplosionRef} />}
