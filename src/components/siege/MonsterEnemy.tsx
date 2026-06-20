@@ -140,6 +140,14 @@ function emitMonster3D(camera: THREE.Camera, url: string, sx: number, sy: number
 // separation — fine for the handful of beach monsters). Each entry = current x/z + radius.
 const MONSTERS = new Set<{ x: number; y: number; z: number; r: number }>();
 const _fwd = new THREE.Vector3();   // scratch: player look direction (for teleport-behind)
+// Headshot waist-bend scratch (world-space rotation applied to the spine bone on
+// top of the animation). Module-level + reused per-instance; frame callbacks run
+// sequentially so sharing is safe.
+const _hsGwq = new THREE.Quaternion();
+const _hsRight = new THREE.Vector3();
+const _hsDelta = new THREE.Quaternion();
+const _hsPwq = new THREE.Quaternion();
+const _hsLocal = new THREE.Quaternion();
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
@@ -161,6 +169,18 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // their own skeleton — a plain shared scene can only render in one place. SkeletonUtils
   // clones the skinned mesh + skeleton properly (materials stay shared, which is fine).
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
+  // Waist/spine bone for the headshot recoil-bend. Take the LOWEST spine bone in
+  // DFS order (hinges at the waist); fall back to hips/pelvis. null → no bend.
+  const waistBone = useMemo(() => {
+    let spine: THREE.Bone | null = null, hips: THREE.Bone | null = null;
+    cloned.traverse((o) => {
+      if (!(o as THREE.Bone).isBone) return;
+      const n = o.name.toLowerCase();
+      if (!spine && n.includes('spine')) spine = o as THREE.Bone;
+      if (!hips && (n.includes('hips') || n.includes('pelvis'))) hips = o as THREE.Bone;
+    });
+    return (spine ?? hips) as THREE.Bone | null;
+  }, [cloned]);
   const group = useRef<THREE.Group>(null);
   const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
@@ -994,19 +1014,31 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         g.rotation.y = s.tumbleYaw; g.rotation.z = 0;
         g.rotation.x -= s.spinX * delta;
       } else { g.rotation.x += s.spinX * delta; g.rotation.z += s.spinZ * delta; }
-    } else if (inst.headshotAt) {
-      // Headshot recoil-lean: a backward heel-pivot lean that snaps back over
-      // 0.15s (pivots at the feet — the model origin — like the death topple).
-      // Amplitude scales with the biped's height: 30° at ≤1m, falling linearly to
-      // 0° at 8m, and nothing at ≥8m (big bosses don't flinch from a headshot).
-      const leanDeg = H >= 8 ? 0 : Math.min(30, Math.max(0, 30 * (8 - H) / 7));
+    }
+    // Headshot recoil: BEND THE UPPER BODY BACK at the waist (spine bone) and
+    // snap back over 0.15s. Applied here — AFTER the animation mixer has posed
+    // the skeleton this frame — so it overrides the idle/walk/HIT clip instead of
+    // being overwritten by it. Amplitude scales with height: 45° at ≤1m falling
+    // to 0° at 8m, none ≥8m. The bend axis is the model's WORLD-space horizontal
+    // "right", converted into the bone's local space, so it always tilts straight
+    // back regardless of the rig's baked rest orientation.
+    if (inst.headshotAt && waistBone && !s.tumbling) {
       const ht = (now - inst.headshotAt) / 150;   // 0..1 over 0.15s
+      const leanDeg = H >= 8 ? 0 : Math.min(45, Math.max(0, 45 * (8 - H) / 7));
       if (ht < 1 && leanDeg > 0) {
-        g.rotation.order = 'YXZ';
-        g.rotation.x = -(leanDeg * Math.PI / 180) * Math.sin(Math.PI * ht);   // 0 → peak → 0
-      } else {
-        if (g.rotation.x !== 0) g.rotation.x = 0;
-        inst.headshotAt = 0;   // animation done — clear so it stays clean + re-triggers next hit
+        const angle = (leanDeg * Math.PI / 180) * Math.sin(Math.PI * ht);   // 0 → peak → 0
+        g.getWorldQuaternion(_hsGwq);
+        _hsRight.set(1, 0, 0).applyQuaternion(_hsGwq).normalize();   // model's right in world (horizontal)
+        _hsDelta.setFromAxisAngle(_hsRight, -angle);                 // −angle = lean BACK (matches root −x convention)
+        const parent = waistBone.parent;
+        if (parent) {
+          parent.getWorldQuaternion(_hsPwq);                        // bone parent → world
+          // localDelta = parentWorld⁻¹ · Δworld · parentWorld, then premultiply onto the animated pose
+          _hsLocal.copy(_hsPwq).invert().multiply(_hsDelta).multiply(_hsPwq);
+          waistBone.quaternion.premultiply(_hsLocal);
+        }
+      } else if (ht >= 1) {
+        inst.headshotAt = 0;   // done — mixer restores the bone next frame; re-triggers on the next headshot
       }
     }
 
