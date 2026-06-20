@@ -13,6 +13,7 @@ import { TerrainLayer } from './TerrainLayer';
 import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
+import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -55,9 +56,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
         : kind === 'flat'
           ? <FlatGroundLayer world={world} onReady={() => setTerrainReady(true)} />
           : <TerrainLayer onReady={() => setTerrainReady(true)} />}
-      {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD). */}
+      {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
+          and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}
-      <WaterLayer world={world} />
+      {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}

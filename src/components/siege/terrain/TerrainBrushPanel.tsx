@@ -8,8 +8,10 @@ import { Slider } from '@/components/ui/slider';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
+import { useState } from 'react';
 import { useBrushState, setBrushState } from './terrainBrushState';
-import type { BrushMode } from './heightField';
+import { serializeField, type BrushMode } from './heightField';
+import { saveMap } from './mapPersistence';
 
 const MODES: { key: BrushMode; label: string }[] = [
   { key: 'raise', label: 'Raise (R)' },
@@ -23,7 +25,19 @@ export function TerrainBrushPanel() {
   const mapId = useActiveMapId();
   const bs = useBrushState();
   const world = getWorldDefinition(mapId);
+  const [saved, setSaved] = useState(false);
   if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap') return null;
+
+  const onSave = async () => {
+    await saveMap({
+      id: world.id,
+      name: world.name,
+      heightField: serializeField(),
+      water: { on: bs.waterOn, level: bs.waterLevel },
+    });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
 
   return (
     <Card className="waterfall-card fixed left-4 top-1/2 -translate-y-1/2 z-50 w-56 p-3 text-xs font-mono">
@@ -71,6 +85,31 @@ export function TerrainBrushPanel() {
       <div className="mt-2 text-[10px] text-muted-foreground">
         {bs.enabled ? 'Look at ground · hold B to sculpt' : 'Turn ON to sculpt the terrain'}
       </div>
+
+      <div className="mt-3 border-t border-border/40 pt-2">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="font-bold text-primary">💧 Water</span>
+          <Button
+            size="sm"
+            variant={bs.waterOn ? 'default' : 'outline'}
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setBrushState({ waterOn: !bs.waterOn })}
+          >
+            {bs.waterOn ? 'ON' : 'off'}
+          </Button>
+        </div>
+        {bs.waterOn && (
+          <div className="text-muted-foreground">
+            <div className="mb-1 flex justify-between"><span>Level</span><b className="text-foreground">{bs.waterLevel} m</b></div>
+            <Slider value={[bs.waterLevel]} min={-40} max={120} step={1} onValueChange={([v]) => setBrushState({ waterLevel: v })} />
+            <div className="mt-1 text-[10px]">Lower terrain below this to make lakes.</div>
+          </div>
+        )}
+      </div>
+
+      <Button size="sm" className="mt-3 h-7 w-full text-[11px]" onClick={onSave}>
+        {saved ? 'Saved ✓' : 'Save map'}
+      </Button>
     </Card>
   );
 }

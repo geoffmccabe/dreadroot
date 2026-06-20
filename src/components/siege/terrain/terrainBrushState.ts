@@ -9,9 +9,11 @@ export interface BrushState {
   radius: number;     // brush radius (meters)
   strength: number;   // meters/second at full strength
   edge: number;       // edge-blur softness 0 (hard) .. 1 (soft)
+  waterOn: boolean;   // flood the map with water up to waterLevel
+  waterLevel: number; // water surface height (world Y) — dig terrain below it to make lakes
 }
 
-let state: BrushState = { enabled: false, mode: 'raise', radius: 12, strength: 10, edge: 0.5 };
+let state: BrushState = { enabled: false, mode: 'raise', radius: 12, strength: 10, edge: 0.5, waterOn: false, waterLevel: 4 };
 const subs = new Set<() => void>();
 
 export function getBrushState(): BrushState { return state; }

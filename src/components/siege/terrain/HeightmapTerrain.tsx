@@ -13,9 +13,11 @@ import { toRenderSpace } from '@/lib/renderSpace';
 import { enqueueJob } from '@/lib/budgetedWork';
 import {
   CELL_M, SAMPLES, SAMPLE_M, cellKey, cellOf, getHeight, getSampleAt,
-  setBaseline, clearField, consumeDirtyCells,
+  setBaseline, clearField, consumeDirtyCells, loadField,
 } from './heightField';
 import { registerTerrainMesh, unregisterTerrainMesh } from './terrainMeshRegistry';
+import { loadMap } from './mapPersistence';
+import { setBrushState } from './terrainBrushState';
 
 const VIEW_CELLS = 4;          // load radius in cells (4×128 = 512 m of editable detail)
 const TEX_REPEAT_M = 6;
@@ -71,11 +73,24 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   }, [world.id]);
 
   useEffect(() => {
+    let alive = true;
     setBaseline(baseY);
     clearField();
+    setBrushState({ waterOn: false }); // reset flood until the saved map (if any) loads
     setDynamicHeightProvider(getHeight);
     onReady?.();
+    // Load any saved version of this map (local for now; server later — see mapPersistence).
+    (async () => {
+      const saved = await loadMap(world.id);
+      if (!alive || !saved) return;
+      loadField(saved.heightField);
+      setBrushState({ waterOn: saved.water.on, waterLevel: saved.water.level });
+      // Rebuild any cells already streamed so they reflect the loaded heights.
+      for (const m of loaded.current.values()) { groupRef.current?.remove(m); unregisterTerrainMesh(m); m.geometry.dispose(); }
+      loaded.current.clear();
+    })();
     return () => {
+      alive = false;
       setDynamicHeightProvider(null);
       clearField();
       for (const m of loaded.current.values()) { unregisterTerrainMesh(m); m.geometry.dispose(); }
