@@ -44,6 +44,21 @@ const MOUNT: FieldDef[] = [
   { key: 'offZ', label: 'Offset Z', min: -3, max: 3, step: 0.05 },
   { key: 'pitchDeg', label: 'Aim pitch°', min: -45, max: 45, step: 1 },
 ];
+// Glow (omni point light, like a Glow Block).
+const GLOW: FieldDef[] = [
+  { key: 'intensity', label: 'Intensity', min: 0, max: 6, step: 0.1 },
+  { key: 'range', label: 'Falloff radius (m)', min: 2, max: 60, step: 1 },
+  { key: 'glowDecay', label: 'Decay', min: 0.5, max: 3, step: 0.1 },
+  { key: 'emitterSize', label: 'Source size (m)', min: 0.1, max: 3, step: 0.05 },
+  { key: 'offY', label: 'Height (m)', min: -3, max: 6, step: 0.1 },
+];
+// Pulse + flicker (both types).
+const PULSE: FieldDef[] = [
+  { key: 'pulseSpeed', label: 'Pulse speed', min: 0.2, max: 10, step: 0.1 },
+  { key: 'pulseDepth', label: 'Pulse depth', min: 0, max: 1, step: 0.02 },
+  { key: 'flicker', label: 'Flicker amount', min: 0, max: 1, step: 0.02 },
+  { key: 'flickerSpeed', label: 'Flicker speed', min: 1, max: 20, step: 0.5 },
+];
 
 export function LightsEffectsPanel() {
   const { previewOn, def } = useLightStore();
@@ -98,53 +113,78 @@ export function LightsEffectsPanel() {
     <div className="space-y-3">
       <Card className="p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Light (spotlight)</span>
+          <span className="text-sm font-semibold">Light</span>
           <Button size="sm" variant={previewOn ? 'default' : 'outline'} onClick={() => lightStore.setPreview(!previewOn)}>
             {previewOn ? 'Preview ON (aim with view)' : 'Preview'}
           </Button>
+        </div>
+        <div className="flex gap-1">
+          {([['spotlight', 'Spotlight'], ['glow', 'Glow (omni)']] as const).map(([t, label]) => (
+            <Button key={t} size="sm" variant={def.type === t ? 'default' : 'outline'} className="flex-1 h-7 text-xs" onClick={() => set({ type: t })}>{label}</Button>
+          ))}
         </div>
         <div className="text-xs text-muted-foreground">Reusable code: <span className="font-mono text-foreground">{code}</span></div>
       </Card>
 
       <Card className="p-3 space-y-2">
-        <Color k="color" label="Beam colour" />
-        <Grid fields={BEAM} />
+        <Color k="color" label={def.type === 'glow' ? 'Light colour' : 'Beam colour'} />
+        <Grid fields={def.type === 'glow' ? GLOW : BEAM} />
       </Card>
 
+      {/* Pulse + flicker (both types) */}
       <Card className="p-3 space-y-2">
-        <Label className="text-xs font-semibold">Dark-rim circle</Label>
-        <Grid fields={RIM} />
+        <Sel
+          label="Pulse style"
+          value={def.pulseStyle}
+          options={[{ value: 'none', label: 'None' }, { value: 'sine', label: 'Smooth (sine)' }, { value: 'throb', label: 'Throb' }, { value: 'heartbeat', label: 'Heartbeat' }]}
+          onChange={(v) => set({ pulseStyle: v as LightDef['pulseStyle'] })}
+        />
+        <Grid fields={PULSE} />
       </Card>
 
-      <Card className="p-3 space-y-2">
-        <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Fog beam</Label><Toggle k="fogOn" label="Fog" /></div>
-        <Color k="fogColor" label="Fog colour" />
-        <Grid fields={FOG} />
-      </Card>
+      {def.type === 'spotlight' && (
+        <>
+          <Card className="p-3 space-y-2">
+            <Label className="text-xs font-semibold">Dark-rim circle</Label>
+            <Grid fields={RIM} />
+          </Card>
+
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Fog beam</Label><Toggle k="fogOn" label="Fog" /></div>
+            <Color k="fogColor" label="Fog colour" />
+            <Grid fields={FOG} />
+          </Card>
+
+          <Card className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Shadows (cheap)</Label>
+              <Toggle k="shadowOn" label="Shadow" />
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <Label className="text-xs flex-1">Quality</Label>
+              {[256, 512, 1024].map((s) => (
+                <Button key={s} size="sm" variant={def.shadowSize === s ? 'default' : 'outline'} className="h-6 px-2" onClick={() => set({ shadowSize: s })}>{s}</Button>
+              ))}
+            </div>
+          </Card>
+        </>
+      )}
 
       <Card className="p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <Label className="text-xs font-semibold">Shadows (cheap)</Label>
-          <Toggle k="shadowOn" label="Shadow" />
+          <Label className="text-xs font-semibold">{def.type === 'glow' ? 'Glowing source' : 'Glowing disc'}</Label>
+          <Toggle k="emitterOn" label={def.type === 'glow' ? 'Source' : 'Disc'} />
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <Label className="text-xs flex-1">Quality</Label>
-          {[256, 512, 1024].map((s) => (
-            <Button key={s} size="sm" variant={def.shadowSize === s ? 'default' : 'outline'} className="h-6 px-2" onClick={() => set({ shadowSize: s })}>{s}</Button>
-          ))}
-        </div>
+        <Color k="emitterColor" label={def.type === 'glow' ? 'Source colour' : 'Disc colour'} />
+        {def.type === 'spotlight' && <Grid fields={EMIT} />}
       </Card>
 
-      <Card className="p-3 space-y-2">
-        <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Glowing disc</Label><Toggle k="emitterOn" label="Disc" /></div>
-        <Color k="emitterColor" label="Disc colour" />
-        <Grid fields={EMIT} />
-      </Card>
-
-      <Card className="p-3 space-y-2">
-        <Label className="text-xs font-semibold">Mount</Label>
-        <Grid fields={MOUNT} />
-      </Card>
+      {def.type === 'spotlight' && (
+        <Card className="p-3 space-y-2">
+          <Label className="text-xs font-semibold">Mount</Label>
+          <Grid fields={MOUNT} />
+        </Card>
+      )}
 
       <Card className="p-3 space-y-2">
         <div className="flex items-center gap-2">

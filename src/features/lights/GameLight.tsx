@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { frameLoop } from '@/lib/frameLoop';
 import { cookieTexture, discTexture } from './lightCookie';
-import type { LightDef } from './lightTypes';
+import { lightWave, type LightDef } from './lightTypes';
 
 const DEG = Math.PI / 180;
 
@@ -45,6 +45,52 @@ void main() {
 }`;
 
 export function GameLight({ def, idSuffix = '' }: { def: LightDef; idSuffix?: string }) {
+  if (def.type === 'glow') return <GlowLight def={def} idSuffix={idSuffix} />;
+  return <SpotLightImpl def={def} idSuffix={idSuffix} />;
+}
+
+// 'glow' type — an omni point light that washes nearby terrain (the Glow Block effect),
+// plus a small glowing source sphere. Pulse + flicker drive the intensity over time.
+function GlowLight({ def, idSuffix }: { def: LightDef; idSuffix: string }) {
+  const lightRef = useRef<THREE.PointLight>(null);
+  const origin = useMemo(() => new THREE.Vector3(def.offX, def.offY, def.offZ), [def.offX, def.offY, def.offZ]);
+  const baseI = def.intensity;
+
+  useEffect(() => {
+    const animated = def.flicker > 0 || def.pulseStyle !== 'none';
+    if (!animated) { if (lightRef.current) lightRef.current.intensity = baseI; return; }
+    const unreg = frameLoop.register(`glowlight-${def.code}-${idSuffix}`, (_d, t) => {
+      if (lightRef.current) lightRef.current.intensity = baseI * lightWave(def, t);
+    }, 64);
+    return unreg;
+  }, [def, idSuffix, baseI]);
+
+  const sphereMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: new THREE.Color(def.emitterColor), toneMapped: false,
+  }), [def.emitterColor]);
+  useEffect(() => () => sphereMat.dispose(), [sphereMat]);
+
+  return (
+    <group>
+      <pointLight
+        ref={lightRef}
+        position={[origin.x, origin.y, origin.z]}
+        color={def.color}
+        intensity={def.intensity}
+        distance={def.range}
+        decay={def.glowDecay}
+        castShadow={false}
+      />
+      {def.emitterOn && (
+        <mesh position={[origin.x, origin.y, origin.z]} material={sphereMat}>
+          <sphereGeometry args={[Math.max(0.05, def.emitterSize * 0.5), 16, 12]} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function SpotLightImpl({ def, idSuffix = '' }: { def: LightDef; idSuffix?: string }) {
   const spotRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
 
@@ -60,17 +106,16 @@ export function GameLight({ def, idSuffix = '' }: { def: LightDef; idSuffix?: st
     if (spotRef.current && targetRef.current) spotRef.current.target = targetRef.current;
   }, []);
 
-  // Flicker the spotlight intensity only (no per-frame allocation).
+  // Drive the spotlight intensity from pulse + flicker (no per-frame allocation).
   const baseI = def.intensity;
-  const flick = def.flicker;
   useEffect(() => {
-    if (flick <= 0) { if (spotRef.current) spotRef.current.intensity = baseI; return; }
+    const animated = def.flicker > 0 || def.pulseStyle !== 'none';
+    if (!animated) { if (spotRef.current) spotRef.current.intensity = baseI; return; }
     const unreg = frameLoop.register(`gamelight-${def.code}-${idSuffix}`, (_d, t) => {
-      const f = 1 - flick + flick * Math.sin(t * 11) * Math.sin(t * 6.7 + 1.3);
-      if (spotRef.current) spotRef.current.intensity = baseI * f;
+      if (spotRef.current) spotRef.current.intensity = baseI * lightWave(def, t);
     }, 64);
     return unreg;
-  }, [def.code, idSuffix, flick, baseI]);
+  }, [def, idSuffix, baseI]);
 
   // --- Soft volumetric beam cone ---
   // Apex at the light (origin), base out along the beam — narrow at the light, widening

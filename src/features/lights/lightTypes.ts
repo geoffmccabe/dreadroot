@@ -3,7 +3,8 @@
 // referenced anywhere in the game (by the build LLM or by hand) to attach this exact
 // light to a monster/object. First type: 'spotlight' (robot face/chest beam).
 
-export type LightTypeId = 'spotlight';
+export type LightTypeId = 'spotlight' | 'glow';
+export type PulseStyle = 'none' | 'sine' | 'heartbeat' | 'throb';
 
 export interface LightDef {
   code: string;   // reusable handle, e.g. 'shombie-face'
@@ -38,8 +39,15 @@ export interface LightDef {
   emitterIntensity: number;
   emitterSize: number; // diameter, metres
 
-  // Liveliness
-  flicker: number;     // 0..1 flicker amount
+  // Liveliness — applies to BOTH types (drives the light's intensity over time).
+  flicker: number;     // 0..1 random flicker amount
+  flickerSpeed: number; // flicker rate
+  pulseStyle: PulseStyle;
+  pulseSpeed: number;  // pulse rate
+  pulseDepth: number;  // 0..1 how deep the pulse dips
+
+  // 'glow' type (omni point light like a Glow Block, washes nearby terrain):
+  glowDecay: number;   // point-light decay (2 = physical 1/r²)
 
   // Mount (offset from the host, and aim pitch)
   offX: number;
@@ -71,11 +79,38 @@ export const DEFAULT_LIGHT: LightDef = {
   emitterIntensity: 2.2,
   emitterSize: 0.7,
   flicker: 0.12,
+  flickerSpeed: 9,
+  pulseStyle: 'none',
+  pulseSpeed: 2,
+  pulseDepth: 0.5,
+  glowDecay: 2,
   offX: 0,
   offY: 0,
   offZ: 0,
   pitchDeg: 8,
 };
+
+// Intensity multiplier over time from pulse + flicker (shared by both light types).
+export function lightWave(def: LightDef, t: number): number {
+  let p = 1;
+  const sp = def.pulseSpeed, d = def.pulseDepth;
+  if (def.pulseStyle === 'sine') {
+    p = 1 - d + d * (0.5 + 0.5 * Math.sin(t * sp));
+  } else if (def.pulseStyle === 'throb') {
+    const s = 0.5 + 0.5 * Math.sin(t * sp);
+    p = 1 - d + d * s * s; // sharper swell
+  } else if (def.pulseStyle === 'heartbeat') {
+    const ph = (t * sp * 0.25) % 1; // two quick beats then rest
+    const beat = Math.exp(-Math.pow((ph - 0.08) * 9, 2)) + 0.6 * Math.exp(-Math.pow((ph - 0.26) * 9, 2));
+    p = 1 - d + d * Math.min(1, beat);
+  }
+  let f = 1;
+  if (def.flicker > 0) {
+    const s = t * def.flickerSpeed;
+    f = 1 - def.flicker + def.flicker * Math.sin(s) * Math.sin(s * 0.6 + 1.7);
+  }
+  return Math.max(0, p * f);
+}
 
 /** name -> reusable code (lowercase kebab, safe for the DB `code` column). */
 export function slugifyCode(name: string): string {
