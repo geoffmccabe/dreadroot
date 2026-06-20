@@ -14,6 +14,7 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
+import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -88,6 +89,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
           {/* Press "I" to show a floating grid of every game item over spawn. */}
           <SiegeItemGrid />
+          {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
+              Phase 3 drop-in palette lands. */}
+          {world.id === 'starblink' && <SciFiShowcase />}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}
