@@ -13,12 +13,28 @@
 export interface HBox { lx: number; ly: number; lz: number; hx: number; hy: number; hz: number; }
 export interface MonsterHitbox { body: HBox; head: HBox; }
 
-const LS_KEY = 'siege_hitboxes_v1';
+// v2: stored values are now HEIGHT-NORMALIZED (fractions of the monster's height)
+// so one box scales correctly across same-model monsters of different sizes
+// (e.g. the 1.8m Demon Horde + the 4m Red Demon share reddemon.glb). v1 stored
+// absolute metres, so the key is bumped to ignore stale v1 data.
+const LS_KEY = 'siege_hitboxes_v2';
 
-// Per-URL overrides, loaded once from localStorage.
+// localStorage overrides (NORMALIZED), loaded once. These win over BAKED.
 const overrides: Record<string, MonsterHitbox> = (() => {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
 })();
+
+// Hand-tuned, baked-in defaults (NORMALIZED — fractions of height). Permanent for
+// everyone on every device; localStorage overrides take precedence. Tuned in-world
+// then committed here. reddemon.glb tuned on the 1.8m Demon Horde (÷1.8 to normalize).
+const BAKED: Record<string, MonsterHitbox> = {
+  '/siege/monsters/reddemon.glb': {
+    body: { lx: 0.0278, ly: 0.4727, lz: 0.0556, hx: 0.1802, hy: 0.2782, hz: 0.1246 },
+    head: { lx: 0.0278, ly: 0.7397, lz: 0.1944, hx: 0.0667, hy: 0.0945, hz: 0.0691 },
+  },
+};
+
+const scaleBox = (b: HBox, k: number): HBox => ({ lx: b.lx * k, ly: b.ly * k, lz: b.lz * k, hx: b.hx * k, hy: b.hy * k, hz: b.hz * k });
 
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
@@ -36,21 +52,27 @@ export function defaultHitbox(radius: number, height: number, headFrac: number):
   };
 }
 
-/** The effective hitbox for a monster: stored override, else the cylinder default. */
+/** The effective hitbox for a monster IN ABSOLUTE METRES: localStorage override,
+ *  else the baked-in tuned default, else the cylinder default — the first two are
+ *  normalized so they're scaled by this monster's height. */
 export function getHitboxFor(url: string, radius: number, height: number, headFrac: number): MonsterHitbox {
-  return overrides[url] ?? defaultHitbox(radius, height, headFrac);
+  const norm = overrides[url] ?? BAKED[url];
+  if (norm) return { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) };
+  return defaultHitbox(radius, height, headFrac);
 }
 
-export function hasOverride(url: string): boolean { return !!overrides[url]; }
+export function hasOverride(url: string): boolean { return !!(overrides[url] || BAKED[url]); }
 
-/** Replace a monster's boxes (used by the editor) and persist + notify. */
-export function setHitboxFor(url: string, hb: MonsterHitbox): void {
-  overrides[url] = hb;
+/** Save a monster's boxes from the editor. `hb` is in ABSOLUTE metres for a monster
+ *  of `height`; stored normalized (÷height) so it scales to other sizes. */
+export function setHitboxAbsolute(url: string, hb: MonsterHitbox, height: number): void {
+  const k = 1 / Math.max(0.01, height);
+  overrides[url] = { body: scaleBox(hb.body, k), head: scaleBox(hb.head, k) };
   persist();
   emit();
 }
 
-/** Drop a monster's override (back to the cylinder default). */
+/** Drop a monster's localStorage override (back to the baked/cylinder default). */
 export function resetHitboxFor(url: string): void {
   delete overrides[url];
   persist();

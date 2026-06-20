@@ -1,13 +1,13 @@
 // In-world hitbox editor state. Active only while monsters are frozen (PPP) AND
 // boxes are shown (!hb). Edits the box of the monster TYPE nearest the camera, so
 // you just walk up to the monster you want and adjust. Per-axis move/resize in
-// 0.05m steps; auto-saved (setHitboxFor persists to localStorage).
+// 0.05m steps; auto-saved (setHitboxAbsolute normalizes ÷height + persists).
 //
 // Keys (handled in SiegeSpawner, edit-mode only):
 //   j/l  move ∓X (left/right)    u/o  move ∓Z (back/forward)   i/k  move ±Y (up/down)
 //   Shift+same → grow/shrink the half-extent on that axis
 //   b → toggle body/head box   n → reset this monster to default   ! h b x → export
-import { getHitboxFor, setHitboxFor, resetHitboxFor, type MonsterHitbox } from './hitboxConfig';
+import { getHitboxFor, setHitboxAbsolute, resetHitboxFor, type MonsterHitbox } from './hitboxConfig';
 
 interface Editable {
   url: string; radius: number; height: number; headFrac: number;
@@ -59,7 +59,7 @@ export function applyEdit(camX: number, camZ: number, axis: 'x' | 'y' | 'z', dir
     else box.lz += d;
   }
   editUrl = e.url;
-  setHitboxFor(e.url, next);   // persists + notifies renderers
+  setHitboxAbsolute(e.url, next, e.height);   // store normalized (÷height) + notify renderers
   emit();
 }
 
