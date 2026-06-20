@@ -155,6 +155,21 @@ const _hsDelta = new THREE.Quaternion();
 const _hsPwq = new THREE.Quaternion();
 const _hsLocal = new THREE.Quaternion();
 const _hbWorld = new THREE.Vector3();   // scratch: head bone world position (hitbox follow)
+// Bullseye spin-fall scratch: 360° pirouette about vertical (yaw) + 90° tip about
+// the world horizontal axis ⟂ the bullet dir, composed as a quaternion.
+const _bqTip = new THREE.Quaternion();
+const _bqYaw = new THREE.Quaternion();
+const _bAxis = new THREE.Vector3();
+const _bUP = new THREE.Vector3(0, 1, 0);
+const HALF_PI = Math.PI / 2;
+const TWO_PI = Math.PI * 2;
+function bullseyeQuat(out: THREE.Quaternion, yaw: number, spin: number, tip: number, bdx: number, bdz: number): void {
+  const ax = bdz, az = -bdx, am = Math.hypot(ax, az) || 1;   // world horizontal axis ⟂ bullet dir
+  _bAxis.set(ax / am, 0, az / am);
+  _bqTip.setFromAxisAngle(_bAxis, tip);                       // tip toward the bullet dir
+  _bqYaw.setFromAxisAngle(_bUP, yaw + spin);                  // base facing + vertical spin
+  out.copy(_bqTip).multiply(_bqYaw);
+}
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
@@ -539,18 +554,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    death style so every bullseye kill gets the signature fall. ──
     if (inst.dead && inst.bullseyeAt) {
       const td = now - inst.deadAt;
-      const sign = inst.bullseyeSign ?? -1;
-      const FLAT = Math.PI / 2;
       const FALL = 1000, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;
       const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
-      g.rotation.order = 'YXZ';
-      g.rotation.z = 0;
-      if (td < FALL) {
-        const e = td / FALL, eo = e * e * (3 - 2 * e);       // smoothstep — visible spin
-        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;     // 360° + 90° to flat over 1s
-      } else {
-        g.rotation.x = sign * FLAT;                          // flat corpse
-      }
+      const e = Math.min(1, td / FALL), eo = e * e * (3 - 2 * e);
+      bullseyeQuat(g.quaternion, inst.yaw, eo * TWO_PI, eo * HALF_PI, inst.bullseyeDirX ?? 0, inst.bullseyeDirZ ?? 1);
       const yOff = td >= LIE_END ? -H * Math.min(1, (td - LIE_END) / SINK) : 0;
       g.position.set(s.x, s.y + yOff, s.z);
       inst.x = s.x; inst.y = s.y + yOff; inst.z = s.z;
@@ -1140,20 +1147,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // like the death topple (pivots at the feet). Takes priority over the lean.
     if (inst.bullseyeAt && !inst.dead && !s.tumbling) {
       const bt = (now - inst.bullseyeAt) / 1000;          // seconds since the bullseye
-      const sign = inst.bullseyeSign ?? -1;
-      const FLAT = Math.PI / 2;                            // 90° = lying flat
-      g.rotation.order = 'YXZ';
-      g.rotation.z = 0;
-      if (bt < 1.0) {
-        const e = bt, eo = e * e * (3 - 2 * e);            // smoothstep — visible spin over 1s
-        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;  // spin 360° + 90° to flat
-      } else if (bt < 2.0) {
-        g.rotation.x = sign * FLAT;                        // hold flat (stunned)
-      } else if (bt < 2.4) {
+      const bdx = inst.bullseyeDirX ?? 0, bdz = inst.bullseyeDirZ ?? 1;
+      if (bt < 1.0) {                                       // FALL: spin 360° + tip 90° to flat
+        const e = bt, eo = e * e * (3 - 2 * e);
+        bullseyeQuat(g.quaternion, inst.yaw, eo * TWO_PI, eo * HALF_PI, bdx, bdz);
+      } else if (bt < 2.0) {                               // HOLD flat (stunned)
+        bullseyeQuat(g.quaternion, inst.yaw, TWO_PI, HALF_PI, bdx, bdz);
+      } else if (bt < 2.4) {                               // STAND back up (un-tip)
         const e = (bt - 2.0) / 0.4, eo = e * e * (3 - 2 * e);
-        g.rotation.x = sign * FLAT * (1 - eo);             // stand back up
+        bullseyeQuat(g.quaternion, inst.yaw, TWO_PI, HALF_PI * (1 - eo), bdx, bdz);
       } else {
-        g.rotation.x = 0;
+        g.rotation.set(0, inst.yaw, 0);
         inst.bullseyeAt = 0;                               // done — resume normal
       }
     }
