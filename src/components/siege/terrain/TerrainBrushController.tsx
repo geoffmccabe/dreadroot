@@ -16,6 +16,7 @@ const MARCH_STEP = 2;  // coarse step (m); refined by bisection on crossing
 
 export function TerrainBrushController() {
   const cam = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
   const ring = useRef<THREE.Mesh>(null);
   const applying = useRef(false);
   const flatTarget = useRef<number | undefined>(undefined);
@@ -60,10 +61,40 @@ export function TerrainBrushController() {
     const onUp = (e: KeyboardEvent) => {
       if (e.code === 'KeyB') applying.current = false;
     };
+    // Mouse drawing — only over the game canvas (so panel clicks still work). Intercept at
+    // capture phase so the click never reaches the weapon (that "fail" sound = the gun
+    // dry-firing on an empty/blocked shot).
+    const canvas = gl.domElement;
+    const onMouseDown = (e: MouseEvent) => {
+      if (!getBrushState().enabled || e.target !== canvas) return;
+      if (e.button === 0) { applying.current = true; flatTarget.current = undefined; }
+      else if (e.button === 2) { applying.current = true; flatTarget.current = undefined; setBrushState({ mode: 'lower' }); }
+      e.preventDefault(); e.stopImmediatePropagation();
+    };
+    const onMouseUp = () => { applying.current = false; };
+    const onContext = (e: MouseEvent) => { if (getBrushState().enabled && e.target === canvas) e.preventDefault(); };
+    // Scroll wheel = brush size in 0.5 m steps.
+    const onWheel = (e: WheelEvent) => {
+      if (!getBrushState().enabled || e.target !== canvas) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const r = getBrushState().radius + (e.deltaY < 0 ? 0.5 : -0.5);
+      setBrushState({ radius: Math.max(0.5, Math.min(80, Math.round(r * 2) / 2)) });
+    };
     window.addEventListener('keydown', onDown, true);
     window.addEventListener('keyup', onUp, true);
-    return () => { window.removeEventListener('keydown', onDown, true); window.removeEventListener('keyup', onUp, true); };
-  }, []);
+    window.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('contextmenu', onContext, true);
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener('keydown', onDown, true);
+      window.removeEventListener('keyup', onUp, true);
+      window.removeEventListener('mousedown', onMouseDown, true);
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('contextmenu', onContext, true);
+      window.removeEventListener('wheel', onWheel, true);
+    };
+  }, [gl]);
 
   useFrame((_, dt) => {
     const bs = getBrushState();

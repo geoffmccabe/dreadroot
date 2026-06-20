@@ -9,7 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WorldDefinition } from '@/config/worldDefinition';
 import { setDynamicHeightProvider } from '../terrainHeight';
-import { toRenderSpace, toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
+import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import { enqueueJob } from '@/lib/budgetedWork';
 import {
   CELL_M, SAMPLES, SAMPLE_M, cellKey, cellOf, getHeight, getSampleAt,
@@ -57,27 +57,15 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     return { cx0: cellOf(b.min[0]), cx1: cellOf(b.max[0] - 1e-3), cz0: cellOf(b.min[1]), cz1: cellOf(b.max[1] - 1e-3) };
   }, [world.bounds]);
 
-  // Base plane sitting just below baseline so the ground reads as infinite beyond the
-  // streamed detail cells (the void edge otherwise). Detail cells render on top of it.
-  const basePlane = useMemo(() => {
-    const b = world.bounds;
-    const minX = b ? b.min[0] : -10000, maxX = b ? b.max[0] : 10000;
-    const minZ = b ? b.min[1] : -10000, maxZ = b ? b.max[1] : 10000;
-    const sizeX = maxX - minX, sizeZ = maxZ - minZ;
-    // Bake UVs into the geometry (world/6) so the SHARED grass texture stays at repeat
-    // (1,1) — the detail cells depend on that for their own baked UVs.
-    const geo = new THREE.PlaneGeometry(sizeX, sizeZ);
-    const pos = geo.getAttribute('position'), uv = geo.getAttribute('uv');
-    for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / TEX_REPEAT_M, pos.getY(i) / TEX_REPEAT_M);
-    uv.needsUpdate = true;
-    const mat = new THREE.MeshStandardMaterial({ map: grass, color: GRASS_HI, roughness: 1, metalness: 0 });
-    const m = new THREE.Mesh(geo, mat);
-    m.rotation.x = -Math.PI / 2;
-    const [rx, ry, rz] = toRenderSpace((minX + maxX) / 2, baseY - 0.1, (minZ + maxZ) / 2);
-    m.position.set(rx, ry, rz);
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [world.id]);
+  // Distance fog hides the edge of the streamed-cell ring (no overlapping "base plane",
+  // which used to z-fight the flat cells → the white/black flashing, and blocked digging).
+  // Cells fully fade into fog before their ~VIEW_CELLS×128 m edge.
+  const scene = useThree((s) => s.scene);
+  useEffect(() => {
+    const prevFog = scene.fog;
+    scene.fog = new THREE.Fog(0x9fb2c4, VIEW_CELLS * CELL_M * 0.45, VIEW_CELLS * CELL_M * 0.95);
+    return () => { scene.fog = prevFog; };
+  }, [scene]);
 
   useEffect(() => {
     let alive = true;
@@ -165,6 +153,8 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const addCell = (key: number, cx: number, cz: number) => {
     if (loaded.current.has(key) || !groupRef.current) return;
     const mesh = new THREE.Mesh(buildGeometry(cx, cz), cellMat);
+    mesh.receiveShadow = true;   // catch the sun for 3D form
+    mesh.castShadow = true;
     mesh.userData.ground = true;
     mesh.userData.terrainCell = key;
     groupRef.current.add(mesh);
@@ -211,9 +201,5 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     }
   });
 
-  return (
-    <group ref={groupRef}>
-      <primitive object={basePlane} />
-    </group>
-  );
+  return <group ref={groupRef} />;
 }

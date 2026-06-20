@@ -69,8 +69,8 @@ export function TerrainBrushPanel() {
 
       <div className="mt-3 space-y-2 text-muted-foreground">
         <div>
-          <div className="mb-1 flex justify-between"><span>Size</span><b className="text-foreground">{bs.radius} m</b></div>
-          <Slider value={[bs.radius]} min={2} max={80} step={1} onValueChange={([v]) => setBrushState({ radius: v })} />
+          <div className="mb-1 flex justify-between"><span>Size <span className="opacity-60">(scroll)</span></span><b className="text-foreground">{bs.radius} m</b></div>
+          <Slider value={[bs.radius]} min={0.5} max={80} step={0.5} onValueChange={([v]) => setBrushState({ radius: v })} />
         </div>
         <div>
           <div className="mb-1 flex justify-between"><span>Strength</span><b className="text-foreground">{bs.strength}</b></div>
@@ -83,7 +83,7 @@ export function TerrainBrushPanel() {
       </div>
 
       <div className="mt-2 text-[10px] text-muted-foreground">
-        {bs.enabled ? 'Look at ground · hold B to sculpt' : 'Turn ON to sculpt the terrain'}
+        {bs.enabled ? 'Look at ground · hold LEFT-MOUSE to sculpt · scroll = size' : 'Turn ON to sculpt the terrain'}
       </div>
 
       <div className="mt-3 border-t border-border/40 pt-2">
