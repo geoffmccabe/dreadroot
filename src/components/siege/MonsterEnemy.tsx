@@ -153,6 +153,7 @@ const _hsRight = new THREE.Vector3();
 const _hsDelta = new THREE.Quaternion();
 const _hsPwq = new THREE.Quaternion();
 const _hsLocal = new THREE.Quaternion();
+const _hbWorld = new THREE.Vector3();   // scratch: head bone world position (hitbox follow)
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
@@ -186,6 +187,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     });
     return (spine ?? hips) as THREE.Bone | null;
   }, [cloned]);
+  // Head bone — the head HITBOX rides this so it tracks the skull through the
+  // animation (bend-back, bob, lunge). General: any rig with a 'head' bone gets
+  // it; rigs without one fall back to the static root-anchored head box.
+  const headBone = useMemo(() => {
+    let head: THREE.Bone | null = null;
+    cloned.traverse((o) => {
+      if (!head && (o as THREE.Bone).isBone && o.name.toLowerCase().includes('head')) head = o as THREE.Bone;
+    });
+    return head as THREE.Bone | null;
+  }, [cloned]);
+  // The head bone's rest position in the monster's LOCAL frame (captured once);
+  // the residual between the tuned box and this lets the box keep its tuned offset
+  // (e.g. forward onto the face) while riding the bone.
+  const headRestLocal = useRef<{ x: number; y: number; z: number } | null>(null);
+  const headWireRef = useRef<THREE.Mesh>(null);   // the !hb head wireframe (world-space, bone-followed)
   const group = useRef<THREE.Group>(null);
   const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
   const { actions, names, mixer } = useAnimations(animations, group);
@@ -454,9 +470,31 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
   useFrame((_, delta) => {
     const g = group.current; if (!g) return;
+    // Head hitbox FOLLOW: ride the head bone so the box tracks the skull through
+    // animation (bend-back, bob, lunge). Center = head bone world pos + the tuned
+    // residual (in the body's yaw frame). Writes inst.headBoxWorld (detection) +
+    // positions the wireframe (render). Runs even when paused so the editor's
+    // live edits still reposition the box. No head bone → static box (below).
+    const doHeadFollow = () => {
+      if (!headBone) return;
+      headBone.getWorldPosition(_hbWorld);
+      const yaw = inst.yaw, cs = Math.cos(yaw), sn = Math.sin(yaw);
+      if (!headRestLocal.current) {
+        const dx = _hbWorld.x - inst.x, dy = _hbWorld.y - inst.y, dz = _hbWorld.z - inst.z;
+        headRestLocal.current = { x: dx * cs - dz * sn, y: dy, z: dx * sn + dz * cs };   // world→local
+      }
+      const ref = headRestLocal.current, hh = hitbox.head;
+      const rx = hh.lx - ref.x, ry = hh.ly - ref.y, rz = hh.lz - ref.z;                  // residual (local)
+      const wx = _hbWorld.x + (rx * cs + rz * sn);                                        // local→world
+      const wy = _hbWorld.y + ry;
+      const wz = _hbWorld.z + (-rx * sn + rz * cs);
+      if (!inst.headBoxWorld) inst.headBoxWorld = { x: 0, y: 0, z: 0 };
+      inst.headBoxWorld.x = wx; inst.headBoxWorld.y = wy; inst.headBoxWorld.z = wz;
+      if (headWireRef.current) { headWireRef.current.position.set(wx, wy, wz); headWireRef.current.rotation.y = yaw; }
+    };
     // Debug pause (PPP): freeze movement AND animation in place so hitboxes can be
     // inspected. timeScale=0 stops the mixer; the early return skips all AI/physics.
-    if (getMonstersPaused()) { mixer.timeScale = 0; return; }
+    if (getMonstersPaused()) { mixer.timeScale = 0; doHeadFollow(); return; }
     if (mixer.timeScale === 0) mixer.timeScale = J.anim * (c.animSpeed ?? 1);   // restore on unpause
     const s = st.current;
     const now = performance.now();
@@ -1148,6 +1186,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     inst.x = s.x; inst.y = yR; inst.z = s.z;   // keep the combat hitbox on the live body
     inst.yaw = g.rotation.y;                     // so attached fire rotates with the body
+    doHeadFollow();                              // update the bone-followed head hitbox + wireframe
     // BODY collider: feet → shoulders (STAND·H). Other demons stand on its top, so a stacked
     // demon sits at shoulder height (~0.8H) instead of floating above the head below it.
     const br = cfg.zombie ? H * 0.26 : me.r;
@@ -1179,29 +1218,29 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     sdbg.monsters = MONSTERS.size; // SW debug
   });
 
+  const sel = showHitboxes && getEditUrl() === c.url ? getSelectedBox() : null;
   return (
+   <>
     <group ref={group} scale={scale}>
       <primitive object={cloned} />
-      {/* !hb debug: the ACTUAL collision BOXES (the exact geometry the bullet test
-          uses). Rendered in a scale-cancelling child (the group is scaled) so they're
-          in world metres, and inside the group so they rotate with the monster's
-          facing. Green = body, red = head; the box being edited turns yellow. */}
-      {showHitboxes && (() => {
-        const sel = getEditUrl() === c.url ? getSelectedBox() : null;
-        const b = hitbox.body, h = hitbox.head;
-        return (
-          <group scale={1 / scale}>
-            <mesh position={[b.lx, b.ly, b.lz]} renderOrder={999}>
-              <boxGeometry args={[b.hx * 2, b.hy * 2, b.hz * 2]} />
-              <meshBasicMaterial color={sel === 'body' ? '#ffe000' : '#22ff55'} wireframe transparent opacity={0.55} depthTest={false} />
-            </mesh>
-            <mesh position={[h.lx, h.ly, h.lz]} renderOrder={1000}>
-              <boxGeometry args={[h.hx * 2, h.hy * 2, h.hz * 2]} />
+      {/* !hb debug: the BODY collision box (the exact geometry the bullet test uses).
+          Root-anchored, inside the scale-cancelling group so it rotates with facing.
+          The HEAD box is a bone-followed sibling below. Edited box = yellow. */}
+      {showHitboxes && (
+        <group scale={1 / scale}>
+          <mesh position={[hitbox.body.lx, hitbox.body.ly, hitbox.body.lz]} renderOrder={999}>
+            <boxGeometry args={[hitbox.body.hx * 2, hitbox.body.hy * 2, hitbox.body.hz * 2]} />
+            <meshBasicMaterial color={sel === 'body' ? '#ffe000' : '#22ff55'} wireframe transparent opacity={0.55} depthTest={false} />
+          </mesh>
+          {/* No head bone → static head box here (the bone-followed sibling is skipped). */}
+          {!headBone && (
+            <mesh position={[hitbox.head.lx, hitbox.head.ly, hitbox.head.lz]} renderOrder={1000}>
+              <boxGeometry args={[hitbox.head.hx * 2, hitbox.head.hy * 2, hitbox.head.hz * 2]} />
               <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
             </mesh>
-          </group>
-        );
-      })()}
+          )}
+        </group>
+      )}
       {/* Body fire: one procedural flame shell per spec, wrapping the body. The inner group
           cancels the model scale so flames are sized in world metres; being a child means they
           follow the body automatically as it moves/teleports/spins. */}
@@ -1214,5 +1253,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         ))}
       </group>
     </group>
+    {/* HEAD hitbox wireframe — world-space sibling, positioned every frame by
+        doHeadFollow so it rides the head bone (tracks bend/bob/lunge). */}
+    {showHitboxes && headBone && (
+      <mesh ref={headWireRef} renderOrder={1000}>
+        <boxGeometry args={[hitbox.head.hx * 2, hitbox.head.hy * 2, hitbox.head.hz * 2]} />
+        <meshBasicMaterial color={sel === 'head' ? '#ffe000' : '#ff2233'} wireframe transparent opacity={0.85} depthTest={false} />
+      </mesh>
+    )}
+   </>
   );
 }

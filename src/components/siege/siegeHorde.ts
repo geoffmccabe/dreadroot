@@ -57,6 +57,10 @@ export interface DemonInstance {
   // fall back to the legacy radius/height cylinder.
   hitboxes?: MonsterHitbox;
   bpRadius?: number; bpTop?: number; bpBottom?: number;
+  // World center of the head box AFTER bone-follow (rides the skull through the
+  // animation). Written by MonsterEnemy each frame; refineBulletHit tests the head
+  // box here instead of the static local offset. Undefined → no head bone → static.
+  headBoxWorld?: { x: number; y: number; z: number };
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -110,7 +114,15 @@ enemyCombatRegistry.register<DemonInstance>({
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-6) return null;
     const ux = dx / len, uy = dy / len, uz = dz / len;
-    if (rayHitsBox(hb.head, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: true };
+    // Head: test the BONE-FOLLOWED world center if present (rides the skull),
+    // else the static local box. Half-extents come from the tuned head box.
+    if (d.headBoxWorld) {
+      const hw = d.headBoxWorld;
+      const hbox = { lx: 0, ly: 0, lz: 0, hx: hb.head.hx, hy: hb.head.hy, hz: hb.head.hz };
+      if (rayHitsBox(hbox, hw.x, hw.y, hw.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: true };
+    } else if (rayHitsBox(hb.head, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) {
+      return { hit: true, isHeadshot: true };
+    }
     if (rayHitsBox(hb.body, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: false };
     return { hit: false, isHeadshot: false };
   },
