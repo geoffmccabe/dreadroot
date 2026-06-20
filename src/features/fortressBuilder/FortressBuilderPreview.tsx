@@ -91,15 +91,57 @@ function LightMesh({
   useEffect(() => { intensityRef.current = intensity; }, [intensity]);
   useEffect(() => {
     const unreg = frameLoop.register(`fb-light-${lid}`, (_d, t) => {
-      // Torch-like flicker.
-      const f = 0.72 + 0.28 * Math.sin(t * 11) * Math.sin(t * 6.3 + 1.7);
-      // x2.5 so the thin edge frame is bright enough to bloom; user intensity scales it.
-      mat.emissiveIntensity = intensityRef.current * 2.5 * Math.max(0.25, f);
+      // Gentle torch flicker. Kept moderate (was x2.5 with a wide dip) so the emissive
+      // edges don't blow out the bloom/exposure and cause black flashing.
+      const f = 0.85 + 0.15 * Math.sin(t * 9) * Math.sin(t * 5.3 + 1.7); // ~0.70..1.0
+      mat.emissiveIntensity = intensityRef.current * 1.3 * f;
     }, 64);
     return unreg;
   }, [mat, lid]);
 
   return <instancedMesh ref={meshRef} args={[geo, mat, BUFFER]} frustumCulled={false} />;
+}
+
+// Cluster lit voxels into up to `max` centroids (coarse spatial buckets, most-populated
+// first) so we can cast REAL light from a handful of point lights instead of hundreds.
+function clusterCentroids(voxels: FortressVoxel[], max: number): { x: number; y: number; z: number }[] {
+  if (voxels.length === 0) return [];
+  const CELL = 10;
+  const buckets = new Map<string, { x: number; y: number; z: number; n: number }>();
+  for (const v of voxels) {
+    const k = `${Math.floor(v.x / CELL)},${Math.floor(v.y / CELL)},${Math.floor(v.z / CELL)}`;
+    const b = buckets.get(k);
+    if (b) { b.x += v.x; b.y += v.y; b.z += v.z; b.n++; }
+    else buckets.set(k, { x: v.x, y: v.y, z: v.z, n: 1 });
+  }
+  return [...buckets.values()]
+    .sort((a, b) => b.n - a.n)
+    .slice(0, max)
+    .map((b) => ({ x: b.x / b.n, y: b.y / b.n, z: b.z / b.n }));
+}
+
+// Real point lights that spill onto nearby blocks/terrain. A FIXED count is always
+// rendered (unused ones parked far away at 0 intensity) so the scene's light count
+// never changes — that avoids the material recompiles that cause black flashing.
+function LightSpill({ voxels, color, intensity, max = 4 }: { voxels: FortressVoxel[]; color: string; intensity: number; max?: number }) {
+  const centroids = useMemo(() => clusterCentroids(voxels, max), [voxels, max]);
+  return (
+    <>
+      {Array.from({ length: max }).map((_, i) => {
+        const c = centroids[i];
+        return (
+          <pointLight
+            key={i}
+            position={c ? [c.x + 0.5, c.y + 0.5, c.z + 0.5] : [0, -10000, 0]}
+            color={color}
+            intensity={c ? intensity * 6 : 0}
+            distance={22}
+            decay={2}
+          />
+        );
+      })}
+    </>
+  );
 }
 
 // Translucent barrier walls (20-60-20 outer ring = D), tall. Local to the preview
@@ -225,6 +267,9 @@ export function FortressBuilderPreview() {
       ))}
       <LightMesh lid="extrude" voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} texture={texRef.current!} />
       <LightMesh lid="inset" voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} texture={texRef.current!} />
+      {/* Real light spill onto nearby blocks/terrain (capped, constant count). */}
+      {extrudeLightOn && <LightSpill voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} />}
+      {insetLightOn && <LightSpill voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} />}
       {barrierOn && <BarrierWalls D={D} />}
     </group>
   );
