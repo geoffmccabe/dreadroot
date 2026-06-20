@@ -7,13 +7,15 @@
 // Once these basics are confirmed, they get wired into the Challenge Creator.
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useGLTF, useAnimations, Billboard, Text } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { SIEGE_SPAWN_POINT } from './siegeAreas';
 import { APP_VERSION } from '@/version';
-import { MonsterEnemy } from './MonsterEnemy';
+import { MonsterEnemy, type MonsterConfig } from './MonsterEnemy';
+import { throwBoulder, getBoulders, updateBoulders } from './boulderSystem';
+import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
 
 // id (for @ command) | glb | display name | height m | walk speed m/s | animSpeed (anim playback)
 // All glbs are ~2.0 m intrinsic, so render scale = height/2. Bigger ⇒ slower animSpeed (no skating).
@@ -146,13 +148,56 @@ function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void)
   }, [camera, add]);
 }
 
+// Renders thrown boulders (2 m grey spheres with the fortress block texture) from a fixed pool,
+// updated each frame. The golem's onRangedAttack pushes boulders into boulderSystem.
+function BoulderField() {
+  const camera = useThree((s) => s.camera);
+  const POOL = 24;
+  const refs = useRef<(THREE.Mesh | null)[]>([]);
+  const geo = useMemo(() => new THREE.SphereGeometry(1, 16, 12), []); // r=1 → 2 m diameter
+  const mat = useMemo(() => {
+    const t = getGlobalAtlasTexture();
+    let map: THREE.Texture | null = null;
+    if (t) { map = t.clone(); map.wrapS = map.wrapT = THREE.RepeatWrapping; map.repeat.set(6, 6); map.needsUpdate = true; }
+    return new THREE.MeshStandardMaterial({ color: 0x8a8a8a, map, roughness: 0.95, metalness: 0 });
+  }, []);
+  useFrame((_, dt) => {
+    updateBoulders(dt, camera.position.x, camera.position.y - 1.6, camera.position.z);
+    const bs = getBoulders();
+    for (let i = 0; i < POOL; i++) {
+      const m = refs.current[i]; if (!m) continue;
+      const b = bs[i];
+      if (b) { m.visible = true; m.position.set(b.x, b.y, b.z); m.rotation.x += dt * 2; m.rotation.z += dt * 1.3; }
+      else m.visible = false;
+    }
+  });
+  return <>{Array.from({ length: POOL }).map((_, i) => (
+    <mesh key={i} ref={(el) => { refs.current[i] = el; }} geometry={geo} material={mat} visible={false} frustumCulled={false} />
+  ))}</>;
+}
+
 export function SiegeNewMonsterLineup() {
   useCyclePanel();
+  const camera = useThree((s) => s.camera);
   const [spawned, setSpawned] = useState<Spawned[]>([]);
   const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
     setSpawned((s) => [...s, { key: spawnSeq++, mon, pos }]);
   }, []);
   useSpawnCommand(add);
+
+  // Per-monster special behavior. Elemental Golem: kite at 30-50 m and lob boulders.
+  const extraProps = (mon: Mon): Partial<MonsterConfig> => {
+    if (mon.glb !== 'elementalgolem') return {};
+    return {
+      kiteMin: 30, kiteMax: 50, rangedRange: 50, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
+      onRangedAttack: (ox, oy, oz) => {
+        if (Math.random() < 0.5) return;            // 50% chance per 1-3 s window
+        const p = camera.position;
+        throwBoulder(ox, oy, oz, p.x, p.y - 1.6, p.z, 30 + Math.random() * 30,
+          { dmgMin: 50, dmgMax: 200, kbMin: 5, kbMax: 20 });
+      },
+    };
+  };
 
   // Review row at Bleakrock, spaced so big monsters don't overlap.
   const cx = SIEGE_SPAWN_POINT[0];
@@ -173,8 +218,9 @@ export function SiegeNewMonsterLineup() {
       {spawned.map((s) => (
         <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
           modelHeight={INTRINSIC} height={s.mon.height} speed={s.mon.speed} animSpeed={s.mon.animSpeed}
-          health={healthFor(s.mon.height)} gait="climb" />
+          health={healthFor(s.mon.height)} gait="climb" {...extraProps(s.mon)} />
       ))}
+      <BoulderField />
     </Suspense>
   );
 }

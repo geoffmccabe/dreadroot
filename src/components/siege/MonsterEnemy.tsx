@@ -74,6 +74,8 @@ export interface MonsterConfig {
   sizeJitter?: number;        // per-demon ± size fraction (0.10 = ±10%, 0.50 = ±50%)
   speedJitter?: number;       // per-demon ± walk-speed fraction
   animSpeed?: number;         // playback-rate multiplier for ALL clips (1 = native; 3 = 3x faster)
+  kiteMin?: number;           // ranged "kite": hold this far from the player — retreat if closer
+  kiteMax?: number;           // …approach if farther than this; else hold + face (no melee chase)
   rangedRange?: number;       // if set, fires a ranged attack when the player is within this (m) but beyond melee
   rangedCooldownMs?: number;  // MIN recharge (ms) between ranged attacks (default 60000)
   rangedCooldownMaxMs?: number; // MAX recharge — each cooldown is random in [min,max]; defaults to min
@@ -836,12 +838,23 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         s.swipeUntil = now + 1000;                        // plant + play the vomit pose for the 1s spray
         play(clips.attack); const aAtk = clip(clips.attack); if (aAtk) aAtk.time = 0;
       }
+      // Kite (ranged standoff): hold between kiteMin..kiteMax — retreat if too close, approach if
+      // too far, else face + idle. Replaces the melee chase for ranged-only monsters (e.g. golem).
+      if (c.kiteMin) {
+        const kMax = c.kiteMax ?? c.kiteMin;
+        if (dist < c.kiteMin || dist > kMax) {
+          const sgn = dist < c.kiteMin ? -1 : 1;
+          mvx = (dx / dist) * sgn; mvz = (dz / dist) * sgn; moving = true;
+          s.x += mvx * SPD * delta; s.z += mvz * SPD * delta;
+          if (now > s.swipeUntil) play(clips.walk);
+        } else if (now > s.swipeUntil) play(clips.idle);
+      }
       // "Ready to swing": melee monsters only — close enough + off cooldown. Suppresses the chase
       // and fires the swing so being in range always attacks.
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
       const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
-      if (dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
+      if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
         // holds the vomit pose during the spit (movement continues).
@@ -849,7 +862,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
         if (now > s.swipeUntil) play(clips.walk);   // vomit/swing pose shows during an attack
-      } else if (c.rangedRange) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
+      } else if (c.rangedRange && !c.kiteMin) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
         if (c.attackStyle === 'spin-lunge') {
