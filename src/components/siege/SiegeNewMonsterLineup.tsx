@@ -40,7 +40,26 @@ function useClipIdx() {
 
 function ReviewMonster({ id, name, mh, x, y, z, first }: { id: string; name: string; mh: number; x: number; y: number; z: number; first: boolean }) {
   const { scene, animations } = useGLTF(`/siege/monsters/${id}.glb?v=${APP_VERSION}`);
-  const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
+  const cloned = useMemo(() => {
+    const c = SkeletonUtils.clone(scene) as THREE.Group;
+    // Brighten like MonsterEnemy: clone each material and feed the base-color map into emissive so
+    // the model self-illuminates and the texture is visible regardless of scene lighting (without
+    // this the Synty palette washes out to pure white under the world lights).
+    c.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!(mesh as THREE.Mesh).isMesh) return;
+      const arr = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const cloned2 = arr.map((mm) => (mm as THREE.Material).clone());
+      mesh.material = Array.isArray(mesh.material) ? cloned2 : cloned2[0];
+      cloned2.forEach((mm) => {
+        const m = mm as THREE.MeshStandardMaterial;
+        if ('emissive' in m && m.map) {
+          m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; m.needsUpdate = true;
+        }
+      });
+    });
+    return c;
+  }, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
   const idx = useClipIdx();
