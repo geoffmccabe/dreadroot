@@ -13,6 +13,7 @@ import { raycastMesh } from '@/components/siege/meshColliderSystem';
 import { initializeShnakeRevenge, markShnakeIndignant } from '@/features/enemies/ai/adapters/ShnakeAdapter';
 import { enemyCombatRegistry, type RaycastResult } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { resolveBulletHit, BASE_BULLET_DAMAGE, stepBulletPhysics } from '@/features/combat';
+import { emitBlood } from '@/features/blood/bloodSystem';
 import { getActiveWeapon } from '@/config/activeWeapon';
 
 const _raycastResult: RaycastResult = { adapter: null, enemy: null, t: 0, hitX: 0, hitY: 0, hitZ: 0 };
@@ -761,6 +762,13 @@ export function useFortressFrameLoop({
             const _velRatio = bullet.speed / Math.max(1, tierDef.velocity);
             const _baseScaled = Math.round((getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE) * _velRatio);
             const finalDamage = _baseScaled * (isBullseye ? 4 : isHeadshot ? 2 : 1);
+
+            // Bullseye → blood erupts out the EXIT side (continue past the impact
+            // along the bullet dir), at half the bullet speed.
+            if (isBullseye) {
+              const _bd = bullet.direction;
+              emitBlood(hitX + _bd.x * 0.3, hitY + _bd.y * 0.3, hitZ + _bd.z * 0.3, _bd.x, _bd.y, _bd.z, bullet.speed);
+            }
 
             const bulletDamageInfo = {
               damage: finalDamage,
