@@ -541,12 +541,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const td = now - inst.deadAt;
       const sign = inst.bullseyeSign ?? -1;
       const FLAT = Math.PI / 2;
-      const FALL = 700, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;
+      const FALL = 1000, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;
       const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
       g.rotation.order = 'YXZ';
+      g.rotation.z = 0;
       if (td < FALL) {
-        const e = td / FALL, eo = 1 - (1 - e) * (1 - e);     // ease-out spin
-        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;     // 360° + 90° to flat
+        const e = td / FALL, eo = e * e * (3 - 2 * e);       // smoothstep — visible spin
+        g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;     // 360° + 90° to flat over 1s
       } else {
         g.rotation.x = sign * FLAT;                          // flat corpse
       }
@@ -1142,13 +1143,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const sign = inst.bullseyeSign ?? -1;
       const FLAT = Math.PI / 2;                            // 90° = lying flat
       g.rotation.order = 'YXZ';
-      if (bt < 0.7) {
-        const e = bt / 0.7, eo = 1 - (1 - e) * (1 - e);   // ease-out (snappy fall)
+      g.rotation.z = 0;
+      if (bt < 1.0) {
+        const e = bt, eo = e * e * (3 - 2 * e);            // smoothstep — visible spin over 1s
         g.rotation.x = sign * (2 * Math.PI + FLAT) * eo;  // spin 360° + 90° to flat
       } else if (bt < 2.0) {
         g.rotation.x = sign * FLAT;                        // hold flat (stunned)
-      } else if (bt < 2.3) {
-        const e = (bt - 2.0) / 0.3, eo = e * e * (3 - 2 * e);
+      } else if (bt < 2.4) {
+        const e = (bt - 2.0) / 0.4, eo = e * e * (3 - 2 * e);
         g.rotation.x = sign * FLAT * (1 - eo);             // stand back up
       } else {
         g.rotation.x = 0;
