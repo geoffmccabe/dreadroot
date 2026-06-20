@@ -21,9 +21,23 @@ function benefitText(b: SupporterBenefit): string {
 }
 
 export function SupportLevelPanel({ userId }: { userId: string | null }) {
-  const { tiers, currentLevel, isLoading } = useSupporterStatus(userId);
+  const { tiers, currentLevel, isLoading, refresh } = useSupporterStatus(userId);
   const [coinLabel, setCoinLabel] = useState<Map<string, string>>(new Map());
   const [busy, setBusy] = useState<string | null>(null); // `${tierId}:${provider}` while redirecting
+  const [syncing, setSyncing] = useState(false);
+
+  async function syncHoldings() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-wax-holdings', { body: {} });
+      if (error || data?.error) alert(`Sync failed: ${error?.message ?? data?.error}`);
+      await refresh();
+    } catch (e) {
+      alert(`Sync failed: ${(e as Error).message}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   async function subscribe(tierId: string, provider: 'stripe' | 'paypal') {
     setBusy(`${tierId}:${provider}`);
@@ -60,7 +74,13 @@ export function SupportLevelPanel({ userId }: { userId: string | null }) {
     <Card className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-foreground">Support Level</span>
-        <Badge>{isLoading ? '…' : levelName(currentLevel)}</Badge>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" disabled={syncing || !userId}
+            onClick={syncHoldings} title="Pull your latest on-chain WAX holdings">
+            {syncing ? '…' : '↻ Sync'}
+          </Button>
+          <Badge>{isLoading ? '…' : levelName(currentLevel)}</Badge>
+        </div>
       </div>
 
       {tiers.map((ts: TierStatus) => {
