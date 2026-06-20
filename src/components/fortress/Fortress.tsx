@@ -781,13 +781,9 @@ export function Fortress() {
     // on this slot. Synchronous via grenadeDefsRef so the digit fires
     // before any DB roundtrip.
     if (grenadeDefsRef.current.has(eq.itemId)) {
-      if (grenadeReadySlot === slot) {
-        setGrenadeReadySlot(null);
-      } else {
-        setEggReadySlot(null); // mutually exclusive with egg-ready
-        setGrenadeReadySlot(slot);
-        playPinPullSound();
-      }
+      // QA# only DEACTIVATES the armed grenade (arming + throwing are via G now), so
+      // selecting a grenade never steals the weapon's fire.
+      if (grenadeReadySlot === slot) setGrenadeReadySlot(null);
       return;
     }
 
