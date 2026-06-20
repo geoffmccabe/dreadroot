@@ -10,7 +10,11 @@ import { useMemo } from 'react';
 import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
 import { ToneMappingMode } from 'postprocessing';
 
-const ENABLE_POSTFX = true;
+// TEMPORARILY DISABLED: the bloom pipeline (mipmapBlur + MSAA float targets) was
+// causing full-screen BLACK FLASHING while moving — a known failure on some GPUs
+// (and mipmapBlur smears any single shader NaN across the whole screen). Off until a
+// flash-proof glow path is in place (lighter/no mipmap bloom, or emissive-only glow).
+const ENABLE_POSTFX = false;
 
 export function FortressPostFX() {
   const isMobile = useMemo(
