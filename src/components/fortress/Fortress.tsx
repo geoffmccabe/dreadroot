@@ -65,6 +65,7 @@ import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
 import { ScopeOverlay } from './ScopeOverlay';
+import { CenterFlash } from './CenterFlash';
 import { FortressOverlays } from './FortressOverlays';
 import { createMainAudioRefs, preloadRejectionSound, playReversedAudio } from './FortressAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
@@ -494,6 +495,7 @@ export function Fortress() {
   //   3. Real inventory grenade + free QS slot → transfer + arm.
   //   4. No real grenade OR no free QS slot → no-op.
   const handleGrenadeTogglePress = useCallback(async () => {
+    // 1. Already armed → disarm (E1 weapon active again).
     if (grenadeReadySlot !== null) {
       setGrenadeReadySlot(null);
       return;
@@ -506,26 +508,26 @@ export function Fortress() {
       .eq('user_id', user.id)
       .in('region', ['inventory', 'quick_select']);
     const allRows = ((rows as any[]) ?? []);
-    // Step 2: QS already holds a grenade — arm it.
-    const qsGrenade = allRows.find(r => r.region === 'quick_select' && defs.has(r.item_id));
-    if (qsGrenade) {
-      setGrenadeReadySlot(qsGrenade.slot);
+    // 2. A grenade already in QA → arm the LEFT-MOST (lowest slot).
+    const qsGren = allRows.filter(r => r.region === 'quick_select' && defs.has(r.item_id)).sort((a, b) => a.slot - b.slot);
+    if (qsGren.length) {
+      setEggReadySlot(null);
+      setGrenadeReadySlot(qsGren[0].slot);
       playPinPullSound();
       return;
     }
-    // Step 3: inventory holds a grenade — try to equip then arm.
+    // 3. No QA grenade → move one from INV to the RIGHT-MOST free QA slot. Do NOT
+    //    arm it — the next G (or its slot#) arms it. So "GG" = move-then-arm.
     const invGrenade = allRows.find(r => r.region === 'inventory' && defs.has(r.item_id));
     if (!invGrenade) return;
     const usedQs = new Set(allRows.filter(r => r.region === 'quick_select').map(r => r.slot));
-    let firstEmpty: number | null = null;
-    for (let i = 1; i <= 6; i++) {
-      if (!usedQs.has(i)) { firstEmpty = i; break; }
-    }
-    if (firstEmpty === null) return;
+    let rightMost: number | null = null;
+    for (let i = 6; i >= 1; i--) { if (!usedQs.has(i)) { rightMost = i; break; } }
+    if (rightMost === null) return;   // no open QA slot → can't stage a grenade
     try {
       await worldStore.transferSlot(
         { region: 'inventory', page: 0, slot: invGrenade.slot },
-        { region: 'quick_select', page: 0, slot: firstEmpty },
+        { region: 'quick_select', page: 0, slot: rightMost },
         1,
       );
     } catch (err) {
@@ -533,8 +535,6 @@ export function Fortress() {
       return;
     }
     if (refetchInventoryAndQs) void refetchInventoryAndQs();
-    setGrenadeReadySlot(firstEmpty);
-    playPinPullSound();
   }, [grenadeReadySlot, user?.id, refetchInventoryAndQs]);
 
   // Throw flow needs to clear the armed slot when the click consumes
@@ -2302,6 +2302,7 @@ export function Fortress() {
       <ChallengeBrowser />
       <ChallengeResultPanel />
       <ScopeOverlay />
+      <CenterFlash />
       <FortressHUD
         flyingCoins={flyingCoins}
         currentTheme={currentTheme}

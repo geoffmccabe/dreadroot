@@ -25,16 +25,19 @@ const FALLBACK: LightDef = {
   code: CODE,
   name: 'Shombie Face',
   color: '#bfe6ff',
-  intensity: 2.0,
-  angleDeg: 24,
-  range: 24,
+  intensity: 0.6,    // 30% of the previous 2.0 …
+  angleDeg: 11,      // half as narrow (was 24)
+  range: 48,         // … but reaches much farther
+  decay: 1.0,        // gentle falloff so it actually carries the distance
+  penumbra: 0.7,
   pitchDeg: 4,
-  shadowSize: 512, // keep the single shadow-caster cheap
+  shadowSize: 512,   // keep the single shadow-caster cheap
   emitterColor: '#bfe6ff',
-  emitterIntensity: 2.0,
+  emitterIntensity: 1.6,
   emitterSize: 0.35,
   fogColor: '#bfe6ff',
   fogStrength: 0.18,
+  fogLength: 42,     // long, soft beam
 };
 
 export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] }) {
