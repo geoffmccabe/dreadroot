@@ -114,8 +114,10 @@ the topple plays on every bullseye; if it survives, it recovers to idle.)
 - **P2 — Effect dispatcher + per-monster config scaffold.** The `hitZone` flag +
   a generic bullseye-effects entry point reading per-monster config. *Test: console
   confirms a bullseye fires with the right config.*
-- **P3 — Default topple sequence.** The feet-pivot 360° fall in bullet direction.
-  *Test: front shot → back; back shot → face.*
+- **P3 — Default topple sequence.** ✅ feet-pivot 450° spin-fall (360°+90° flat) →
+  hold for the 2s stun → stand up if still alive (a KILL falls via the normal death
+  anim for now). Fall side by bullet-vs-facing (front→back, behind→face). *Test on a
+  tanky monster (e.g. the 1000-HP Red Demon boss) so it survives + stands back up.*
 - **P4 — Bullseye sound.** Wire the audio file you provide. *Test: hear it.*
 - **P5 — Blood spray.** Reuse the vomit spray: 100 teardrops, exit-side origin,
   50% speed, 25° cone, 70% opacity, blood color, drag physics. *Test: visual.*

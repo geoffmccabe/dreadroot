@@ -357,7 +357,6 @@ export function FirstPersonControls({
   
   // Keep player level ref updated
   useEffect(() => {
-    console.log(`[FortressControls] playerLevel prop updated to: ${playerLevel}`);
     playerLevelRef.current = playerLevel;
   }, [playerLevel]);
 
