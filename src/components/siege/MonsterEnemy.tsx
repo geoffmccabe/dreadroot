@@ -1023,7 +1023,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // "right", converted into the bone's local space, so it always tilts straight
     // back regardless of the rig's baked rest orientation.
     if (inst.headshotAt && waistBone && !s.tumbling) {
-      const ht = (now - inst.headshotAt) / 150;   // 0..1 over 0.15s
+      const ht = (now - inst.headshotAt) / 300;   // 0..1 over 0.3s
       const leanDeg = H >= 8 ? 0 : Math.min(45, Math.max(0, 45 * (8 - H) / 7));
       if (ht < 1 && leanDeg > 0) {
         const angle = (leanDeg * Math.PI / 180) * Math.sin(Math.PI * ht);   // 0 → peak → 0
