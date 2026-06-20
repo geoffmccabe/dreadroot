@@ -31,7 +31,12 @@ uniform vec3 uColor;
 varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 void main() {
-  vec3 viewDir = normalize(cameraPosition - vWorldPos);
+  // Guard normalize(0): when the camera sits exactly on the wall plane, cameraPosition
+  // - vWorldPos is the zero vector and normalize() returns NaN, which mipmapBlur bloom
+  // then smears across the whole screen as a black flash.
+  vec3 toCam = cameraPosition - vWorldPos;
+  float toCamLen = max(length(toCam), 1e-4);
+  vec3 viewDir = toCam / toCamLen;
   // Grazing angles glow; straight-on is nearly invisible (classic force-field).
   float fres = pow(1.0 - abs(dot(viewDir, vWorldNormal)), 3.0);
   // Gentle shimmer: vertical bands drifting up + a slow diagonal ripple.

@@ -705,11 +705,11 @@ export function useFortressFrameLoop({
           // the real boxes. A box MISS turns this into a non-hit (bullet flies on); a
           // hit carries the authoritative headshot flag (overrides the headFrac rule).
           let _enemyHit2 = _enemyHit;
-          let _refinedHS: boolean | null = null;
+          let _refinedZone: 'body' | 'headshot' | 'bullseye' | null = null;
           if (_enemyHit) {
             const _rf = _raycastResult.adapter?.refineBulletHit?.(
               _raycastResult.enemy, prevBX, prevBY, prevBZ, bx - prevBX, by - prevBY, bz - prevBZ);
-            if (_rf) { if (!_rf.hit) _enemyHit2 = false; else _refinedHS = _rf.isHeadshot; }
+            if (_rf) { if (!_rf.hit) _enemyHit2 = false; else _refinedZone = _rf.zone; }
           }
           let _wallBlocks = wallDist !== null;
           if (_enemyHit2 && _wallBlocks) {
@@ -752,8 +752,15 @@ export function useFortressFrameLoop({
               tierMaxSpeed: tierDef.velocity,
               baseDamage: getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE,
             });
-            const finalDamage = hitResolved.damage;
-            const isHeadshot = _refinedHS !== null ? _refinedHS : hitResolved.isHeadshot;
+            // Zone → damage multiplier (body 1× / headshot 2× / bullseye 4×). Recompute
+            // the base so a box-refined zone scales correctly (the headFrac-based
+            // hitResolved.damage may disagree with the box zone).
+            const zone = _refinedZone ?? (hitResolved.isHeadshot ? 'headshot' : 'body');
+            const isBullseye = zone === 'bullseye';
+            const isHeadshot = zone === 'headshot' || isBullseye;
+            const _velRatio = bullet.speed / Math.max(1, tierDef.velocity);
+            const _baseScaled = Math.round((getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE) * _velRatio);
+            const finalDamage = _baseScaled * (isBullseye ? 4 : isHeadshot ? 2 : 1);
 
             const bulletDamageInfo = {
               damage: finalDamage,
@@ -763,6 +770,7 @@ export function useFortressFrameLoop({
               knockbackDirZ: hitResolved.knockbackDirZ,
               hitX, hitY, hitZ,
               isHeadshot,
+              isBullseye,
               source: 'bullet' as const,
               bulletTier: bullet.tier,
             };

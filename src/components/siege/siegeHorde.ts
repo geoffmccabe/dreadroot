@@ -13,8 +13,9 @@ import {
   type FlameAttachPoint,
   type BurnFollower,
 } from '@/features/enemies/combat/EnemyCombatRegistry';
-import { spawnDamageNumber, DN_RED, DN_WHITE } from './damageNumbers';
+import { spawnDamageNumber, DN_RED, DN_WHITE, DN_YELLOW } from './damageNumbers';
 import { rayHitsBox, type MonsterHitbox } from './hitboxConfig';
+import { effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
 
 export interface DemonInstance {
   id: string;
@@ -57,6 +58,13 @@ export interface DemonInstance {
   // fall back to the legacy radius/height cylinder.
   hitboxes?: MonsterHitbox;
   bpRadius?: number; bpTop?: number; bpBottom?: number;
+  // Bullseye box = head box scaled by this pct (0 = none). Centered on the same
+  // bone-followed head center. Written by MonsterEnemy.
+  bullseyePct?: number;
+  // World center of the head box AFTER bone-follow (rides the skull through the
+  // animation). Written by MonsterEnemy each frame; refineBulletHit tests the head
+  // box here instead of the static local offset. Undefined → no head bone → static.
+  headBoxWorld?: { x: number; y: number; z: number };
 }
 
 // Live array (not a Set) so getActiveEnemies returns it with zero per-query allocation —
@@ -110,9 +118,26 @@ enemyCombatRegistry.register<DemonInstance>({
     const len = Math.hypot(dx, dy, dz);
     if (len < 1e-6) return null;
     const ux = dx / len, uy = dy / len, uz = dz / len;
-    if (rayHitsBox(hb.head, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: true };
-    if (rayHitsBox(hb.body, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, isHeadshot: false };
-    return { hit: false, isHeadshot: false };
+    const pct = effectiveBullseyePct(d.bullseyePct ?? 0);   // base × global size factor (role/items)
+    // Head box center: the BONE-FOLLOWED world center if present (rides the skull),
+    // else the static local center. The bullseye box is the head box × pct at the
+    // SAME center — test it first (smaller); if hit → bullseye (4×), else headshot.
+    const cx = d.headBoxWorld ? d.headBoxWorld.x : d.x;
+    const cy = d.headBoxWorld ? d.headBoxWorld.y : d.y;
+    const cz = d.headBoxWorld ? d.headBoxWorld.z : d.z;
+    // For the static (no-bone) case the head box has its own local offset; fold it
+    // into the center so both paths use a center + zero-offset box.
+    const ox2 = d.headBoxWorld ? 0 : hb.head.lx, oy2 = d.headBoxWorld ? 0 : hb.head.ly, oz2 = d.headBoxWorld ? 0 : hb.head.lz;
+    const headBox = { lx: ox2, ly: oy2, lz: oz2, hx: hb.head.hx, hy: hb.head.hy, hz: hb.head.hz };
+    if (rayHitsBox(headBox, cx, cy, cz, d.yaw, ox, oy, oz, ux, uy, uz, len)) {
+      if (pct > 0) {
+        const bull = { lx: ox2, ly: oy2, lz: oz2, hx: hb.head.hx * pct, hy: hb.head.hy * pct, hz: hb.head.hz * pct };
+        if (rayHitsBox(bull, cx, cy, cz, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, zone: 'bullseye' as const };
+      }
+      return { hit: true, zone: 'headshot' as const };
+    }
+    if (rayHitsBox(hb.body, d.x, d.y, d.z, d.yaw, ox, oy, oz, ux, uy, uz, len)) return { hit: true, zone: 'body' as const };
+    return { hit: false, zone: 'body' as const };
   },
   // Fire keeps burning on the body through the death animation (getHitbox goes
   // null at death so weapons stop hitting it, but the corpse is still on screen
@@ -129,8 +154,12 @@ enemyCombatRegistry.register<DemonInstance>({
     // Floating damage number (Unity port): white normal / red headshot, on discrete hits only
     // (skip flame DoT ticks so they don't flood). Spawns near the hit zone on the body.
     if (info.source !== 'flame' && dealt > 0) {
-      spawnDamageNumber(d.x, d.y + d.height * (info.isHeadshot ? 0.92 : 0.6), d.z,
-        String(Math.round(dealt)), info.isHeadshot ? DN_RED : DN_WHITE);
+      // Bullseye floats the points number higher with a 'BULLSEYE' label just under
+      // it (both above the head). Normal/headshot numbers sit on the head as before.
+      const numY = info.isBullseye ? d.height * 1.25 : d.height * (info.isHeadshot ? 0.92 : 0.6);
+      spawnDamageNumber(d.x, d.y + numY, d.z, String(Math.round(dealt)),
+        info.isBullseye ? DN_YELLOW : info.isHeadshot ? DN_RED : DN_WHITE);
+      if (info.isBullseye) spawnDamageNumber(d.x, d.y + d.height * 1.08, d.z, 'BULLSEYE', DN_YELLOW);
     }
     const now = performance.now();
     if (info.isHeadshot) d.headshotAt = now;   // triggers the quick body recoil-lean in MonsterEnemy

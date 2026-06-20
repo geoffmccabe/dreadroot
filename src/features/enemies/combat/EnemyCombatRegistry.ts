@@ -46,6 +46,8 @@ export interface DamageInfo {
   hitZ: number;
   /** True if the bullet landed in the enemy's upper-most ~25% (headshot). */
   isHeadshot: boolean;
+  /** True if the bullet landed in the small bullseye box inside the head (4×). */
+  isBullseye?: boolean;
   source: DamageSource;
   /** Explicit knockback impulse (m/s) for melee — overrides the adapter's
    *  default. Set by the strike system from tier difference + damage dealt. */
@@ -103,7 +105,7 @@ export interface EnemyCombatAdapter<TEnemy = unknown> {
     enemy: TEnemy,
     ox: number, oy: number, oz: number,
     dx: number, dy: number, dz: number,
-  ) => { hit: boolean; isHeadshot: boolean } | null;
+  ) => { hit: boolean; zone: 'body' | 'headshot' | 'bullseye' } | null;
 
   /** Optional: true if this hit harmlessly bounced off (no damage dealt) — e.g.
    *  the walapa shrugs off sub-T7 bullets. Lets the caller skip score/effects
