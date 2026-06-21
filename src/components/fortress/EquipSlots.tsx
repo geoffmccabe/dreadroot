@@ -17,10 +17,13 @@ const HUD_DIM = 'hsl(var(--hud-text-dim))';
 const T1_BOOTS = '/rocket_boots_t1_256px.webp';
 const EQUIP_FALLBACK = '/wooden_thud_sound.mp3';   // soft "place" sound for non-weapons / no reload clip
 
-// equip slot number ↔ gear type (and accepted item_category per slot).
-interface SlotDef { num: number; type: string; label: string; glyph: string; cats: string[]; }
+// equip slot number ↔ gear type (and accepted item_category per slot). Slots 1 & 5 are the
+// LEFT and RIGHT hands (each holds a pistol/grenade; a rifle fills BOTH). 2/3/4 stay armor/
+// boots/potion. `hand: 'L'|'R'` marks the two hand slots so the layout can group them.
+interface SlotDef { num: number; type: string; label: string; glyph: string; cats: string[]; hand?: 'L' | 'R'; }
 const SLOTS: SlotDef[] = [
-  { num: 1, type: 'weapon', label: 'Weapon', glyph: '🔫', cats: ['weapon'] },
+  { num: 1, type: 'weapon', label: 'L', glyph: '🔫', cats: ['weapon'], hand: 'L' },
+  { num: 5, type: 'weapon', label: 'R', glyph: '🔫', cats: ['weapon'], hand: 'R' },
   { num: 2, type: 'armor', label: 'Armor', glyph: '🛡️', cats: ['armor'] },
   { num: 3, type: 'boots', label: 'Boots', glyph: '🥾', cats: ['boots'] },
   { num: 4, type: 'potion', label: 'Potion', glyph: '🧪', cats: ['consumable', 'potion'] },
@@ -28,7 +31,7 @@ const SLOTS: SlotDef[] = [
 
 interface EquipItem { itemId: string; name: string; itemNumber: number | null; tier: number | null; category: string; spriteUrl: string | null; }
 type EquipMap = Record<number, EquipItem | null>;
-const EMPTY: EquipMap = { 1: null, 2: null, 3: null, 4: null };
+const EMPTY: EquipMap = { 1: null, 2: null, 3: null, 4: null, 5: null };
 
 // Loosely-typed client for user_slots (not in generated types in this shape).
 const sb = supabase as unknown as {
@@ -79,6 +82,9 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const { user } = useAuth();
   const { toast } = useToast();
   const [equip, setEquip] = useState<EquipMap>(EMPTY);
+  // Kind of weapon in the LEFT hand (slot 1) — a rifle fills BOTH hands (icon centered
+  // between L and R, right hand blocked); a pistol stays in one hand. null = empty/other.
+  const [leftKind, setLeftKind] = useState<'rifle' | 'pistol' | null>(null);
   const cursorHeld = useCursorStack((s) => !!s.cursor);
 
   // Resolve item defs for the SHARED equip gear (owned by useUserData) and build the slot map. No
@@ -102,7 +108,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       }
       if (cancelled) return;
       const next: EquipMap = { ...EMPTY };
-      for (const g of gear) if (g.slot >= 1 && g.slot <= 4) next[g.slot] = defs[g.itemId] ?? null;
+      for (const g of gear) if (g.slot >= 1 && g.slot <= 5) next[g.slot] = defs[g.itemId] ?? null;
       setEquip(next);
     })();
     return () => { cancelled = true; };
@@ -112,7 +118,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   // Drive the active-weapon store from the weapon slot (slot 1). Guns only.
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
   useEffect(() => {
-    if (weaponItemNumber == null) { setActiveWeapon(null); return; }
+    if (weaponItemNumber == null) { setActiveWeapon(null); setLeftKind(null); return; }
     let cancelled = false;
     (async () => {
       const { data } = await (supabase as unknown as {
@@ -120,7 +126,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       }).from('weapon_stats').select('*').eq('item_number', weaponItemNumber).maybeSingle();
       if (cancelled) return;
       const d = data as Record<string, number | string | boolean | null> | null;
-      if (!d || !d.is_gun) { setActiveWeapon(null); return; }
+      if (!d || !d.is_gun) { setActiveWeapon(null); setLeftKind(null); return; }
+      setLeftKind(d.is_pistol ? 'pistol' : 'rifle');
       const clip = typeof d.ammo_clip_amount === 'number' && d.ammo_clip_amount > 0 ? d.ammo_clip_amount : null;
       const cd = typeof d.shoot_cooldown === 'number' && d.shoot_cooldown > 0 ? d.shoot_cooldown : 0.15;
       setActiveWeapon({
@@ -220,45 +227,65 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     document.addEventListener('pointerup', cleanup);
   };
 
+  // A rifle in the LEFT hand fills BOTH hands: its icon is drawn centered across the L+R
+  // boxes, and neither box shows its own sprite (right hand is blocked).
+  const rifleAcrossHands = leftKind === 'rifle';
+
+  const renderSlot = (def: SlotDef, suppressSprite = false) => {
+    const g = equip[def.num];
+    const bootsDefault = def.type === 'boots' && !g;
+    const sprite = suppressSprite ? null : (g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
+    const bright = !suppressSprite && (!!g || bootsDefault);
+    return (
+      <div
+        key={def.num}
+        title={g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
+        onPointerDown={(e) => startEquipDrag(def, e)}
+        onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
+        onDragStart={(e) => e.preventDefault()}
+        style={{
+          width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
+          background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
+          border: `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', cursor: g || cursorHeld ? 'pointer' : 'default', userSelect: 'none',
+        }}
+      >
+        {sprite ? (
+          <img src={sprite} alt={def.label} draggable={false} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35, WebkitUserDrag: 'none' } as React.CSSProperties} />
+        ) : (
+          <span style={{ fontSize: 24, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{def.glyph}</span>
+        )}
+        {!suppressSprite && g?.tier ? (
+          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{g.tier}</span>
+        ) : null}
+        <span style={{
+          position: 'absolute', top: 'calc(100% + 1.8px)', left: 0, right: 0,
+          textAlign: 'center', fontSize: 9, fontWeight: 700,
+          color: 'hsl(var(--hud-text))', fontFamily: 'var(--hud-font)',
+          pointerEvents: 'none', textTransform: 'uppercase',
+        }}>{def.label}</span>
+      </div>
+    );
+  };
+
+  const left = SLOTS[0], right = SLOTS[1], gearSlots = SLOTS.slice(2);   // L, R, then armor/boots/potion
   return (
-    <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'row', gap: 6 }}>
-      {SLOTS.map((def) => {
-        const g = equip[def.num];
-        const bootsDefault = def.type === 'boots' && !g;
-        const sprite = g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null);
-        const bright = !!g || bootsDefault;
-        return (
-          <div
-            key={def.num}
-            title={g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
-            onPointerDown={(e) => startEquipDrag(def, e)}
-            onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
-            onDragStart={(e) => e.preventDefault()}
-            style={{
-              width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
-              background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
-              border: `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              position: 'relative', cursor: g || cursorHeld ? 'pointer' : 'default', userSelect: 'none',
-            }}
-          >
-            {sprite ? (
-              <img src={sprite} alt={def.label} draggable={false} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35, WebkitUserDrag: 'none' } as React.CSSProperties} />
-            ) : (
-              <span style={{ fontSize: 24, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{def.glyph}</span>
-            )}
-            {g?.tier ? (
-              <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{g.tier}</span>
-            ) : null}
-            <span style={{
-              position: 'absolute', top: 'calc(100% + 1.8px)', left: 0, right: 0,
-              textAlign: 'center', fontSize: 9, fontWeight: 700,
-              color: 'hsl(var(--hud-text))', fontFamily: 'var(--hud-font)',
-              pointerEvents: 'none', textTransform: 'uppercase',
-            }}>{def.label}</span>
-          </div>
-        );
-      })}
+    <div style={{ position: 'fixed', bottom: 16, right: 16, zIndex: 20, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 6 }}>
+      {/* Hands: L + R side by side. A rifle bridges both with a centered icon. */}
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'row', gap: 6 }}>
+        {renderSlot(left, rifleAcrossHands)}
+        {renderSlot(right, rifleAcrossHands)}
+        {rifleAcrossHands && equip[1]?.spriteUrl ? (
+          <img
+            src={equip[1]!.spriteUrl!} alt="Rifle" draggable={false}
+            style={{ position: 'absolute', top: 7, left: 0, right: 0, marginInline: 'auto', width: 84, height: 46, objectFit: 'contain', pointerEvents: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
+          />
+        ) : null}
+      </div>
+      {/* ¼-slot gap between the hands and the gear slots. */}
+      <div style={{ width: 15, flex: '0 0 auto' }} />
+      {gearSlots.map((def) => renderSlot(def))}
     </div>
   );
 }

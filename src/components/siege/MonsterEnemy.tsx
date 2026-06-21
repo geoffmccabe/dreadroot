@@ -170,6 +170,60 @@ function bullseyeQuat(out: THREE.Quaternion, yaw: number, spin: number, tip: num
   _bqYaw.setFromAxisAngle(_bUP, yaw + spin);                  // base facing + vertical spin
   out.copy(_bqTip).multiply(_bqYaw);
 }
+// Bullseye-fall terrain analysis: a body of height H, feet at (fx,fz), toppling in
+// horizontal direction (dx,dz). Marches the ground out one body-length and returns
+//   tip      — the body angle (from vertical) that lays it PARALLEL to the average
+//              slope it falls onto (90° = flat; <90° lying up an incline; >90° down).
+//   slopeDeg — steepest local downslope along the fall, in degrees (0 if uphill/flat).
+//   fallOff  — open space or a near-vertical face (cliff/ledge/rooftop) → free-fall.
+function bullseyeLanding(fx: number, fz: number, dx: number, dz: number, H: number): { tip: number; slopeDeg: number; fallOff: boolean } {
+  const yF = sampleHeight(fx, fz);
+  if (yF == null) return { tip: HALF_PI, slopeDeg: 90, fallOff: true };
+  const N = Math.max(3, Math.ceil(H / 0.4));
+  const stepLen = H / N;
+  let prevY = yF, yHead = yF, maxStepDrop = 0;
+  for (let i = 1; i <= N; i++) {
+    const d = stepLen * i;
+    const y = sampleHeight(fx + dx * d, fz + dz * d);
+    if (y == null) return { tip: HALF_PI, slopeDeg: 90, fallOff: true };   // toppled into open space
+    const drop = prevY - y;                                    // + = ground falls away
+    if (drop > maxStepDrop) maxStepDrop = drop;
+    prevY = y; yHead = y;
+  }
+  // A single short step that plunges ≈vertically = a cliff/rooftop edge → fall off.
+  const localDeg = Math.atan2(maxStepDrop, stepLen) * 180 / Math.PI;
+  if (localDeg >= 80) return { tip: HALF_PI, slopeDeg: 90, fallOff: true };
+  const slope = Math.atan2(yHead - yF, H);                     // + uphill / − downhill
+  return { tip: HALF_PI - slope, slopeDeg: Math.max(0, -slope * 180 / Math.PI), fallOff: false };
+}
+// Advances the toppled body across terrain for ONE frame: free-falls off cliffs,
+// slides down >60° slopes until they flatten below 30°, else rests parallel to the
+// ground. Mutates the feet position (s.x/s.y/s.z) and slide/fall state on `s`.
+// Returns the body's current tip and whether it is still in motion (not yet at rest).
+function bullseyeSettle(s: { x: number; y: number; z: number; beSlideV: number; beSliding: boolean; beFell: boolean; beFellVY: number }, dx: number, dz: number, H: number, dt: number): { tip: number; moving: boolean } {
+  if (s.beFell) {                                             // free-fall off an edge
+    s.beFellVY -= 24 * dt;
+    s.x += dx * 4 * dt; s.z += dz * 4 * dt; s.y += s.beFellVY * dt;
+    const gy = sampleHeight(s.x, s.z);
+    if (gy != null && s.y <= gy) { s.y = gy; s.beFell = false; return { tip: HALF_PI, moving: false }; }
+    return { tip: HALF_PI, moving: true };
+  }
+  const land = bullseyeLanding(s.x, s.z, dx, dz, H);
+  if (land.fallOff) { s.beFell = true; s.beFellVY = 0; return { tip: HALF_PI, moving: true }; }
+  if (land.slopeDeg >= 60) s.beSliding = true;                // steep → start sliding
+  if (s.beSliding && land.slopeDeg < 30) s.beSliding = false; // flattened out → stop
+  if (s.beSliding) {
+    const th = land.slopeDeg * Math.PI / 180;
+    s.beSlideV = Math.min(s.beSlideV + 16 * Math.sin(th) * dt, 14);   // gravity-driven, friction-capped
+    const horiz = s.beSlideV * Math.cos(th);
+    s.x += dx * horiz * dt; s.z += dz * horiz * dt;
+    const gy = sampleHeight(s.x, s.z); if (gy != null) s.y = gy;
+    return { tip: land.tip, moving: true };
+  }
+  s.beSlideV = 0;
+  const gy = sampleHeight(s.x, s.z); if (gy != null) s.y = gy;
+  return { tip: land.tip, moving: false };
+}
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
 // Demon HEAD colliders live in the same grid (for the player + headshot reference) but are
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
@@ -251,7 +305,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
     deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0,
     sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
-    tumbleYaw: 0, bulletTumble: false, killFired: false });
+    tumbleYaw: 0, bulletTumble: false, killFired: false,
+    // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
+    beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0 });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -553,16 +609,27 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    lies flat and sinks into the ground → despawn. Overrides the per-monster
     //    death style so every bullseye kill gets the signature fall. ──
     if (inst.dead && inst.bullseyeAt) {
+      if (s.beFor !== inst.bullseyeAt) { s.beFor = inst.bullseyeAt; s.beSlideV = 0; s.beSliding = false; s.beFell = false; s.beFellVY = 0; s.beSettledAt = 0; }
+      const bdx = inst.bullseyeDirX ?? 0, bdz = inst.bullseyeDirZ ?? 1;
+      const FALL = 333, LIE = 2500, SINK = 3000;
+      const settle = bullseyeSettle(s, bdx, bdz, H, delta);      // slide/fall-off/rest on terrain
       const td = now - inst.deadAt;
-      const FALL = 333, LIE_END = FALL + 2500, SINK = 3000, SINK_END = LIE_END + SINK;   // fall fast (~0.33s)
-      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
-      const e = Math.min(1, td / FALL), eo = e * e * (3 - 2 * e);
-      bullseyeQuat(g.quaternion, inst.yaw, 0, eo * HALF_PI, inst.bullseyeDirX ?? 0, inst.bullseyeDirZ ?? 1);   // no spin — just fall flat
-      const yOff = td >= LIE_END ? -H * Math.min(1, (td - LIE_END) / SINK) : 0;
-      g.position.set(s.x, s.y + yOff, s.z);
-      inst.x = s.x; inst.y = s.y + yOff; inst.z = s.z;
+      const fellIn = td >= FALL;
+      if (!fellIn || settle.moving) {                            // still tipping in, sliding, or falling off
+        const e = Math.min(1, td / FALL), eo = e * e * (3 - 2 * e);
+        bullseyeQuat(g.quaternion, inst.yaw, 0, fellIn ? settle.tip : settle.tip * eo, bdx, bdz);
+        g.position.set(s.x, s.y, s.z);
+        s.beSettledAt = 0;
+      } else {                                                   // at rest on the slope → lie, then sink
+        if (s.beSettledAt === 0) s.beSettledAt = now;
+        const held = now - s.beSettledAt;
+        bullseyeQuat(g.quaternion, inst.yaw, 0, settle.tip, bdx, bdz);
+        const yOff = held >= LIE ? -H * Math.min(1, (held - LIE) / SINK) : 0;
+        g.position.set(s.x, s.y + yOff, s.z);
+        if (!inst.despawned && held > LIE + SINK) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+      }
+      inst.x = g.position.x; inst.y = g.position.y; inst.z = g.position.z;
       play(clips.idle);
-      if (!inst.despawned && td > SINK_END) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
       return;
     }
 
@@ -1146,20 +1213,30 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // bullseye KILL lets the normal death animation take over). Drives g.rotation.x
     // like the death topple (pivots at the feet). Takes priority over the lean.
     if (inst.bullseyeAt && !inst.dead && !s.tumbling) {
+      if (s.beFor !== inst.bullseyeAt) { s.beFor = inst.bullseyeAt; s.beSlideV = 0; s.beSliding = false; s.beFell = false; s.beFellVY = 0; s.beSettledAt = 0; }
+      inst.stunUntil = Math.max(inst.stunUntil, now + 200);   // stay suppressed while toppling/sliding
       const bt = (now - inst.bullseyeAt) / 1000;          // seconds since the bullseye
       const bdx = inst.bullseyeDirX ?? 0, bdz = inst.bullseyeDirZ ?? 1;
-      if (bt < 0.333) {                                     // FALL flat (no spin) toward bullet dir — fast
-        const e = bt / 0.333, eo = e * e * (3 - 2 * e);
-        bullseyeQuat(g.quaternion, inst.yaw, 0, eo * HALF_PI, bdx, bdz);
-      } else if (bt < 2.0) {                               // HOLD flat (stunned)
-        bullseyeQuat(g.quaternion, inst.yaw, 0, HALF_PI, bdx, bdz);
-      } else if (bt < 2.4) {                               // STAND back up (un-tip)
-        const e = (bt - 2.0) / 0.4, eo = e * e * (3 - 2 * e);
-        bullseyeQuat(g.quaternion, inst.yaw, 0, HALF_PI * (1 - eo), bdx, bdz);
-      } else {
-        g.rotation.set(0, inst.yaw, 0);
-        inst.bullseyeAt = 0;                               // done — resume normal
+      const settle = bullseyeSettle(s, bdx, bdz, H, delta);   // slide/fall-off/rest on terrain
+      const fellIn = bt >= 0.333;
+      if (!fellIn || settle.moving) {                     // tipping in, sliding down, or falling off
+        const e = Math.min(1, bt / 0.333), eo = e * e * (3 - 2 * e);
+        bullseyeQuat(g.quaternion, inst.yaw, 0, fellIn ? settle.tip : settle.tip * eo, bdx, bdz);
+        s.beSettledAt = 0;
+      } else {                                            // at rest on the slope
+        if (s.beSettledAt === 0) s.beSettledAt = now;
+        const held = (now - s.beSettledAt) / 1000;
+        if (held < 2.0) {                                 // HOLD (stunned, parallel to slope)
+          bullseyeQuat(g.quaternion, inst.yaw, 0, settle.tip, bdx, bdz);
+        } else if (held < 2.4) {                          // STAND back up (un-tip to vertical)
+          const e = (held - 2.0) / 0.4, eo = e * e * (3 - 2 * e);
+          bullseyeQuat(g.quaternion, inst.yaw, 0, settle.tip * (1 - eo), bdx, bdz);
+        } else {
+          g.rotation.set(0, inst.yaw, 0);
+          inst.bullseyeAt = 0;                            // done — resume normal
+        }
       }
+      inst.x = s.x; inst.y = s.y; inst.z = s.z; me.x = s.x; me.z = s.z; me.y = s.y;   // hitbox/collider follow the slide (g.position applied below)
     }
     // Headshot recoil: BEND THE UPPER BODY BACK at the waist (spine bone) and
     // snap back over 0.15s. Applied here — AFTER the animation mixer has posed
