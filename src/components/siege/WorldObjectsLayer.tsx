@@ -25,6 +25,17 @@ const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx
 // columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
 const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump/i;
 
+// Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
+// flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't
+// match their UVs. Until a correct PP palette is sourced, give the stone/cave and tent families
+// a sensible flat color so the island reads right. Only objects ON that palette are affected,
+// so correctly-textured rocks elsewhere are untouched.
+const PP_PALETTE_HASH = 'f50be3a42b';
+const STONE_FAM_RE = /rock|stone|boulder|cliff|rune|pillar|plateau|column|stalag|mound|cave|mountain/i;
+const TENT_FAM_RE = /tent|tarp|bedroll/i;
+const STONE_GREY = 0x86827b;   // warm stone grey, to match the other rocks
+const TENT_TAN = 0xb0a585;     // canvas/tan, so the tent isn't near-black
+
 // Shared atlas cache: each Synty pack atlas is loaded ONCE and reused across every
 // model that uses it — small memory, no per-model textures embedded.
 const atlasCache = new Map<string, THREE.Texture>();
@@ -161,7 +172,14 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         }
         // per-material real texture (prefab -> .mat -> _MainTex); fall back to pack atlas
         const tu = (matMap && matMap[m.name]) || atlasUrl;
-        if (tu) {
+        const ppFlat = tu && tu.includes(PP_PALETTE_HASH)
+          && (STONE_FAM_RE.test(fbx) ? STONE_GREY : TENT_FAM_RE.test(fbx) ? TENT_TAN : null);
+        if (ppFlat != null && ppFlat !== false) {
+          // Drop the wrong palette → flat category color (Synty flat-shaded look; normals still shade it).
+          m.map = null; m.color.set(ppFlat); if ('metalness' in m) m.metalness = 0;
+          if ('emissive' in m && m.emissive) m.emissive.setRGB(0, 0, 0);
+          m.needsUpdate = true;
+        } else if (tu) {
           m.map = getAtlas(tu); m.color.setRGB(1, 1, 1); if ('metalness' in m) m.metalness = 0;
           if (cutout && cutout.has(tu)) { m.alphaTest = 0.5; m.transparent = false; }  // foliage cutout
           m.needsUpdate = true;
