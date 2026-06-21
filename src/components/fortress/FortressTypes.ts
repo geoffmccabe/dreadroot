@@ -261,6 +261,9 @@ export interface SceneProps {
    *  tier. Returns null if no grenade is held. Inventory is owned by
    *  Fortress.tsx so the throw mechanism delegates here. */
   consumeGrenade?: () => number | null;
+  /** Filled by FortressScene with its throw fn so Fortress's G state machine can
+   *  trigger a hand-grenade throw (Fortress owns inventory + fill-vs-throw logic). */
+  grenadeThrowRef?: React.MutableRefObject<(() => boolean) | null>;
   /** Throw a shpider egg now. Returns true if one was thrown. */
   onThrowEgg?: () => boolean;
   /** Y-key handler — parent decides whether to arm. */
