@@ -560,7 +560,11 @@ export async function syncAtlasOnInit(): Promise<void> {
   // record textureId → layer. No render change; the atlas is still what renders. Lets
   // us verify the array path holds the real game textures before any renderer uses it.
   if (isArrayBackend()) {
-    for (const s of specs) registerTextureId(s.textureId, s.sourceUrl);
+    for (const s of specs) {
+      // The slot the atlas assigned this texture — lets renderers map slot → layer.
+      const slot = atlasManager.getSlotForTexture(s.textureId)?.slotIndex ?? null;
+      registerTextureId(s.textureId, s.sourceUrl, slot);
+    }
   }
 
   // Save to IndexedDB

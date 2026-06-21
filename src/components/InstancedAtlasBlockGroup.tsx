@@ -221,6 +221,124 @@ function createAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMate
   return material;
 }
 
+// ── Stage 2b: array-texture variant ──────────────────────────────────────────
+// Renders the SAME lit, face-shaded blocks but samples a DataArrayTexture instead of
+// the packed atlas. It REUSES the existing per-instance `instanceUvOffset` attribute
+// (no renderer-wide attribute changes): the fragment derives the atlas slot from that
+// offset, looks up the array LAYER via a slot→layer texture, and samples the array.
+// Only used when the 'array' backend flag is on; the atlas path is unchanged.
+import { isArrayBackend } from '@/config/textureBackend';
+import { getArrayTextureManager } from '@/lib/arrayTextureManager';
+import { buildSlotLayerData, slotLayerCount } from '@/lib/arrayTextureRegistry';
+
+// 1×1 white dummy map → gives the material USE_MAP/vMapUv plumbing without an atlas.
+let _dummyMap: THREE.DataTexture | null = null;
+function getDummyMap(): THREE.DataTexture {
+  if (!_dummyMap) {
+    _dummyMap = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+    _dummyMap.needsUpdate = true;
+  }
+  return _dummyMap;
+}
+
+// slot→layer lookup as an R-float texture (1024 slots wide), rebuilt as textures stream in.
+const SLOT_TEX_W = 1024;
+let _slotLayerTex: THREE.DataTexture | null = null;
+let _slotLayerLastCount = -1;
+function getSlotLayerTexture(): THREE.DataTexture {
+  if (!_slotLayerTex) {
+    _slotLayerTex = new THREE.DataTexture(buildSlotLayerData(SLOT_TEX_W), SLOT_TEX_W, 1, THREE.RedFormat, THREE.FloatType);
+    _slotLayerTex.minFilter = THREE.NearestFilter;
+    _slotLayerTex.magFilter = THREE.NearestFilter;
+    _slotLayerTex.needsUpdate = true;
+    _slotLayerLastCount = slotLayerCount();
+  }
+  return _slotLayerTex;
+}
+/** Refresh the slot→layer texture if new textures have registered since last bake. */
+export function refreshSlotLayerTexture(): void {
+  if (!_slotLayerTex) return;
+  if (slotLayerCount() === _slotLayerLastCount) return;
+  (_slotLayerTex.image.data as Float32Array).set(buildSlotLayerData(SLOT_TEX_W));
+  _slotLayerTex.needsUpdate = true;
+  _slotLayerLastCount = slotLayerCount();
+}
+
+function createArrayAtlasMaterial(arrayTex: THREE.Texture): THREE.MeshLambertMaterial {
+  const material = new THREE.MeshLambertMaterial({
+    map: getDummyMap(), color: 0xffffff, transparent: false, alphaTest: 0,
+  });
+  const GRID = ATLAS_GRID_SIZE;
+  const EPS = (4.0 / 256).toFixed(6);
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uArrayTex = { value: arrayTex };
+    shader.uniforms.uSlotLayer = { value: getSlotLayerTexture() };
+    // Same vertex injection as the atlas material (instance UV offset + face shading).
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      attribute vec2 instanceUvOffset;
+      varying vec2 vInstanceUvOffset;
+      varying float vFaceShade;`
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <uv_vertex>',
+      `#include <uv_vertex>
+      vInstanceUvOffset = instanceUvOffset;
+      vec3 worldNormal = normalize(mat3(modelMatrix) * normal);
+      if (worldNormal.y > 0.5) { vFaceShade = 1.0; }
+      else if (worldNormal.y < -0.5) { vFaceShade = 0.65; }
+      else if (abs(worldNormal.z) > 0.5) { vFaceShade = 0.8; }
+      else { vFaceShade = 0.9; }`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      precision highp sampler2DArray;
+      uniform sampler2DArray uArrayTex;
+      uniform sampler2D uSlotLayer;
+      varying vec2 vInstanceUvOffset;
+      varying float vFaceShade;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+        vec2 localUv = clamp(fract(vMapUv), vec2(${EPS}), vec2(${(1 - 4.0 / 256).toFixed(6)}));
+        int col = int(floor(vInstanceUvOffset.x * float(${GRID}) + 0.5));
+        int row = int(floor(vInstanceUvOffset.y * float(${GRID}) + 0.5));
+        int slot = row * ${GRID} + col;
+        float layer = texelFetch(uSlotLayer, ivec2(slot, 0), 0).r;
+        vec4 sampledDiffuseColor = texture(uArrayTex, vec3(localUv, layer));
+        sampledDiffuseColor.rgb *= vFaceShade;
+        diffuseColor *= sampledDiffuseColor;
+      #endif`
+    );
+  };
+  return material;
+}
+
+// Shared array material (one per array texture), mirroring the atlas-material sharing.
+const _sharedArrayMatByTex = new WeakMap<THREE.Texture, THREE.MeshLambertMaterial>();
+function getSharedArrayMaterial(): THREE.MeshLambertMaterial | null {
+  const arrayTex = getArrayTextureManager().getTexture() as THREE.Texture | null;
+  if (!arrayTex) return null;
+  let m = _sharedArrayMatByTex.get(arrayTex);
+  if (!m) { m = createArrayAtlasMaterial(arrayTex); _sharedArrayMatByTex.set(arrayTex, m); }
+  return m;
+}
+
+// While the array backend is active, keep the slot→layer lookup current as textures
+// stream in (cheap no-op when nothing changed). Self-contained; runs only when on.
+if (isArrayBackend()) {
+  let acc = 0;
+  frameLoop.register('array-slotlayer-refresh', (d) => {
+    acc += d;
+    if (acc < 1) return;
+    acc = 0;
+    refreshSlotLayerTexture();
+  }, 75);
+}
+
 export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> = ({
   blocks,
   blockDef,
@@ -276,6 +394,12 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   // chunk) instead of one material per component. Do NOT dispose it here —
   // it is shared; disposing on one chunk's unmount would break all others.
   const material = useMemo(() => {
+    // Stage 2b: when the array backend is on, render from the DataArrayTexture (falls
+    // back to the atlas if the array engine isn't ready yet). Default = atlas, unchanged.
+    if (isArrayBackend()) {
+      const am = getSharedArrayMaterial();
+      if (am) { materialRef.current = am; return am; }
+    }
     if (!atlasTexture) return null;
     const mat = getSharedAtlasMaterial(atlasTexture);
     materialRef.current = mat;
