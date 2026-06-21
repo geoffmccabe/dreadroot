@@ -1,8 +1,11 @@
 // Data hook for the rebuilt admin Users panel. Reads the SW player snapshot
 // (4,000+ rows) with SERVER-SIDE pagination/sort/search so it stays fast, and
-// overlays live Dreadroot account info (roles/coins) by email match.
+// overlays live Dreadroot account info (roles/coins/VIP) by email match.
+// Splits out native-only Dreadroot accounts (no SW history) for a separate panel.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+
+export const REAL_SENTINEL = '__REAL__';
 
 export interface SnapshotRow {
   sw_id: string;
@@ -19,6 +22,7 @@ export interface SnapshotRow {
   suspicious: boolean;
   suspicious_reasons: string | null;
   flagged: boolean;
+  admin_note: string | null;
 }
 export interface LiveAccount {
   id: string;
@@ -27,20 +31,30 @@ export interface LiveAccount {
   coins: number | null;
   token_balances: { theme_name: string; coins: number }[];
   has_profile: boolean;
+  vip: number;
 }
 export interface PlayerRow extends SnapshotRow {
   account?: LiveAccount;
   nativeOnly?: boolean;
+  vip: number;
 }
+export type Verdict = 'cheater' | 'real' | null;
+export function verdictOf(r: { flagged: boolean; admin_note: string | null }): Verdict {
+  if (r.flagged) return 'cheater';
+  if (r.admin_note === REAL_SENTINEL) return 'real';
+  return null;
+}
+
 export type SortCol =
   | 'username' | 'player_rights' | 'last_login_date' | 'total_minutes_played'
   | 'total_kills' | 'accuracy' | 'total_items_held' | 'max_single_stack';
 
 const LIST_COLS =
-  'sw_id,username,email,player_rights,last_login_date,total_minutes_played,total_kills,accuracy,distinct_items,total_items_held,max_single_stack,suspicious,suspicious_reasons,flagged';
+  'sw_id,username,email,player_rights,last_login_date,total_minutes_played,total_kills,accuracy,distinct_items,total_items_held,max_single_stack,suspicious,suspicious_reasons,flagged,admin_note';
 
 export function useAdminPlayers() {
   const [rows, setRows] = useState<PlayerRow[]>([]);
+  const [nativeAccounts, setNativeAccounts] = useState<PlayerRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -52,15 +66,28 @@ export function useAdminPlayers() {
   const [accountsOnly, setAccountsOnly] = useState(false);
 
   const accountsByEmail = useRef<Map<string, LiveAccount>>(new Map());
-  const nativeOnly = useRef<PlayerRow[]>([]);
   const accountsLoaded = useRef(false);
 
   const loadAccounts = useCallback(async () => {
     if (accountsLoaded.current) return;
     accountsLoaded.current = true;
     try {
-      const { data } = await supabase.functions.invoke('get-all-users');
-      const users = (data?.users ?? []) as any[];
+      // VIP per account = highest active-subscription tier level
+      const [{ data: au }, { data: tiers }, { data: subs }] = await Promise.all([
+        supabase.functions.invoke('get-all-users'),
+        supabase.from('supporter_tiers' as never).select('id, level').then(r => r, () => ({ data: [] as any[] })),
+        supabase.from('user_subscriptions' as never).select('user_id, tier_id, status, paid_until').then(r => r, () => ({ data: [] as any[] })),
+      ]);
+      const tierLevel = new Map<string, number>(((tiers as any[]) || []).map(t => [t.id, t.level]));
+      const now = Date.now();
+      const vipByUser = new Map<string, number>();
+      for (const s of ((subs as any[]) || [])) {
+        if (s.status !== 'active') continue;
+        if (s.paid_until && new Date(s.paid_until).getTime() < now) continue;
+        const lvl = tierLevel.get(s.tier_id) ?? 0;
+        vipByUser.set(s.user_id, Math.max(vipByUser.get(s.user_id) ?? 0, lvl));
+      }
+      const users = (au?.users ?? []) as any[];
       const map = new Map<string, LiveAccount>();
       for (const u of users) {
         const email = (u.email || '').toLowerCase();
@@ -68,24 +95,28 @@ export function useAdminPlayers() {
         map.set(email, {
           id: u.id, email, roles: u.roles || [], coins: u.profile?.coins ?? null,
           token_balances: u.token_balances || [], has_profile: !!u.has_profile,
+          vip: vipByUser.get(u.id) ?? 0,
         });
       }
       accountsByEmail.current = map;
+
       const emails = [...map.keys()];
+      let snapEmails = new Set<string>();
       if (emails.length) {
         const { data: snap } = await supabase
           .from('sw_player_snapshot' as any).select('email').in('email', emails);
-        const snapEmails = new Set(((snap as any[]) || []).map(r => (r.email || '').toLowerCase()));
-        nativeOnly.current = emails.filter(e => !snapEmails.has(e)).map(e => {
-          const a = map.get(e)!;
-          return {
-            sw_id: 'acct:' + a.id, username: a.email.split('@')[0], email: a.email,
-            player_rights: null, last_login_date: null, total_minutes_played: 0, total_kills: 0,
-            accuracy: 0, distinct_items: 0, total_items_held: 0, max_single_stack: 0,
-            suspicious: false, suspicious_reasons: null, flagged: false, account: a, nativeOnly: true,
-          } as PlayerRow;
-        });
+        snapEmails = new Set(((snap as any[]) || []).map(r => (r.email || '').toLowerCase()));
       }
+      setNativeAccounts(emails.filter(e => !snapEmails.has(e)).map(e => {
+        const a = map.get(e)!;
+        return {
+          sw_id: 'acct:' + a.id, username: a.email.split('@')[0], email: a.email,
+          player_rights: null, last_login_date: null, total_minutes_played: 0, total_kills: 0,
+          accuracy: 0, distinct_items: 0, total_items_held: 0, max_single_stack: 0,
+          suspicious: false, suspicious_reasons: null, flagged: false, admin_note: null,
+          account: a, nativeOnly: true, vip: a.vip,
+        } as PlayerRow;
+      }));
     } catch (e) { console.error('[useAdminPlayers] accounts load failed', e); }
   }, []);
 
@@ -102,10 +133,8 @@ export function useAdminPlayers() {
     if (error) { console.error('[useAdminPlayers] load failed', error); setRows([]); setLoading(false); return; }
     let list = ((data as any[]) ?? []) as PlayerRow[];
     for (const r of list) {
-      if (r.email) { const a = accountsByEmail.current.get(r.email.toLowerCase()); if (a) r.account = a; }
-    }
-    if (page === 0 && !s && !suspiciousOnly && !accountsOnly && nativeOnly.current.length) {
-      list = [...nativeOnly.current, ...list];
+      const a = r.email ? accountsByEmail.current.get(r.email.toLowerCase()) : undefined;
+      r.account = a; r.vip = a?.vip ?? 0;
     }
     if (accountsOnly) list = list.filter(r => r.account);
     setRows(list);
@@ -121,7 +150,7 @@ export function useAdminPlayers() {
   }, [sortCol]);
 
   return {
-    rows, total, loading, page, setPage, pageSize, setPageSize,
+    rows, nativeAccounts, total, loading, page, setPage, pageSize, setPageSize,
     sortCol, sortAsc, toggleSort, search, setSearch,
     suspiciousOnly, setSuspiciousOnly, accountsOnly, setAccountsOnly, reload: load,
   };

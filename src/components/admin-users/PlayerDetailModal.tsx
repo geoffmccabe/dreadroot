@@ -1,5 +1,5 @@
 // Per-player detail: full stats + item list + live-account actions (coins,
-// roles) + cheater flag. Used by AdminPlayersPanel.
+// roles) + cheater verdict (Flag / REAL). Used by AdminPlayersPanel.
 import { useEffect, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,15 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import type { PlayerRow } from './useAdminPlayers';
+import { REAL_SENTINEL, verdictOf, type PlayerRow, type Verdict } from './useAdminPlayers';
 
 const ROLE_OPTIONS = ['user', 'admin', 'superadmin'];
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded bg-white/5 px-2 py-1">
-      <div className="text-[10px] opacity-60">{label}</div>
-      <div className="text-xs tabular-nums font-medium">{value}</div>
+      <div className="text-[10px] text-white/60">{label}</div>
+      <div className="text-xs tabular-nums font-medium text-white">{value}</div>
     </div>
   );
 }
@@ -28,7 +28,7 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
   const { toast } = useToast();
   const acc = player.account;
   const [items, setItems] = useState<{ item_number: number; name: string; qty: number }[]>([]);
-  const [flagged, setFlagged] = useState(player.flagged);
+  const [verdict, setVerdict] = useState<Verdict>(verdictOf(player));
   const [coins, setCoins] = useState(acc?.coins?.toString() ?? '');
   const [roles, setRoles] = useState<string[]>(acc?.roles?.length ? acc.roles : ['user']);
 
@@ -41,14 +41,17 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
     })();
   }, [player]);
 
-  const saveFlag = async () => {
-    const nf = !flagged;
-    const { error } = await supabase.from('sw_player_snapshot' as any)
-      .update({ flagged: nf }).eq('sw_id', player.sw_id);
-    if (error) { toast({ title: 'Error', description: 'Flag failed', variant: 'destructive' }); return; }
-    setFlagged(nf); onChanged();
-    toast({ title: nf ? 'Flagged as cheater' : 'Unflagged', description: player.username || '' });
+  const setVerdictDb = async (next: Verdict) => {
+    const patch = {
+      flagged: next === 'cheater',
+      admin_note: next === 'real' ? REAL_SENTINEL : null,
+    };
+    const { error } = await supabase.from('sw_player_snapshot' as any).update(patch).eq('sw_id', player.sw_id);
+    if (error) { toast({ title: 'Error', description: 'Update failed', variant: 'destructive' }); return; }
+    setVerdict(next); onChanged();
+    toast({ title: next === 'cheater' ? 'Flagged as cheater' : next === 'real' ? 'Marked REAL ✓' : 'Cleared', description: player.username || '' });
   };
+
   const saveCoins = async () => {
     if (!acc) return;
     const v = parseInt(coins, 10); if (isNaN(v)) return;
@@ -67,18 +70,19 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col text-white">
         <DialogHeader>
-          <DialogTitle className="text-sm flex items-center gap-2">
+          <DialogTitle className="text-sm flex items-center gap-2 text-white">
             {player.username || '(no name)'}
-            {player.suspicious && <Badge variant="destructive" className="text-[10px]">suspicious</Badge>}
-            {flagged && <Badge variant="destructive" className="text-[10px]">flagged</Badge>}
+            {verdict === 'cheater' && <Badge variant="destructive" className="text-[10px]">FLAGGED</Badge>}
+            {verdict === 'real' && <Badge className="text-[10px] bg-green-600 text-white">REAL ✓</Badge>}
+            {verdict == null && player.suspicious && <Badge className="text-[10px] bg-amber-600 text-white">suspicious</Badge>}
           </DialogTitle>
         </DialogHeader>
-        <div className="text-[11px] opacity-70 -mt-1">
-          {player.email || 'no email'} · rights {player.player_rights ?? 0} · {player.sw_id}
+        <div className="text-[11px] text-white/60 -mt-1">
+          {player.email || 'no email'} · rights {player.player_rights ?? 0} · VIP {player.vip} · {player.sw_id}
         </div>
-        {player.suspicious_reasons && (
+        {player.suspicious_reasons && verdict !== 'real' && (
           <div className="text-[11px] text-red-400">⚠ {player.suspicious_reasons}</div>
         )}
 
@@ -91,13 +95,14 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
               <Stat label="Item types" value={player.distinct_items} />
               <Stat label="Items held" value={player.total_items_held.toLocaleString()} />
               <Stat label="Max stack" value={player.max_single_stack.toLocaleString()} />
+              <Stat label="Last login" value={player.last_login_date || '—'} />
             </div>
           )}
 
-          <div className="border-t border-border/50 pt-2 mt-1">
-            <div className="text-xs font-medium mb-1">Dreadroot account</div>
+          <div className="border-t border-white/10 pt-2 mt-1">
+            <div className="text-xs font-medium mb-1 text-white">Dreadroot account</div>
             {acc ? (
-              <div className="space-y-2 text-xs">
+              <div className="space-y-2 text-xs text-white">
                 <div className="flex items-center gap-2 flex-wrap">
                   Roles:
                   {ROLE_OPTIONS.map(r => (
@@ -111,26 +116,26 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
                 </div>
                 <div className="flex items-center gap-2">
                   Coins:
-                  <Input value={coins} onChange={e => setCoins(e.target.value)} className="h-7 w-28 text-xs" />
+                  <Input value={coins} onChange={e => setCoins(e.target.value)} className="h-7 w-28 text-xs text-white" />
                   <Button size="sm" className="h-7 text-xs" onClick={saveCoins}>Save</Button>
                 </div>
-                <div className="text-[11px] opacity-70">
-                  Tokens: {acc.token_balances.map(b => `${b.theme_name}:${b.coins}`).join(', ') || '—'}
+                <div className="text-[11px] text-white/60">
+                  VIP tier: {player.vip} · Tokens: {acc.token_balances.map(b => `${b.theme_name}:${b.coins}`).join(', ') || '—'}
                 </div>
               </div>
             ) : (
-              <div className="text-xs opacity-60">No live Dreadroot account yet (hasn't logged in).</div>
+              <div className="text-xs text-white/60">No live Dreadroot account yet (hasn't logged in).</div>
             )}
           </div>
 
           {!player.nativeOnly && (
-            <div className="border-t border-border/50 pt-2 mt-2">
-              <div className="text-xs font-medium mb-1">Items ({items.length})</div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px]">
+            <div className="border-t border-white/10 pt-2 mt-2">
+              <div className="text-xs font-medium mb-1 text-white">Items ({items.length})</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] text-white">
                 {items.map((it, i) => (
                   <div key={i} className="flex justify-between">
                     <span className="truncate">{it.name}</span>
-                    <span className="tabular-nums opacity-70 ml-2">×{it.qty.toLocaleString()}</span>
+                    <span className="tabular-nums text-white/60 ml-2">×{it.qty.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -138,12 +143,19 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
           )}
         </ScrollArea>
 
-        <div className="flex gap-2 pt-2 border-t border-border/50">
-          <Button size="sm" variant={flagged ? 'destructive' : 'outline'} className="h-8 text-xs" onClick={saveFlag}>
-            {flagged ? 'Unflag' : 'Flag as cheater'}
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 text-xs ml-auto" onClick={onClose}>Close</Button>
-        </div>
+        {!player.nativeOnly && (
+          <div className="flex gap-2 pt-2 border-t border-white/10">
+            <Button size="sm" variant={verdict === 'cheater' ? 'destructive' : 'outline'} className="h-8 text-xs"
+              onClick={() => setVerdictDb(verdict === 'cheater' ? null : 'cheater')}>
+              {verdict === 'cheater' ? 'Unflag' : 'Flag as cheater'}
+            </Button>
+            <Button size="sm" className="h-8 text-xs text-white bg-green-600 hover:bg-green-700"
+              onClick={() => setVerdictDb(verdict === 'real' ? null : 'real')}>
+              {verdict === 'real' ? 'Clear REAL' : 'REAL — verified'}
+            </Button>
+            <Button size="sm" variant="outline" className="h-8 text-xs ml-auto" onClick={onClose}>Close</Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
