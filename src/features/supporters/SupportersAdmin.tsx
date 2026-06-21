@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { displaySymbol, networkLabel, type TokenAsset } from '@/features/wallet/types';
 import { TierRequirementsEditor } from './TierRequirementsEditor';
 import { TierBenefitsEditor } from './TierBenefitsEditor';
@@ -21,6 +22,31 @@ export function SupportersAdmin() {
   const [chains, setChains] = useState<string[]>([]);
   const [amt, setAmt] = useState<Record<string, string>>({});
   const [pid, setPid] = useState<Record<string, { stripe: string; paypal: string }>>({});
+  const [bfBusy, setBfBusy] = useState(false);
+  const [bfStatus, setBfStatus] = useState<string | null>(null);
+
+  // Siege Worlds VIP backfill — looks up each imported SW player's real DiviGo DIVI + Portal NFT and
+  // assigns VIP. Runs in batches server-side; we keep calling until it reports the queue is drained.
+  const runBackfill = async () => {
+    setBfBusy(true);
+    let processed = 0, divi = 0, portal = 0, matched = 0, applied = 0;
+    try {
+      for (let i = 0; i < 500; i++) {   // hard cap on rounds; each round handles a batch
+        const { data, error } = await supabase.functions.invoke('sw-vip-backfill', { body: { limit: 50 } });
+        if (error) { setBfStatus(`Stopped: ${error.message}`); break; }
+        const d = data as { processed?: number; withDivi?: number; withPortal?: number; matchedToAccounts?: number; vipApplied?: number; note?: string; error?: string };
+        if (d?.error) { setBfStatus(`Stopped: ${d.error}`); break; }
+        processed += d.processed ?? 0; divi += d.withDivi ?? 0; portal += d.withPortal ?? 0;
+        matched += d.matchedToAccounts ?? 0; applied += d.vipApplied ?? 0;
+        setBfStatus(`Checked ${processed} linked players · ${divi} hold DIVI · ${portal} hold a Portal · ${matched} matched to accounts (${applied} VIP applied)…`);
+        if (!d.processed || d.note === 'batch drained') { setBfStatus(`Done. Checked ${processed} · ${divi} with DIVI · ${portal} with Portal · ${matched} matched (${applied} VIP applied).`); break; }
+      }
+    } catch (e) {
+      setBfStatus(`Stopped: ${(e as Error).message}`);
+    } finally {
+      setBfBusy(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const [tRes, vRes, aRes] = await Promise.all([
@@ -71,6 +97,20 @@ export function SupportersAdmin() {
           {chains.map((c) => <Badge key={c} variant="secondary">{networkLabel(c)}</Badge>)}
           {!chains.length && <span className="text-xs text-foreground/60">No coins yet.</span>}
         </div>
+      </Card>
+
+      {/* Siege Worlds VIP backfill */}
+      <Card className="p-3 space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-bold text-foreground">Siege Worlds VIP backfill</div>
+            <div className="text-xs text-foreground/60">Reads each imported Siege Worlds player's real DiviGo DIVI &amp; LightningWorks Portal and assigns their VIP level. Safe to re-run.</div>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0" disabled={bfBusy} onClick={runBackfill}>
+            {bfBusy ? 'Running…' : 'Run backfill'}
+          </Button>
+        </div>
+        {bfStatus && <div className="text-xs text-foreground/75">{bfStatus}</div>}
       </Card>
 
       {/* Tier cards */}
