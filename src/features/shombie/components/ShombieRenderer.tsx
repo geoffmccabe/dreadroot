@@ -35,7 +35,10 @@ import {
 import particleFire from 'three-particle-fire';
 import { getGlobalAtlasTexture, isAtlasReady } from '@/hooks/useTextureAtlas';
 import { getShombieUVs, slotIndexToUVs } from '@/lib/atlasLookup';
-import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset } from '@/lib/atlasMaterial';
+import { createAtlasStandardMaterial, createUvOffsetAttribute, setInstanceUvOffset, createArrayStandardMaterial, createALayerAttribute, setInstanceALayer } from '@/lib/atlasMaterial';
+import { isArrayBackend } from '@/config/textureBackend';
+import { getArrayTextureManager } from '@/lib/arrayTextureManager';
+import { parseStripMetadata } from '@/lib/animationToStrip';
 import {
   isStriking,
   strikePartExtend,
@@ -246,8 +249,21 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       }
     }, []);
 
+    // Stage 3: when the array backend is on AND its texture is ready, use the array
+    // material (per-instance layer) so monster textures aren't limited by atlas slots.
+    const arrayMode = isArrayBackend();
+    const aLayerAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
+
     // Create atlas material
     const material = useMemo(() => {
+      if (arrayMode) {
+        const arrTex = getArrayTextureManager().getTexture() as THREE.Texture | null;
+        if (arrTex) {
+          const mat = createArrayStandardMaterial(arrTex, { roughness: 0.8, metalness: 0.1 });
+          materialRef.current = mat;
+          return mat;
+        }
+      }
       const atlasTexture = getGlobalAtlasTexture();
       if (!atlasTexture || !isAtlasReady()) {
         // Fallback material
@@ -266,14 +282,27 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       });
       materialRef.current = mat;
       return mat;
-    }, []);
+    }, [arrayMode]);
 
-    // Update material when atlas becomes ready
+    // Update material when atlas (or the array texture) becomes ready
     useEffect(() => {
       const checkAtlas = () => {
-        if (isAtlasReady() && meshRef.current) {
+        if (!meshRef.current || !materialRef.current) return;
+        if (arrayMode) {
+          // Array backend: swap in the array material once the engine texture exists.
+          if (!materialRef.current.map) {
+            const arrTex = getArrayTextureManager().getTexture() as THREE.Texture | null;
+            if (arrTex) {
+              const newMat = createArrayStandardMaterial(arrTex, { roughness: 0.8, metalness: 0.1 });
+              materialRef.current = newMat;
+              meshRef.current.material = newMat;
+            }
+          }
+          return;
+        }
+        if (isAtlasReady()) {
           const atlasTexture = getGlobalAtlasTexture();
-          if (atlasTexture && materialRef.current && !materialRef.current.map) {
+          if (atlasTexture && !materialRef.current.map) {
             const newMat = createAtlasStandardMaterial(atlasTexture, {
               roughness: 0.8,
               metalness: 0.1,
@@ -286,9 +315,9 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
 
       const interval = setInterval(checkAtlas, 100);
       return () => clearInterval(interval);
-    }, []);
+    }, [arrayMode]);
 
-    // Setup UV offset attribute when mesh is ready
+    // Setup UV offset attribute (atlas) or aLayer attribute (array) when mesh is ready
     useEffect(() => {
       const mesh = meshRef.current;
       if (!mesh) return;
@@ -296,7 +325,10 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
       if (!uvOffsetAttrRef.current) {
         uvOffsetAttrRef.current = createUvOffsetAttribute(mesh, MAX_INSTANCES);
       }
-    }, []);
+      if (arrayMode && !aLayerAttrRef.current) {
+        aLayerAttrRef.current = createALayerAttribute(mesh, MAX_INSTANCES);
+      }
+    }, [arrayMode]);
 
     // Create head fire for a shombie (universal instanced flame system only).
     // The old per-shombie THREE.Points fallback was removed: at horde scale it
@@ -568,6 +600,12 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
         let instanceIndex = 0;
         let candCount = 0; // emerged shombies eligible for head flames this frame
 
+        // Array backend: per-pass tier→current-frame-layer cache so we resolve each tier's
+        // animated layer once per frame (not per shombie/per part). Cleared every pass.
+        const arrayReady = arrayMode && !!getArrayTextureManager().getTexture();
+        const tierLayerCache = arrayReady ? new Map<number, number>() : null;
+        const aLayerAttr = aLayerAttrRef.current;
+
         for (const shombie of shombies) {
           if (!shombie.isActive) continue;
 
@@ -734,11 +772,34 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             }
           }
 
+          // Array backend: resolve this tier's CURRENT animation-frame layer (cached per
+          // pass). No slot limit → animated tiers that overflow the atlas still get a real
+          // texture here, so they don't fall back to a solid tier color.
+          let aLayer = 0;
+          if (arrayReady && tierLayerCache) {
+            const tier = shombie.definition.tier;
+            const cached = tierLayerCache.get(tier);
+            if (cached !== undefined) {
+              aLayer = cached;
+            } else {
+              const url = shombie.definition.texture_url;
+              if (url) {
+                const meta = parseStripMetadata(url);
+                const fc = meta?.frames ?? 1;
+                const fd = meta?.delay ?? 100;
+                const fi = fc > 1 ? Math.floor(performance.now() / fd) % fc : 0;
+                aLayer = getArrayTextureManager().resolveFrame(url, fi, fc).layer;
+              }
+              tierLayerCache.set(tier, aLayer);
+            }
+          }
+
           const healthPercent = shombie.currentHealth / shombie.maxHealth;
           const brightness = 0.7 + healthPercent * 0.3;
 
-          // Check if atlas has texture for this tier
-          const hasAtlasTexture = uvs !== null;
+          // Check if atlas has texture for this tier. In array mode a layer is always
+          // available (no slot overflow), so always treat as textured.
+          const hasAtlasTexture = arrayReady ? (!!shombie.definition.texture_url) : (uvs !== null);
           if (hasAtlasTexture) {
             tmpColor.setRGB(brightness, brightness, brightness);
           } else {
@@ -895,6 +956,10 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
             if (uvOffsetAttr) {
               setInstanceUvOffset(uvOffsetAttr, instanceIndex, uvOffsetX, uvOffsetY);
             }
+            // Array backend: per-instance layer index
+            if (aLayerAttr) {
+              setInstanceALayer(aLayerAttr, instanceIndex, aLayer);
+            }
 
             mesh.setColorAt(instanceIndex, tmpColor);
 
@@ -917,6 +982,9 @@ export const ShombieRenderer = forwardRef<ShombieRendererHandle, ShombieRenderer
           }
           if (uvOffsetAttr) {
             uvOffsetAttr.needsUpdate = true;
+          }
+          if (aLayerAttr) {
+            aLayerAttr.needsUpdate = true;
           }
         }
 

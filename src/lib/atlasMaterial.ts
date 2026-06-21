@@ -9,6 +9,71 @@ import * as THREE from 'three';
 import { ATLAS_GRID_SIZE } from './textureAtlas';
 
 const SLOT_UV_SIZE = 1 / ATLAS_GRID_SIZE;
+
+// ── Texture-array variants (Stage 3) ─────────────────────────────────────────
+// Same lit monster materials, but each instance carries a per-instance LAYER index
+// (aLayer) into a DataArrayTexture instead of a UV offset into the packed atlas. This
+// frees monster textures from the atlas slot limit (overflowed shombie tiers etc.).
+let _dummyMap1x1: THREE.DataTexture | null = null;
+function dummyMap(): THREE.DataTexture {
+  if (!_dummyMap1x1) {
+    _dummyMap1x1 = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+    _dummyMap1x1.needsUpdate = true;
+  }
+  return _dummyMap1x1;
+}
+
+/** Per-instance array LAYER attribute (float). */
+export function createALayerAttribute(mesh: THREE.InstancedMesh, max: number): THREE.InstancedBufferAttribute {
+  const attr = new THREE.InstancedBufferAttribute(new Float32Array(max), 1);
+  attr.setUsage(THREE.DynamicDrawUsage);
+  mesh.geometry.setAttribute('aLayer', attr);
+  return attr;
+}
+export function setInstanceALayer(attr: THREE.InstancedBufferAttribute, i: number, layer: number): void {
+  (attr.array as Float32Array)[i] = layer;
+}
+
+/** MeshStandardMaterial that samples a DataArrayTexture by per-instance layer index. */
+export function createArrayStandardMaterial(
+  arrayTex: THREE.Texture,
+  options?: { roughness?: number; metalness?: number }
+): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({
+    map: dummyMap(), color: 0xffffff,
+    roughness: options?.roughness ?? 0.4, metalness: options?.metalness ?? 0.1,
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uArrayTex = { value: arrayTex };
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <common>',
+      `#include <common>
+      attribute float aLayer;
+      varying float vALayer;`
+    );
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <uv_vertex>',
+      `#include <uv_vertex>
+      vALayer = aLayer;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+      precision highp sampler2DArray;
+      uniform sampler2DArray uArrayTex;
+      varying float vALayer;`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+        vec2 localUv = clamp(fract(vMapUv), vec2(${HALF_TEXEL.toFixed(6)}), vec2(${(1 - HALF_TEXEL).toFixed(6)}));
+        vec4 sampledDiffuseColor = texture(uArrayTex, vec3(localUv, vALayer));
+        diffuseColor *= sampledDiffuseColor;
+      #endif`
+    );
+  };
+  return material;
+}
 // Half-texel inset in slot-local UV space to prevent bilinear filtering bleed
 // Each slot is 256 texels, so half texel = 0.5/256
 const HALF_TEXEL = 0.5 / 256;

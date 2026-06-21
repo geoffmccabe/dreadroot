@@ -119,8 +119,13 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
 function applyFaceSym(p: Profile, F: number, faceSym: FaceSym, flip: boolean): Profile {
   if (faceSym !== 'lr') return p;
   const topH = new Array<number>(F), greyCol = new Array<number>(F);
+  const maxM = Math.floor((F - 1) / 2);
   for (let c = 0; c < F; c++) {
-    const src = flip ? Math.max(c, F - 1 - c) : Math.min(c, F - 1 - c);
+    // m: 0 at the two outer corners, maxM at the centre seam.
+    const m = Math.min(c, F - 1 - c);
+    // flip swaps centre<->corner so a centre peak moves OUT to the corners (and the
+    // corners become the centre) — a genuinely different symmetric face.
+    const src = flip ? (maxM - m) : m;
     topH[c] = p.topH[src];
     greyCol[c] = p.greyCol[src];
   }
