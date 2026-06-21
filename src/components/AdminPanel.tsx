@@ -159,7 +159,7 @@ export function AdminPanel({
           }
         }}
         className={cn(
-          "admin-panel-dialog w-full max-h-[90vh] overflow-hidden flex flex-col",
+          "admin-panel-dialog hud-draggable w-full max-h-[90vh] overflow-hidden flex flex-col",
           !effectiveWidth && "max-w-4xl",
           activeTab === 'effects' && "!left-auto !right-4 !translate-x-0"
         )}

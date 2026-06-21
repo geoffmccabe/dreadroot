@@ -387,7 +387,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             node.style.setProperty('border-radius', '6px', 'important');
           }
         }}
-        className="user-panel-dialog relative overflow-hidden flex flex-col"
+        className="user-panel-dialog hud-draggable relative overflow-hidden flex flex-col"
         style={{
           width: `${panelSize.width}px`,
           height: `${panelSize.height}px`,
