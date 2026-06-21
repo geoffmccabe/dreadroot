@@ -6,8 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trophy, Skull } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useActiveGame } from '@/config/activeGame';
-import { gameDataKey } from '@/config/gameRegistry';
 
 type Metric =
   | 'shots_hit'
@@ -32,7 +30,6 @@ const METRICS: { id: Metric; label: string; unit?: string; format: (v: number) =
 ];
 
 function LeaderboardTab({ metric, format }: { metric: Metric; format: (v: number) => string }) {
-  const gameKey = gameDataKey(useActiveGame());
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +45,6 @@ function LeaderboardTab({ metric, format }: { metric: Metric; format: (v: number
       const { data, error: rpcErr } = await supabase.rpc('get_leaderboard' as any, {
         p_metric: metric,
         p_limit: 100,
-        p_game: gameKey,
       });
       if (rpcErr) {
         console.error('[Leaderboard]', metric, rpcErr);
@@ -59,7 +55,7 @@ function LeaderboardTab({ metric, format }: { metric: Metric; format: (v: number
       }
       setLoading(false);
     })();
-  }, [metric, gameKey]);
+  }, [metric]);
 
   if (loading) {
     return <div className="text-sm text-muted-foreground p-4">Loading leaderboard…</div>;
@@ -114,13 +110,13 @@ const MONSTERS: { id: string; label: string }[] = [
   { id: 'shtickman', label: 'Shtickman' },
   { id: 'shwarm',    label: 'Shwarm' },
   { id: 'shpider',   label: 'Shpider' },
+  { id: 'shroomer',  label: 'Shroomer' },
 ];
 const TIERS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 interface KillRow { rank: number; user_id: string; display_name: string; kills: number; }
 
 function KillLeaderboard({ enemyType, tier }: { enemyType: string; tier: number }) {
-  const gameKey = gameDataKey(useActiveGame());
   const [rows, setRows] = useState<KillRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -137,7 +133,6 @@ function KillLeaderboard({ enemyType, tier }: { enemyType: string; tier: number 
         p_enemy_type: enemyType,
         p_tier: tier,
         p_limit: 20,
-        p_game: gameKey,
       });
       if (rpcErr) {
         setError(rpcErr.message);
@@ -147,7 +142,7 @@ function KillLeaderboard({ enemyType, tier }: { enemyType: string; tier: number 
       }
       setLoading(false);
     })();
-  }, [enemyType, tier, gameKey]);
+  }, [enemyType, tier]);
 
   if (loading) return <div className="text-sm text-muted-foreground p-4">Loading…</div>;
   if (error)   return <div className="text-sm text-destructive p-4">Couldn't load: {error}</div>;

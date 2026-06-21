@@ -113,7 +113,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [avatarError, setAvatarError] = useState(false);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
-  const [basePanelSize, setBasePanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
+  const [basePanelSize, setBasePanelSize] = useState({ width: 592, height: 720 }); // 538 widened 10% → 592 (extends right on open); height 600*1.2=720
   const [isResizing, setIsResizing] = useState(false);
   // Kinetik-style glow: fires on open, on drag-to-move, and on resize.
   const glow = useGlowPanel();
