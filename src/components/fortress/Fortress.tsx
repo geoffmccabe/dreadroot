@@ -570,6 +570,7 @@ export function Fortress() {
     // No free hand → can't FILL, so skip the inventory query entirely and go straight to
     // throw / re-arm. (This is the "glove + grenade in hand" case — it must always respond,
     // and must NOT depend on a DB round-trip succeeding.)
+    console.log('[DR-DBG] grenade toggle: leftRifle', leftRifle, 'leftFree', leftFree, 'rightFree', rightFree, 'hg', JSON.stringify({ L: hg.L?.armed, R: hg.R?.armed }), 'anyArmed', anyArmedHandGrenade());
     if (!leftFree && !rightFree) {
       if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
       const reArm: Hand | null = (hg.R && !hg.R.armed) ? 'R' : (hg.L && !hg.L.armed) ? 'L' : null;

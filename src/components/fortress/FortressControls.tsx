@@ -796,6 +796,7 @@ export function FirstPersonControls({
         // (fill a free hand → arm → throw RIGHT-first → re-arm; rifle = old QA flow). It
         // owns inventory + the fill-vs-throw decision and triggers throws via its ref.
         // AIRBORNE, arming is disallowed (as before) but you can still THROW an armed one.
+        console.log('[DR-DBG] G key: onGround', onGround.current, 'god', godModeRef.current, '→ will call toggle:', (onGround.current || godModeRef.current));
         if (onGround.current || godModeRef.current) {
           onGrenadeTogglePress?.();
         } else if (anyArmedHandGrenade() || grenadeReadyRef.current) {

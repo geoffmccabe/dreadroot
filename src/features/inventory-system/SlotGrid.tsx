@@ -186,6 +186,7 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, tapCountsOnly, onCl
       }}
       onPointerUp={(e) => {
         if (e.button !== 0) return;
+        console.log('[DR-DBG] inv tile pointerUp slot', slotIndex, 'reactCursor', cursor?.origin, 'liveCursor', cursorStackApi.getCursor()?.origin);
         // Stale closure `cursor` on purpose (see pressRef note above):
         // a same-tick pickup hasn't re-rendered, so we won't double-fire.
         if (!cursor) return;

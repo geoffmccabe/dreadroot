@@ -150,7 +150,22 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   // change (gearKey changes), or reverted if the move fails. Drag-OUT uses a GHOST (below),
   // never a clear, so a cancelled drag can't look like a loss.
   const [optimistic, setOptimistic] = useState<Record<number, EquipItem>>({});
-  useEffect(() => { setOptimistic({}); }, [gearKey]);   // gear refreshed → overlay no longer needed
+  // Drop an optimistic entry only once the gear prop CONFIRMS that exact item in that slot
+  // AND its def has loaded — so the gear-derived tile is ready to take over with no flicker
+  // and no momentary active-weapon gap (which would read as "NO WEAPON" mid-equip).
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const keys = Object.keys(prev);
+      if (!keys.length) return prev;
+      const n = { ...prev }; let changed = false;
+      for (const s of keys) {
+        const slot = Number(s);
+        const g = gear.find((gg) => gg.slot === slot);
+        if (g && g.itemId === prev[slot].itemId && defs[g.itemId]) { delete n[slot]; changed = true; }
+      }
+      return changed ? n : prev;
+    });
+  }, [gear, defs]);
   const equip: EquipMap = useMemo(() => {
     const m: EquipMap = { ...EMPTY };
     for (const g of gear) if (g.slot >= 1 && g.slot <= 5) m[g.slot] = defs[g.itemId] ?? null;
@@ -205,6 +220,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
 
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
+    console.log('[DR-DBG] equip pointerUp slot', def.num, 'cursorOrigin', cur?.origin);
     if (cur) {
       const r = await resolveDrop(def, cur.itemId);
       if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
@@ -250,6 +266,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const startEquipDrag = (def: SlotDef, e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const item = equip[def.num];
+    console.log('[DR-DBG] equip pointerDown slot', def.num, 'hasItem', !!item, item?.name);
     if (!item) return;
     const sx = e.clientX, sy = e.clientY;
     let lifted = false;
@@ -262,6 +279,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (dx * dx + dy * dy > 36) {   // ~6px drag threshold
         lifted = true;
+        console.log('[DR-DBG] equip drag LIFTED slot', def.num, '→ cursor set');
         cursorStackApi.setCursor({
           itemId: item.itemId, itemKey: '', quantity: 1, name: item.name, tier: item.tier,
           spriteUrl: item.spriteUrl, nonStackable: true, origin: { region: 'equip', slot: def.num },
