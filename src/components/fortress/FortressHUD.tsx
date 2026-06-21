@@ -9,6 +9,9 @@ import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
+import { CoordsHud } from '@/components/siege/CoordsHud';
+import { TriagePanel } from '@/components/siege/TriagePanel';
+import { useActiveGame } from '@/config/activeGame';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
@@ -95,6 +98,9 @@ export function FortressHUD(props: FortressHUDProps) {
     playerPositionRef,
     playerForwardRef,
   } = props;
+
+  const activeGame = useActiveGame();
+  const isSiege = activeGame === 'siege-worlds';
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
   const selectedSlot = selectedSlotProp;
@@ -896,6 +902,10 @@ export function FortressHUD(props: FortressHUDProps) {
       <SiegeTeleportMenu />
       {/* Terrain builder panel — shows only on editable (heightmap) siege maps. */}
       <TerrainBrushPanel />
+      {/* Laser inspector: live "pointing at <item>" readout + flag worklist. On ALL siege
+          maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
+      {isSiege && <CoordsHud />}
+      {isSiege && <TriagePanel />}
       {/* Siege Worlds inspect-view animation panel (game CSS) — shows only in inspect. */}
       <SiegeAnimPanel />
       {/* Flying coin animations */}

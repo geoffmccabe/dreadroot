@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { playerState, heading } from './playerState';
 import { probeState } from './probeState';
 
-const TAGS = ['bad', 'out of place', 'sideways', 'rotated 90', 'rotated 180',
+const TAGS = ['good', 'bad', 'out of place', 'sideways', 'rotated 90', 'rotated 180',
   'upside down', 'too big', 'too small', 'bad/no texture', 'missing parts',
   'floating', 'sunk in ground'];
 
@@ -52,13 +52,22 @@ export function TriagePanel() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyC' || e.ctrlKey || e.metaKey) return;
+      if (e.ctrlKey || e.metaKey) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // C = plain capture. While the laser is ON + pointing at something: B = flag BAD,
+      // G = flag GOOD — one keypress per item, no clicking. (Gated on the laser so it can't
+      // clash with other B/G keys.)
+      let flag: string[] | null = null;
+      if (e.code === 'KeyC') flag = [];
+      else if (probeState.on && probeState.hasHit && e.code === 'KeyB') flag = ['bad'];
+      else if (probeState.on && probeState.hasHit && e.code === 'KeyG') flag = ['good'];
+      if (!flag) return;
       const { x, z, fx, fz } = playerState;
       const h = heading(fx, fz);
       setEntries((es) => [...es, {
         item: probeState.on ? (probeState.hit || '(laser hit nothing)') : '(laser off — press L)',
         px: x, pz: z, hx: probeState.hx, hy: probeState.hy, hz: probeState.hz,
-        deg: h.deg, dir: h.dir, issues: [],
+        deg: h.deg, dir: h.dir, issues: flag,
       }]);
     };
     window.addEventListener('keydown', onKey);

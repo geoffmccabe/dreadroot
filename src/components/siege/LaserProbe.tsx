@@ -19,8 +19,13 @@ export function LaserProbe() {
     const dot = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), new THREE.MeshBasicMaterial({ color: 0xff3030, depthTest: false }));
     line.renderOrder = 999; dot.renderOrder = 999;
     line.frustumCulled = false; dot.frustumCulled = false;
-    const grp = new THREE.Group(); grp.add(line);   // dot (red circle) removed — line only
-    return { grp, line, dot };
+    // Highlight box around whatever the laser points at (works for ANY mesh, incl. the
+    // plain sampler models that the instanced-tint highlight can't touch).
+    const box = new THREE.BoxHelper(dot, 0xffee00);
+    (box.material as THREE.LineBasicMaterial).depthTest = false;
+    box.renderOrder = 1000; box.frustumCulled = false; box.visible = false;
+    const grp = new THREE.Group(); grp.add(line); grp.add(box);
+    return { grp, line, dot, box };
   }, []);
 
   const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = 8000; return r; }, []);
@@ -125,6 +130,8 @@ export function LaserProbe() {
         probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
         probeState.mesh = h.object as THREE.Mesh;            // for the V voxelize tool
         probeState.instanceId = h.instanceId ?? -1;
+        // highlight box around the pointed-at object (any mesh type)
+        try { box.setFromObject(h.object); box.visible = true; } catch { box.visible = false; }
         // tint the pointed-at instance red
         const im = h.object as THREE.InstancedMesh;
         if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
@@ -138,6 +145,7 @@ export function LaserProbe() {
         rc.hit = false;
         probeState.hasHit = false; probeState.hit = null;
         probeState.mesh = null; probeState.instanceId = -1;
+        box.visible = false;
         clearHL();
       }
     }

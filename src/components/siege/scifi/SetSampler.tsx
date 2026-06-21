@@ -26,6 +26,9 @@ function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
   const { scene } = useGLTF(`/siege/scifi/${file}`, '/draco/');
   const obj = useMemo(() => {
     const model = scene.clone(true);
+    const id = file.replace(/\.gltf$/, '');
+    // Tag every mesh with the asset id so the laser inspector reports WHICH model you flag.
+    model.traverse((o) => { o.userData.fbx = id; });
     const box = new THREE.Box3().setFromObject(model);
     const ground = sampleHeight(x, z) ?? 0;
     model.position.y = ground - box.min.y;       // lowest point on the ground
