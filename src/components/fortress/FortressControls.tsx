@@ -11,6 +11,7 @@ import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
 import { getAiming } from '@/config/aimState';
+import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
 import { flashCenter } from '@/config/centerFlash';
 import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
@@ -1980,6 +1981,17 @@ export function FirstPersonControls({
             pc.fov = THREE.MathUtils.damp(pc.fov, target, getActiveWeapon()?.zoomSpeed ?? 10, delta);
             if (Math.abs(pc.fov - target) < 0.05) { pc.fov = target; adsActiveRef.current = false; }
             pc.updateProjectionMatrix();
+          } else {
+            // Resting (not aiming): apply the user's FoV slider in real time.
+            // FirstPersonArms used to drive this each frame but is disabled, so
+            // nothing was reading getBaseFov — the slider did nothing. Damp the
+            // resting FOV toward the setting so the panel adjusts the view live.
+            const base = getBaseFov();
+            if (Math.abs(pc.fov - base) > 0.01) {
+              pc.fov = THREE.MathUtils.damp(pc.fov, base, 10, delta);
+              if (Math.abs(pc.fov - base) < 0.05) pc.fov = base;
+              pc.updateProjectionMatrix();
+            }
           }
         }
       }
