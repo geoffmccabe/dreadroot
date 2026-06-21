@@ -1,6 +1,19 @@
 import React, { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
+import { useThree } from '@react-three/fiber';
+import { frameLoop } from '@/lib/frameLoop';
+import { shadowStore } from '@/features/lights/shadowStore';
 import { CycleState } from './FortressTypes';
+
+// Sun shadow: ONE directional light whose tight ortho shadow camera follows the player.
+// This replaces per-monster moving spotlight shadows (3 full-scene passes → 1) and gives
+// stable, accurate ground shadows. Only nearby chunks/monsters fall inside the box and
+// frustum-cull into it, so the cost is one cheap pass.
+const SUN_HALF = 32;            // ortho half-size → 64u box centred on the player
+const SUN_MAP = 2048;           // single map, tight area → crisp
+const SUN_DIST = 80;            // how far up-sun the light sits from the player
+const SUN_DIR = new THREE.Vector3(35, 45, 15).normalize(); // matches the static position below
+const SUN_TEXEL = (2 * SUN_HALF) / SUN_MAP; // world units per shadow texel (for snapping)
 
 export interface LightingHandle {
   update: () => void;
@@ -14,6 +27,7 @@ export const DynamicLighting = forwardRef<LightingHandle, DynamicLightingProps>(
   const hemisphereRef = useRef<THREE.HemisphereLight>(null);
   const directionalRef = useRef<THREE.DirectionalLight>(null);
   const ambientRef = useRef<THREE.AmbientLight>(null);
+  const { camera } = useThree();
 
   // Cache previous lighting value to avoid unnecessary updates
   const prevLightingRef = useRef(0);
@@ -26,9 +40,26 @@ export const DynamicLighting = forwardRef<LightingHandle, DynamicLightingProps>(
         console.log('✅ Shadow camera layers enabled for avatar');
       }
     }, 100);
-    
+
     return () => clearTimeout(timer);
   }, []);
+
+  // Sun shadow follows the player. Without this the ortho shadow box stays at world
+  // origin and you walk out of it. Texel-snapping the centre stops shadow-edge crawl.
+  useEffect(() => {
+    return frameLoop.register('sun-shadow-follow', () => {
+      if (!shadowStore.get()) return; // zero cost when shadows are off
+      const light = directionalRef.current;
+      if (!light) return;
+      // Snap the box centre to the shadow-map texel grid (kills shimmer while moving).
+      const cx = Math.round(camera.position.x / SUN_TEXEL) * SUN_TEXEL;
+      const cz = Math.round(camera.position.z / SUN_TEXEL) * SUN_TEXEL;
+      const cy = camera.position.y - 1.0; // ~ground/feet under the camera
+      light.position.set(cx + SUN_DIR.x * SUN_DIST, cy + SUN_DIR.y * SUN_DIST, cz + SUN_DIR.z * SUN_DIST);
+      light.target.position.set(cx, cy, cz);
+      light.target.updateMatrixWorld();
+    }, 20);
+  }, [camera]);
 
   // Expose update function instead of using useFrame
   useImperativeHandle(ref, () => ({
@@ -66,14 +97,16 @@ export const DynamicLighting = forwardRef<LightingHandle, DynamicLightingProps>(
         position={[35, 45, 15]}
         intensity={1.0}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-        shadow-camera-far={60}
-        shadow-camera-left={-30}
-        shadow-camera-right={30}
-        shadow-camera-top={30}
-        shadow-camera-bottom={-30}
-        shadow-bias={-0.0005}
+        shadow-mapSize-width={SUN_MAP}
+        shadow-mapSize-height={SUN_MAP}
+        shadow-camera-near={1}
+        shadow-camera-far={SUN_DIST + SUN_HALF * 2}
+        shadow-camera-left={-SUN_HALF}
+        shadow-camera-right={SUN_HALF}
+        shadow-camera-top={SUN_HALF}
+        shadow-camera-bottom={-SUN_HALF}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.6}
       />
       <ambientLight
         ref={ambientRef}

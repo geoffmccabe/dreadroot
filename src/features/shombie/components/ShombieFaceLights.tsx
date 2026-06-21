@@ -1,7 +1,7 @@
 // Mounts the authored 'shombie-face' light on the FRONT of each Shombie's head, aimed
 // along its walk direction so it sweeps trees/ground/players as it moves. Plan B at
 // scale: a fixed POOL of lights follows the nearest-K active Shombies (constant light
-// count → no shader recompiles), and only SHADOW_CAP of them cast a real (cheap) shadow.
+// count → no shader recompiles). They are pure lights — shadows come from the sun.
 // Uses the saved light by code (live edits from the Lights panel apply too); falls back
 // to the default so there's always something to test with.
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,12 +12,14 @@ import { GameLight } from '@/features/lights/GameLight';
 import { useLightStore } from '@/features/lights/lightStore';
 import { loadLights, getLight } from '@/features/lights/lightsDb';
 import { DEFAULT_LIGHT, type LightDef } from '@/features/lights/lightTypes';
-import { useShadowsEnabled } from '@/features/lights/shadowStore';
 import type { ShombieInstance } from '../types';
 
 const CODE = 'shombie-face';
 const POOL = 4;        // max simultaneous face-lights (nearest to camera)
-const SHADOW_CAP = 3;  // the 3 nearest cast real shadows (rest light without shadow)
+// Face beams are PURE LIGHTS — they no longer cast shadow maps. Per-monster moving
+// spotlight shadows over the whole world cost ~+108 ms/s of bufferSubData (3 extra
+// full-scene depth passes) and looked backwards. Shadows now come from ONE sun light
+// (FortressLighting) whose shadow camera follows the player.
 
 // Built-in default so Shombies ALWAYS have a visible face-beam, even before anyone
 // saves a 'shombie-face' light in the Lights panel. A saved one (or live edit) overrides.
@@ -43,7 +45,6 @@ const FALLBACK: LightDef = {
 
 export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] }) {
   const { camera } = useThree();
-  const shadowsEnabled = useShadowsEnabled();
   const live = useLightStore();
   const [saved, setSaved] = useState<LightDef | null>(null);
   useEffect(() => { loadLights().then(() => setSaved(getLight(CODE))); }, []);
@@ -119,7 +120,7 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
     <>
       {Array.from({ length: POOL }).map((_, i) => (
         <group key={i} ref={(n) => { groupRefs[i].current = n; }}>
-          <GameLight def={{ ...def, shadowOn: shadowsEnabled && i < SHADOW_CAP }} idSuffix={`shombie-${i}`} />
+          <GameLight def={{ ...def, shadowOn: false }} idSuffix={`shombie-${i}`} />
         </group>
       ))}
     </>
