@@ -142,15 +142,21 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gearKey]);
 
-  // SINGLE SOURCE OF TRUTH: the slot→item map derived PURELY from the shared `gear` prop
-  // (owned by useUserData, updated via user_slots realtime). NO optimistic local mutation —
-  // a slot whose item is on the cursor is shown as a dimmed GHOST, never cleared, so a
-  // cancelled drag (ESC) just un-ghosts (nothing was ever removed from state or the DB).
+  // Base slot→item map derived from the shared `gear` prop (the source of truth, updated via
+  // user_slots realtime). On TOP we apply an OPTIMISTIC overlay set the instant an item is
+  // dropped onto a slot, so the equip + active-weapon (and thus the ability to SHOOT) appear
+  // immediately instead of waiting on a realtime round-trip. The overlay only ADDS (never
+  // clears), so it can't "lose" an item; it's dropped the moment the gear prop reflects the
+  // change (gearKey changes), or reverted if the move fails. Drag-OUT uses a GHOST (below),
+  // never a clear, so a cancelled drag can't look like a loss.
+  const [optimistic, setOptimistic] = useState<Record<number, EquipItem>>({});
+  useEffect(() => { setOptimistic({}); }, [gearKey]);   // gear refreshed → overlay no longer needed
   const equip: EquipMap = useMemo(() => {
     const m: EquipMap = { ...EMPTY };
     for (const g of gear) if (g.slot >= 1 && g.slot <= 5) m[g.slot] = defs[g.itemId] ?? null;
+    for (const s of Object.keys(optimistic)) m[Number(s)] = optimistic[Number(s)];
     return m;
-  }, [gear, defs]);
+  }, [gear, defs, optimistic]);
   // True when this slot's item is currently riding the cursor (drag-out / pickup in progress).
   const isGhosted = (slot: number) => cursor?.origin.region === 'equip' && cursor.origin.slot === slot;
 
@@ -216,13 +222,21 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       } else if (def.hand && !r.isRifle && leftKind === 'rifle' && fromEquipSlot !== 1) {
         toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
       }
-      cursorStackApi.setCursor(null);   // consume the cursor; the gear-prop refresh shows the result
+      cursorStackApi.setCursor(null);   // consume the cursor
+      // OPTIMISTIC: show the item in the target slot INSTANTLY (so the active weapon is set
+      // and you can shoot right away, not after a realtime round-trip). Reverted below if the
+      // move fails; dropped automatically once the gear prop reflects it.
+      if (r.item) setOptimistic((prev) => ({ ...prev, [targetNum]: r.item! }));
       // Weapon slot: ALWAYS a reload sound (the weapon's reload_sound, or the default reload clip the
       // game uses) — never the thud. Other slots: the soft place sound.
       void playSound(def.type === 'weapon' ? getSoundUrl(r.reloadKey ?? 'rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
       const from = originToRpc(cur.origin);
-      try { await equipTransfer(from, { region: 'equip', page: 0, slot: targetNum }); }
-      catch (err) { reportFail('Equip failed', err); }
+      try {
+        await equipTransfer(from, { region: 'equip', page: 0, slot: targetNum });
+      } catch (err) {
+        setOptimistic((prev) => { const n = { ...prev }; delete n[targetNum]; return n; });   // revert
+        reportFail('Equip failed', err);
+      }
       void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
       return;
     }
