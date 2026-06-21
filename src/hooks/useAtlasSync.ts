@@ -30,6 +30,8 @@ import {
 } from '@/lib/atlasLookup';
 import { getGlobalAtlasTexture, incrementAtlasVersion } from '@/hooks/useTextureAtlas';
 import { initLogStartStep, initLogFinishStep, initLogStep, initLogErrorStep } from '@/contexts/InitializationContext';
+import { isArrayBackend } from '@/config/textureBackend';
+import { registerTextureId } from '@/lib/arrayTextureRegistry';
 
 interface SyncResult {
   added: number;
@@ -553,6 +555,13 @@ export async function syncAtlasOnInit(): Promise<void> {
 
   // Batch load all images in parallel and draw to atlas
   await atlasManager.batchSetTextures(specs);
+
+  // Stage 2a (flag-gated): also feed every texture into the array-texture engine and
+  // record textureId → layer. No render change; the atlas is still what renders. Lets
+  // us verify the array path holds the real game textures before any renderer uses it.
+  if (isArrayBackend()) {
+    for (const s of specs) registerTextureId(s.textureId, s.sourceUrl);
+  }
 
   // Save to IndexedDB
   await atlasManager.save();

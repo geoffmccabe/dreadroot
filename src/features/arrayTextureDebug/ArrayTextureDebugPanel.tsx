@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useUserData } from '@/hooks/useUserData';
 import { GamePanel } from '@/components/ui/GamePanel';
 import { Button } from '@/components/ui/button';
+import { isArrayBackend } from '@/config/textureBackend';
 import { arrayDebug, useArrayDebug } from './arrayDebugStore';
 
 export function ArrayTextureDebugPanel() {
@@ -54,9 +55,12 @@ export function ArrayTextureDebugPanel() {
           <Stat label="Free" value={s?.free ?? '…'} />
           <Stat label="Evictions" value={s?.evictions ?? '…'} />
         </div>
+        <div className="text-xs">
+          Backend: <span className="font-mono">{isArrayBackend() ? 'array (flag ON)' : 'atlas (default)'}</span>
+        </div>
         <div className="grid grid-cols-2 gap-2">
-          <Button size="sm" onClick={() => arrayDebug.dispatch('load', 24)}>Load 24 tiles</Button>
-          <Button size="sm" variant="outline" onClick={() => arrayDebug.dispatch('load', 64)}>Load 64</Button>
+          <Button size="sm" onClick={() => arrayDebug.dispatch('game')}>Show game layers</Button>
+          <Button size="sm" variant="outline" onClick={() => arrayDebug.dispatch('load', 24)}>Load 24 tiles</Button>
           <Button size="sm" variant="outline" onClick={() => arrayDebug.dispatch('stress', 2000)}>Stress 2000 (evict)</Button>
           <Button size="sm" variant="ghost" onClick={() => arrayDebug.dispatch('clear')}>Clear grid</Button>
         </div>
