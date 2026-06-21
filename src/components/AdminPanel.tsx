@@ -47,7 +47,7 @@ import { useUserData } from '@/hooks/useUserData';
 import { useCreatureRegistry } from '@/hooks/useCreatureRegistry';
 import { WaterfallControls } from './AdminPanel.WaterfallControls';
 import { WeatherControls } from './AdminPanel.WeatherControls';
-import { UsersList } from './AdminPanel.UsersList';
+import { AdminPlayersPanel } from './admin-users/AdminPlayersPanel';
 import { BlocksList } from './AdminPanel.BlocksList';
 import { FlameEffectsPanel } from './AdminPanel.FlameEffectsPanel';
 import { SmokeEffectsPanel } from './AdminPanel.SmokeEffectsPanel';
@@ -95,9 +95,14 @@ export function AdminPanel({
   const resizingRef = useRef(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
-  // When atlas tab is active and no custom width set, use wider default
+  // When atlas tab is active and no custom width set, use wider default.
+  // Users tab needs near-full width for the 4,000+ player table.
   const isAtlasTab = activeTab === 'worlds' && worldsSubtab === 'atlas';
-  const effectiveWidth = panelWidth ?? (isAtlasTab ? 1200 : undefined);
+  const isUsersTab = activeTab === 'users' && usersSubtab === 'users';
+  const effectiveWidth = panelWidth ?? (
+    isUsersTab ? Math.round((typeof window !== 'undefined' ? window.innerWidth : 1400) * 0.95)
+    : isAtlasTab ? 1200 : undefined
+  );
   const [panelHeight, setPanelHeight] = useState<number | null>(null);
   const glow = useGlowPanel();
   const drag = usePanelDrag(glow.trigger);
@@ -290,9 +295,7 @@ export function AdminPanel({
                 <TabsTrigger value="supporters">Supporters</TabsTrigger>
               </TabsList>
               <TabsContent value="users" className="flex-1 overflow-hidden mt-0">
-                <ScrollArea className="h-full pr-4">
-                  <UsersList />
-                </ScrollArea>
+                <AdminPlayersPanel />
               </TabsContent>
               <TabsContent value="supporters" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-full pr-4">
