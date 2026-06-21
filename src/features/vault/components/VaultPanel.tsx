@@ -258,18 +258,9 @@ export function VaultPanel({
   if (!isOpen) return null;
 
   return (
-    <div
-      style={{
-        background: 'hsla(var(--hud-bg-h) / 0.45)',
-        border: '1px solid hsla(var(--hud-border-h) / 0.7)',
-        borderRadius: 6,
-        padding: 8,
-      }}
-    >
-      {/* Title above-left, matching the Inventory panel header. */}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+      {/* Title OUTSIDE the bordered box, matching the Inventory panel header. */}
       <span style={{
-        display: 'block',
-        marginBottom: 4,
         fontSize: '11px',
         fontWeight: 700,
         color: 'hsl(var(--hud-text))',
@@ -279,6 +270,14 @@ export function VaultPanel({
         VAULT
       </span>
 
+      <div
+        style={{
+          background: 'hsla(var(--hud-bg-h) / 0.45)',
+          border: '1px solid hsla(var(--hud-border-h) / 0.7)',
+          borderRadius: 6,
+          padding: 8,
+        }}
+      >
       {/* Page tabs + ORG + X close */}
       <div className="flex gap-1 mb-2 items-center">
         {Array.from({ length: config.page_count }, (_, p) => (
@@ -307,12 +306,12 @@ export function VaultPanel({
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto text-base px-2 py-0.5 rounded hover:bg-white/15 transition leading-none"
-          style={{ color: 'hsl(0, 0%, 95%)' }}
+          className="ml-auto rounded-full border border-white/20 hover:bg-white/15 transition flex items-center justify-center"
+          style={{ color: 'hsl(0, 0%, 95%)', width: 18, height: 18, fontSize: 12, lineHeight: 1, padding: 0 }}
           title="Close vault (V)"
           aria-label="Close vault"
         >
-          ×
+          x
         </button>
       </div>
 
@@ -324,6 +323,7 @@ export function VaultPanel({
         activePage={activePage}
         onSlotClick={onSlotClick}
       />
+      </div>
     </div>
   );
 }

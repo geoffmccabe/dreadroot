@@ -2416,6 +2416,7 @@ export function Fortress() {
         removeInventoryRow={removeInventoryRow}
         vaultOpen={vaultOpen}
         onCloseVault={handleCloseVault}
+        vaultForceCloseToken={vaultForceCloseToken}
         inventoryOpen={inventoryOpen}
         setInventoryOpen={setInventoryOpen}
         selectedSlot={selectedSlot}
