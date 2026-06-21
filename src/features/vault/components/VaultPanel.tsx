@@ -266,6 +266,19 @@ export function VaultPanel({
         padding: 8,
       }}
     >
+      {/* Title above-left, matching the Inventory panel header. */}
+      <span style={{
+        display: 'block',
+        marginBottom: 4,
+        fontSize: '11px',
+        fontWeight: 700,
+        color: 'hsl(var(--hud-text))',
+        fontFamily: 'var(--hud-font)',
+        letterSpacing: '0.05em',
+      }}>
+        VAULT
+      </span>
+
       {/* Page tabs + ORG + X close */}
       <div className="flex gap-1 mb-2 items-center">
         {Array.from({ length: config.page_count }, (_, p) => (
@@ -280,7 +293,7 @@ export function VaultPanel({
             )}
             style={{ color: 'hsl(0, 0%, 95%)' }}
           >
-            Page {p + 1}
+            P{p + 1}
           </button>
         ))}
         <button
@@ -291,9 +304,6 @@ export function VaultPanel({
         >
           ORG
         </button>
-        <span className="ml-3 text-[10px] opacity-70" style={{ color: 'hsl(0,0%,95%)' }}>
-          VAULT
-        </span>
         <button
           type="button"
           onClick={onClose}
