@@ -103,13 +103,20 @@ export function FortressBuilderPanel() {
     <GamePanel
       open={s.isOpen}
       onClose={() => builderStore.set({ isOpen: false })}
-      title="Fortress Builder"
+      title="Khaured Fortress Builder"
       defaultWidth={360}
       defaultHeight={620}
       initialStyle={{ top: 72, right: 16 }}
     >
       <div className="space-y-4" data-no-drag>
-        {/* Source image preview */}
+        {/* Branded header image */}
+        <img
+          src="/Khaured_fortress_800px.webp"
+          alt="Khaured Fortress"
+          className="w-full rounded"
+        />
+
+        {/* Source image preview (the uploaded image being built) */}
         {s.imageSrc ? (
           <img
             src={s.imageSrc}
@@ -119,10 +126,13 @@ export function FortressBuilderPanel() {
           />
         ) : null}
 
-        <div className="space-y-1">
-          <Label className="text-xs">Image{s.imageName ? `: ${s.imageName}` : ''}</Label>
-          <input type="file" accept="image/*" onChange={onFile} className="block w-full text-xs" />
-        </div>
+        {/* Image upload — admins/superadmins only */}
+        {isAdmin && (
+          <div className="space-y-1">
+            <Label className="text-xs">Image{s.imageName ? `: ${s.imageName}` : ''}</Label>
+            <input type="file" accept="image/*" onChange={onFile} className="block w-full text-xs" />
+          </div>
+        )}
 
         {/* Prompt + Rebuild */}
         <div className="space-y-1">
@@ -258,7 +268,12 @@ export function FortressBuilderPanel() {
                 className="h-7 flex-1 rounded"
                 title={`Stone ${i + 1}`}
                 style={{
-                  background: c,
+                  // Show the actual cliff stone, multiplied by the tier grey (so the
+                  // swatch matches the in-world block) instead of a flat colour.
+                  backgroundImage: 'url(/cliff_texture_seamless.webp)',
+                  backgroundColor: c,
+                  backgroundBlendMode: 'multiply',
+                  backgroundSize: 'cover',
                   outline: s.exTier === i ? '2px solid hsl(var(--hud-text-bright))' : '1px solid hsla(var(--hud-border))',
                   outlineOffset: '-1px',
                 }}

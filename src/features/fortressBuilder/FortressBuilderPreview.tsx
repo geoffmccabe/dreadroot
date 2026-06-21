@@ -123,7 +123,7 @@ function clusterCentroids(voxels: FortressVoxel[], max: number): { x: number; y:
 // Real point lights that spill onto nearby blocks/terrain. A FIXED count is always
 // rendered (unused ones parked far away at 0 intensity) so the scene's light count
 // never changes — that avoids the material recompiles that cause black flashing.
-function LightSpill({ voxels, color, intensity, spread, max = 8 }: { voxels: FortressVoxel[]; color: string; intensity: number; spread: number; max?: number }) {
+function LightSpill({ voxels, color, intensity, spread, yOffset = 0, max = 8 }: { voxels: FortressVoxel[]; color: string; intensity: number; spread: number; yOffset?: number; max?: number }) {
   const centroids = useMemo(() => clusterCentroids(voxels, max), [voxels, max]);
   return (
     <>
@@ -132,15 +132,15 @@ function LightSpill({ voxels, color, intensity, spread, max = 8 }: { voxels: For
         return (
           <pointLight
             key={i}
-            // Sits at the extruded/inset cells (out from the wall face) so it washes back
-            // onto the wall it came from. `spread` = how far that wash reaches.
-            position={c ? [c.x + 0.5, c.y + 0.5, c.z + 0.5] : [0, -10000, 0]}
+            // yOffset lifts the light ABOVE the cells (extrude → washes the blocks above);
+            // 0 keeps it in the cells (inset → glows inside the niche). `spread` = reach.
+            position={c ? [c.x + 0.5, c.y + 0.5 + yOffset, c.z + 0.5] : [0, -10000, 0]}
             color={color}
-            // x12 (decay 2 falls off fast) so the wash is actually visible on neighbours;
-            // the user's intensity slider scales it.
-            intensity={c ? intensity * 12 : 0}
+            // decay 1 (not 2) so `spread`/distance actually controls how far the wash
+            // reaches (decay 2 made everything past ~3 blocks invisible regardless of spread).
+            intensity={c ? intensity * 8 : 0}
             distance={Math.max(2, spread)}
-            decay={2}
+            decay={1}
           />
         );
       })}
@@ -272,8 +272,10 @@ export function FortressBuilderPreview() {
       <LightMesh lid="extrude" voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} texture={texRef.current!} />
       <LightMesh lid="inset" voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} texture={texRef.current!} />
       {/* Real light spill onto nearby blocks/terrain (capped, constant count). */}
-      {extrudeLightOn && <LightSpill voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} spread={extrudeLightSpread} />}
-      {insetLightOn && <LightSpill voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} spread={insetLightSpread} />}
+      {/* Extrude light sits ABOVE the protrusions (yOffset) to wash the blocks above;
+          inset light stays in the niche. */}
+      {extrudeLightOn && <LightSpill voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} spread={extrudeLightSpread} yOffset={2.5} />}
+      {insetLightOn && <LightSpill voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} spread={insetLightSpread} yOffset={0} />}
       {barrierOn && <BarrierWalls D={D} />}
     </group>
   );
