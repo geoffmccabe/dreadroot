@@ -498,6 +498,84 @@ All colors MUST be HSL.
     box-shadow: none !important;
   }
 
+  /* ============================================================
+     SHARED HUD-PANEL CHROME — applies to every floating panel
+     (user / admin / marketplace dialogs + GamePanel shells).
+     `[class*="panel-dialog"]` catches the dialog panels;
+     `.hud-panel` catches the GamePanel-based shells.
+     ============================================================ */
+
+  /* Low-contrast buttons (outline / ghost / link variants) read poorly on the
+     translucent HUD background — give them a solid fill + readable text. Filled
+     variants (primary / secondary / destructive), tab triggers, and the close
+     (✕ / X) buttons keep their own styling. */
+  [class*="panel-dialog"] button[class*="border-primary"],
+  [class*="panel-dialog"] button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]):not([role="tab"]):not([data-no-drag]):not([class*="top-4"]),
+  .hud-panel button[class*="border-primary"],
+  .hud-panel button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]):not([role="tab"]):not([data-no-drag]):not([class*="top-4"]) {
+    background-color: #7c92ab !important;
+    color: #b5cceb !important;
+    border-color: rgba(181, 204, 235, 0.4) !important;
+  }
+  [class*="panel-dialog"] button[class*="border-primary"]:hover,
+  [class*="panel-dialog"] button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]):not([role="tab"]):not([data-no-drag]):not([class*="top-4"]):hover,
+  .hud-panel button[class*="border-primary"]:hover,
+  .hud-panel button:not([class*="bg-primary"]):not([class*="bg-destructive"]):not([class*="bg-secondary"]):not([role="tab"]):not([data-no-drag]):not([class*="top-4"]):hover {
+    background-color: #8ba2bd !important;
+    color: #d6e6ff !important;
+  }
+
+  /* Native scrollbars inside HUD panels — match the theme instead of the
+     default white/grey browser bar. Webkit (Chrome/Safari/Edge) + Firefox. */
+  [class*="panel-dialog"] *::-webkit-scrollbar,
+  .hud-panel *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  [class*="panel-dialog"] *::-webkit-scrollbar-track,
+  .hud-panel *::-webkit-scrollbar-track {
+    background: hsla(var(--hud-bg-dim));
+    border-radius: 5px;
+  }
+  [class*="panel-dialog"] *::-webkit-scrollbar-thumb,
+  .hud-panel *::-webkit-scrollbar-thumb {
+    background: hsla(var(--hud-border-h) / 0.55);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  [class*="panel-dialog"] *::-webkit-scrollbar-thumb:hover,
+  .hud-panel *::-webkit-scrollbar-thumb:hover {
+    background: hsla(var(--hud-border-h) / 0.85);
+    background-clip: padding-box;
+  }
+  [class*="panel-dialog"] *::-webkit-scrollbar-corner,
+  .hud-panel *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  [class*="panel-dialog"] *,
+  .hud-panel * {
+    scrollbar-width: thin;
+    scrollbar-color: hsla(var(--hud-border-h) / 0.55) hsla(var(--hud-bg-dim));
+  }
+
+  /* Drag affordance — a small centered grab bar at the top of movable panels.
+     Purely visual (pointer-events:none) so the click falls through to the
+     header's drag handler beneath it. Only on panels wired for dragging. */
+  .hud-draggable::before {
+    content: "";
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 46px;
+    height: 4px;
+    border-radius: 2px;
+    background: hsla(var(--hud-border-h) / 0.75);
+    pointer-events: none;
+    z-index: 6;
+  }
+
   /* Active tab inside user panel: subtle highlight, not bright white */
   .user-panel-dialog [data-state="active"][role="tab"] {
     background: hsla(211, 30%, 51%, 0.5) !important;

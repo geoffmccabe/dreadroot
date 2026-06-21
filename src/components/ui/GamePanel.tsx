@@ -67,7 +67,7 @@ export function GamePanel({
           node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
         }
       }}
-      className="fixed flex flex-col overflow-hidden"
+      className="hud-panel hud-draggable fixed flex flex-col overflow-hidden"
       style={{
         width: size.width,
         height: size.height,
@@ -84,7 +84,7 @@ export function GamePanel({
       }}
     >
       <div
-        className="flex-shrink-0 flex items-center justify-between px-3 py-2 select-none"
+        className="flex-shrink-0 flex items-center justify-between px-3 pt-3 pb-2 select-none"
         style={{ cursor: 'move', color: 'hsl(var(--hud-text-bright))' }}
         onMouseDown={drag.onHeaderMouseDown}
       >
