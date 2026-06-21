@@ -84,15 +84,15 @@
 		{
 			"bufferView":0,
 			"componentType":5126,
-			"count":4,
+			"count":10201,
 			"max":[
-				500,
-				500,
+				2500,
+				2500,
 				0
 			],
 			"min":[
-				-500,
-				-500,
+				-2500,
+				-2500,
 				0
 			],
 			"type":"VEC3"
@@ -100,45 +100,45 @@
 		{
 			"bufferView":1,
 			"componentType":5126,
-			"count":4,
+			"count":10201,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":2,
 			"componentType":5126,
-			"count":4,
+			"count":10201,
 			"type":"VEC2"
 		},
 		{
 			"bufferView":3,
 			"componentType":5123,
-			"count":6,
+			"count":60000,
 			"type":"SCALAR"
 		}
 	],
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":48,
+			"byteLength":122412,
 			"byteOffset":0,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":48,
-			"byteOffset":48,
+			"byteLength":122412,
+			"byteOffset":122412,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":32,
-			"byteOffset":96,
+			"byteLength":81608,
+			"byteOffset":244824,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":12,
-			"byteOffset":128,
+			"byteLength":120000,
+			"byteOffset":326432,
 			"target":34963
 		}
 	],
@@ -150,7 +150,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":140,
+			"byteLength":446432,
 			"uri":"desert_SM_Env_Water_Plane_01.bin"
 		}
 	]
