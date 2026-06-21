@@ -12,6 +12,7 @@ import { GameLight } from '@/features/lights/GameLight';
 import { useLightStore } from '@/features/lights/lightStore';
 import { loadLights, getLight } from '@/features/lights/lightsDb';
 import { DEFAULT_LIGHT, type LightDef } from '@/features/lights/lightTypes';
+import { useShadowsEnabled } from '@/features/lights/shadowStore';
 import type { ShombieInstance } from '../types';
 
 const CODE = 'shombie-face';
@@ -30,7 +31,7 @@ const FALLBACK: LightDef = {
   range: 48,         // … but reaches much farther
   decay: 1.0,        // gentle falloff so it actually carries the distance
   penumbra: 0.7,
-  pitchDeg: 4,
+  pitchDeg: 0,       // the group carries the full 3D aim at the target; no extra tilt
   shadowSize: 512,   // keep the single shadow-caster cheap
   emitterColor: '#bfe6ff',
   emitterIntensity: 1.6,
@@ -42,6 +43,7 @@ const FALLBACK: LightDef = {
 
 export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] }) {
   const { camera } = useThree();
+  const shadowsEnabled = useShadowsEnabled();
   const live = useLightStore();
   const [saved, setSaved] = useState<LightDef | null>(null);
   useEffect(() => { loadLights().then(() => setSaved(getLight(CODE))); }, []);
@@ -84,21 +86,29 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
           bestDist[j] = d; chosen[j] = s;
         }
       }
-      // Track the chosen lights every frame so they move smoothly.
+      // Aim each chosen light AT the enemy (the player) in full 3D — so the beam
+      // tracks the target and swivels UP when the player is above (e.g. up a tree),
+      // even though the shombie can't climb. Smoothly slerped for a searchlight feel.
+      const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
       for (let i = 0; i < POOL; i++) {
         const g = groupRefs[i].current;
         if (!g) continue;
         const s = chosen[i];
         if (!s || !s.isActive) { g.position.set(0, -10000, 0); continue; }
         const sc = s.scale || 1;
-        const speed = Math.hypot(s.velocity.x, s.velocity.z);
-        if (speed > 0.05) fwd.set(s.velocity.x / speed, 0, s.velocity.z / speed);
-        else fwd.copy(lastFacing[i]);
-        lastFacing[i].copy(fwd);
-        const headY = s.position.y + 1.7 * sc;
-        pos.set(s.position.x + fwd.x * 0.3 * sc, headY, s.position.z + fwd.z * 0.3 * sc);
+        const headY = s.position.y + 1.7 * sc; // head cube centre
+        // Desired direction from the head to the target (player), in 3D.
+        fwd.set(px - s.position.x, py - headY, pz - s.position.z);
+        if (fwd.lengthSq() < 1e-6) fwd.copy(lastFacing[i]); else fwd.normalize();
+        // Smooth swivel toward the target (so it "searches" rather than snapping).
+        lastFacing[i].lerp(fwd, 0.12);
+        if (lastFacing[i].lengthSq() < 1e-6) lastFacing[i].set(0, 0, -1); else lastFacing[i].normalize();
+        const aim = lastFacing[i];
+        // Lamp sits on the head's surface in the aim direction (front of the head,
+        // tilting up with the beam) and the beam (group -Z) points exactly at the target.
+        pos.set(s.position.x + aim.x * 0.28 * sc, headY + aim.y * 0.28 * sc, s.position.z + aim.z * 0.28 * sc);
         g.position.copy(pos);
-        q.setFromUnitVectors(Z, fwd);
+        q.setFromUnitVectors(Z, aim);
         g.quaternion.copy(q);
       }
     }, 35);
@@ -109,7 +119,7 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
     <>
       {Array.from({ length: POOL }).map((_, i) => (
         <group key={i} ref={(n) => { groupRefs[i].current = n; }}>
-          <GameLight def={{ ...def, shadowOn: def.shadowOn && i < SHADOW_CAP }} idSuffix={`shombie-${i}`} />
+          <GameLight def={{ ...def, shadowOn: shadowsEnabled && i < SHADOW_CAP }} idSuffix={`shombie-${i}`} />
         </group>
       ))}
     </>
