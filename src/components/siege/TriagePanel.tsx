@@ -62,6 +62,8 @@ export function TriagePanel() {
       else if (probeState.on && probeState.hasHit && e.code === 'KeyB') flag = ['bad'];
       else if (probeState.on && probeState.hasHit && e.code === 'KeyG') flag = ['good'];
       if (!flag) return;
+      // While the laser owns B/G, stop them reaching Block-mode / Grenade handlers.
+      e.preventDefault(); e.stopImmediatePropagation();
       const { x, z, fx, fz } = playerState;
       const h = heading(fx, fz);
       setEntries((es) => [...es, {
@@ -70,8 +72,9 @@ export function TriagePanel() {
         deg: h.deg, dir: h.dir, issues: flag,
       }]);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    // CAPTURE phase so we intercept B/G BEFORE the Block-mode / Grenade keybinds fire.
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   const toggle = (i: number, t: string) => setEntries((es) =>
@@ -117,8 +120,8 @@ export function TriagePanel() {
    <>
     {dropdown}
     <div style={{
-      position: 'fixed', left: 10, top: 70, width: 340, maxHeight: '78vh', overflowY: 'auto',
-      background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 6,
+      position: 'fixed', right: 10, top: 70, width: 340, maxHeight: '78vh', overflowY: 'auto',
+      background: 'rgba(0,0,0,0.72)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: 10,
       padding: 8, color: '#fff', font: '11px ui-monospace, monospace', pointerEvents: 'auto',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
