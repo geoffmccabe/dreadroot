@@ -68,6 +68,10 @@ export function SlotGrid({
             occupant={occ}
             ghosted={ghosted}
             highlight={highlight}
+            // Inventory taps only COUNT (never pick up), so report every click regardless of
+            // detail; other regions keep the detail>=2 skip so a double-click's pickup doesn't
+            // fight the double-click handler.
+            tapCountsOnly={locationOf(slotIdx).region === 'inventory'}
             onInspect={onSlotInspect}
             onClick={(button, shift, doubleClick, intent) => onSlotClick({
               location: locationOf(slotIdx),
@@ -90,11 +94,14 @@ interface SlotTileProps {
   occupant: SlotOccupant | undefined;
   ghosted: boolean;
   highlight: boolean;
+  /** When true (inventory), a plain tap only counts toward triple-click — it never picks
+   *  up — so we report every click (no detail>=2 skip) for reliable triple-click counting. */
+  tapCountsOnly?: boolean;
   onClick: (button: 'left' | 'right', shift: boolean, doubleClick: boolean, intent?: 'drag' | 'tap') => void;
   onInspect?: (occupant: SlotOccupant) => void;
 }
 
-function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect }: SlotTileProps) {
+function SlotTile({ slotIndex, occupant, ghosted, highlight, tapCountsOnly, onClick, onInspect }: SlotTileProps) {
   const cursor = useCursorStack((s) => s.cursor);
   const cursorActive = cursor !== null;
   const [isHovered, setIsHovered] = React.useState(false);
@@ -160,10 +167,11 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
           pressRef.current = null;
           if (!p || ev.button !== 0) return;
           if (p.didDrag) return; // drag drop handled by the release tile's onPointerUp
-          // Skip pickup on the clicks of a double-click (detail>=2) so
-          // the dblclick handler's vault→inv shortcut isn't fighting a
-          // half-completed cursor pickup.
-          if (ev.detail >= 2) return;
+          // Skip the clicks of a double-click (detail>=2) ONLY where a tap would pick up
+          // (vault) — so it doesn't fight the double-click handler. Inventory taps merely
+          // COUNT toward triple-click, so we must report every one (else fast triple-clicks
+          // never reach 3).
+          if (!tapCountsOnly && ev.detail >= 2) return;
           // Discrete click with no drag → a plain TAP. It must NEVER pick the item up
           // (only drag moves). Report it as intent='tap' so the reducer just counts it
           // toward triple-click-to-equip; nothing is lifted onto the cursor.

@@ -35,15 +35,6 @@ interface EquipItem { itemId: string; name: string; itemNumber: number | null; t
 type EquipMap = Record<number, EquipItem | null>;
 const EMPTY: EquipMap = { 1: null, 2: null, 3: null, 4: null, 5: null };
 
-// Loosely-typed client for user_slots (not in generated types in this shape).
-const sb = supabase as unknown as {
-  from: (t: string) => {
-    select: (c: string) => {
-      eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: Array<{ slot: number; item_id: string }> | null }> };
-    };
-  };
-};
-
 // Resolve a drop: whether the item fits the slot, its display def (for an instant optimistic tile),
 // and the weapon's reload-sound key (so equipping a weapon plays its reload clip). item_category is a
 // BROAD field (block/item/seed/…) that most weapons don't tag 'weapon', so the weapon slot ALSO
@@ -200,14 +191,6 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     else setFlameGlove(null);
   }, [equip]);
 
-  const firstEmptyInventorySlot = useCallback(async (): Promise<number | null> => {
-    if (!user?.id) return null;
-    const { data: occ } = await sb.from('user_slots').select('slot').eq('user_id', user.id).eq('region', 'inventory');
-    const used = new Set((occ || []).map((r) => r.slot));
-    for (let s = 1; s <= 18; s++) if (!used.has(s)) return s;
-    return null;
-  }, [user?.id]);
-
   const reportFail = (title: string, err: unknown) => {
     const e = err as { message?: string; code?: string; details?: string };
     toast({ title, description: String(e?.message ?? e?.details ?? e?.code ?? err).slice(0, 160), variant: 'destructive', duration: 6000 });
@@ -249,7 +232,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
 
   // Drag OUT of an equip slot: pressing a filled slot and dragging lifts the item onto the cursor
   // (origin = this equip slot), so releasing over an inv/QS tile routes through equip_transfer.
-  // A plain click (no drag) falls through to handlePointerUp's click-to-unequip.
+  // A plain click (no drag) does nothing — moving is drag-only.
   const startEquipDrag = (def: SlotDef, e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const item = equip[def.num];
@@ -295,7 +278,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     return (
       <div
         key={def.num}
-        title={gren ? `Grenade T${gren.tier} — ${armed ? 'armed: G throws, right-click disarms' : 'disarmed: G arms'}` : (g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
+        title={gren ? `Grenade T${gren.tier} — ${armed ? 'armed: G throws, right-click disarms' : 'disarmed: G arms'}` : (g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
         onPointerDown={(e) => startEquipDrag(def, e)}
         onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
         onDragStart={(e) => e.preventDefault()}
@@ -333,11 +316,11 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         {renderSlot(left, rifleAcrossHands)}
         {renderSlot(right, rifleAcrossHands)}
         {rifleAcrossHands && equip[1]?.spriteUrl ? (
-          // The centered rifle IS the drag/click handle — grabbing anywhere on it operates
-          // on slot 1 (so you can drag it out / click to unequip from either hand box).
+          // The centered rifle IS the drag handle — grabbing anywhere on it operates on
+          // slot 1 (so you can drag it out to inventory/QA from either hand box).
           <img
             src={equip[1]!.spriteUrl!} alt="Rifle" draggable={false}
-            title={`${equip[1]!.name} (drag off, or click to unequip)`}
+            title={`${equip[1]!.name} (drag to inventory to unequip)`}
             onPointerDown={(e) => startEquipDrag(left, e)}
             onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(left); }}
             onDragStart={(e) => e.preventDefault()}
