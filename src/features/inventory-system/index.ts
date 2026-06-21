@@ -10,3 +10,10 @@ export type { SlotClickResult } from './slotClick';
 export type { Region, SlotLocation, SlotOccupant, SlotClickInput, SlotClickHandlers } from './types';
 export { ItemTileVisual } from './ItemTileVisual';
 export type { ItemTileVisualOccupant, ItemTileVisualProps } from './ItemTileVisual';
+// Unified grid model (capacity-driven) + the single capacity source-of-truth hook.
+export {
+  canDropInEquip, equipSlotRole, isHandRole, rowBands, cellToDbSlot, dbSlotToCell,
+  vaultFlatToPageSlot, vaultPageSlotToFlat, DEFAULT_CAPACITY,
+} from './gridModel';
+export type { GridCapacity, GridRegion, DbSlot, Cell, ItemClass, EquipRole, EquipDropResult } from './gridModel';
+export { useGridCapacity } from './useGridCapacity';
