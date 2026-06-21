@@ -763,12 +763,12 @@ export function useFortressFrameLoop({
             const _baseScaled = Math.round((getActiveWeapon()?.maxDamage ?? BASE_BULLET_DAMAGE) * _velRatio);
             const finalDamage = _baseScaled * (isBullseye ? 4 : isHeadshot ? 2 : 1);
 
-            // Bullseye → blood erupts out the EXIT side (away from the shooter),
-            // at half the bullet speed. Direction reversed per playtest — it was
-            // spraying back toward the shooter.
+            // Bullseye → blood erupts out the EXIT side: from the far side of the
+            // head, continuing in the bullet's travel direction (away from the
+            // shooter), at half the bullet speed.
             if (isBullseye) {
               const _bd = bullet.direction;
-              emitBlood(hitX - _bd.x * 0.3, hitY - _bd.y * 0.3, hitZ - _bd.z * 0.3, -_bd.x, -_bd.y, -_bd.z, bullet.speed);
+              emitBlood(hitX + _bd.x * 0.3, hitY + _bd.y * 0.3, hitZ + _bd.z * 0.3, _bd.x, _bd.y, _bd.z, bullet.speed);
             }
 
             const bulletDamageInfo = {
