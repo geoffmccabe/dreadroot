@@ -305,7 +305,10 @@ function createArrayAtlasMaterial(arrayTex: THREE.Texture): THREE.MeshLambertMat
       `#ifdef USE_MAP
         vec2 localUv = clamp(fract(vMapUv), vec2(${EPS}), vec2(${(1 - 4.0 / 256).toFixed(6)}));
         int col = int(floor(vInstanceUvOffset.x * float(${GRID}) + 0.5));
-        int row = int(floor(vInstanceUvOffset.y * float(${GRID}) + 0.5));
+        // The atlas UV offset flips Y (uvOffsetY = 1 - (row+1)/GRID), so recover the
+        // real slot row by inverting it — otherwise we'd fetch the wrong layer.
+        int rowF = int(floor(vInstanceUvOffset.y * float(${GRID}) + 0.5));
+        int row = ${GRID} - 1 - rowF;
         int slot = row * ${GRID} + col;
         float layer = texelFetch(uSlotLayer, ivec2(slot, 0), 0).r;
         vec4 sampledDiffuseColor = texture(uArrayTex, vec3(localUv, layer));
