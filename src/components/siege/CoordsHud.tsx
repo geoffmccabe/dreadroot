@@ -4,24 +4,29 @@
 // report both, plus the forward vector (so "in front of me" is unambiguous).
 
 import { useEffect, useState } from 'react';
-import { playerState, heading } from './playerState';
+import { heading } from './playerState';
 import { probeState } from './probeState';
 import { APP_VERSION } from '@/version';
 
+// Full report from the REAL laser state (camera pos + what the laser points at). The old
+// playerState store is not wired in this shell, so everything reads off probeState.
 function report(): string {
-  const { x, y, z, fx, fz } = playerState;
-  const h = heading(fx, fz);
+  const { camX, camY, camZ, dirX, dirZ } = probeState;
+  const h = heading(dirX, dirZ);
   const lines = [
-    `SW position (engine): x=${x.toFixed(1)} y=${y.toFixed(1)} z=${z.toFixed(1)}`,
-    `SW position (Unity):  x=${(-x).toFixed(1)} y=${y.toFixed(1)} z=${z.toFixed(1)}`,
-    `facing: ${h.deg}° ${h.dir}  forward=(${fx.toFixed(2)}, ${fz.toFixed(2)})`,
+    `SW camera (engine): x=${camX.toFixed(1)} y=${camY.toFixed(1)} z=${camZ.toFixed(1)}`,
+    `facing: ${h.deg}° ${h.dir}  forward=(${dirX.toFixed(2)}, ${dirZ.toFixed(2)})`,
   ];
-  if (probeState.on) {
-    lines.push(probeState.hasHit
-      ? `laser → POINTING AT: ${probeState.hit}  (hit engine x=${probeState.hx.toFixed(1)} y=${probeState.hy.toFixed(1)} z=${probeState.hz.toFixed(1)})`
-      : `laser → pointing at: nothing`);
+  if (probeState.hasHit) {
+    lines.push(
+      `laser → POINTING AT: ${probeState.hit}`,
+      `  ${probeState.tris.toLocaleString()} tris · ${probeState.dist.toFixed(1)}m away`,
+      `  hit engine x=${probeState.hx.toFixed(1)} y=${probeState.hy.toFixed(1)} z=${probeState.hz.toFixed(1)}`,
+    );
+  } else {
+    lines.push(`laser → pointing at: nothing`);
   }
-  lines.push(`("in front of me" = move along forward from engine position)`, `build v${APP_VERSION}`);
+  lines.push(`build v${APP_VERSION}`);
   return lines.join('\n');
 }
 
@@ -46,8 +51,6 @@ export function CoordsHud() {
   // it off). Sits at the bottom-left, ABOVE the user menu (which is bottom-4 left-4), left-
   // aligned and rounded to match it.
   if (!probeState.on) return null;
-  const { x, y, z, fx, fz } = playerState;
-  const h = heading(fx, fz);
   const hitName = probeState.hasHit ? probeState.hit : null;
 
   return (

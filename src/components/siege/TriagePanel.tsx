@@ -4,7 +4,7 @@
 // back so fixes can be worked through systematically.
 
 import { useEffect, useState } from 'react';
-import { playerState, heading } from './playerState';
+import { heading } from './playerState';
 import { probeState } from './probeState';
 
 const TAGS = ['good', 'bad', 'out of place', 'sideways', 'rotated 90', 'rotated 180',
@@ -64,11 +64,10 @@ export function TriagePanel() {
       if (!flag) return;
       // While the laser owns B/G, stop them reaching Block-mode / Grenade handlers.
       e.preventDefault(); e.stopImmediatePropagation();
-      const { x, z, fx, fz } = playerState;
-      const h = heading(fx, fz);
+      const h = heading(probeState.dirX, probeState.dirZ);
       setEntries((es) => [...es, {
         item: probeState.on ? (probeState.hit || '(laser hit nothing)') : '(laser off — press L)',
-        px: x, pz: z, hx: probeState.hx, hy: probeState.hy, hz: probeState.hz,
+        px: probeState.camX, pz: probeState.camZ, hx: probeState.hx, hy: probeState.hy, hz: probeState.hz,
         deg: h.deg, dir: h.dir, issues: flag,
       }]);
     };

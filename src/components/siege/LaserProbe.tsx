@@ -112,6 +112,7 @@ export function LaserProbe() {
     // separate store that may not be wired in this shell).
     probeState.camX = camera.position.x; probeState.camY = camera.position.y; probeState.camZ = camera.position.z;
     camera.getWorldDirection(dir);
+    probeState.dirX = dir.x; probeState.dirZ = dir.z;
     // Originate the visible beam below the eye (like a gun-barrel laser) so it isn't
     // edge-on to the view — the raycast itself still comes from the camera center.
     down.set(0, -1, 0).applyQuaternion(camera.quaternion);
