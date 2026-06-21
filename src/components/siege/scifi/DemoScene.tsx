@@ -14,7 +14,10 @@ import {
   setMeshCollidersEnabled, type MeshInstanceInput,
 } from '../meshColliderSystem';
 
-const COLLIDER_RATIO = 0.5;   // decimate collider geometry (BVH blocks movement, not pixels)
+// FULL-fidelity colliders (no decimation). Decimating thin street tiles pulled their edges
+// inward, leaving seam GAPS you fall through (the render mesh stays full-res so no visible
+// hole). Full-res BVH costs more triangles but is built in the background; correctness wins.
+const COLLIDER_RATIO = 1.0;
 const PER_JOB = 40;           // meshes registered per budgeted tick
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
