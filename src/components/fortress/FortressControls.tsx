@@ -10,7 +10,7 @@ import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
-import { anyArmedHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
+import { anyArmedHandGrenade, anyHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
 import { getFlameGlove } from '@/config/flameGlove';
 import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
@@ -796,8 +796,10 @@ export function FirstPersonControls({
         // (fill a free hand → arm → throw RIGHT-first → re-arm; rifle = old QA flow). It
         // owns inventory + the fill-vs-throw decision and triggers throws via its ref.
         // AIRBORNE, arming is disallowed (as before) but you can still THROW an armed one.
-        console.log('[DR-DBG] G key: onGround', onGround.current, 'god', godModeRef.current, '→ will call toggle:', (onGround.current || godModeRef.current));
-        if (onGround.current || godModeRef.current) {
+        // A tap runs the parent's grenade state machine. Allow it on the ground OR whenever
+        // a grenade is already IN A HAND (arm/throw must work even if the ground check is
+        // momentarily flaky) — only a true airborne glide with no hand grenade falls through.
+        if (onGround.current || godModeRef.current || anyHandGrenade()) {
           onGrenadeTogglePress?.();
         } else if (anyArmedHandGrenade() || grenadeReadyRef.current) {
           onThrowGrenade?.();

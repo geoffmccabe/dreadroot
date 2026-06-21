@@ -186,14 +186,14 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, tapCountsOnly, onCl
       }}
       onPointerUp={(e) => {
         if (e.button !== 0) return;
-        console.log('[DR-DBG] inv tile pointerUp slot', slotIndex, 'reactCursor', cursor?.origin, 'liveCursor', cursorStackApi.getCursor()?.origin);
-        // Stale closure `cursor` on purpose (see pressRef note above):
-        // a same-tick pickup hasn't re-rendered, so we won't double-fire.
-        if (!cursor) return;
+        // Read the LIVE cursor (not the React snapshot): a drag that STARTED in another
+        // component (e.g. an Equip slot) may not have re-rendered this tile yet, so the
+        // React `cursor` can still read empty and the drop would silently bail. Pickup is
+        // drag-only now, so there's no same-tick-pickup double-fire to guard against.
+        const live = cursorStackApi.getCursor();
+        if (!live) return;
         if (ghosted) {
-          // Release on the SOURCE tile → return the item. Cursor
-          // never touched the DB, so clearing the cursor reverts the
-          // visual state instantly.
+          // Release on the SOURCE tile → return the item. Cursor never touched the DB.
           cursorStackApi.setCursor(null);
           return;
         }

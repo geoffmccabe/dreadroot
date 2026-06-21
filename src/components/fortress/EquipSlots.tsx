@@ -220,20 +220,19 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
 
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
-    console.log('[DR-DBG] equip pointerUp slot', def.num, 'cursorOrigin', cur?.origin);
     if (cur) {
       const r = await resolveDrop(def, cur.itemId);
       if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
       // Hand rules. A RIFLE is two-handed → it always lands in the canonical LEFT slot (1)
-      // so it renders CENTERED across both hands, and needs BOTH hands free. A pistol can't
-      // share a hand with a rifle. EXCLUDE the slot the item is dragged FROM (it's being
-      // vacated) so re-seating the rifle doesn't see itself as occupying a hand.
+      // so it renders CENTERED across both hands, and needs BOTH hands free. A hand counts as
+      // occupied by a real equip item OR a hand GRENADE (handGren). A pistol/glove can't share
+      // a hand with a rifle. EXCLUDE the slot being dragged FROM (it's being vacated).
       let targetNum = def.num;
       const fromEquipSlot = cur.origin.region === 'equip' ? cur.origin.slot : null;
       if (def.hand && r.isRifle) {
-        const occ1 = !!equip[1] && fromEquipSlot !== 1;
-        const occ5 = !!equip[5] && fromEquipSlot !== 5;
-        if (occ1 || occ5) { toast({ title: 'Free both hands for a rifle', duration: 2400 }); return; }
+        const occ1 = (!!equip[1] || !!handGren.L) && fromEquipSlot !== 1;
+        const occ5 = (!!equip[5] || !!handGren.R) && fromEquipSlot !== 5;
+        if (occ1 || occ5) { toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
       } else if (def.hand && !r.isRifle && leftKind === 'rifle' && fromEquipSlot !== 1) {
         toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
@@ -266,7 +265,6 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const startEquipDrag = (def: SlotDef, e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const item = equip[def.num];
-    console.log('[DR-DBG] equip pointerDown slot', def.num, 'hasItem', !!item, item?.name);
     if (!item) return;
     const sx = e.clientX, sy = e.clientY;
     let lifted = false;
@@ -279,7 +277,6 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       const dx = ev.clientX - sx, dy = ev.clientY - sy;
       if (dx * dx + dy * dy > 36) {   // ~6px drag threshold
         lifted = true;
-        console.log('[DR-DBG] equip drag LIFTED slot', def.num, '→ cursor set');
         cursorStackApi.setCursor({
           itemId: item.itemId, itemKey: '', quantity: 1, name: item.name, tier: item.tier,
           spriteUrl: item.spriteUrl, nonStackable: true, origin: { region: 'equip', slot: def.num },

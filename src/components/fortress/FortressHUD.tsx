@@ -1320,11 +1320,12 @@ export function FortressHUD(props: FortressHUDProps) {
                       document.addEventListener('pointercancel', onCancel);
                     }}
                     onPointerUp={(e) => {
-                      // Drop the cursor when it's released over a tile.
-                      // No-op when no cursor is held — the pure-click
-                      // path runs in the document-level pointerup above.
+                      // Drop the cursor when it's released over a tile. Read the LIVE cursor
+                      // (not the React snapshot) — a drag that started in another component
+                      // (e.g. an Equip slot) may not have re-rendered this tile, leaving the
+                      // React `cursor` empty so the drop would silently bail.
                       if (e.button !== 0) return;
-                      if (!cursor) return;
+                      if (!cursorStackApi.getCursor()) return;
                       // Released on its OWN (ghosted source) slot → just return the item.
                       // Pickup never touched the DB, so clearing the cursor restores it.
                       // (Matches the inventory grid; without this a same-slot drop became a
