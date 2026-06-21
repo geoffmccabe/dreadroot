@@ -61,6 +61,8 @@ import { usePathfindingConfigs } from '@/hooks/usePathfindingConfigs';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 
 import { FortressScene } from './FortressScene';
+import { useShadowsEnabled } from '@/features/lights/shadowStore';
+import { ShadowToggleSync } from '@/features/lights/ShadowToggleSync';
 import { GodMapPanel } from '@/features/god-map';
 import { FortressProviders } from './FortressProviders';
 import { FortressHUD } from './FortressHUD';
@@ -82,6 +84,7 @@ import { getDefaultBulletTier } from '@/lib/bulletScaling';
 // Main Fortress orchestrator component
 export function Fortress() {
   const { currentTheme, availableThemes, isLoading: themeLoading } = useCoinTheme();
+  const shadowsEnabled = useShadowsEnabled(); // '-' key toggles; default off = zero cost
   
   const defaultColorPalette = [
     { hex: '#06c8c0', weight: 10 },
@@ -1949,7 +1952,7 @@ export function Fortress() {
       <FortressProviders>
       <Canvas
         camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
-        shadows={false}
+        shadows={shadowsEnabled}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         dpr={1}
         onCreated={({ gl }) => {
@@ -1961,6 +1964,7 @@ export function Fortress() {
         }}
       >
         {showPerfMonitor && <Perf position="top-left" minimal={true} />}
+        <ShadowToggleSync />
         <FortressScene
           settings={settings}
           onCoinHit={handleCoinHit}
