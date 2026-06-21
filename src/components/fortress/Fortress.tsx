@@ -567,6 +567,20 @@ export function Fortress() {
     const leftFree = !equippedGear.some((e: { slot: number }) => e.slot === 1) && !hg.L;
     const rightFree = !equippedGear.some((e: { slot: number }) => e.slot === 5) && !hg.R;
 
+    // No free hand → can't FILL, so skip the inventory query entirely and go straight to
+    // throw / re-arm. (This is the "glove + grenade in hand" case — it must always respond,
+    // and must NOT depend on a DB round-trip succeeding.)
+    if (!leftFree && !rightFree) {
+      if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
+      const reArm: Hand | null = (hg.R && !hg.R.armed) ? 'R' : (hg.L && !hg.L.armed) ? 'L' : null;
+      if (reArm) {
+        const cur = getHandGrenades()[reArm]!;
+        setHandGrenade(reArm, { ...cur, armed: true });
+        playPinPullSound();
+      }
+      return;
+    }
+
     const { data: rows } = await supabase.from('user_slots' as any).select('region, slot, item_id').eq('user_id', user.id).in('region', ['inventory', 'quick_select']);
     const allRows = ((rows as any[]) ?? []);
     const assignedQa = new Set<number>([hg.L?.qsSlot, hg.R?.qsSlot].filter((v): v is number => v != null));
