@@ -227,7 +227,7 @@ function createAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMate
 // (no renderer-wide attribute changes): the fragment derives the atlas slot from that
 // offset, looks up the array LAYER via a slot→layer texture, and samples the array.
 // Only used when the 'array' backend flag is on; the atlas path is unchanged.
-import { isArrayBackend } from '@/config/textureBackend';
+import { isArrayBackend, isArrayWorld } from '@/config/textureBackend';
 import { getArrayTextureManager } from '@/lib/arrayTextureManager';
 import { buildSlotLayerData } from '@/lib/arrayTextureRegistry';
 
@@ -332,15 +332,16 @@ function getSharedArrayMaterial(): THREE.MeshLambertMaterial | null {
   return m;
 }
 
-// While the array backend is active, keep the slot→layer lookup current as textures
-// stream in (cheap no-op when nothing changed). Self-contained; runs only when on.
+// While the array engine is active (for monsters and/or world), keep its textures fresh.
+// Mip regen always runs (monster layers stream); the world slot→layer lookup only needs
+// rebuilding when the world actually renders from the array. Cheap no-ops otherwise.
 if (isArrayBackend()) {
   let acc = 0;
   frameLoop.register('array-slotlayer-refresh', (d) => {
     acc += d;
     if (acc < 1) return;
     acc = 0;
-    refreshSlotLayerTexture();
+    if (isArrayWorld()) refreshSlotLayerTexture();
     // Refresh the mip chain once newly-streamed layers settle (kills distance moiré).
     getArrayTextureManager().maybeRegenMipmaps();
   }, 75);
@@ -401,9 +402,10 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
   // chunk) instead of one material per component. Do NOT dispose it here —
   // it is shared; disposing on one chunk's unmount would break all others.
   const material = useMemo(() => {
-    // Stage 2b: when the array backend is on, render from the DataArrayTexture (falls
-    // back to the atlas if the array engine isn't ready yet). Default = atlas, unchanged.
-    if (isArrayBackend()) {
+    // Render the world from the DataArrayTexture only when the world array path is on
+    // (Phase 6). Default = atlas (correct + half the memory); monsters still use the
+    // array via isArrayBackend(). Falls back to atlas if the engine isn't ready.
+    if (isArrayWorld()) {
       const am = getSharedArrayMaterial();
       if (am) { materialRef.current = am; return am; }
     }

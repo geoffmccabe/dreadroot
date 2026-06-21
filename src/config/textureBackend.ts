@@ -36,6 +36,22 @@ export function isArrayBackend(): boolean {
   return active === 'array';
 }
 
+// Separate, narrower switch: should the WORLD (trees + placed blocks) render from the
+// array? Default OFF even when isArrayBackend() is on, because the world array path
+// (Phase 2) isn't production-ready — it eagerly streams hundreds of textures (overflow →
+// eviction → wrong/duplicate tree textures) and doubles texture memory (atlas stays
+// built). Monsters (shombies etc.) keep using isArrayBackend() since the atlas overflows
+// them. Flip this on only to test Phase 6 (placed-blocks-on-array done properly).
+const WORLD_KEY = 'textureArrayWorld';
+export function isArrayWorld(): boolean {
+  if (!isArrayBackend()) return false;
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(WORLD_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+
 export function setTextureBackend(b: TextureBackend): void {
   if (b === active) return;
   active = b;

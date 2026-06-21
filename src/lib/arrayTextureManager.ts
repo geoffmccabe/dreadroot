@@ -8,6 +8,7 @@
 // Stage 1: the engine works in isolation (capability detection, streaming, LRU). No
 // renderer consumes it yet — the admin debug panel exercises + visualises it.
 import * as THREE from 'three';
+import { isArrayWorld } from '@/config/textureBackend';
 
 export interface LayerResolution {
   layer: number;   // array layer (0 = loading/missing placeholder)
@@ -28,8 +29,11 @@ export interface ArrayTextureManagerStats {
 const LAYER_RES = 256;
 const PLACEHOLDER_LAYER = 0;
 // Conservative per-device budgets (the GPU's MAX_ARRAY_TEXTURE_LAYERS caps this anyway).
+// Each layer is 256×256×4 = 256KB, so 1024 layers ≈ 268MB (JS buffer + GPU). When only
+// monsters use the array (world stays on the atlas), 384 is ample and saves ~168MB.
 const MOBILE_BUDGET = 384;
 const DESKTOP_BUDGET = 1024;
+const MONSTER_ONLY_BUDGET = 384;
 
 function isMobile(): boolean {
   return typeof window !== 'undefined' &&
@@ -94,7 +98,8 @@ class ArrayTextureManagerImpl {
       return;
     }
     const maxLayers = (ctx && ctx.getParameter && ctx.getParameter(ctx.MAX_ARRAY_TEXTURE_LAYERS)) || 256;
-    const budget = isMobile() ? MOBILE_BUDGET : DESKTOP_BUDGET;
+    // Full budget only when the world renders from the array; otherwise monster-only.
+    const budget = isArrayWorld() ? (isMobile() ? MOBILE_BUDGET : DESKTOP_BUDGET) : MONSTER_ONLY_BUDGET;
     this.layerCount = Math.max(16, Math.min(maxLayers, budget));
 
     const layerBytes = this.layerRes * this.layerRes * 4;
