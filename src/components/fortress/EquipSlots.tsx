@@ -221,8 +221,19 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
     if (cur) {
+      // INSTANT FEEDBACK (no DB wait): render the dropped item + play the place/reload sound NOW
+      // straight from the cursor, which already carries sprite/name/tier. Validation + weapon
+      // classification (which need item_number from the DB) run right after and refine/revert.
+      const revert = (slot: number) => setOptimistic((prev) => { const n = { ...prev }; delete n[slot]; return n; });
+      setOptimistic((prev) => ({
+        ...prev,
+        [def.num]: { itemId: cur.itemId, name: cur.name, itemNumber: null, tier: cur.tier, category: '', spriteUrl: cur.spriteUrl },
+      }));
+      void playSound(def.type === 'weapon' ? getSoundUrl('rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
+      cursorStackApi.setCursor(null);   // consume the cursor
+
       const r = await resolveDrop(def, cur.itemId);
-      if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
+      if (!r.ok) { revert(def.num); toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
       // Hand rules. A RIFLE is two-handed → it always lands in the canonical LEFT slot (1)
       // so it renders CENTERED across both hands, and needs BOTH hands free. A hand counts as
       // occupied by a real equip item OR a hand GRENADE (handGren). A pistol/glove can't share
@@ -232,24 +243,24 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       if (def.hand && r.isRifle) {
         const occ1 = (!!equip[1] || !!handGren.L) && fromEquipSlot !== 1;
         const occ5 = (!!equip[5] || !!handGren.R) && fromEquipSlot !== 5;
-        if (occ1 || occ5) { toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
+        if (occ1 || occ5) { revert(def.num); toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
       } else if (def.hand && !r.isRifle && leftKind === 'rifle' && fromEquipSlot !== 1) {
-        toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
+        revert(def.num); toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
       }
-      cursorStackApi.setCursor(null);   // consume the cursor
-      // OPTIMISTIC: show the item in the target slot INSTANTLY (so the active weapon is set
-      // and you can shoot right away, not after a realtime round-trip). Reverted below if the
-      // move fails; dropped automatically once the gear prop reflects it.
-      if (r.item) setOptimistic((prev) => ({ ...prev, [targetNum]: r.item! }));
-      // Weapon slot: ALWAYS a reload sound (the weapon's reload_sound, or the default reload clip the
-      // game uses) — never the thud. Other slots: the soft place sound.
-      void playSound(def.type === 'weapon' ? getSoundUrl(r.reloadKey ?? 'rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
+      // Refine: replace the instant tile with the FULL item (item_number → active weapon fires),
+      // moving it to the final target slot (a rifle migrates from the dropped hand to slot 1).
+      setOptimistic((prev) => {
+        const n = { ...prev };
+        if (targetNum !== def.num) delete n[def.num];
+        if (r.item) n[targetNum] = r.item;
+        return n;
+      });
       const from = originToRpc(cur.origin);
       try {
         await equipTransfer(from, { region: 'equip', page: 0, slot: targetNum });
       } catch (err) {
-        setOptimistic((prev) => { const n = { ...prev }; delete n[targetNum]; return n; });   // revert
+        revert(targetNum);
         reportFail('Equip failed', err);
       }
       void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
@@ -307,6 +318,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     return (
       <div
         key={def.num}
+        className={armed ? 'dr-armed-flash' : undefined}
         title={gren ? `Grenade T${gren.tier} — ${armed ? 'armed: G throws, right-click disarms' : 'disarmed: G arms'}` : (g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
         onPointerDown={(e) => startEquipDrag(def, e)}
         onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
@@ -314,7 +326,9 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         style={{
           width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
           background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
-          border: `1px solid ${armed ? 'hsl(28 90% 55%)' : cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
+          // Armed → bright-red flashing border via the .dr-armed-flash class (mirrors the green
+          // "ready to drop" outline). Unarmed falls back to the normal/selected border.
+          border: armed ? '2px solid hsla(0, 100%, 58%, 1)' : `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           position: 'relative', cursor: g || cursorHeld ? 'pointer' : 'default', userSelect: 'none',
         }}

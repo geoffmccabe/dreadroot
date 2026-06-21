@@ -1198,3 +1198,15 @@ All colors MUST be HSL.
               0 0 22px 3px hsl(var(--primary) / 0.4);
 }
 .glass-drag-header { cursor: move; user-select: none; }
+
+/* Armed grenade: bright-red FLASHING border (mirrors the green "ready to drop" outline, but
+   red + flashing to mean "armed, ready to throw"). Applied to the equip hand tile. */
+@keyframes dr-armed-flash {
+  0%, 49%   { border-color: hsla(0, 100%, 58%, 1);    box-shadow: 0 0 9px 1px hsla(0, 100%, 55%, 0.85); }
+  50%, 100% { border-color: hsla(0, 100%, 58%, 0.22); box-shadow: 0 0 2px 0   hsla(0, 100%, 55%, 0.15); }
+}
+.dr-armed-flash {
+  border-width: 2px !important;
+  border-style: solid !important;
+  animation: dr-armed-flash 0.6s steps(1, end) infinite;
+}
