@@ -7,17 +7,23 @@ knows its DB home (`region` + `slot`). A MOVE = pick up cell A, drop on cell B; 
 computes the DB change, ONE rule-check per destination decides if B accepts it. Equip is NOT
 a special component with its own move path — it is just row 1 of the same grid.
 
-### Row bands
+### Row bands — sizes are DYNAMIC (capacity is data, never hardcoded)
 
-| Rows   | Region      | Size        | Cols / notes                                              |
-|--------|-------------|-------------|-----------------------------------------------------------|
-| 1      | Equip       | 5           | col1=Left hand, col2=Right hand, col3=Armor, col4=Boots, col5=Special |
-| 2      | QA          | 6           | cols 1–6                                                  |
-| 3–5    | Inventory   | 18 (3×6)    | cols 1–6                                                  |
-| 6+     | Vault       | flat/scroll | ONE flat sequence of slots. Pages are UI-ONLY (Geoff). |
+| Rows         | Region    | Size (today / default) | Notes                                                |
+|--------------|-----------|------------------------|------------------------------------------------------|
+| 1            | Equip     | 5                      | col1=L hand, col2=R hand, col3=Armor, col4=Boots, col5=Special |
+| 2            | QA        | 6 → grows (7,8,9,0…)   | width = `capacity.qaCols`                            |
+| 3 … 3+R-1    | Inventory | 3×6 → grows            | `capacity.invRows × capacity.invCols`               |
+| after inv …  | Vault     | flat band, grows       | `capacity.vaultSlots`, `vaultCols` wide; pages UI-only |
 
-Equip DB slot numbers stay 1=L, 5=R, 2=Armor, 3=Boots, 4=Special (that's the DB; the grid
-maps visual columns → those slot numbers).
+**Items can extend ANY region** — more QA slots, bigger inventory, bigger vault. So every size
+comes from a `GridCapacity` the caller supplies (sourced from the user's upgrades + vault
+config); `rowBands(cap)` computes where each band starts/ends. `DEFAULT_CAPACITY` is a fallback
+only. Nothing about sizing is hardcoded in `gridModel.ts`.
+
+Capacity sources (wiring): vault → existing `useVaultData` config (page_count·cols·rows);
+QA + inventory → user upgrade allocation (today 6 / 3×6; to be read from the user's owned
+slot-expansion items). Equip DB slot numbers stay 1=L, 5=R, 2=Armor, 3=Boots, 4=Special.
 
 ### Vault is flat (pages are UI only)
 
