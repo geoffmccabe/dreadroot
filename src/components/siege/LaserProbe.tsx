@@ -108,6 +108,9 @@ export function LaserProbe() {
 
   useFrame(() => {
     if (!on) return;
+    // Record the REAL camera position the laser uses (the panel's playerState readout is a
+    // separate store that may not be wired in this shell).
+    probeState.camX = camera.position.x; probeState.camY = camera.position.y; probeState.camZ = camera.position.z;
     camera.getWorldDirection(dir);
     // Originate the visible beam below the eye (like a gun-barrel laser) so it isn't
     // edge-on to the view — the raycast itself still comes from the camera center.
@@ -124,9 +127,12 @@ export function LaserProbe() {
       // brute-force ray-tested — NOT the mesh count. Give those a no-op raycast (once) so
       // they're skipped, then raycast the WHOLE scene recursively (which reliably hits the
       // normal items — the earlier candidate-cull was dropping them).
+      let meshCount = 0;
       scene.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (!m.isMesh || m.userData.__laserChk) return;
+        if (!m.isMesh) return;
+        meshCount++;
+        if (m.userData.__laserChk) return;
         m.userData.__laserChk = true;
         const g = m.geometry as THREE.BufferGeometry | undefined;
         const tris = g ? (g.index ? g.index.count : (g.getAttribute('position')?.count ?? 0)) / 3 : 0;
@@ -134,6 +140,7 @@ export function LaserProbe() {
       });
       const hits = ray.intersectObjects(scene.children, true)
         .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot && h.object !== box && h.object !== line);
+      probeState.dbgMeshes = meshCount; probeState.dbgHits = hits.length;
       if (hits.length) {
         const h = hits[0];
         rc.hit = true; rc.dist = camera.position.distanceTo(h.point);

@@ -74,7 +74,8 @@ export function CoordsHud() {
       <div style={{ marginTop: 3, opacity: 0.85 }}>
         <b style={{ color: '#ff8a8a' }}>B</b> = flag Bad &nbsp;·&nbsp; <b style={{ color: '#8aff8a' }}>G</b> = flag Good
       </div>
-      <div style={{ marginTop: 3, opacity: 0.55, fontSize: 10 }}>x {x.toFixed(0)} y {y.toFixed(0)} z {z.toFixed(0)} · {h.deg}°{h.dir}</div>
+      <div style={{ marginTop: 3, opacity: 0.55, fontSize: 10 }}>cam x {probeState.camX.toFixed(0)} y {probeState.camY.toFixed(0)} z {probeState.camZ.toFixed(0)}</div>
+      <div style={{ opacity: 0.55, fontSize: 10 }}>debug: {probeState.dbgMeshes} meshes · {probeState.dbgHits} hits</div>
       <button
         onClick={doCopy}
         style={{

@@ -12,4 +12,7 @@ export const probeState = {
   instanceId: -1,                  // instance index within the mesh, or -1 for a plain mesh
   tris: 0,                         // triangle count of the pointed-at mesh's geometry
   dist: 0,                         // distance (m) from camera to the hit
+  camX: 0, camY: 0, camZ: 0,       // the REAL camera position the laser raycasts from
+  dbgMeshes: 0,                    // # scene meshes the last raycast considered
+  dbgHits: 0,                      // # hits the last raycast returned (debug)
 };
