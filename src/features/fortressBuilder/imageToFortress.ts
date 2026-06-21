@@ -289,14 +289,17 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   // + slider) blocks above the tallest design block.
   if (opts.parapet) {
     const pTier = Math.max(1, levels - 1); // second-darkest tier (tiers run 1=light..levels=dark)
-    const size = T + 2 + Math.max(0, Math.round(opts.parapetWidth ?? 0));
-    const rad = size >> 1;
+    // rad = half the base footprint (T+2) plus each width step. Every +1 widens both
+    // sides, so the slider never has dead steps (width = 2*rad+1).
+    const rad = ((T + 2) >> 1) + Math.max(0, Math.round(opts.parapetWidth ?? 0));
     const heightAdd = Math.max(0, Math.round(opts.parapetHeight ?? 0));
+    const designMax = maxHeight; // snapshot: every tower is relative to the DESIGN top,
+    let tallest = maxHeight;     // not to the previous tower (avoid compounding heights).
     const corners: Array<[number, number]> = [[0, 0], [F - 1, 0], [0, F - 1], [F - 1, F - 1]];
     corners.forEach(([cgx, cgz], i) => {
       const rv = mulberry32(((seed || 1) * 31 + i * 1013904223) >>> 0)();
-      const top = maxHeight + 2 + Math.floor(rv * 9) + heightAdd; // maxH+2 .. maxH+10 (+slider)
-      if (top > maxHeight) maxHeight = top;
+      const top = designMax + 2 + Math.floor(rv * 9) + heightAdd; // designMax+2 .. +10 (+slider)
+      if (top > tallest) tallest = top;
       for (let gx = cgx - rad; gx <= cgx + rad; gx++) {
         for (let gz = cgz - rad; gz <= cgz + rad; gz++) {
           for (let y = 0; y < top; y++) {
@@ -306,6 +309,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
         }
       }
     });
+    maxHeight = tallest;
   }
 
   // --- Wall-walk + stairs around the top edge (only when the wall is >= 3 thick). ---
