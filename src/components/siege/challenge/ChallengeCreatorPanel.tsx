@@ -581,10 +581,14 @@ export function ChallengeCreatorPanel() {
             {picker.loading ? <div style={{ color: '#9fb4d0' }}>Loading…</div>
               : picker.rows.length === 0 ? <div style={{ color: '#9fb4d0' }}>No saved challenges yet — make one and hit Save.</div>
               : picker.rows.map((r) => (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
+                  {/* Banner thumbnail (4×1) so it's easy to recognise which challenge to edit. */}
+                  {r.data?.banner
+                    ? <img src={r.data.banner} alt="" style={{ width: 200, height: 50, objectFit: 'cover', borderRadius: 6, flexShrink: 0, background: '#0d141f' }} />
+                    : <div style={{ width: 200, height: 50, borderRadius: 6, flexShrink: 0, background: '#0d141f', border: '1px dashed hsla(210,25%,45%,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#52617a', fontSize: 10 }}>no banner</div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.name}{r.game && <span style={{ fontSize: 10, color: '#7fd0ff', fontWeight: 700 }}> · {r.game}</span>}{r.region && <span style={{ fontSize: 10, color: '#ffd27f', fontWeight: 700 }}> · region: {r.region}</span>}
+                    <div style={{ fontSize: 20, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.name}{r.game && <span style={{ fontSize: 11, color: '#7fd0ff', fontWeight: 700 }}> · {r.game}</span>}{r.region && <span style={{ fontSize: 11, color: '#ffd27f', fontWeight: 700 }}> · region: {r.region}</span>}
                     </div>
                     <div style={{ fontSize: 11, color: '#7e90ad' }}>{r.creator_name ?? '—'} · {new Date(r.updated_at).toLocaleString()}</div>
                   </div>
