@@ -1,0 +1,399 @@
+{
+ "set": "worlds",
+ "cell": 19.8,
+ "count": 56,
+ "items": [
+  {
+   "file": "worlds_SM_Bld_Billboard_07.gltf",
+   "w": 1.42,
+   "h": 1.704,
+   "d": 0.12,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Corp_Generator_01.gltf",
+   "w": 11.364,
+   "h": 11.198,
+   "d": 5.162,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Door_Double_03.gltf",
+   "w": 3.864,
+   "h": 3.477,
+   "d": 0.885,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Greeble_07.gltf",
+   "w": 1.114,
+   "h": 1.921,
+   "d": 0.619,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Light_01.gltf",
+   "w": 0.272,
+   "h": 1.895,
+   "d": 0.272,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Platform_Base_Large_01.gltf",
+   "w": 5.0,
+   "h": 1.269,
+   "d": 5.0,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Platform_Small_02.gltf",
+   "w": 2.5,
+   "h": 0.237,
+   "d": 2.5,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Pod_Corridor_Round_Connector_01.gltf",
+   "w": 5.645,
+   "h": 5.369,
+   "d": 1.219,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Pod_Hab_Small_05.gltf",
+   "w": 15.5,
+   "h": 6.14,
+   "d": 7.68,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Railing_01.gltf",
+   "w": 2.858,
+   "h": 0.988,
+   "d": 0.1,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Scav_Refinery_Pipe_02_Half_03.gltf",
+   "w": 1.324,
+   "h": 2.9,
+   "d": 5.0,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Bld_Vendor_04.gltf",
+   "w": 2.352,
+   "h": 3.826,
+   "d": 1.586,
+   "category": "building"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_Backpack_Cage_01.gltf",
+   "w": 0.615,
+   "h": 1.481,
+   "d": 0.636,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_Hair_Male_01.gltf",
+   "w": 0.247,
+   "h": 0.228,
+   "d": 0.251,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_Helmet_Space_02.gltf",
+   "w": 0.412,
+   "h": 0.492,
+   "d": 0.453,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_VR_02_Hair_02.gltf",
+   "w": 0.289,
+   "h": 0.24,
+   "d": 0.342,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Env_Artifact_AlienRuin_01.gltf",
+   "w": 12.039,
+   "h": 23.059,
+   "d": 3.511,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Detail_Crater_Fill_01.gltf",
+   "w": 7.451,
+   "h": 0.0,
+   "d": 7.451,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Floating_Rocks_01.gltf",
+   "w": 8.815,
+   "h": 22.835,
+   "d": 12.24,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Ground_Greeble_04.gltf",
+   "w": 3.901,
+   "h": 0.359,
+   "d": 3.644,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Plant_Coral_02.gltf",
+   "w": 2.049,
+   "h": 6.085,
+   "d": 1.242,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Plant_Hallowed_02.gltf",
+   "w": 5.433,
+   "h": 11.052,
+   "d": 6.887,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Plant_Palm_03.gltf",
+   "w": 2.998,
+   "h": 4.59,
+   "d": 2.941,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Road_Slope_Up_01.gltf",
+   "w": 5.356,
+   "h": 1.963,
+   "d": 16.755,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Generic_Cloud_01.gltf",
+   "w": 6.678,
+   "h": 1.651,
+   "d": 1.608,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Alien_Letter_07.gltf",
+   "w": 0.259,
+   "h": 0.035,
+   "d": 0.352,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Alien_Letter_33.gltf",
+   "w": 0.265,
+   "h": 0.035,
+   "d": 0.35,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Banner_02_D.gltf",
+   "w": 1.009,
+   "h": 2.699,
+   "d": 0.048,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Banner_05_F.gltf",
+   "w": 0.833,
+   "h": 0.833,
+   "d": 0.048,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Billboard_07.gltf",
+   "w": 1.42,
+   "h": 1.704,
+   "d": 0.12,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Chair_03.gltf",
+   "w": 0.54,
+   "h": 1.041,
+   "d": 0.618,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Fuel_Cell_01.gltf",
+   "w": 0.571,
+   "h": 1.097,
+   "d": 0.599,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Junky_Male_01.gltf",
+   "w": 0.99,
+   "h": 1.023,
+   "d": 0.913,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Poster_01.gltf",
+   "w": 0.904,
+   "h": 1.53,
+   "d": 0.01,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Satellite_07.gltf",
+   "w": 2.815,
+   "h": 1.701,
+   "d": 2.815,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Scav_Scrap_24.gltf",
+   "w": 13.532,
+   "h": 2.101,
+   "d": 1.923,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Scav_Scrap_51.gltf",
+   "w": 2.133,
+   "h": 2.34,
+   "d": 4.403,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Symbol_16.gltf",
+   "w": 0.504,
+   "h": 0.02,
+   "d": 0.321,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Turret_Large_01.gltf",
+   "w": 3.684,
+   "h": 3.314,
+   "d": 5.339,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Prop_Vendor_Pan_06.gltf",
+   "w": 0.805,
+   "h": 0.436,
+   "d": 0.805,
+   "category": "prop"
+  },
+  {
+   "file": "worlds_SM_Ship_Block_03.gltf",
+   "w": 13.293,
+   "h": 3.693,
+   "d": 12.965,
+   "category": "ship"
+  },
+  {
+   "file": "worlds_SM_Ship_Block_04.gltf",
+   "w": 15.474,
+   "h": 3.949,
+   "d": 16.087,
+   "category": "ship"
+  },
+  {
+   "file": "worlds_SM_Veh_Apc_01.gltf",
+   "w": 5.738,
+   "h": 4.857,
+   "d": 10.818,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_HoverTank_01_Base.gltf",
+   "w": 5.895,
+   "h": 2.193,
+   "d": 8.877,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Hover_Bike_02.gltf",
+   "w": 1.036,
+   "h": 1.815,
+   "d": 4.412,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Hover_Bike_Attach_Bag_02.gltf",
+   "w": 0.275,
+   "h": 0.378,
+   "d": 0.129,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Turret_Large_01.gltf",
+   "w": 2.365,
+   "h": 1.585,
+   "d": 4.459,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Vendor_Tug_01.gltf",
+   "w": 3.817,
+   "h": 6.029,
+   "d": 9.05,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Vendor_Tug_01_Attach_Fin_03.gltf",
+   "w": 0.39,
+   "h": 2.146,
+   "d": 1.226,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Veh_Vendor_Tug_01_Attach_Sail_01.gltf",
+   "w": 0.469,
+   "h": 4.33,
+   "d": 5.243,
+   "category": "vehicle"
+  },
+  {
+   "file": "worlds_SM_Wep_Alien_01.gltf",
+   "w": 0.079,
+   "h": 0.364,
+   "d": 0.819,
+   "category": "weapon"
+  },
+  {
+   "file": "worlds_SM_Wep_BigAxe_03.gltf",
+   "w": 0.081,
+   "h": 1.12,
+   "d": 0.407,
+   "category": "weapon"
+  },
+  {
+   "file": "worlds_SM_Wep_Heavy_02.gltf",
+   "w": 0.314,
+   "h": 0.426,
+   "d": 0.743,
+   "category": "weapon"
+  },
+  {
+   "file": "worlds_SM_Wep_Pistol_04.gltf",
+   "w": 0.087,
+   "h": 0.31,
+   "d": 0.376,
+   "category": "weapon"
+  },
+  {
+   "file": "worlds_SM_Wep_Scope_Sniper_02.gltf",
+   "w": 0.13,
+   "h": 0.115,
+   "d": 0.461,
+   "category": "weapon"
+  },
+  {
+   "file": "worlds_SM_Wep_Shotgun_03.gltf",
+   "w": 0.12,
+   "h": 0.311,
+   "d": 1.063,
+   "category": "weapon"
+  }
+ ]
+}

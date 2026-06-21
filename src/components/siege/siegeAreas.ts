@@ -53,6 +53,10 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
  */
 export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; }
 export const SIEGE_DEMOS: SiegeDemoMap[] = [
-  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',  pos: [0, 3, 0] },
-  { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo', pos: [0, 3, 0] },
+  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [0, 3, 0] },
+  { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo',  pos: [0, 3, 0] },
+  // Component-only sets shown as auto-arranged sampler grids.
+  { code: 'KeyC', key: 'C', name: 'CyberCity',   mapId: 'cyber-demo',  pos: [0, 3, 0] },
+  { code: 'KeyD', key: 'D', name: 'Mech',        mapId: 'mech-demo',   pos: [0, 3, 0] },
+  { code: 'KeyE', key: 'E', name: 'SciFi Worlds', mapId: 'worlds-demo', pos: [0, 3, 0] },
 ];

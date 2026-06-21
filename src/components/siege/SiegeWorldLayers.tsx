@@ -16,6 +16,7 @@ import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
+import { SetSampler } from './scifi/SetSampler';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -122,6 +123,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <MeshColliderPlayer />
             </Suspense>
           )}
+          {/* Component-only sets shown as auto-arranged sampler grids. */}
+          {world.id === 'cyber-demo' && <SetSampler set="cyber" />}
+          {world.id === 'mech-demo' && <SetSampler set="mech" />}
+          {world.id === 'worlds-demo' && <SetSampler set="worlds" />}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}

@@ -238,12 +238,30 @@ export const SPACE_DEMO_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/** Component-only sets (no baked scene) shown as auto-arranged sampler grids, each its
+ *  own map. Same heightmap ground + fill light + per-model BVH colliders as the demos. */
+function samplerWorld(id: string, name: string, wireId: number): WorldDefinition {
+  return {
+    id, name, gameId: 'siege-worlds', ownerId: null, wireId, kind: 'siege',
+    meshColliders: false,
+    bounds: { min: [-1500, -1500], max: [1500, 1500] },
+    ground: { kind: 'heightmap', surfaceY: 0 },
+    spawn: { position: [0, 3, 0], yaw: 0 },
+  };
+}
+export const CYBER_SAMPLER_WORLD = samplerWorld('cyber-demo', 'CyberCity', 5);
+export const MECH_SAMPLER_WORLD = samplerWorld('mech-demo', 'Mech', 6);
+export const WORLDS_SAMPLER_WORLD = samplerWorld('worlds-demo', 'SciFi Worlds', 7);
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
   [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
+  [CYBER_SAMPLER_WORLD.id]: CYBER_SAMPLER_WORLD,
+  [MECH_SAMPLER_WORLD.id]: MECH_SAMPLER_WORLD,
+  [WORLDS_SAMPLER_WORLD.id]: WORLDS_SAMPLER_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {
