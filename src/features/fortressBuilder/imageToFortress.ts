@@ -72,6 +72,23 @@ function mulberry32(a: number) {
 const tierFor = (b: number, levels: number): number =>
   Math.min(levels, Math.max(1, Math.round((1 - b) * (levels - 1)) + 1));
 
+// Partition `total` into a run of variable-length segments (the "blocky rectangle"
+// generator). Most runs are 2..maxRun long; `oneChance` of them collapse to a single
+// unit — those are the random one-block-wide vertical lines / one-block-tall seams that
+// break up the grid and give the masonry a hand-laid, always-different look.
+function runLengths(total: number, maxRun: number, oneChance: number, rng: () => number): number[] {
+  const out: number[] = [];
+  const hi = Math.max(2, maxRun);
+  let acc = 0;
+  while (acc < total) {
+    let len = rng() < oneChance ? 1 : 2 + Math.floor(rng() * (hi - 1));
+    if (acc + len > total) len = total - acc;
+    out.push(len);
+    acc += len;
+  }
+  return out;
+}
+
 interface Profile { topH: number[]; greyCol: number[]; } // per column 0..F-1
 
 // One wall's silhouette: topmost present pixel per column -> block height (+ optional
@@ -120,16 +137,21 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
     topH[gx] = Math.max(0, Math.min(maxBlockH, h));
   }
 
-  // Chunkiness: collapse every `chunk`-wide group of columns to ONE height (the group's
-  // max, so towers/merlons stay solid) and ONE grey column (the group centre). This
-  // turns fine 1-block detail into blocky N-wide rectangles — the brutalist look.
+  // Chunkiness — silhouette only: collapse the skyline into blocky steps of VARIABLE
+  // width (1..chunk, with occasional 1-wide merlons) instead of a uniform N-grid, so the
+  // top reads as mixed rectangles rather than even teeth. The FACE tone pattern is built
+  // separately as varied rectangles (buildTierField), so greyCol is left at full
+  // per-column resolution here.
   if (chunk > 1) {
-    for (let c0 = 0; c0 < F; c0 += chunk) {
-      const end = Math.min(F, c0 + chunk);
+    const crng = mulberry32(((seed || 1) * 2246822519 + 17) >>> 0);
+    const widths = runLengths(F, chunk, 0.18, crng);
+    let c0 = 0;
+    for (const w of widths) {
+      const end = Math.min(F, c0 + w);
       let hMax = 0;
       for (let c = c0; c < end; c++) if (topH[c] > hMax) hMax = topH[c];
-      const gc = greyCol[Math.min(F - 1, c0 + (chunk >> 1))];
-      for (let c = c0; c < end; c++) { topH[c] = hMax; greyCol[c] = gc; }
+      for (let c = c0; c < end; c++) topH[c] = hMax;
+      c0 = end;
     }
   }
 
@@ -184,12 +206,51 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const span = bMax - bMin;
   const norm = (b: number) => (span < 0.05 ? b : (b - bMin) / span);
 
-  const mk = (group: number) => applyFaceSym(baseProfile(grid, F, heightScale, groupSeed(seed, group), chunk), F, faceSym, flip);
+  const maxTopH = (p: Profile) => { let m = 0; for (let c = 0; c < F; c++) if (p.topH[c] > m) m = p.topH[c]; return m; };
+
+  // Build the FACE tone pattern as a field of varied rectangles. Stack variable-height
+  // bands; within each band lay variable-width cells, each re-seeded so seams don't line
+  // up between bands (running-bond) — giving mixed rectangles + the odd 1-wide vertical
+  // line. Each cell samples ONE grey value (flat tier) so it reads blocky, not noisy.
+  interface TierField { field: Int16Array; maxH: number; }
+  const buildTierField = (prof: Profile, gseed: number): TierField => {
+    const maxH = maxTopH(prof);
+    const field = new Int16Array(F * (maxH + 1));
+    if (maxH <= 0) return { field, maxH };
+    const rngB = mulberry32(((gseed || 1) * 2246822519 + 101) >>> 0);
+    const bands = runLengths(maxH + 1, chunk, 0.12, rngB);
+    let y0 = 0;
+    for (let bi = 0; bi < bands.length; bi++) {
+      const bh = bands[bi];
+      const yc = y0 + (bh >> 1);
+      const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(yc / Math.max(heightScale, 1e-6))));
+      const rngC = mulberry32(((gseed || 1) * 2654435761 + bi * 40503 + 7) >>> 0);
+      const cells = runLengths(F, chunk, 0.2, rngC);
+      let x0 = 0;
+      for (const cw of cells) {
+        const xc = Math.min(F - 1, x0 + (cw >> 1));
+        const tier = tierFor(norm(gray[r][prof.greyCol[xc]]), levels);
+        for (let y = y0; y < y0 + bh && y <= maxH; y++)
+          for (let x = x0; x < x0 + cw && x < F; x++) field[x * (maxH + 1) + y] = tier;
+        x0 += cw;
+      }
+      y0 += bh;
+    }
+    return { field, maxH };
+  };
+
+  const mkWall = (group: number) => {
+    const profile = applyFaceSym(baseProfile(grid, F, heightScale, groupSeed(seed, group), chunk), F, faceSym, flip);
+    const tiles = chunk > 1 ? buildTierField(profile, groupSeed(seed, group)) : null;
+    return { profile, tiles };
+  };
   // wallProfiles indexed by wall: 0 front, 1 right, 2 back, 3 left
-  let wallProfiles: Profile[];
-  if (wallSym === '4way') { const p = mk(0); wallProfiles = [p, p, p, p]; }
-  else if (wallSym === '2way') { const a = mk(0), b = mk(1); wallProfiles = [a, b, a, b]; }
-  else { wallProfiles = [mk(0), mk(1), mk(2), mk(3)]; }
+  let walls: Array<{ profile: Profile; tiles: TierField | null }>;
+  if (wallSym === '4way') { const w = mkWall(0); walls = [w, w, w, w]; }
+  else if (wallSym === '2way') { const a = mkWall(0), b = mkWall(1); walls = [a, b, a, b]; }
+  else { walls = [mkWall(0), mkWall(1), mkWall(2), mkWall(3)]; }
+  const wallProfiles = walls.map((w) => w.profile);
+  const tierFields = walls.map((w) => w.tiles);
 
   // Entry width must share the fortress parity so the opening (and stairs) are
   // perfectly centered/symmetric: even fortress -> even entry, odd -> odd.
@@ -240,10 +301,12 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
       for (let y = 0; y < h; y++) {
         if (y >= carveLo && y <= carveHi) continue; // entry tunnel (through full thickness)
         const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y / Math.max(heightScale, 1e-6))));
-        // Snap the sampled row to the chunk grid too, so the facade reads as N×N
-        // rectangles (greyCol is already chunked horizontally in baseProfile).
-        const rC = chunk > 1 ? Math.min(H - 1, Math.floor(r / chunk) * chunk + (chunk >> 1)) : r;
-        const tier = tierFor(norm(gray[rC][greyCol]), levels);
+        // Blocky face: read the precomputed varied-rectangle tier field; fall back to a
+        // direct per-cell sample (chunk==1 fine mode, or above the field's top).
+        const tf = tierFields[w];
+        const tier = (tf && y <= tf.maxH && tf.field[col * (tf.maxH + 1) + y])
+          ? tf.field[col * (tf.maxH + 1) + y]
+          : tierFor(norm(gray[r][greyCol]), levels);
         const exOut = clamp(exOutArr[tier - 1] ?? 0, -T, 2);
         const exIn = clamp(exInArr[tier - 1] ?? 0, -T, 2);
         const dStart = -exOut;        // outer extent (negative = protrude; positive = recess)
@@ -287,6 +350,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   // A solid tower of the 2nd-darkest stone on each footprint corner, centred on the corner
   // and (T+2+width) wide so it overhangs the walls by >=2, rising 2..10 (random per tower,
   // + slider) blocks above the tallest design block.
+  const parapetTowers: Array<{ cgx: number; cgz: number; rad: number; top: number }> = [];
   if (opts.parapet) {
     const pTier = Math.max(1, levels - 1); // second-darkest tier (tiers run 1=light..levels=dark)
     // rad = half the base footprint (T+2) plus each width step. Every +1 widens both
@@ -300,6 +364,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
       const rv = mulberry32(((seed || 1) * 31 + i * 1013904223) >>> 0)();
       const top = designMax + 2 + Math.floor(rv * 9) + heightAdd; // designMax+2 .. +10 (+slider)
       if (top > tallest) tallest = top;
+      parapetTowers.push({ cgx, cgz, rad, top });
       for (let gx = cgx - rad; gx <= cgx + rad; gx++) {
         for (let gz = cgz - rad; gz <= cgz + rad; gz++) {
           for (let y = 0; y < top; y++) {
@@ -313,6 +378,8 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   }
 
   // --- Wall-walk + stairs around the top edge (only when the wall is >= 3 thick). ---
+  // Parapets are already built (solid) above; the walk DRILLS a passage through each
+  // corner tower so the rampart ring stays continuous.
   if (T >= 3) {
     const innerProt = Math.max(0, ...exInArr.map((v) => clamp(v, -T, 2)));
     addWallWalk({
@@ -322,6 +389,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
       coordFor,
       place,
       removeAt,
+      parapets: parapetTowers,
     });
   }
 

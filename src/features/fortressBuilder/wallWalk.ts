@@ -24,6 +24,9 @@ export interface WallWalkCtx {
   coordFor: (w: number, col: number, d: number) => [number, number];
   place: (lx: number, y: number, lz: number, tier: number, light?: number) => void;
   removeAt: (lx: number, y: number, lz: number) => void;
+  // Solid corner towers already built; the walk drills a passage through each so the
+  // rampart ring stays continuous. cgx/cgz = footprint corner, rad = half-width, top = height.
+  parapets?: Array<{ cgx: number; cgz: number; rad: number; top: number }>;
 }
 
 interface RingCell { gx: number; gz: number; px: number; pz: number; } // px,pz = inward (into courtyard) unit
@@ -65,6 +68,34 @@ export function addWallWalk(ctx: WallWalkCtx): void {
       for (let d = 0; d <= T - 1; d++) {
         const [gx, gz] = coordFor(w, col, d);
         place(G(gx), floorY, G(gz), tier);
+      }
+    }
+  }
+
+  // --- 3b) Drill the walk THROUGH each corner parapet so the ring is continuous. ---
+  // The tower is a solid plug; carve an L of the walk band (depth 1..T-2) reaching from
+  // the corner inward along BOTH walls, leaving the outer skin, the floor below and a roof
+  // above intact (a covered gateway through the tower). Heading only inward (ix/iz) means
+  // we never punch a hole in the tower's outboard corner.
+  if (ctx.parapets && ctx.parapets.length) {
+    const PASS_H = 4; // walk-band opening height (feet + headroom)
+    for (const t of ctx.parapets) {
+      const X = t.cgx, Z = t.cgz;
+      const ix = X === 0 ? 1 : -1;
+      const iz = Z === 0 ? 1 : -1;
+      const passTop = Math.min(t.top, walkSurface + PASS_H);
+      if (passTop <= walkSurface) continue;
+      for (let d = 1; d <= T - 2; d++) {
+        const gzBand = Z + iz * d;            // slot along the X-running wall
+        for (let s = 0; s <= t.rad; s++) {
+          const gx = X + ix * s;
+          for (let y = walkSurface; y < passTop; y++) removeAt(G(gx), y, G(gzBand));
+        }
+        const gxBand = X + ix * d;            // slot along the Z-running wall
+        for (let s = 0; s <= t.rad; s++) {
+          const gz = Z + iz * s;
+          for (let y = walkSurface; y < passTop; y++) removeAt(G(gxBand), y, G(gz));
+        }
       }
     }
   }
