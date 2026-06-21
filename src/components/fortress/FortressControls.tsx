@@ -9,7 +9,7 @@ import { triggerChop } from './chopFeedbackStore';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
-import { getActiveWeapon, getRightWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
+import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { anyArmedHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
 import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
@@ -1007,7 +1007,7 @@ export function FirstPersonControls({
   // fire on independent cooldowns; the AMMO pool stays shared (one pool for now).
   const fireWeaponShot = useCallback((weapon?: ActiveWeaponStats | null, fireClock?: React.MutableRefObject<number>) => {
     if (!onShoot) return;
-    const aw = weapon !== undefined ? weapon : getActiveWeapon();
+    const aw = weapon !== undefined ? weapon : getFireWeapon();   // left-click: E1, else fall back to E2
     const clock = fireClock ?? lastFireTime;
     // A weapon must be EQUIPPED to shoot — no gun = no fire (no default shot), flash a
     // warning each attempt. (Flame glove = non-gun → flame path, never reaches here.)
@@ -1232,7 +1232,7 @@ export function FirstPersonControls({
     } else if (showCrosshairs && onShoot) {
       // Grenade armed + a RIFLE (not a pistol) → the click does NOTHING; throw the
       // grenade with G. A PISTOL fires even with a grenade armed (dual-wield).
-      if (grenadeReadyRef.current && !getActiveWeapon()?.isPistol) return;
+      if (grenadeReadyRef.current && !getFireWeapon()?.isPistol) return;
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;
 
@@ -1243,7 +1243,7 @@ export function FirstPersonControls({
 
       // Automatic weapons fire on mousedown + frame-loop repeat (hold-to-fire),
       // NOT on the click event — otherwise a tap would double-fire.
-      if (getActiveWeapon()?.isAutomatic) return;
+      if (getFireWeapon()?.isAutomatic) return;
 
       fireWeaponShot();
     }
@@ -1393,9 +1393,10 @@ export function FirstPersonControls({
         event.preventDefault();
         return;
       }
-      // 2. A RIGHT-hand pistol → fire it now, and start the hold-to-zoom timer (the frame
-      //    loop engages ADS past the threshold; release fires a second shot). No inspect/ADS.
-      const rw = getRightWeapon();
+      // 2. DUAL-WIELD only — BOTH hands hold a gun → right-click fires the RIGHT one (with
+      //    hold-to-zoom + release-2nd-shot). With a single gun (in either hand) left-click
+      //    fires it (getFireWeapon fallback) and right-click stays ADS, so no double-binding.
+      const rw = getActiveWeapon() ? getRightWeapon() : null;
       if (rw && showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         fireWeaponShotRef.current?.(rw, lastFireTimeRight);
         rmbDownAtRef.current = Date.now();
@@ -1799,12 +1800,12 @@ export function FirstPersonControls({
 
       // Start flame glove, automatic rapid-fire, or pentabullet charge (shooting mode).
       // Grenade armed + RIFLE (not a pistol) → mousedown does nothing (throw with G).
-      const grenadeBlocksFire = grenadeReadyRef.current && !getActiveWeapon()?.isPistol;
+      const grenadeBlocksFire = grenadeReadyRef.current && !getFireWeapon()?.isPistol;
       if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode && !grenadeBlocksFire) {
         if (isFlameGloveSelected && onFlameStart) {
           // Flame Glove selected — start flamethrower
           onFlameStart();
-        } else if (getActiveWeapon()?.isAutomatic) {
+        } else if (getFireWeapon()?.isAutomatic) {
           // Automatic weapon: hold to rapid-fire. Fire the first round now; the
           // frame loop repeats at the weapon's cooldown. No pentabullet charge.
           autoFiringRef.current = true;
@@ -2282,7 +2283,7 @@ export function FirstPersonControls({
       // Conflict rule: a weapon equipped in E1 (a gun, or the flame glove) DISABLES
       // block/tree chopping — empty the equip slot to chop. Prevents left-click
       // doing double-duty as fire AND chop.
-      const noWeaponEquipped = getActiveWeapon() === null && !isFlameGloveSelectedRef.current;
+      const noWeaponEquipped = getFireWeapon() === null && !isFlameGloveSelectedRef.current;
       if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current && noWeaponEquipped) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;
