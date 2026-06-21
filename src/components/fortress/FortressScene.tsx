@@ -42,6 +42,7 @@ import { useActiveMapId } from '@/config/activeMap';
 import { setAiming } from '@/config/aimState';
 import { getRightWeapon } from '@/config/activeWeapon';
 import { anyArmedHandGrenade } from '@/config/handGrenade';
+import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
@@ -1056,7 +1057,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // drives ADS via the aimState store, so we DON'T immediately zoom here.
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 2 && crosshairsEnabled && !getRightWeapon() && !anyArmedHandGrenade()) {
+      if (e.button === 2 && crosshairsEnabled && !getRightWeapon() && !anyArmedHandGrenade() && getFlameGlove()?.hand !== 'R') {
         setIsAiming(true);
       }
     };
@@ -1496,9 +1497,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     debugBullets: DEBUG_BULLETS,
   });
 
-  // Flame Glove / Flamethrower system
-  const isFlameGloveSelected = selectedItemDef?.name?.toLowerCase().includes('flame glove') ?? false;
-  const flameGloveTier = selectedItemDef?.tier ?? 1;
+  // Flame Glove / Flamethrower system. Driven by the dual-wield flame-glove store
+  // (a glove in EITHER hand, preferring the right) rather than the single E1 selection,
+  // so a glove works alongside a pistol/grenade in the other hand.
+  const flameGloveState = useFlameGlove();
+  const isFlameGloveSelected = flameGloveState !== null;
+  const flameGloveTier = flameGloveState?.tier ?? 1;
   const ftTiers = useFlamethrowerTiers();
   const ftTierDef = ftTiers.getDefinition(flameGloveTier);
 

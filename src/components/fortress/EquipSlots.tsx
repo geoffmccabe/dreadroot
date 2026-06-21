@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { useHandGrenades } from '@/config/handGrenade';
+import { setFlameGlove } from '@/config/flameGlove';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
 import { playSound } from '@/lib/spatialAudio';
@@ -189,6 +190,15 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     })();
     return () => { cancelled = true; };
   }, [rightItemNumber, leftKind]);
+
+  // Flame glove (one-handed) — active in EITHER hand, preferring the RIGHT if a glove is
+  // worn in both (only one is used). Binds the flame to that hand's mouse button downstream.
+  useEffect(() => {
+    const isGlove = (it: EquipItem | null) => !!it?.name && it.name.toLowerCase().includes('flame glove');
+    if (isGlove(equip[5])) setFlameGlove({ hand: 'R', tier: equip[5]!.tier ?? 1 });
+    else if (isGlove(equip[1])) setFlameGlove({ hand: 'L', tier: equip[1]!.tier ?? 1 });
+    else setFlameGlove(null);
+  }, [equip]);
 
   const firstEmptyInventorySlot = useCallback(async (): Promise<number | null> => {
     if (!user?.id) return null;
