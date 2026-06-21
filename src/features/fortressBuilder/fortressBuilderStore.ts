@@ -43,10 +43,6 @@ export interface BuilderState {
   insetLightColor: string;
   insetLightIntensity: number;
   insetLightSpread: number;
-  // Scanning searchlights on the tops of OUTER-extruded blocks (4-8/face, symmetric if
-  // faceSym='lr'); narrow beams pointing up, sweeping slowly to wash the wall.
-  scanLightOn: boolean;
-  scanLightColor: string;
 }
 
 const initial: BuilderState = {
@@ -87,8 +83,6 @@ const initial: BuilderState = {
   insetLightColor: '#ff5a1f',   // red-orange
   insetLightIntensity: 1.0,
   insetLightSpread: 8,
-  scanLightOn: false,
-  scanLightColor: '#ff5a1f',    // red-orange default
 };
 
 let state: BuilderState = initial;

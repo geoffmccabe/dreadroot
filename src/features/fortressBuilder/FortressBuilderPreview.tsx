@@ -8,7 +8,6 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { builderStore, useBuilder } from './fortressBuilderStore';
 import { buildFortressVoxels, type FortressVoxel } from './imageToFortress';
-import { computeScanAnchors, ScanLights } from './scanLights';
 import { loadImageEl, imageToGrayGrid } from './imageToGrayGrid';
 import { setBuilderBarrier } from '@/features/enemies/ai/fortressSafeZone';
 import { frameLoop } from '@/lib/frameLoop';
@@ -175,7 +174,6 @@ export function FortressBuilderPreview() {
     extrudeOut, extrudeIn,
     extrudeLightOn, extrudeLightColor, extrudeLightIntensity, extrudeLightSpread,
     insetLightOn, insetLightColor, insetLightIntensity, insetLightSpread,
-    scanLightOn, scanLightColor,
   } = useBuilder();
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
@@ -265,12 +263,6 @@ export function FortressBuilderPreview() {
     return { tiers, lightExtrude, lightInset };
   }, [result, extrudeLightOn, insetLightOn]);
 
-  // Scanning searchlight anchors on outer-extrude tops (4-8/face, symmetric if faceSym='lr').
-  const scanAnchors = useMemo(
-    () => (scanLightOn && result ? computeScanAnchors(result.voxels, F, rebuildSeed, faceSym === 'lr') : []),
-    [scanLightOn, result, F, rebuildSeed, faceSym]
-  );
-
   if (!isOpen || !result || !texReady || !texRef.current || !centerRef.current) return null;
   const c = centerRef.current;
   return (
@@ -285,7 +277,6 @@ export function FortressBuilderPreview() {
           inset light stays in the niche. */}
       {extrudeLightOn && <LightSpill voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} spread={extrudeLightSpread} yOffset={2.5} />}
       {insetLightOn && <LightSpill voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} spread={insetLightSpread} yOffset={0} />}
-      {scanAnchors.length > 0 && <ScanLights anchors={scanAnchors} color={scanLightColor} />}
       {barrierOn && <BarrierWalls D={D} />}
     </group>
   );
