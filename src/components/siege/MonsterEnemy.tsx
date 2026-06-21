@@ -12,6 +12,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { groundAt } from './siegeGround';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
@@ -1080,7 +1081,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    head) AND too-tall walls. groundY = highest standable surface; wallTop = a box we're
     //    pressed against that's taller than a step. ──
     const feet = s.y;
-    let groundY = sampleHeight(s.x, s.z) ?? feet;
+    // groundAt prefers the BVH mesh surface (city streets, SWW rocks) below the monster's
+    // step reach, falling back to terrain — so monsters stand on the city instead of falling
+    // through to the flat ground beneath it. Ceiling = feet + a step's worth of headroom.
+    let groundY = groundAt(s.x, s.z, feet + 3) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
     // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-

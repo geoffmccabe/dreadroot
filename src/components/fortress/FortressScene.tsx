@@ -1817,7 +1817,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         </>
       )}
       {isSiegeReview && <ColliderDebugView />}
-      {isSiegeReview && <SiegeSpawner />}
+      {/* '!' monster spawner — on ALL siege maps for testing/demos, not just SWW review. */}
+      {isSiege && <SiegeSpawner />}
       {isSiege && <BullseyeTestTracer />}
       {isSiege && <LaserProbe />}
       {isSiege && <VoxelizeTool />}

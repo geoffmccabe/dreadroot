@@ -11,6 +11,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
+import { groundAt } from './siegeGround';
 import { SIEGE_SPAWN_POINT } from './siegeAreas';
 import { APP_VERSION } from '@/version';
 import { MonsterEnemy, type MonsterConfig } from './MonsterEnemy';
@@ -135,7 +136,8 @@ function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void)
             for (let i = 0; i < qty; i++) {
               const ox = camera.position.x + fwd.x * 6 + (i - qty / 2) * (m.height * 0.8);
               const oz = camera.position.z + fwd.z * 6;
-              const oy = sampleHeight(ox, oz) ?? camera.position.y - 1.6;
+              // Spawn on the street under the player (mesh surface), not the terrain under the city.
+              const oy = groundAt(ox, oz, camera.position.y + 1) ?? (camera.position.y - 1.6);
               add(m, [ox, oy, oz]);
             }
           }
