@@ -106,6 +106,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const [displayName, setDisplayName] = useState('');
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  // Track avatar image load failure so we fall back to the placeholder icon
+  // instead of a broken-image box. Google avatar URLs (lh3.googleusercontent.com)
+  // intermittently 403 — referrerPolicy=no-referrer fixes most; this catches the rest.
+  const [avatarError, setAvatarError] = useState(false);
   const [storeActiveClass, setStoreActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [inventoryActiveClass, setInventoryActiveClass] = useState<'basic' | 'magic' | 'mystery' | 'iconic'>('basic');
   const [basePanelSize, setBasePanelSize] = useState({ width: 538, height: 720 }); // 20% larger: 448*1.2=538, 600*1.2=720
@@ -227,6 +231,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
       setBlockchainAddress('');
     }
   }, [tokenBalance?.blockchain_address]);
+
+  // Reset the avatar load-error flag whenever the URL changes (new upload or backfill).
+  useEffect(() => { setAvatarError(false); }, [profile?.avatar_url]);
 
   // Sync display name with profile
   useEffect(() => {
@@ -480,10 +487,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                       justifyContent: 'center',
                     }}
                   >
-                    {profile?.avatar_url ? (
+                    {profile?.avatar_url && !avatarError ? (
                       <img
                         src={profile.avatar_url}
                         alt="User Image"
+                        referrerPolicy="no-referrer"
+                        onError={() => setAvatarError(true)}
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (

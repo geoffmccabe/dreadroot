@@ -17,7 +17,7 @@ import type { ShombieInstance } from '../types';
 
 const CODE = 'shombie-face';
 const POOL = 4;        // max simultaneous face-lights (nearest to camera)
-const SHADOW_CAP = 1;  // how many of those cast a real shadow
+const SHADOW_CAP = 3;  // the 3 nearest cast real shadows (rest light without shadow)
 
 // Built-in default so Shombies ALWAYS have a visible face-beam, even before anyone
 // saves a 'shombie-face' light in the Lights panel. A saved one (or live edit) overrides.

@@ -482,6 +482,22 @@ All colors MUST be HSL.
     background-color: hsla(211, 30%, 85%, 0.35) !important;
   }
 
+  /* Kill the stray rectangular focus box around the subpanels on open.
+     Radix moves focus into the dialog when it opens; the scrollable tab
+     panels (overflow-y-auto) are keyboard-focusable scroll containers in
+     newer Chrome and draw a default outline / tailwind focus ring around
+     the whole content area. Suppress it on the panels and the dialog shell
+     (the panel's own glow box-shadow lives via inline style, not here). */
+  .user-panel-dialog:focus,
+  .user-panel-dialog:focus-visible {
+    outline: none !important;
+  }
+  .user-panel-dialog [role="tabpanel"]:focus,
+  .user-panel-dialog [role="tabpanel"]:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
   /* Active tab inside user panel: subtle highlight, not bright white */
   .user-panel-dialog [data-state="active"][role="tab"] {
     background: hsla(211, 30%, 51%, 0.5) !important;
