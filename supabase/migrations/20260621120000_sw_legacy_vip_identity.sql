@@ -1,46 +1,82 @@
 -- Siege Worlds legacy VIP backfill — identity + looked-up holdings.
 --
--- SW users were imported into sw_player_snapshot (archive, keyed by email). Each SW player record also
--- has a DiviGo link (telegram_id = their DiviGo account number). We use that to look up their REAL DIVI
--- balance + LightningWorks Portal NFT server-to-server (via the SSO partner API) and grant a VIP tier —
--- WITHOUT them logging in. When they later connect their own wallet, sync-holdings re-certifies (live
--- data replaces the legacy snapshot). DIVI is never copied as spendable; these are gating-only mirrors.
+-- SW users were imported into sw_player_snapshot (archive). Each SW player also has a DiviGo link
+-- (telegram_id = their DiviGo account number); we use it to look up their REAL DIVI + LightningWorks
+-- Portal NFT (via the SSO partner API) and grant a VIP tier WITHOUT them logging in. When they later
+-- connect their own wallet, sync-holdings re-certifies (live data replaces this). DIVI is never copied
+-- as spendable — these are gating-only mirrors.
+--
+-- SELF-CONTAINED: creates the dependency tables if a prior migration hasn't (create-if-not-exists is a
+-- no-op when they already exist), so this is safe to run on its own.
 
--- 1. Capture the DiviGo identity + the looked-up holdings on the archive row.
+-- Dependency tables (skipped if they already exist) ----------------------------------------------
+
+create table if not exists public.user_divigo_links (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  app_token  text,                    -- LW-SSO OAuth bearer (nullable: legacy rows have none)
+  verified   boolean not null default true,
+  linked_at  timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.user_divigo_links enable row level security;
+drop policy if exists user_divigo_links_read on public.user_divigo_links;
+create policy user_divigo_links_read on public.user_divigo_links for select using (user_id = auth.uid());
+
+create table if not exists public.user_external_holdings (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  token_theme_id uuid not null references public.token_themes(id) on delete cascade,
+  chain          text not null,
+  account        text not null,
+  amount         numeric not null default 0,
+  updated_at     timestamptz not null default now(),
+  unique (user_id, token_theme_id, account)
+);
+alter table public.user_external_holdings enable row level security;
+drop policy if exists user_external_holdings_read on public.user_external_holdings;
+create policy user_external_holdings_read on public.user_external_holdings for select using (user_id = auth.uid());
+create index if not exists user_external_holdings_user_idx on public.user_external_holdings (user_id);
+
+create table if not exists public.user_nft_holdings (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null,
+  collection   text not null,
+  schema_name  text,
+  template_id  bigint,
+  asset_count  int  not null default 0,
+  updated_at   timestamptz not null default now(),
+  unique (user_id, collection, schema_name, template_id)
+);
+alter table public.user_nft_holdings enable row level security;
+drop policy if exists user_nft_holdings_read on public.user_nft_holdings;
+create policy user_nft_holdings_read on public.user_nft_holdings for select using (user_id = auth.uid());
+
+-- 1. Capture the DiviGo identity + looked-up holdings on the archive row.
 alter table public.sw_player_snapshot
-  add column if not exists telegram_id        text,      -- DiviGo account number (route='telegram')
-  add column if not exists telegram_confirmed int default 0,  -- 1 = the SW user verified the DiviGo link
-  add column if not exists divi_live          numeric,   -- DIVI read from DiviGo at backfill time
-  add column if not exists has_portal         boolean,   -- owns a LightningWorks Portal NFT
-  add column if not exists holdings_checked_at timestamptz, -- when the DiviGo lookup last ran
-  add column if not exists matched_user_id    uuid,      -- resolved Dreadroot auth user (by email), if any
-  add column if not exists vip_applied_at     timestamptz; -- when the VIP holdings were written to that user
-
+  add column if not exists telegram_id        text,
+  add column if not exists telegram_confirmed int default 0,
+  add column if not exists divi_live          numeric,
+  add column if not exists has_portal         boolean,
+  add column if not exists holdings_checked_at timestamptz,
+  add column if not exists matched_user_id    uuid,
+  add column if not exists vip_applied_at     timestamptz;
 create index if not exists sw_player_snapshot_email_idx on public.sw_player_snapshot (lower(email));
 create index if not exists sw_player_snapshot_matched_user_idx on public.sw_player_snapshot (matched_user_id);
 
--- 2. Per-user DiviGo identity in Dreadroot. user_divigo_links already holds the OAuth bearer (app_token);
---    extend it to also hold the legacy DiviGo number so a user can be re-checked or re-certified, even
---    before they do the interactive OAuth connect. app_token becomes optional (legacy rows have none).
+-- 2. Per-user DiviGo identity: hold the legacy DiviGo number even before an interactive OAuth connect.
 alter table public.user_divigo_links alter column app_token drop not null;
 alter table public.user_divigo_links
-  add column if not exists divigo_number text,            -- DiviGo account number (telegram id)
+  add column if not exists divigo_number text,
   add column if not exists divigo_route  text default 'telegram',
-  add column if not exists source        text;            -- 'oauth' | 'sw-legacy'
+  add column if not exists source        text;
 
--- 3. Tag holdings by who wrote them, so the legacy VIP grant isn't wiped by an unrelated live sync.
---    sync-holdings owns source='sync' rows; the legacy backfill writes source='sw-legacy'. Default is
---    'sync' (and existing rows are backfilled to 'sync') so sync's scoped delete — neq 'sw-legacy',
---    which in SQL excludes NULLs — cleans every live row but leaves legacy intact. Legacy survives
---    until the user re-certifies (a real DiviGo connect clears it; then live data takes over).
+-- 3. Tag holdings by writer so the legacy VIP grant isn't wiped by an unrelated live sync.
 alter table public.user_external_holdings add column if not exists source text default 'sync';
 alter table public.user_nft_holdings      add column if not exists source text default 'sync';
 update public.user_external_holdings set source = 'sync' where source is null;
 update public.user_nft_holdings      set source = 'sync' where source is null;
 
--- 4. Lazy claim: when a SW user who was backfilled (holdings already looked up) later signs up for a
---    Dreadroot account with the same email, this grants their honorary VIP on first call. Idempotent;
---    skips anyone who has already connected their own DiviGo (app_token present) — they're self-certified.
+-- 4. Lazy claim: a backfilled SW user who later signs up gets their honorary VIP on first call.
 create or replace function public.apply_sw_legacy_vip()
 returns jsonb language plpgsql security definer set search_path = public as $fn$
 declare
@@ -52,7 +88,6 @@ declare
   v_now timestamptz := now();
 begin
   if v_uid is null then return jsonb_build_object('applied', false, 'reason', 'not authenticated'); end if;
-  -- Already self-certified via OAuth connect → nothing to do.
   if exists (select 1 from user_divigo_links where user_id = v_uid and app_token is not null) then
     return jsonb_build_object('applied', false, 'reason', 'already connected');
   end if;
