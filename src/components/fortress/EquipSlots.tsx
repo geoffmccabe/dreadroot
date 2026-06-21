@@ -255,7 +255,11 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
           itemId: item.itemId, itemKey: '', quantity: 1, name: item.name, tier: item.tier,
           spriteUrl: item.spriteUrl, nonStackable: true, origin: { region: 'equip', slot: def.num },
         });
-        setEquip((prev) => ({ ...prev, [def.num]: null }));   // optimistic clear; reconciles on refetch
+        // NOTE: do NOT optimistically clear the slot here. The DB still holds the item
+        // until the drop's equip_transfer runs; a cancelled drag (ESC / release on the
+        // world) must leave the slot showing its item, not look empty (= "lost").
+        // The authoritative gear prop drives the slot; a successful move clears it via
+        // the user_slots realtime update.
         cleanup();
       }
     }

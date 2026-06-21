@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 import { AdminPanel } from '@/components/AdminPanel';
 import { FortressBuilderPanel } from '@/features/fortressBuilder/FortressBuilderPanel';
+import { ArrayTextureDebugPanel } from '@/features/arrayTextureDebug/ArrayTextureDebugPanel';
 import { UserPanel } from '@/components/UserPanel';
 import { Toaster } from '@/components/ui/toaster';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
@@ -175,6 +176,9 @@ export function FortressOverlays(props: FortressOverlaysProps) {
 
       {/* Fortress Builder (admin) - Toggle with Shift+B */}
       <FortressBuilderPanel />
+
+      {/* Array-texture engine debug (admin) - Toggle with Shift+L (Stage 1) */}
+      <ArrayTextureDebugPanel />
     </>
   );
 }

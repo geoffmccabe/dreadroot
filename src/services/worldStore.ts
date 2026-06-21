@@ -716,7 +716,9 @@ export async function transferVaultToVault(
 // RPC body enforces them and writes one item_history audit row.
 
 export interface SlotRegion {
-  region: 'inventory' | 'quick_select' | 'vault';
+  // 'equip' is valid for eject_slot_to_world (drop-to-world) only; transfer_slot/
+  // swap_slot still reject it at the RPC (equip moves go through equip_transfer).
+  region: 'inventory' | 'quick_select' | 'vault' | 'equip';
   page: number;
   slot: number;
 }

@@ -69,7 +69,7 @@ export interface SlotClickHandlers {
   /** Eject the slot's item into the world at a position. Used when the
    *  cursor releases outside any panel — the item lands in the game. */
   ejectSlotToWorld: (
-    from: { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
+    from: { region: 'inventory' | 'quick_select' | 'vault' | 'equip'; page: number; slot: number },
   ) => Promise<boolean>;
 
   // ── Within-region positional move (no RPC) ──────────────────────

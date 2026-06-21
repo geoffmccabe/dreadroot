@@ -5,6 +5,7 @@ import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
 import { ChallengePointsCounter } from '@/components/siege/challenge/ChallengePointsCounter';
+import { DropToWorldGlobe } from '@/components/fortress/DropToWorldGlobe';
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
@@ -653,37 +654,24 @@ export function FortressHUD(props: FortressHUDProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [setCursor]);
 
-  // Drop-outside-panel: if the cursor is held and pointerup fires on
-  // the game CANVAS (not a panel/tile), eject the item into the world
-  // at the player's position. We gate on the release target being the
-  // canvas (target.closest('canvas') below), so releases on slot tiles
-  // or panel chrome never reach the eject path.
-  useEffect(() => {
-    const onPointerUp = (e: PointerEvent) => {
-      const c = cursorStackApi.getCursor();
-      if (!c) return;
-      // Only left-button releases count.
-      if (e.button !== 0) return;
-      // The 3D game world is a <canvas>; the HUD is plain DOM nodes.
-      // If the release landed on the canvas (or inside it), the
-      // player meant to throw the item into the world. Releases on
-      // anywhere else (panel background, hotbar gap, modal, etc.)
-      // keep the cursor so a near-miss doesn't lose the item.
-      const target = e.target as HTMLElement | null;
-      const onGameCanvas = target?.tagName === 'CANVAS' || !!target?.closest('canvas');
-      if (!onGameCanvas) return;
-      const origin = c.origin;
-      const from = (() => {
-        if (origin.region === 'inventory') return { region: 'inventory' as const, page: 0, slot: origin.gridSlot };
-        if (origin.region === 'hotbar') return { region: 'quick_select' as const, page: 0, slot: origin.slot };
-        return { region: 'vault' as const, page: origin.page, slot: origin.slot };
-      })();
-      slotClickHandlers.ejectSlotToWorld(from).then((ok) => {
-        if (ok) setCursor(null);
-      });
-    };
-    window.addEventListener('pointerup', onPointerUp);
-    return () => window.removeEventListener('pointerup', onPointerUp);
+  // Drop-into-world is NOW only via the DropToWorldGlobe target (deliberate hover +
+  // release + YES confirm). A plain release over the game view does nothing — it keeps the
+  // item on the cursor — so a near-miss of a slot can never silently dump an item.
+  // This callback performs the actual eject for whatever is on the cursor.
+  const dropCursorToWorld = useCallback(async (): Promise<boolean> => {
+    const c = cursorStackApi.getCursor();
+    if (!c) return false;
+    const o = c.origin;
+    const from =
+      o.region === 'inventory' ? { region: 'inventory' as const, page: 0, slot: o.gridSlot } :
+      o.region === 'hotbar'    ? { region: 'quick_select' as const, page: 0, slot: o.slot } :
+      o.region === 'vault'     ? { region: 'vault' as const, page: o.page, slot: o.slot } :
+      o.region === 'equip'     ? { region: 'equip' as const, page: 0, slot: o.slot } :
+      null;
+    if (!from) return false;
+    const ok = await slotClickHandlers.ejectSlotToWorld(from);
+    if (ok) setCursor(null);
+    return ok;
   }, [slotClickHandlers, setCursor]);
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
@@ -1313,25 +1301,14 @@ export function FortressHUD(props: FortressHUDProps) {
                         // or a prior pickup), let the per-tile or
                         // global pointerUp handler deliver the drop.
                         if (cursorStackApi.getCursor()) return;
-                        // Pure click with no cursor. When an inventory
-                        // or vault panel is open, the QS grid is in
-                        // cursor-stack mode — a click PICKS UP (spec §6),
-                        // it does not activate the item. With both panels
-                        // closed, a click activates (use) the slot.
+                        // Pure click (no drag) with no cursor held → ACTIVATE this QA slot
+                        // (use the item / select it), ALWAYS — even with an inventory or
+                        // vault panel open. Picking a QA item UP to move it is drag-only
+                        // (the pointermove handler above lifts it past the drag threshold).
                         if (!p.didDrag) {
-                          if (inventoryOpen || vaultOpen) {
-                            handleSlotClick({
-                              location: { region: 'hotbar', slot: p.slot },
-                              occupant: p.occupant,
-                              button: 'left',
-                              shift: ev.shiftKey,
-                              doubleClick: false,
-                            });
-                          } else {
-                            setSelectedSlot(p.slot);
-                            if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
-                            registerSlotTapRef.current(p.slot);
-                          }
+                          setSelectedSlot(p.slot);
+                          if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                          registerSlotTapRef.current(p.slot);
                         }
                       };
                       document.addEventListener('pointermove', onMove);
@@ -1344,6 +1321,11 @@ export function FortressHUD(props: FortressHUDProps) {
                       // path runs in the document-level pointerup above.
                       if (e.button !== 0) return;
                       if (!cursor) return;
+                      // Released on its OWN (ghosted source) slot → just return the item.
+                      // Pickup never touched the DB, so clearing the cursor restores it.
+                      // (Matches the inventory grid; without this a same-slot drop became a
+                      // swap-with-self and was rejected = "can't put it back".)
+                      if (isGhosted) { cursorStackApi.setCursor(null); return; }
                       handleSlotClick({
                         location: { region: 'hotbar', slot: slot.slot },
                         occupant: slotOccupant,
@@ -1440,6 +1422,9 @@ export function FortressHUD(props: FortressHUDProps) {
                 </div>
               );
             })}
+            {/* Drop-to-world target: half a slot right of the last QA slot, only while
+                carrying an item. The ONLY way to world-drop (deliberate + confirm). */}
+            <DropToWorldGlobe onDrop={dropCursorToWorld} />
             {/* Challenge wave timer (red) + points (light blue), right of slot 6. */}
             <ChallengePointsCounter />
           </div>
