@@ -6,7 +6,7 @@ import { useEffect } from 'react';
 import { useUserData } from '@/hooks/useUserData';
 import { GamePanel } from '@/components/ui/GamePanel';
 import { Button } from '@/components/ui/button';
-import { isArrayBackend } from '@/config/textureBackend';
+import { isArrayBackend, setTextureBackend } from '@/config/textureBackend';
 import { arrayDebug, useArrayDebug } from './arrayDebugStore';
 
 export function ArrayTextureDebugPanel() {
@@ -57,6 +57,17 @@ export function ArrayTextureDebugPanel() {
         </div>
         <div className="text-xs">
           Backend: <span className="font-mono">{isArrayBackend() ? 'array (flag ON)' : 'atlas (default)'}</span>
+        </div>
+        <Button
+          size="sm"
+          variant={isArrayBackend() ? 'default' : 'outline'}
+          className="w-full"
+          onClick={() => { setTextureBackend(isArrayBackend() ? 'atlas' : 'array'); location.reload(); }}
+        >
+          {isArrayBackend() ? 'Switch to ATLAS (reload)' : 'Switch to ARRAY backend (reload)'}
+        </Button>
+        <div className="text-[10px] opacity-60">
+          Flip to ARRAY + reload, then "Show game layers" to see real game textures stream into layers.
         </div>
         <div className="grid grid-cols-2 gap-2">
           <Button size="sm" onClick={() => arrayDebug.dispatch('game')}>Show game layers</Button>
