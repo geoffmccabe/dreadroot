@@ -1322,6 +1322,11 @@ export function FortressHUD(props: FortressHUDProps) {
                       // path runs in the document-level pointerup above.
                       if (e.button !== 0) return;
                       if (!cursor) return;
+                      // Released on its OWN (ghosted source) slot → just return the item.
+                      // Pickup never touched the DB, so clearing the cursor restores it.
+                      // (Matches the inventory grid; without this a same-slot drop became a
+                      // swap-with-self and was rejected = "can't put it back".)
+                      if (isGhosted) { cursorStackApi.setCursor(null); return; }
                       handleSlotClick({
                         location: { region: 'hotbar', slot: slot.slot },
                         occupant: slotOccupant,
