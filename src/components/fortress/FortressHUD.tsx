@@ -647,38 +647,12 @@ export function FortressHUD(props: FortressHUDProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [setCursor]);
 
-  // Drop-outside-panel: if the cursor is held and pointerup fires on
-  // the game CANVAS (not a panel/tile), eject the item into the world
-  // at the player's position. We gate on the release target being the
-  // canvas (target.closest('canvas') below), so releases on slot tiles
-  // or panel chrome never reach the eject path.
-  useEffect(() => {
-    const onPointerUp = (e: PointerEvent) => {
-      const c = cursorStackApi.getCursor();
-      if (!c) return;
-      // Only left-button releases count.
-      if (e.button !== 0) return;
-      // The 3D game world is a <canvas>; the HUD is plain DOM nodes.
-      // If the release landed on the canvas (or inside it), the
-      // player meant to throw the item into the world. Releases on
-      // anywhere else (panel background, hotbar gap, modal, etc.)
-      // keep the cursor so a near-miss doesn't lose the item.
-      const target = e.target as HTMLElement | null;
-      const onGameCanvas = target?.tagName === 'CANVAS' || !!target?.closest('canvas');
-      if (!onGameCanvas) return;
-      const origin = c.origin;
-      const from = (() => {
-        if (origin.region === 'inventory') return { region: 'inventory' as const, page: 0, slot: origin.gridSlot };
-        if (origin.region === 'hotbar') return { region: 'quick_select' as const, page: 0, slot: origin.slot };
-        return { region: 'vault' as const, page: origin.page, slot: origin.slot };
-      })();
-      slotClickHandlers.ejectSlotToWorld(from).then((ok) => {
-        if (ok) setCursor(null);
-      });
-    };
-    window.addEventListener('pointerup', onPointerUp);
-    return () => window.removeEventListener('pointerup', onPointerUp);
-  }, [slotClickHandlers, setCursor]);
+  // Releasing a held item over the game CANVAS used to EJECT it into the world
+  // (delete from inventory + spawn a world drop). That silently destroyed items on a
+  // near-miss while aiming for a slot — and mis-mapped equip-origin drags to the vault.
+  // DISABLED for safety: a canvas release now KEEPS the item on the cursor (pickup is
+  // non-destructive, so ESC returns it to its slot — nothing can be lost this way).
+  // If a deliberate "drop to world" is wanted later, it should be an explicit gesture.
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
