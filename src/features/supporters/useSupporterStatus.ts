@@ -41,9 +41,18 @@ export function useSupporterStatus(userId: string | null): SupporterStatus {
   const [currentLevel, setCurrentLevel] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
+  const claimedRef = useState(() => ({ done: false }))[0];
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
+      // One-time lazy claim: if this account matches a backfilled Siege Worlds player, grant their
+      // honorary VIP holdings before we compute the level. No-ops for everyone else (and if already
+      // self-certified). Best-effort — a failure here must never block the panel.
+      if (userId && !claimedRef.done) {
+        claimedRef.done = true;
+        try { await supabase.rpc('apply_sw_legacy_vip' as never); } catch { /* ignore */ }
+      }
       const [tRes, rRes, bRes, balRes, extRes, nftRes, subRes] = await Promise.all([
         supabase.from('supporter_tiers' as never).select('*').eq('is_active', true).order('level'),
         supabase.from('supporter_requirements' as never).select('*'),

@@ -59,8 +59,13 @@ Deno.serve(async (req) => {
   }
 
   await admin.from('user_divigo_links').upsert({
-    user_id: user.id, app_token: token, verified: true, updated_at: new Date().toISOString(),
+    user_id: user.id, app_token: token, verified: true, source: 'oauth', updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' })
+
+  // Real re-certification: the user has now connected their own DiviGo, so drop any honorary
+  // Siege Worlds 'sw-legacy' holdings — the next sync-holdings writes their live, verified values.
+  await admin.from('user_external_holdings').delete().eq('user_id', user.id).eq('source', 'sw-legacy')
+  await admin.from('user_nft_holdings').delete().eq('user_id', user.id).eq('source', 'sw-legacy')
 
   return json({ ok: true, linked: true })
 })

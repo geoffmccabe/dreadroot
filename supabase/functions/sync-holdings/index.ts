@@ -122,11 +122,15 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Replace both mirrors for this user (so sold-off assets drop out).
-  await admin.from('user_nft_holdings').delete().eq('user_id', user.id)
+  // Replace this user's OWN (live) mirror rows so sold-off assets drop out — but DON'T touch the
+  // 'sw-legacy' rows written by the Siege Worlds VIP backfill. Those represent an honorary VIP that
+  // only changes once the player actually re-certifies (a real DiviGo connect clears them; see
+  // divigo-connect). Tag our writes source='sync' so this stays scoped.
+  for (const r of nftAcc) (r as Record<string, unknown>).source = 'sync'
+  await admin.from('user_nft_holdings').delete().eq('user_id', user.id).neq('source', 'sw-legacy')
   if (nftAcc.length) await admin.from('user_nft_holdings').insert(nftAcc)
-  await admin.from('user_external_holdings').delete().eq('user_id', user.id)
-  const extRows = Array.from(extByKey.values())
+  await admin.from('user_external_holdings').delete().eq('user_id', user.id).neq('source', 'sw-legacy')
+  const extRows = Array.from(extByKey.values()).map((r) => ({ ...r, source: 'sync' }))
   if (extRows.length) await admin.from('user_external_holdings').insert(extRows)
 
   const chains = [...links.map((l) => l.chain), ...(divigoToken ? ['divigo'] : [])]
