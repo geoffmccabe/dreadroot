@@ -122,7 +122,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           )}
           {world.id === 'space-demo' && (
             <Suspense fallback={null}>
-              <DemoScene file="space_demo.gltf" group="spacedemo" />
+              {/* The Space exterior scene is ~10km — shrink it so it's viewable on the ground. */}
+              <DemoScene file="space_demo.gltf" group="spacedemo" scale={0.025} />
               <MeshColliderPlayer />
             </Suspense>
           )}

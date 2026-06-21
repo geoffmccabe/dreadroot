@@ -3,13 +3,22 @@
 // spread of the set's models + dims) and lays them in a grid, grounded at real 1:1 scale,
 // textured. Each model loads in its own Suspense so one failure can't blank the whole grid.
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { Component, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { sampleHeight } from '../terrainHeight';
 
 interface SamplerItem { file: string; w: number; h: number; d: number; category: string; }
 interface SamplerManifest { set: string; cell: number; count: number; items: SamplerItem[]; }
+
+// A single bad/corrupt model must NOT white-screen the whole map. This boundary swallows a
+// failed model (and its Suspense throw) so the rest of the grid still renders.
+class ModelBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch() { /* skip the broken model silently */ }
+  render() { return this.state.failed ? null : this.props.children; }
+}
 
 function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
   const { scene } = useGLTF(`/siege/scifi/${file}`);
@@ -47,9 +56,11 @@ export function SetSampler({ set }: { set: string }) {
         const x = (col - (cols - 1) / 2) * cell;
         const z = (row - (cols - 1) / 2) * cell;
         return (
-          <Suspense key={it.file} fallback={null}>
-            <SamplerModel file={it.file} x={x} z={z} />
-          </Suspense>
+          <ModelBoundary key={it.file}>
+            <Suspense fallback={null}>
+              <SamplerModel file={it.file} x={x} z={z} />
+            </Suspense>
+          </ModelBoundary>
         );
       })}
     </>

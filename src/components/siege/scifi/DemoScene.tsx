@@ -18,12 +18,13 @@ const COLLIDER_RATIO = 0.5;   // decimate collider geometry (BVH blocks movement
 const PER_JOB = 40;           // meshes registered per budgeted tick
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
-export function DemoScene({ file, group }: { file: string; group: string }) {
+export function DemoScene({ file, group, scale = 1 }: { file: string; group: string; scale?: number }) {
   // Draco-compressed (to fit Cloudflare's 25MB/file limit); decode via local /draco/.
   const { scene } = useGLTF(`/siege/scifi_demo/${file}`, '/draco/');
 
   const root = useMemo(() => {
     const model = scene.clone(true);
+    if (scale !== 1) model.scale.setScalar(scale);   // huge scenes (Space ~10km) shrink to view
     model.updateMatrixWorld(true);
     // Ground/recenter using ONLY solid meshes — backdrop spheres (sky/planets) can be
     // tens of km across, and including them would catapult the real content into the sky
@@ -47,7 +48,7 @@ export function DemoScene({ file, group }: { file: string; group: string }) {
     wrap.position.set(-c.x, ground - box.min.y, -c.z);
     wrap.updateMatrixWorld(true);
     return wrap;
-  }, [scene]);
+  }, [scene, scale]);
 
   useEffect(() => {
     const meshes: THREE.Mesh[] = [];
