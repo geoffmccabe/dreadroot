@@ -1239,6 +1239,7 @@ export const worldStore = {
   grantSlot,
   consumeSlot,
   swapSlot,
+  equipTransfer,   // was missing → worldStore.equipTransfer crashed equip↔QA + triple-click
   ejectSlotToWorld,
   // Track 1B — validated world-block writes.
   placeBlock,

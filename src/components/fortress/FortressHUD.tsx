@@ -18,6 +18,9 @@ import { useActiveGame } from '@/config/activeGame';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
+// equipTransfer is a STANDALONE export, NOT a method on worldStore (worldStore.equipTransfer
+// is undefined — that "is not a function" crash silently broke equip→QA drag AND triple-click).
+import { equipTransfer as equipTransferRpc } from '@/services/worldStore';
 import { setDebugStatus } from '@/lib/debugStatus';
 import { useItemDetail } from '@/contexts/ItemDetailContext';
 import { useVaultBridge } from '@/contexts/VaultBridgeContext';
@@ -493,7 +496,7 @@ export function FortressHUD(props: FortressHUDProps) {
       // NOTE: we let the error THROW (not swallow → false) so the REAL reason from the RPC
       // (e.g. "Source slot empty") surfaces in the debug badge via handleSlotClick's catch,
       // instead of a useless generic "equipTransfer rejected".
-      await worldStore.equipTransfer(from, to);
+      await equipTransferRpc(from, to);
       if (refetchInventoryAndQs) void refetchInventoryAndQs();
       return true;
     },
