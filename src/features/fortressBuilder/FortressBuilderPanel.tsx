@@ -91,6 +91,8 @@ export function FortressBuilderPanel() {
   const onLoadSnapshot = (snap: Snapshot) => builderStore.set(snap.state as Partial<typeof s>);
   const onDeleteSnapshot = async (name: string) => { await deleteSnapshot(name); refreshSnaps(); };
 
+  // Scanning beams mount on OUTER protrusions (the cells the generator tags light===1).
+  const hasOuterExtrude = s.extrudeOut.some((v) => v > 0);
   const curExtrude = (s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn)[s.exTier] ?? 0;
   const bumpExtrude = (delta: number) => {
     const src = s.exFace === 'outside' ? s.extrudeOut : s.extrudeIn;
@@ -326,6 +328,36 @@ export function FortressBuilderPanel() {
             </div>
             <Row label={`Inset intensity: ${s.insetLightIntensity.toFixed(1)}`} min={0} max={3} step={0.1} value={s.insetLightIntensity} onChange={(v) => builderStore.set({ insetLightIntensity: v })} />
             <Row label={`Inset spread: ${s.insetLightSpread.toFixed(0)}m`} min={2} max={24} step={1} value={s.insetLightSpread} onChange={(v) => builderStore.set({ insetLightSpread: v })} />
+          </div>
+        </div>
+
+        {/* Scanning beams — narrow up-lights on outer-extrude tops that sweep the wall.
+            Greyed out unless the design has an OUTWARD extrude to mount them on. */}
+        <div className="space-y-2 pt-2" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Label className="text-xs font-semibold">Scanning beams</Label>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant={s.scanLightOn ? 'default' : 'outline'}
+              className="flex-1 h-6 text-xs"
+              disabled={!hasOuterExtrude}
+              onClick={() => builderStore.set({ scanLightOn: !s.scanLightOn })}
+            >
+              Scan beams {s.scanLightOn ? 'ON' : 'OFF'}
+            </Button>
+            <input
+              type="color"
+              value={s.scanLightColor}
+              disabled={!hasOuterExtrude}
+              onChange={(e) => builderStore.set({ scanLightColor: e.target.value })}
+              className="h-6 w-9 rounded"
+              style={{ opacity: hasOuterExtrude ? 1 : 0.4 }}
+            />
+          </div>
+          <div className="text-[10px] opacity-50">
+            {hasOuterExtrude
+              ? '4–8 narrow beams per face on random extrude tops, sweeping · symmetric when Face = Left-Right'
+              : 'Add an outward extrude (+ out) to enable'}
           </div>
         </div>
       </div>
