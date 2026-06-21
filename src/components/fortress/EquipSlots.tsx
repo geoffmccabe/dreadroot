@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
@@ -116,40 +116,49 @@ function originToRpc(origin: CursorOrigin): { region: string; page: number; slot
 export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; itemId: string }>; onMoved: () => void | Promise<void> }) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [equip, setEquip] = useState<EquipMap>(EMPTY);
   // Kind of weapon in the LEFT hand (slot 1) — a rifle fills BOTH hands (icon centered
   // between L and R, right hand blocked); a pistol stays in one hand. null = empty/other.
   const [leftKind, setLeftKind] = useState<'rifle' | 'pistol' | null>(null);
-  const cursorHeld = useCursorStack((s) => !!s.cursor);
+  const cursor = useCursorStack((s) => s.cursor);
+  const cursorHeld = !!cursor;
   const handGren = useHandGrenades();   // grenades shown in the L/R hand boxes (overlay)
 
-  // Resolve item defs for the SHARED equip gear (owned by useUserData) and build the slot map. No
-  // private query/subscription anymore — equip changes arrive via the unified user_slots realtime.
+  // Item defs for the SHARED equip gear (sprite/name/tier/itemNumber), fetched per id-set.
+  const [defs, setDefs] = useState<Record<string, EquipItem>>({});
   const gearKey = gear.map((g) => `${g.slot}:${g.itemId}`).sort().join('|');
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const ids = gear.map((g) => g.itemId).filter(Boolean);
-      const defs: Record<string, EquipItem> = {};
-      if (ids.length) {
-        const { data: items } = await (supabase as unknown as {
-          from: (t: string) => { select: (c: string) => { in: (k: string, v: string[]) => Promise<{ data: Array<{ id: string; name: string; item_number: number | null; tier: number | null; item_category: string; texture_url: string | null }> | null }> } };
-        }).from('items').select('id,name,item_number,tier,item_category,texture_url').in('id', ids);
-        for (const it of items || []) {
-          defs[it.id] = {
-            itemId: it.id, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category,
-            spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
-          };
-        }
-      }
+      if (!ids.length) { if (!cancelled) setDefs({}); return; }
+      const { data: items } = await (supabase as unknown as {
+        from: (t: string) => { select: (c: string) => { in: (k: string, v: string[]) => Promise<{ data: Array<{ id: string; name: string; item_number: number | null; tier: number | null; item_category: string; texture_url: string | null }> | null }> } };
+      }).from('items').select('id,name,item_number,tier,item_category,texture_url').in('id', ids);
       if (cancelled) return;
-      const next: EquipMap = { ...EMPTY };
-      for (const g of gear) if (g.slot >= 1 && g.slot <= 5) next[g.slot] = defs[g.itemId] ?? null;
-      setEquip(next);
+      const next: Record<string, EquipItem> = {};
+      for (const it of items || []) {
+        next[it.id] = {
+          itemId: it.id, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category,
+          spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
+        };
+      }
+      setDefs(next);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gearKey]);
+
+  // SINGLE SOURCE OF TRUTH: the slot→item map derived PURELY from the shared `gear` prop
+  // (owned by useUserData, updated via user_slots realtime). NO optimistic local mutation —
+  // a slot whose item is on the cursor is shown as a dimmed GHOST, never cleared, so a
+  // cancelled drag (ESC) just un-ghosts (nothing was ever removed from state or the DB).
+  const equip: EquipMap = useMemo(() => {
+    const m: EquipMap = { ...EMPTY };
+    for (const g of gear) if (g.slot >= 1 && g.slot <= 5) m[g.slot] = defs[g.itemId] ?? null;
+    return m;
+  }, [gear, defs]);
+  // True when this slot's item is currently riding the cursor (drag-out / pickup in progress).
+  const isGhosted = (slot: number) => cursor?.origin.region === 'equip' && cursor.origin.slot === slot;
 
   // LEFT hand (slot 1) drives the primary active weapon + leftKind (rifle vs pistol).
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
@@ -164,16 +173,17 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     return () => { cancelled = true; };
   }, [weaponItemNumber]);
 
-  // RIGHT hand (slot 5) drives the second pistol. Only a PISTOL fires from the right
-  // hand; if the left holds a rifle (two-handed) there is no separate right weapon.
+  // RIGHT hand (slot 5) drives the second weapon. ANY gun here is fireable (left-click
+  // falls back to it; with a left pistol too, right-click fires it). If the left holds a
+  // rifle (two-handed) it owns both hands → no separate right weapon.
   const rightItemNumber = equip[5]?.itemNumber ?? null;
   useEffect(() => {
     if (rightItemNumber == null || leftKind === 'rifle') { setRightWeapon(null); return; }
     let cancelled = false;
     (async () => {
-      const { stats, kind } = await loadWeaponStats(rightItemNumber);
+      const { stats } = await loadWeaponStats(rightItemNumber);
       if (cancelled) return;
-      setRightWeapon(kind === 'pistol' ? stats : null);
+      setRightWeapon(stats);
     })();
     return () => { cancelled = true; };
   }, [rightItemNumber, leftKind]);
@@ -199,18 +209,19 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
       // Hand rules. A RIFLE is two-handed → it always lands in the canonical LEFT slot (1)
       // so it renders CENTERED across both hands, and needs BOTH hands free. A pistol can't
-      // share a hand with a rifle.
+      // share a hand with a rifle. EXCLUDE the slot the item is dragged FROM (it's being
+      // vacated) so re-seating the rifle doesn't see itself as occupying a hand.
       let targetNum = def.num;
+      const fromEquipSlot = cur.origin.region === 'equip' ? cur.origin.slot : null;
       if (def.hand && r.isRifle) {
-        if (equip[1] || equip[5]) { toast({ title: 'Free both hands for a rifle', duration: 2400 }); return; }
+        const occ1 = !!equip[1] && fromEquipSlot !== 1;
+        const occ5 = !!equip[5] && fromEquipSlot !== 5;
+        if (occ1 || occ5) { toast({ title: 'Free both hands for a rifle', duration: 2400 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
-      } else if (def.hand && !r.isRifle && leftKind === 'rifle') {
+      } else if (def.hand && !r.isRifle && leftKind === 'rifle' && fromEquipSlot !== 1) {
         toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
       }
-      // OPTIMISTIC: show the item in the slot + play the equip sound + clear the cursor INSTANTLY;
-      // the DB move + shared reconcile happen in the background, so it feels immediate.
-      setEquip((prev) => ({ ...prev, [targetNum]: r.item }));
-      cursorStackApi.setCursor(null);
+      cursorStackApi.setCursor(null);   // consume the cursor; the gear-prop refresh shows the result
       // Weapon slot: ALWAYS a reload sound (the weapon's reload_sound, or the default reload clip the
       // game uses) — never the thud. Other slots: the soft place sound.
       void playSound(def.type === 'weapon' ? getSoundUrl(r.reloadKey ?? 'rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
@@ -220,15 +231,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
       return;
     }
-    // No cursor + filled slot → unequip back to the first empty inventory slot (instant + bg move).
+    // No cursor + filled slot → unequip back to the first empty inventory slot. No optimistic
+    // mutation: the gear-prop refresh drives the slot; on failure nothing changed locally.
     if (equip[def.num]) {
-      const removed = equip[def.num];
-      setEquip((prev) => ({ ...prev, [def.num]: null }));   // optimistic clear
       void playSound(EQUIP_FALLBACK, 0.5);
       const dst = await firstEmptyInventorySlot();
-      if (dst == null) { setEquip((prev) => ({ ...prev, [def.num]: removed })); toast({ title: 'Inventory full', duration: 2000 }); return; }
+      if (dst == null) { toast({ title: 'Inventory full', duration: 2000 }); return; }
       try { await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst }); }
-      catch (err) { setEquip((prev) => ({ ...prev, [def.num]: removed })); reportFail('Unequip failed', err); }
+      catch (err) { reportFail('Unequip failed', err); }
       void onMoved();
     }
   };
@@ -255,12 +265,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
           itemId: item.itemId, itemKey: '', quantity: 1, name: item.name, tier: item.tier,
           spriteUrl: item.spriteUrl, nonStackable: true, origin: { region: 'equip', slot: def.num },
         });
-        // Optimistically empty the slot while the item rides the cursor: gives instant
-        // feedback on a drop, AND keeps the rifle "free both hands" check from counting
-        // the rifle-being-dragged as still occupying a hand. The DB row is untouched until
-        // the drop's equip_transfer, so a cancelled drag is reconciled back by the gear
-        // prop (the item never left the database).
-        setEquip((prev) => ({ ...prev, [def.num]: null }));
+        // NO local mutation — the slot renders as a dimmed GHOST (isGhosted) while the item
+        // rides the cursor. Cancel (ESC) just clears the cursor → slot un-ghosts; nothing lost.
         cleanup();
       }
     }
@@ -274,11 +280,12 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
 
   const renderSlot = (def: SlotDef, suppressSprite = false) => {
     const g = equip[def.num];
+    const ghosted = isGhosted(def.num);   // item is on the cursor → show dimmed, don't clear
     // A grenade assigned to this hand (stored in QA, shown here). Armed = bright, disarmed = dim.
     const gren = def.hand && !suppressSprite ? handGren[def.hand] : null;
     const bootsDefault = def.type === 'boots' && !g && !gren;
     const sprite = suppressSprite ? null : (gren?.spriteUrl ?? g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
-    const spriteOpacity = gren ? (gren.armed ? 1 : 0.5) : ((!!g || bootsDefault) ? 1 : 0.35);
+    const spriteOpacity = ghosted ? 0.2 : gren ? (gren.armed ? 1 : 0.5) : ((!!g || bootsDefault) ? 1 : 0.35);
     const tierBadge = gren?.tier ?? (!suppressSprite ? g?.tier : null) ?? null;
     const armed = !!gren?.armed;
     return (
@@ -330,7 +337,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
             onPointerDown={(e) => startEquipDrag(left, e)}
             onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(left); }}
             onDragStart={(e) => e.preventDefault()}
-            style={{ position: 'absolute', top: 7, left: 0, right: 0, marginInline: 'auto', width: 84, height: 46, objectFit: 'contain', cursor: 'pointer', pointerEvents: 'auto', WebkitUserDrag: 'none' } as React.CSSProperties}
+            style={{ position: 'absolute', top: 7, left: 0, right: 0, marginInline: 'auto', width: 84, height: 46, objectFit: 'contain', opacity: isGhosted(1) ? 0.2 : 1, cursor: 'pointer', pointerEvents: 'auto', WebkitUserDrag: 'none' } as React.CSSProperties}
           />
         ) : null}
       </div>

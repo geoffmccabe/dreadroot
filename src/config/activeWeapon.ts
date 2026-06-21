@@ -60,6 +60,12 @@ export function getRightWeapon(): ActiveWeaponStats | null {
   return right;
 }
 
+// The weapon the LEFT mouse fires: the left hand (E1) if it holds a gun, otherwise fall
+// back to the right hand (E2). Guarantees a single gun in EITHER hand fires on left-click.
+export function getFireWeapon(): ActiveWeaponStats | null {
+  return active ?? right;
+}
+
 export function setRightWeapon(w: ActiveWeaponStats | null): void {
   if (w === right) return;
   if (w && right && w.itemNumber === right.itemNumber) return;
