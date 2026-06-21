@@ -128,6 +128,16 @@ All colors MUST be HSL.
     --hud-highlight: 217 80% 55% / 0.5;
     --hud-selection: 271 81% 56%;
 
+    /* ─── VIP / supporter tier colors ───────────────────────────────────
+       Used app-wide as the "flex" for supporters: the User Panel corner
+       accent + the player-name colors in the Admin → Users table all read
+       these, so editing here re-themes every VIP cue at once.
+       Level 0 = basic (grey), 1 = gold, 2 = bright green, 3 = bright blue. */
+    --vip-0: rgba(255, 255, 255, 0.5);
+    --vip-1: #fbbf24;
+    --vip-2: #4ade80;
+    --vip-3: #38bdf8;
+
     /* Rarity color tokens */
     --rarity-common: 0 0% 60%;
     --rarity-uncommon: 142 76% 36%;

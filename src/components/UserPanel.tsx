@@ -47,6 +47,7 @@ import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
 import { PanelGrabBar } from '@/components/ui/PanelGrabBar';
+import { VipCornerBorder } from '@/components/VipCornerBorder';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -412,6 +413,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         }}
       >
         <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
+        <VipCornerBorder userId={user?.id ?? null} />
         <DialogHeader className="flex-shrink-0 relative" style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle className="flex items-center gap-2" style={{ color: 'hsl(var(--hud-text-bright))' }}>
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />

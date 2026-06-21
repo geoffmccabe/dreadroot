@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAdminPlayers, verdictOf, type PlayerRow, type SortCol } from './useAdminPlayers';
 import { PlayerDetailModal } from './PlayerDetailModal';
-import { vipColor, vipSize } from './vipStyle';
+import { vipColorVar, vipSize } from './vipStyle';
 
 const COLUMNS: { key: SortCol; label: string }[] = [
   { key: 'username', label: 'Player' },
@@ -33,11 +33,12 @@ function FlagCell({ r }: { r: PlayerRow }) {
 }
 
 function Row({ r, onClick }: { r: PlayerRow; onClick: () => void }) {
-  const nameCls = r.vip > 0 ? cn(vipColor(r.vip), vipSize(r.vip), 'font-bold') : 'text-white';
+  const nameCls = r.vip > 0 ? cn(vipSize(r.vip), 'font-bold') : 'text-white';
+  const nameStyle = r.vip > 0 ? { color: vipColorVar(r.vip) } : undefined;
   return (
     <tr className="border-t border-white/10 hover:bg-white/10 cursor-pointer text-white" onClick={onClick}>
       <td className="px-2 py-1">
-        <div className={cn('flex items-center gap-1', nameCls)}>
+        <div className={cn('flex items-center gap-1', nameCls)} style={nameStyle}>
           {r.username || '(no name)'}
           {r.account && <Badge variant="outline" className="text-[9px] px-1 py-0 text-white border-white/30">acct</Badge>}
         </div>
@@ -49,7 +50,7 @@ function Row({ r, onClick }: { r: PlayerRow; onClick: () => void }) {
           : <span className="text-white">{r.player_rights ?? 0}</span>}
       </td>
       <td className="px-2 py-1">
-        <span className={cn(vipColor(r.vip), vipSize(r.vip), r.vip > 0 && 'font-bold')}>{r.vip}</span>
+        <span className={cn(vipSize(r.vip), r.vip > 0 && 'font-bold')} style={{ color: vipColorVar(r.vip) }}>{r.vip}</span>
       </td>
       <td className="px-2 py-1 whitespace-nowrap text-[10px] text-white">{r.last_login_date || '—'}</td>
       <td className="px-2 py-1 tabular-nums text-white">{r.total_kills?.toLocaleString()}</td>
