@@ -490,14 +490,12 @@ export function FortressHUD(props: FortressHUDProps) {
     equipTransfer: async (from, to) => {
       // A cursor whose origin is an equip slot was dropped on inv/QS → route through equip_transfer
       // (transfer_slot doesn't handle the equip region). Shared refetch reconciles equip + inv + QS.
-      try {
-        await worldStore.equipTransfer(from, to);
-        if (refetchInventoryAndQs) void refetchInventoryAndQs();
-        return true;
-      } catch (err) {
-        console.error('[equipTransfer] failed:', err);
-        return false;
-      }
+      // NOTE: we let the error THROW (not swallow → false) so the REAL reason from the RPC
+      // (e.g. "Source slot empty") surfaces in the debug badge via handleSlotClick's catch,
+      // instead of a useless generic "equipTransfer rejected".
+      await worldStore.equipTransfer(from, to);
+      if (refetchInventoryAndQs) void refetchInventoryAndQs();
+      return true;
     },
     ejectSlotToWorld: async (from) => {
       try {
@@ -601,11 +599,15 @@ export function FortressHUD(props: FortressHUDProps) {
         if (data?.is_gun) target = 1;
       }
       if (target == null) { setDebugStatus('quick-equip: not a weapon'); return; }
-      const ok = await slotClickHandlers.equipTransfer(
-        { region, page: 0, slot },
-        { region: 'equip', page: 0, slot: target },
-      );
-      setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
+      try {
+        const ok = await slotClickHandlers.equipTransfer(
+          { region, page: 0, slot },
+          { region: 'equip', page: 0, slot: target },
+        );
+        setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
+      } catch (e) {
+        setDebugStatus('quick-equip: ' + ((e as Error)?.message ?? String(e)));
+      }
     })();
   };
 

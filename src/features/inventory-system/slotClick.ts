@@ -236,8 +236,12 @@ async function performDrop(
   const to = { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) };
   // Any move touching the equip region goes through equip_transfer (not transfer_slot).
   if (from.region === 'equip' || to.region === 'equip') {
-    const ok = await h.equipTransfer(from, to);
-    return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+    try {
+      const ok = await h.equipTransfer(from, to);
+      return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+    } catch (e) {
+      return { ok: false, reason: 'equip move failed: ' + ((e as Error)?.message ?? String(e)) };
+    }
   }
   const ok = await h.transferSlot(
     from as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },
@@ -257,8 +261,12 @@ async function performSwap(
   const from = { region: regionOf(origin), page: pageOf(origin), slot: slotOf(origin) };
   const to = { region: regionOf(dst), page: pageOf(dst), slot: slotOf(dst) };
   if (from.region === 'equip' || to.region === 'equip') {
-    const ok = await h.equipTransfer(from, to);   // equip_transfer also handles the swap case
-    return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+    try {
+      const ok = await h.equipTransfer(from, to);   // equip_transfer also handles the swap case
+      return { ok, reason: ok ? undefined : 'equipTransfer rejected' };
+    } catch (e) {
+      return { ok: false, reason: 'equip move failed: ' + ((e as Error)?.message ?? String(e)) };
+    }
   }
   const ok = await h.swapSlot(
     from as { region: 'inventory' | 'quick_select' | 'vault'; page: number; slot: number },

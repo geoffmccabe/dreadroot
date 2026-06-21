@@ -548,6 +548,23 @@ export function Fortress() {
     const aw = getActiveWeapon();
     const leftRifle = !!aw && !aw.isPistol;   // slot 1 holds a two-handed rifle
 
+    // A grenade ALREADY in a hand always responds first — even with a rifle equipped (an
+    // inconsistent legacy state where a hand grenade outlived the rifle going on). Without
+    // this, the rifle branch below would `return` and silently ignore it = "G does nothing".
+    {
+      const hgNow = getHandGrenades();
+      if (hgNow.L || hgNow.R) {
+        if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
+        const reArmNow: Hand | null = (hgNow.R && !hgNow.R.armed) ? 'R' : (hgNow.L && !hgNow.L.armed) ? 'L' : null;
+        if (reArmNow) {
+          const cur = getHandGrenades()[reArmNow]!;
+          setHandGrenade(reArmNow, { ...cur, armed: true });
+          playPinPullSound();
+        }
+        return;
+      }
+    }
+
     // ── RIFLE: legacy QA flow. Armed → throw; else arm a QA grenade (stage from INV if needed). ──
     if (leftRifle) {
       if (grenadeReadySlot !== null) { grenadeThrowRef.current?.(); return; }
