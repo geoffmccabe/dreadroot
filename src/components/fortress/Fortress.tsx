@@ -565,6 +565,38 @@ export function Fortress() {
       }
     }
 
+    // A grenade sitting as a REAL EQUIP ITEM in a hand (dragged there) can't be armed/thrown by
+    // the QA-backed machinery, so G would wrongly "fill another". ADOPT it: bind it to the hand
+    // overlay ARMED (instant red-flash) and move the item into a backing QA slot so the existing
+    // throw/consume path works. Right hand first. Never fills when a hand grenade is present.
+    {
+      const hgAdopt = getHandGrenades();
+      const handSlots: Array<[Hand, number]> = [['R', 5], ['L', 1]];
+      for (const [hand, eqSlot] of handSlots) {
+        if (hgAdopt[hand]) continue;   // already an overlay in this hand
+        const eqGren = equippedGear.find((e: { slot: number; itemId: string }) => e.slot === eqSlot && defs.has(e.itemId));
+        if (!eqGren) continue;
+        // Need a free QA slot to back the overlay (the throw path consumes from QA).
+        const { data: qaRows } = await supabase.from('user_slots' as any).select('slot').eq('user_id', user.id).eq('region', 'quick_select');
+        const usedQa = new Set<number>(((qaRows as any[]) ?? []).map((r) => r.slot));
+        let dst: number | null = null;
+        for (let i = 1; i <= 6; i++) { if (!usedQa.has(i)) { dst = i; break; } }
+        if (dst === null) return;   // QA full → can't adopt right now
+        const tier = defs.get(eqGren.itemId) ?? 1;
+        const sprite = await grenadeSpriteFor(eqGren.itemId);
+        setHandGrenade(hand, { qsSlot: dst, tier, spriteUrl: sprite, armed: true });   // ARM (red flash)
+        playPinPullSound();
+        try {
+          await worldStore.equipTransfer({ region: 'equip', page: 0, slot: eqSlot }, { region: 'quick_select', page: 0, slot: dst });
+          if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        } catch (err) {
+          setHandGrenade(hand, null);   // revert the overlay if the backing move failed
+          console.error('[grenade] adopt equip→QA failed:', err);
+        }
+        return;
+      }
+    }
+
     // ── RIFLE: legacy QA flow. Armed → throw; else arm a QA grenade (stage from INV if needed). ──
     if (leftRifle) {
       if (grenadeReadySlot !== null) { grenadeThrowRef.current?.(); return; }
@@ -632,7 +664,7 @@ export function Fortress() {
       setHandGrenade(reArm, { ...cur, armed: true });
       playPinPullSound();
     }
-  }, [grenadeReadySlot, user?.id, equippedGear, stageGrenadeToQa, grenadeSpriteFor]);
+  }, [grenadeReadySlot, user?.id, equippedGear, stageGrenadeToQa, grenadeSpriteFor, refetchInventoryAndQs]);
 
   // Throw flow needs to clear the armed slot when the click consumes
   // the grenade. We can't modify onThrowGrenade itself (it lives in
