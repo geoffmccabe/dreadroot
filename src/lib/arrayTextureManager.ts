@@ -65,6 +65,14 @@ class ArrayTextureManagerImpl {
   private decodeCanvas: HTMLCanvasElement | null = null;
   private decodeCtx: CanvasRenderingContext2D | null = null;
 
+  // Mipmaps: streamed layers upload via texSubImage3D (level 0 only), so the mip chain
+  // goes stale for newly-loaded layers → shimmer/moiré at distance until refreshed. We
+  // keep the renderer to manually regenerate the chain (GPU-side, no CPU re-upload) once
+  // streaming settles. mipsDirty flags pending work; lastLayerWriteMs debounces.
+  private renderer: THREE.WebGLRenderer | null = null;
+  private mipsDirty = false;
+  private lastLayerWriteMs = 0;
+
   isInited(): boolean { return this.inited; }
   getRevision(): number { return this.revision; }
   /** The layer a url currently occupies, or null if not resident (no side effects). */
@@ -94,12 +102,18 @@ class ArrayTextureManagerImpl {
     this.tex = new THREE.DataArrayTexture(this.buffer, this.layerRes, this.layerRes, this.layerCount);
     this.tex.format = THREE.RGBAFormat;
     this.tex.type = THREE.UnsignedByteType;
-    this.tex.minFilter = THREE.LinearFilter; // no mipmaps for streamed layers (Stage 5 can add)
+    // Trilinear mipmapping + anisotropy — kills the distance moiré/shimmer on detailed
+    // textures (matches the old single-atlas behaviour). generateMipmaps=true lets three
+    // build the chain on the initial full upload (texture stays complete = never black);
+    // we then refresh it manually as layers stream in (see regenerateMipmaps()).
+    this.renderer = gl;
+    this.tex.minFilter = THREE.LinearMipmapLinearFilter;
     this.tex.magFilter = THREE.LinearFilter;
+    this.tex.generateMipmaps = true;
+    this.tex.anisotropy = Math.min(4, gl.capabilities?.getMaxAnisotropy?.() ?? 1);
     this.tex.wrapS = THREE.ClampToEdgeWrapping;
     this.tex.wrapT = THREE.ClampToEdgeWrapping;
     this.tex.colorSpace = THREE.SRGBColorSpace;
-    this.tex.generateMipmaps = false;
     this.tex.needsUpdate = true;
 
     this.decodeCanvas = document.createElement('canvas');
@@ -260,6 +274,24 @@ class ArrayTextureManagerImpl {
     this.buffer.set(px, off);
     this.tex.layerUpdates.add(layer); // upload ONLY this layer (texSubImage3D)
     this.tex.needsUpdate = true;
+    this.mipsDirty = true;
+    this.lastLayerWriteMs = performance.now();
+  }
+
+  /** Refresh the mip chain after layers have streamed in. Call from a frame tick; cheap
+   *  no-op unless layers changed and streaming has settled (~250ms quiet). GPU-side
+   *  generateMipmap — no CPU re-upload. Resyncs three's GL state cache afterward. */
+  maybeRegenMipmaps(): void {
+    if (!this.mipsDirty || !this.tex || !this.renderer) return;
+    if (performance.now() - this.lastLayerWriteMs < 250) return; // wait for the burst to settle
+    const r = this.renderer;
+    const webglTex = (r.properties.get(this.tex) as { __webglTexture?: WebGLTexture })?.__webglTexture;
+    if (!webglTex) return; // three hasn't uploaded it yet — try again next tick
+    const gl = r.getContext() as WebGL2RenderingContext;
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, webglTex);
+    gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+    r.resetState(); // we perturbed the bound texture — resync three's cache
+    this.mipsDirty = false;
   }
 
   private fillLayer(layer: number, r: number, g: number, b: number): void {

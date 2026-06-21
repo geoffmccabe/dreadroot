@@ -341,6 +341,8 @@ if (isArrayBackend()) {
     if (acc < 1) return;
     acc = 0;
     refreshSlotLayerTexture();
+    // Refresh the mip chain once newly-streamed layers settle (kills distance moiré).
+    getArrayTextureManager().maybeRegenMipmaps();
   }, 75);
 }
 
