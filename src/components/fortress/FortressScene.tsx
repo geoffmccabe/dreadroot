@@ -1939,10 +1939,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
       {/* Vault proximity — emits when player walks into the back-wall
           trigger zone so the HUD prompt + V keybind activate. */}
-      {onVaultProximityChange && (
+      {onVaultProximityChange && !isSiege && (
         <VaultProximityWatcher
           cameraRef={cameraRef}
-          enabled={true}
+          enabled={!isSiege}
           onChange={onVaultProximityChange}
         />
       )}

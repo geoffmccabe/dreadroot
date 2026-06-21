@@ -161,6 +161,9 @@ export function FirstPersonControls({
   groundHeightFn,
 }: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null }) {
   const { camera, gl } = useThree();
+  // Siege maps pass groundHeightFn — there is NO fortress there, so all fortress-position
+  // systems (no-fire safe zone, vault) must be OFF (they live at the origin = siege spawn).
+  const isSiege = !!groundHeightFn;
   const { raycastMeshes } = useRaycaster();
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
@@ -824,10 +827,10 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyV':
-        // Open vault if the player is near the fortress back-wall.
+        // Open vault if the player is near the fortress back-wall. DreadRoot only — no vault in siege.
         // No modifier — Cmd/Ctrl+V is left alone (browser paste).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
-        if (onOpenVault) {
+        if (!isSiege && onOpenVault) {
           event.preventDefault();
           onOpenVault();
         }
@@ -1010,8 +1013,8 @@ export function FirstPersonControls({
     // warning each attempt. (Flame glove = non-gun → flame path, never reaches here.)
     // Exception: if the LEFT hand legitimately holds a grenade, stay silent (throw with G).
     if (!aw) { if (!getHandGrenades().L) flashCenter('NO WEAPON EQUIPPED'); return; }
-    // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot.
-    if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
+    // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot. DreadRoot only — no fortress in siege.
+    if (!isSiege && isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
       return;
     }
@@ -1303,8 +1306,8 @@ export function FirstPersonControls({
   const firePentabullet = useCallback(() => {
     if (!onShoot) return;
 
-    // Check if player is in no-fire zone (FSZ + 1 chunk buffer)
-    if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
+    // Check if player is in no-fire zone (FSZ + 1 chunk buffer) — DreadRoot only.
+    if (!isSiege && isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       // Play empty gun click sound and cancel the charge
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
       cancelPentabulletCharge();
