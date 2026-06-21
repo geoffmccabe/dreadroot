@@ -216,9 +216,24 @@ export const CITY_DEMO_WORLD: WorldDefinition = {
   ownerId: null,
   wireId: 3,
   kind: 'siege',
-  meshColliders: false, // the city wires its own colliders via CityDemo
+  meshColliders: false, // the demo wires its own colliders via DemoScene
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
   ground: { kind: 'heightmap', surfaceY: 0 }, // same editable grass terrain as Starblink
+  spawn: { position: [0, 3, 0], yaw: 0 },
+  props: undefined,
+};
+
+/** SciFi Space — the baked Synty SciFi Space exterior demo, same treatment as City. */
+export const SPACE_DEMO_WORLD: WorldDefinition = {
+  id: 'space-demo',
+  name: 'SciFi Space',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 4,
+  kind: 'siege',
+  meshColliders: false,
+  bounds: { min: [-1500, -1500], max: [1500, 1500] },
+  ground: { kind: 'heightmap', surfaceY: 0 },
   spawn: { position: [0, 3, 0], yaw: 0 },
   props: undefined,
 };
@@ -228,6 +243,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
+  [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

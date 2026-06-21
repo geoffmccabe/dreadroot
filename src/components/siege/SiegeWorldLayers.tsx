@@ -15,7 +15,7 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
-import { CityDemo } from './scifi/CityDemo';
+import { DemoScene } from './scifi/DemoScene';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -109,10 +109,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
-          {/* Baked Synty city demo + its BVH colliders (City Demo map only). */}
+          {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
           {world.id === 'city-demo' && (
             <Suspense fallback={null}>
-              <CityDemo />
+              <DemoScene file="city_demo.gltf" group="citydemo" />
+              <MeshColliderPlayer />
+            </Suspense>
+          )}
+          {world.id === 'space-demo' && (
+            <Suspense fallback={null}>
+              <DemoScene file="space_demo.gltf" group="spacedemo" />
               <MeshColliderPlayer />
             </Suspense>
           )}

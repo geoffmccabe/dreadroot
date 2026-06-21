@@ -44,6 +44,15 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 8, name: 'Jungle',        pos: [-733, 29, 651] },
   // Builder sandbox — its OWN map (flat editable terrain), reached like any other area.
   { slot: 9, name: 'Starblink',     pos: [0, 3, 0], mapId: 'starblink' },
-  // Baked Synty city showcase — its own flat map with BVH colliders.
-  { slot: 0, name: 'City Demo',     pos: [0, 3, 0], mapId: 'city-demo' },
+];
+
+/**
+ * Baked Synty asset-set demos — each its OWN map, reached by Ctrl/Cmd+J then a LETTER.
+ * Only sets that ship a fully-assembled scene FBX appear here (City, Space). Component-only
+ * sets (CyberCity, Mech, SciFi Worlds) have no baked scene → they belong in the builder.
+ */
+export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; }
+export const SIEGE_DEMOS: SiegeDemoMap[] = [
+  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',  pos: [0, 3, 0] },
+  { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo', pos: [0, 3, 0] },
 ];

@@ -1,8 +1,8 @@
-// CityDemo — the fully-baked Synty "SciFi City" demo scene (the whole assembled city,
-// 1866 meshes) loaded as ONE glb, grounded at real 1:1 scale. Player collision uses the
-// existing SWW BVH mesh-collider system, built in the BACKGROUND via the budgeted work
-// queue so entering the map never freezes (1866 BVH builds spread over frames). Lives on
-// its own 'city-demo' map (teleport slot 0) so Starblink stays a blank builder canvas.
+// DemoScene — a fully-baked Synty demo scene (City, Space, …) loaded as ONE glb, grounded
+// at real 1:1 scale, with player collision via the SWW BVH mesh-collider system, built in
+// the BACKGROUND on the budgeted work queue so entering never freezes. Backdrop/decor meshes
+// (planet/sky/background/hologram/billboard/neon/glass) are excluded from collision so they
+// don't become giant invisible walls. Each demo lives on its own map (letter teleport).
 
 import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
@@ -14,31 +14,26 @@ import {
   setMeshCollidersEnabled, type MeshInstanceInput,
 } from '../meshColliderSystem';
 
-const GROUP = 'citydemo';
-const COLLIDER_RATIO = 0.5;   // decimate collider geometry to half (BVH is for blocking, not pixels)
+const COLLIDER_RATIO = 0.5;   // decimate collider geometry (BVH blocks movement, not pixels)
 const PER_JOB = 40;           // meshes registered per budgeted tick
+const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
-// Draco-compressed (51MB→9MB to fit Cloudflare's 25MB/file limit); decode via local /draco/.
-export function CityDemo() {
-  const { scene } = useGLTF('/siege/scifi_demo/city_demo.gltf', '/draco/');
+export function DemoScene({ file, group }: { file: string; group: string }) {
+  // Draco-compressed (to fit Cloudflare's 25MB/file limit); decode via local /draco/.
+  const { scene } = useGLTF(`/siege/scifi_demo/${file}`, '/draco/');
 
   const root = useMemo(() => {
     const model = scene.clone(true);
-    // Ground the whole scene so its lowest point sits on the terrain at the map origin.
     const box = new THREE.Box3().setFromObject(model);
     const ground = sampleHeight(0, 0) ?? 0;
     const wrap = new THREE.Group();
     wrap.add(model);
-    wrap.position.set(0, ground - box.min.y, 0);
+    wrap.position.set(0, ground - box.min.y, 0);   // lowest point sits on the ground
     wrap.updateMatrixWorld(true);
     return wrap;
   }, [scene]);
 
   useEffect(() => {
-    // Collect SOLID meshes + world matrix for BVH colliders. EXCLUDE backdrop/decor meshes
-    // (planet, sky, far background buildings, holograms, billboards, neon, glass) — those
-    // are huge or non-physical and were creating giant invisible walls around the city.
-    const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
     const meshes: THREE.Mesh[] = [];
     root.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -51,32 +46,33 @@ export function CityDemo() {
 
     let i = 0;
     const inputs: MeshInstanceInput[] = [];
-    enqueueJob('citydemo_colliders', () => {
+    enqueueJob(`demo_colliders_${group}`, () => {
       const end = Math.min(i + PER_JOB, meshes.length);
       for (; i < end; i++) {
         const m = meshes[i];
         const geo = m.geometry as THREE.BufferGeometry;
         if (!geo.boundingBox) geo.computeBoundingBox();
-        const key = `citydemo_${i}`;
-        registerMeshGeometry('citydemo', key, geo, COLLIDER_RATIO);
+        const key = `${group}_${i}`;
+        registerMeshGeometry(group, key, geo, COLLIDER_RATIO);
         inputs.push({ key, matrix: m.matrixWorld.clone(), geoBox: geo.boundingBox!.clone() });
       }
       if (i >= meshes.length) {
-        setGroupInstances(GROUP, inputs);
+        setGroupInstances(group, inputs);
         setMeshCollidersEnabled(true);
-        return true;   // done
+        return true;
       }
-      return false;    // keep going next frame
+      return false;
     });
 
     return () => {
-      clearGroup(GROUP);
+      clearGroup(group);
       clearMeshColliders();
       setMeshCollidersEnabled(false);
     };
-  }, [root]);
+  }, [root, group]);
 
   return <primitive object={root} />;
 }
 
 useGLTF.preload('/siege/scifi_demo/city_demo.gltf', '/draco/');
+useGLTF.preload('/siege/scifi_demo/space_demo.gltf', '/draco/');
