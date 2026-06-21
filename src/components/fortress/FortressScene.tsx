@@ -1437,6 +1437,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     setShowCrosshairs,
     getDefinitionRef,
     camera,
+    isSiege,
   });
 
   
@@ -1828,8 +1829,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Standalone diagnostic: Thorn + Shi Yang standing side-by-side near spawn, animated
           (idle), with name tags — walk up to compare arm/hand distortion. No dropdown/avatar. */}
       {isSiegeReview && <SiegeCharacterPair />}
-      {/* Review row of freshly-imported Synty monsters (Goblin War Camp + Boss Zombies) near spawn. */}
-      {isSiegeReview && <SiegeNewMonsterLineup />}
+      {/* Monster spawner (@<#>#<qty> command) + combat — enabled on ALL siege maps so you can
+          spawn enemies and fight them for testing/demos, not just the SWW review map. */}
+      {isSiege && <SiegeNewMonsterLineup />}
       {isSiege ? (
         <SiegeWorldLayers world={activeWorld} />
       ) : (

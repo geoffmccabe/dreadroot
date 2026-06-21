@@ -19,6 +19,7 @@ export function useFortressShooting({
   setShowCrosshairs,
   getDefinitionRef,
   camera,
+  isSiege = false,
 }: {
   checkWispHit: () => Promise<boolean>;
   selectedBulletTier: number;
@@ -30,6 +31,7 @@ export function useFortressShooting({
   setShowCrosshairs: Dispatch<SetStateAction<boolean>>;
   getDefinitionRef: MutableRefObject<(tier: number) => any>;
   camera: THREE.Camera;
+  isSiege?: boolean;
 }) {
   const handleShoot = useCallback((
     origin?: THREE.Vector3,
@@ -46,8 +48,10 @@ export function useFortressShooting({
       capturedOrigin = new THREE.Vector3(snap.x, snap.y, snap.z);
     }
 
-    // Block firing inside Fortress Safe Zone
-    if (isPointInFSZ(capturedOrigin.x, capturedOrigin.y, capturedOrigin.z)) return;
+    // Block firing inside Fortress Safe Zone — but ONLY in DreadRoot. Siege maps have no
+    // fortress; the safe zone sits at the origin where Siege builder maps spawn, which was
+    // silently blocking guns there.
+    if (!isSiege && isPointInFSZ(capturedOrigin.x, capturedOrigin.y, capturedOrigin.z)) return;
 
     const capturedDirection = direction ? direction.clone() : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     capturedDirection.normalize();
