@@ -63,9 +63,11 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
     if (it.item_number != null) {
       const { data: ws } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number; reload_sound: string | null; is_gun: boolean | null; is_pistol: boolean | null } | null }> } } };
-      }).from('weapon_stats').select('item_number,reload_sound,is_gun,is_pistol').eq('item_number', it.item_number).maybeSingle();
-      if (ws || isGlove) return { ok: true, item, reloadKey: ws?.reload_sound ?? null, isRifle: !!ws?.is_gun && !ws?.is_pistol };
+        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
+      }).from('weapon_stats').select('*').eq('item_number', it.item_number).maybeSingle();
+      // A rifle is TWO-HANDED. Safe-by-default: a gun is one-handed (pistol) UNLESS
+      // explicitly flagged is_two_handed, so an unmarked gun is never wrongly centered.
+      if (ws || isGlove) return { ok: true, item, reloadKey: (ws?.reload_sound as string) ?? null, isRifle: !!ws?.is_gun && !!ws?.is_two_handed };
     } else if (isGlove) {
       return { ok: true, item, reloadKey: null, isRifle: false };
     }
@@ -90,7 +92,7 @@ async function loadWeaponStats(itemNumber: number): Promise<{ stats: ActiveWeapo
     itemNumber, name: (d.name as string) ?? 'Weapon',
     shootCooldown: cd, maxDamage: (d.max_damage as number) ?? 25,
     fireSound: (d.fire_sound as string) ?? null, emptySound: (d.empty_sound as string) ?? null,
-    reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic, isPistol: !!d.is_pistol,
+    reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic, isPistol: !d.is_two_handed,
     ammoClipAmount: clip, reloadTime: (d.reload_time as number) ?? null,
     projectile: (d.projectile as string) ?? null, bulletsPerTap: (d.bullets_per_tap as number) ?? null,
     horizontalSpread: (d.horizontal_spread as number) ?? null, verticalSpread: (d.vertical_spread as number) ?? null,
@@ -103,7 +105,7 @@ async function loadWeaponStats(itemNumber: number): Promise<{ stats: ActiveWeapo
     isSniper: (d.is_sniper as boolean) ?? null,
     scopeGraphicUrl: (d.scope_graphic_url as string) ?? null,
   };
-  return { stats, kind: d.is_pistol ? 'pistol' : 'rifle' };
+  return { stats, kind: d.is_two_handed ? 'rifle' : 'pistol' };   // safe default: one-handed unless flagged two-handed
 }
 
 function originToRpc(origin: CursorOrigin): { region: string; page: number; slot: number } {
