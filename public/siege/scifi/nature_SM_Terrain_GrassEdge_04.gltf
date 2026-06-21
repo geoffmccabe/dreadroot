@@ -3,6 +3,12 @@
 		"generator":"Khronos glTF Blender I/O v4.4.55",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"EXT_texture_webp"
+	],
+	"extensionsRequired":[
+		"EXT_texture_webp"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -34,6 +40,9 @@
 			"doubleSided":true,
 			"name":"lambert1",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":0
+				},
 				"metallicFactor":0
 			}
 		}
@@ -52,6 +61,23 @@
 					"material":0
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonNature_04",
+			"uri":"PolygonNature_04.webp"
 		}
 	],
 	"accessors":[
@@ -114,6 +140,12 @@
 			"byteLength":1650,
 			"byteOffset":25216,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[

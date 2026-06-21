@@ -3,6 +3,12 @@
 		"generator":"Khronos glTF Blender I/O v4.4.55",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"EXT_texture_webp"
+	],
+	"extensionsRequired":[
+		"EXT_texture_webp"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -55,6 +61,9 @@
 			"doubleSided":true,
 			"name":"trunk1",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":0
+				},
 				"metallicFactor":0
 			}
 		},
@@ -62,12 +71,9 @@
 			"doubleSided":true,
 			"name":"lambert29",
 			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					0.5,
-					0.5,
-					0.5,
-					1
-				],
+				"baseColorTexture":{
+					"index":1
+				},
 				"metallicFactor":0
 			}
 		}
@@ -138,6 +144,31 @@
 					"material":1
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonNatureBiomes_Tropical_Texture_01",
+			"uri":"PolygonNatureBiomes_Tropical_Texture_01.webp"
 		}
 	],
 	"accessors":[
@@ -504,6 +535,12 @@
 			"byteLength":96,
 			"byteOffset":124888,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[

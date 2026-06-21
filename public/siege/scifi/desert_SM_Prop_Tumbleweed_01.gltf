@@ -3,6 +3,12 @@
 		"generator":"Khronos glTF Blender I/O v4.4.55",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"EXT_texture_webp"
+	],
+	"extensionsRequired":[
+		"EXT_texture_webp"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -50,20 +56,31 @@
 			"doubleSided":true,
 			"name":"Nature_Base_Mat4",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":0
+				},
 				"metallicFactor":0
 			}
 		},
 		{
+			"alphaMode":"BLEND",
 			"doubleSided":true,
 			"name":"lambert5",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":1
+				},
 				"metallicFactor":0
 			}
 		},
 		{
+			"alphaMode":"BLEND",
 			"doubleSided":true,
 			"name":"lambert3",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":2
+				},
 				"metallicFactor":0
 			}
 		}
@@ -110,6 +127,49 @@
 					"material":2
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":1
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":2
+				}
+			},
+			"sampler":0
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonNatureBiomesS2_AridDesert_Texture_01",
+			"uri":"PolygonNatureBiomesS2_AridDesert_Texture_01.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"TumbleWeed_01_Sphere",
+			"uri":"TumbleWeed_01_Sphere.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"TumbleWeed_01",
+			"uri":"TumbleWeed_01.webp"
 		}
 	],
 	"accessors":[
@@ -288,6 +348,12 @@
 			"byteLength":36,
 			"byteOffset":96756,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[

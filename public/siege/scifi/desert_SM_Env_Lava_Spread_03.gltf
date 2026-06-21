@@ -3,6 +3,14 @@
 		"generator":"Khronos glTF Blender I/O v4.4.55",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"KHR_texture_transform",
+		"EXT_texture_webp"
+	],
+	"extensionsRequired":[
+		"KHR_texture_transform",
+		"EXT_texture_webp"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -34,6 +42,17 @@
 			"doubleSided":true,
 			"name":"Lavawave1",
 			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"extensions":{
+						"KHR_texture_transform":{
+							"offset":[
+								0,
+								0.30000001192092896
+							]
+						}
+					},
+					"index":0
+				},
 				"metallicFactor":0
 			}
 		}
@@ -52,6 +71,23 @@
 					"material":0
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/webp",
+			"name":"Lavawave_Hot",
+			"uri":"Lavawave_Hot.webp"
 		}
 	],
 	"accessors":[
@@ -114,6 +150,12 @@
 			"byteLength":1014,
 			"byteOffset":3584,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[

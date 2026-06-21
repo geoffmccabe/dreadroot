@@ -3,6 +3,12 @@
 		"generator":"Khronos glTF Blender I/O v4.4.55",
 		"version":"2.0"
 	},
+	"extensionsUsed":[
+		"EXT_texture_webp"
+	],
+	"extensionsRequired":[
+		"EXT_texture_webp"
+	],
 	"scene":0,
 	"scenes":[
 		{
@@ -34,12 +40,9 @@
 			"doubleSided":true,
 			"name":"Trunk",
 			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					1,
-					0,
-					0,
-					1
-				],
+				"baseColorTexture":{
+					"index":0
+				},
 				"metallicFactor":0
 			}
 		},
@@ -47,12 +50,9 @@
 			"doubleSided":true,
 			"name":"Leave",
 			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					0.2049928903579712,
-					1,
-					0,
-					1
-				],
+				"baseColorTexture":{
+					"index":1
+				},
 				"metallicFactor":0
 			}
 		},
@@ -60,12 +60,9 @@
 			"doubleSided":true,
 			"name":"Leaves_Dead",
 			"pbrMetallicRoughness":{
-				"baseColorFactor":[
-					0,
-					0.22726798057556152,
-					1,
-					1
-				],
+				"baseColorTexture":{
+					"index":2
+				},
 				"metallicFactor":0
 			}
 		}
@@ -108,6 +105,39 @@
 					"material":2
 				}
 			]
+		}
+	],
+	"textures":[
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":0
+				}
+			},
+			"sampler":0
+		}
+	],
+	"images":[
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonNature_04",
+			"uri":"PolygonNature_04.webp"
 		}
 	],
 	"accessors":[
@@ -364,6 +394,12 @@
 			"byteLength":1260,
 			"byteOffset":448032,
 			"target":34963
+		}
+	],
+	"samplers":[
+		{
+			"magFilter":9729,
+			"minFilter":9987
 		}
 	],
 	"buffers":[
