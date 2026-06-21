@@ -25,6 +25,7 @@ import { MultiplayerPlayers } from '@/components/MultiplayerPlayers';
 import { LocalPlayerAvatar } from '@/components/LocalPlayerAvatar';
 import { FirstPersonArms } from '@/components/FirstPersonArms';
 import { ChopFeedback } from './ChopFeedback';
+import { ArrayTextureDebug } from '@/features/arrayTextureDebug/ArrayTextureDebug';
 import { FortressBanners } from './FortressBanners';
 import { FortressForceField } from './FortressForceField';
 import { ForceFieldMoire } from './ForceFieldMoire';
@@ -1789,6 +1790,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       
       <MultiplayerPlayers players={players} />
       <ChopFeedback />
+      <ArrayTextureDebug />
       <FortressBuilderPreview />
       <LightsPreview />
       <FortressPostFX />
