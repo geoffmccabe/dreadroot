@@ -123,7 +123,7 @@ function clusterCentroids(voxels: FortressVoxel[], max: number): { x: number; y:
 // Real point lights that spill onto nearby blocks/terrain. A FIXED count is always
 // rendered (unused ones parked far away at 0 intensity) so the scene's light count
 // never changes — that avoids the material recompiles that cause black flashing.
-function LightSpill({ voxels, color, intensity, spread, max = 6 }: { voxels: FortressVoxel[]; color: string; intensity: number; spread: number; max?: number }) {
+function LightSpill({ voxels, color, intensity, spread, max = 8 }: { voxels: FortressVoxel[]; color: string; intensity: number; spread: number; max?: number }) {
   const centroids = useMemo(() => clusterCentroids(voxels, max), [voxels, max]);
   return (
     <>
@@ -136,7 +136,9 @@ function LightSpill({ voxels, color, intensity, spread, max = 6 }: { voxels: For
             // onto the wall it came from. `spread` = how far that wash reaches.
             position={c ? [c.x + 0.5, c.y + 0.5, c.z + 0.5] : [0, -10000, 0]}
             color={color}
-            intensity={c ? intensity * 5 : 0}
+            // x12 (decay 2 falls off fast) so the wash is actually visible on neighbours;
+            // the user's intensity slider scales it.
+            intensity={c ? intensity * 12 : 0}
             distance={Math.max(2, spread)}
             decay={2}
           />
