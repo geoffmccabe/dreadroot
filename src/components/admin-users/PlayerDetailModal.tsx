@@ -70,7 +70,10 @@ export function PlayerDetailModal({ player, onClose, onChanged }: {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col text-white">
+      <DialogContent
+        className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col text-white border"
+        style={{ background: 'hsla(var(--hud-bg))', borderColor: 'hsla(var(--hud-border))' }}
+      >
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2 text-white">
             {player.username || '(no name)'}
