@@ -38,6 +38,9 @@ export interface SlotClickInput {
   button: 'left' | 'right';
   shift: boolean;
   doubleClick: boolean;
+  /** How this left-interaction began: a press-and-DRAG (picks the item up) vs a plain
+   *  TAP (never moves — only counts toward triple-click-to-equip). Absent = cursor drop. */
+  intent?: 'drag' | 'tap';
 }
 
 /** Handler bag the reducer needs to actually mutate state. v4.11.0

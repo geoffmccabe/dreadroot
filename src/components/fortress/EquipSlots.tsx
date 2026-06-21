@@ -243,16 +243,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
       return;
     }
-    // No cursor + filled slot → unequip back to the first empty inventory slot. No optimistic
-    // mutation: the gear-prop refresh drives the slot; on failure nothing changed locally.
-    if (equip[def.num]) {
-      void playSound(EQUIP_FALLBACK, 0.5);
-      const dst = await firstEmptyInventorySlot();
-      if (dst == null) { toast({ title: 'Inventory full', duration: 2000 }); return; }
-      try { await equipTransfer({ region: 'equip', page: 0, slot: def.num }, { region: 'inventory', page: 0, slot: dst }); }
-      catch (err) { reportFail('Unequip failed', err); }
-      void onMoved();
-    }
+    // No cursor → a plain CLICK on a filled equip slot does NOTHING. Per the rules, items
+    // move ONLY by drag-and-drop (drag the item out to inventory/QA to unequip).
   };
 
   // Drag OUT of an equip slot: pressing a filled slot and dragging lifts the item onto the cursor

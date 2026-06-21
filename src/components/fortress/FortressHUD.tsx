@@ -553,10 +553,10 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
-    // INVENTORY triple-click → quick-equip the weapon there to E1 (the cursor
-    // pickup is local-only, so the item is still in the inventory DB the whole
-    // time; on the 3rd click we just clear the cursor and equip from inventory).
-    if (input.location.region === 'inventory' && input.button === 'left' && !input.shift && !input.doubleClick) {
+    // INVENTORY plain TAP → only counts toward triple-click-to-equip (3rd tap equips to
+    // E1). A tap NEVER picks an item up — moving is drag-only — so we ALWAYS return here
+    // for a tap, never falling through to the pickup reducer. (Drags carry intent='drag'.)
+    if (input.intent === 'tap' && input.location.region === 'inventory' && input.button === 'left' && !input.shift && !input.doubleClick) {
       const slot = input.location.gridSlot;
       const t0 = Date.now();
       const it = invTapRef.current;
@@ -565,13 +565,12 @@ export function FortressHUD(props: FortressHUDProps) {
         if (it.count >= 3) {
           invTapRef.current = null;
           const itemId = it.itemId ?? input.occupant?.itemId ?? null;
-          setCursor(null);
           if (itemId) resolveAndEquipRef.current('inventory', slot, itemId);
-          return;   // skip the normal pickup on the 3rd click
         }
       } else {
         invTapRef.current = { slot, count: 1, first: t0, itemId: input.occupant?.itemId ?? null };
       }
+      return;   // a plain tap never moves the item
     }
     try {
       const result = await slotClick(input, cursor, slotClickHandlers);

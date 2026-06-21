@@ -69,12 +69,13 @@ export function SlotGrid({
             ghosted={ghosted}
             highlight={highlight}
             onInspect={onSlotInspect}
-            onClick={(button, shift, doubleClick) => onSlotClick({
+            onClick={(button, shift, doubleClick, intent) => onSlotClick({
               location: locationOf(slotIdx),
               occupant: occ ?? null,
               button,
               shift,
               doubleClick,
+              intent,
             })}
           />
         );
@@ -89,7 +90,7 @@ interface SlotTileProps {
   occupant: SlotOccupant | undefined;
   ghosted: boolean;
   highlight: boolean;
-  onClick: (button: 'left' | 'right', shift: boolean, doubleClick: boolean) => void;
+  onClick: (button: 'left' | 'right', shift: boolean, doubleClick: boolean, intent?: 'drag' | 'tap') => void;
   onInspect?: (occupant: SlotOccupant) => void;
 }
 
@@ -147,8 +148,9 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
             p.didDrag = true;
             // Drag begun on an empty cursor → lift this tile's item onto
             // the cursor so it rides the drag; the release tile's
-            // onPointerUp performs the drop.
-            if (!p.cursorWasHeld && occupant) onClick('left', ev.shiftKey, false);
+            // onPointerUp performs the drop. intent='drag' → this is the ONLY
+            // way a plain (non-shift) interaction picks an item up.
+            if (!p.cursorWasHeld && occupant) onClick('left', ev.shiftKey, false, 'drag');
           }
         };
         const onCancel = () => { pressRef.current = null; cleanup(); };
@@ -162,11 +164,11 @@ function SlotTile({ slotIndex, occupant, ghosted, highlight, onClick, onInspect 
           // the dblclick handler's vault→inv shortcut isn't fighting a
           // half-completed cursor pickup.
           if (ev.detail >= 2) return;
-          // Discrete click with no drag. Drops/returns (cursor already
-          // held) are handled by this tile's onPointerUp; only the
-          // PICKUP case is left to do here.
+          // Discrete click with no drag → a plain TAP. It must NEVER pick the item up
+          // (only drag moves). Report it as intent='tap' so the reducer just counts it
+          // toward triple-click-to-equip; nothing is lifted onto the cursor.
           if (!p.cursorWasHeld && cursorStackApi.getCursor() === null && occupant) {
-            onClick('left', ev.shiftKey, false); // pick up; cursor stays held
+            onClick('left', ev.shiftKey, false, 'tap');
           }
         };
         document.addEventListener('pointermove', onMove);
