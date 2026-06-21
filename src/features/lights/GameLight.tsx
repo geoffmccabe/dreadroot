@@ -36,11 +36,14 @@ uniform float uStrength;
 void main() {
   vec3 toCam = cameraPosition - vWorldPos;
   vec3 viewDir = toCam / max(length(toCam), 1e-4);
-  // Edge-on glow → soft, blurry beam silhouette (no hard cone edge).
+  // Soft edge glow, but with a base so the beam is NOT dark when viewed head-on (down
+  // the axis). Pure fresnel went black face-on → a "dark circle" once the beam aims at
+  // the viewer. Base 0.45 keeps the core glowing; fresnel adds soft brighter edges.
   float fres = pow(1.0 - abs(dot(viewDir, vWorldNormal)), 2.0);
+  float glow = 0.45 + 0.55 * fres;
   // Brightest near the light, fading out toward the far end ("diminishes as it widens").
   float lenFade = 1.0 - vAlong;
-  float a = uStrength * fres * (0.25 + 0.75 * lenFade);
+  float a = uStrength * glow * (0.3 + 0.7 * lenFade);
   gl_FragColor = vec4(uColor, a);
 }`;
 
@@ -168,9 +171,14 @@ function SpotLightImpl({ def, idSuffix = '' }: { def: LightDef; idSuffix?: strin
         castShadow={def.shadowOn}
         shadow-mapSize-width={def.shadowSize}
         shadow-mapSize-height={def.shadowSize}
-        shadow-camera-near={0.3}
+        shadow-camera-near={0.5}
         shadow-camera-far={def.range}
-        shadow-bias={-0.0009}
+        // normalBias offsets the shadow along the surface normal — the proper cure for
+        // blocky self-shadowing (acne) that was darkening the whole lit disc. bias kept
+        // tiny. Together: the spotlight actually LIGHTS its area and occluders (trees,
+        // blocks, monsters) cast clean shadows instead of the surface shadowing itself.
+        shadow-normalBias={0.4}
+        shadow-bias={-0.00015}
         map={cookie}
       />
       <object3D ref={targetRef} position={[target.x, target.y, target.z]} />
