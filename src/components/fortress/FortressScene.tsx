@@ -87,6 +87,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { removeFortressColliders } from './FortressCollision';
 
 // Shwarm system imports
 import { useShwarmSystem, useShwarmMovement, ShwarmRenderer, ShwarmRendererHandle } from '@/features/shwarm';
@@ -306,8 +307,10 @@ export function FortressScene({
       if (activeGame === 'siege-worlds') {
         if (wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
         setWorldSwapTarget(siegeSpawn.clone());
-        // Drop any DreadRoot block colliders so they aren't invisible walls in Siege maps.
+        // Drop DreadRoot colliders so they aren't invisible walls in Siege maps:
+        // the voxel block field AND the central fortress structure boxes (at the origin).
         worldCollisionGrid.clearVoxels();
+        removeFortressColliders();
       } else if (wasGame) {
         setWorldSwapTarget((drReturnPosRef.current ?? new THREE.Vector3(0, 40, 0)).clone());
       }

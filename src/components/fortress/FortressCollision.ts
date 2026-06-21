@@ -2,6 +2,12 @@ import * as THREE from 'three';
 import { PlacedBlock } from '@/types/blocks';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
+import { getActiveGame } from '@/config/activeGame';
+
+// The central fortress only exists in DreadRoot. Its collider boxes sit at the origin —
+// exactly where Siege builder maps (Starblink) spawn — so they MUST NOT be in the grid in
+// Siege, or they read as invisible walls.
+const isSiegeGame = () => getActiveGame() === 'siege-worlds';
 
 // ============================================================
 // FORTRESS COLLISION UTILITIES
@@ -36,8 +42,8 @@ if (typeof window !== 'undefined' && !(window as any)[FORTRESS_GRID_LISTENER_KEY
   (window as any)[FORTRESS_GRID_LISTENER_KEY] = true;
   window.addEventListener('collisionGridCleared', () => {
     _fortressCollidersInGrid = false;
-    // Re-insert if we have cached colliders
-    if (_fortressColliders) {
+    // Re-insert if we have cached colliders — but NEVER in Siege (origin = Starblink spawn).
+    if (_fortressColliders && !isSiegeGame()) {
       for (const fc of _fortressColliders) {
         worldCollisionGrid.insert(fc);
       }
@@ -46,8 +52,17 @@ if (typeof window !== 'undefined' && !(window as any)[FORTRESS_GRID_LISTENER_KEY
   });
 }
 
+/** Remove the fortress colliders from the grid (called when entering Siege). */
+export function removeFortressColliders(): void {
+  if (_fortressColliders) {
+    for (const fc of _fortressColliders) worldCollisionGrid.remove(fc);
+  }
+  _fortressCollidersInGrid = false;
+}
+
 // Function to reset grid state when grid is cleared externally
 export function resetFortressGridState(): void {
+  if (isSiegeGame()) { _fortressCollidersInGrid = false; return; }   // no fortress in Siege
   // Mark as not in grid, then immediately re-insert if we already have the cached colliders.
   // This is important because the collider list is cached across HMR/runtime, but the grid may be cleared.
   _fortressCollidersInGrid = false;
@@ -67,6 +82,7 @@ export function resetFortressGridState(): void {
  * Cached after first call since fortress never changes
  */
 export function createFortressColliders(): THREE.Box3[] {
+  if (isSiegeGame()) return _fortressColliders ?? [];   // never insert the fortress in Siege
   // If colliders are cached, we still must ensure they are present in the grid.
   // The grid can be cleared independently (debug key, hot reload, world reset).
   if (_fortressColliders) {
