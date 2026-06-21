@@ -57,7 +57,8 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
     itemId, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category ?? '',
     spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
   };
-  if (it.item_category && def.cats.includes(it.item_category)) return { ok: true, item, reloadKey: null, isRifle: false };
+  // Weapon/hand slots: ALWAYS resolve weapon_stats so isRifle is reliable — even if the
+  // item also happens to carry item_category 'weapon' (which would otherwise early-return).
   if (def.type === 'weapon') {
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
     if (it.item_number != null) {
@@ -68,7 +69,9 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
     } else if (isGlove) {
       return { ok: true, item, reloadKey: null, isRifle: false };
     }
+    return { ok: false, item, reloadKey: null, isRifle: false };
   }
+  if (it.item_category && def.cats.includes(it.item_category)) return { ok: true, item, reloadKey: null, isRifle: false };
   return { ok: false, item, reloadKey: null, isRifle: false };
 }
 
@@ -194,22 +197,25 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     if (cur) {
       const r = await resolveDrop(def, cur.itemId);
       if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
-      // Hand rules: a RIFLE is two-handed → only the LEFT hand, and only with the right
-      // hand empty. Nothing else may go in a hand while the left holds a rifle.
-      if (def.hand === 'R') {
-        if (r.isRifle) { toast({ title: 'Equip a rifle in the left hand', duration: 2200 }); return; }
-        if (leftKind === 'rifle') { toast({ title: 'Rifle uses both hands — free the left hand first', duration: 2400 }); return; }
+      // Hand rules. A RIFLE is two-handed → it always lands in the canonical LEFT slot (1)
+      // so it renders CENTERED across both hands, and needs BOTH hands free. A pistol can't
+      // share a hand with a rifle.
+      let targetNum = def.num;
+      if (def.hand && r.isRifle) {
+        if (equip[1] || equip[5]) { toast({ title: 'Free both hands for a rifle', duration: 2400 }); return; }
+        targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
+      } else if (def.hand && !r.isRifle && leftKind === 'rifle') {
+        toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
       }
-      if (def.hand === 'L' && r.isRifle && equip[5]) { toast({ title: 'Free the right hand for a rifle', duration: 2400 }); return; }
       // OPTIMISTIC: show the item in the slot + play the equip sound + clear the cursor INSTANTLY;
       // the DB move + shared reconcile happen in the background, so it feels immediate.
-      setEquip((prev) => ({ ...prev, [def.num]: r.item }));
+      setEquip((prev) => ({ ...prev, [targetNum]: r.item }));
       cursorStackApi.setCursor(null);
       // Weapon slot: ALWAYS a reload sound (the weapon's reload_sound, or the default reload clip the
       // game uses) — never the thud. Other slots: the soft place sound.
       void playSound(def.type === 'weapon' ? getSoundUrl(r.reloadKey ?? 'rifle_reload', '/rifle_reload.mp3') : EQUIP_FALLBACK, 0.6);
       const from = originToRpc(cur.origin);
-      try { await equipTransfer(from, { region: 'equip', page: 0, slot: def.num }); }
+      try { await equipTransfer(from, { region: 'equip', page: 0, slot: targetNum }); }
       catch (err) { reportFail('Equip failed', err); }
       void onMoved();   // reconcile: refreshes equip AND clears the source from inventory/QS
       return;
@@ -311,9 +317,15 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         {renderSlot(left, rifleAcrossHands)}
         {renderSlot(right, rifleAcrossHands)}
         {rifleAcrossHands && equip[1]?.spriteUrl ? (
+          // The centered rifle IS the drag/click handle — grabbing anywhere on it operates
+          // on slot 1 (so you can drag it out / click to unequip from either hand box).
           <img
             src={equip[1]!.spriteUrl!} alt="Rifle" draggable={false}
-            style={{ position: 'absolute', top: 7, left: 0, right: 0, marginInline: 'auto', width: 84, height: 46, objectFit: 'contain', pointerEvents: 'none', WebkitUserDrag: 'none' } as React.CSSProperties}
+            title={`${equip[1]!.name} (drag off, or click to unequip)`}
+            onPointerDown={(e) => startEquipDrag(left, e)}
+            onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(left); }}
+            onDragStart={(e) => e.preventDefault()}
+            style={{ position: 'absolute', top: 7, left: 0, right: 0, marginInline: 'auto', width: 84, height: 46, objectFit: 'contain', cursor: 'pointer', pointerEvents: 'auto', WebkitUserDrag: 'none' } as React.CSSProperties}
           />
         ) : null}
       </div>
