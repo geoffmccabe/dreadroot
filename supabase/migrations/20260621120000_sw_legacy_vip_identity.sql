@@ -42,7 +42,7 @@ update public.user_nft_holdings      set source = 'sync' where source is null;
 --    Dreadroot account with the same email, this grants their honorary VIP on first call. Idempotent;
 --    skips anyone who has already connected their own DiviGo (app_token present) — they're self-certified.
 create or replace function public.apply_sw_legacy_vip()
-returns jsonb language plpgsql security definer set search_path = public as $$
+returns jsonb language plpgsql security definer set search_path = public as $fn$
 declare
   v_uid uuid := auth.uid();
   v_email text;
@@ -87,6 +87,6 @@ begin
 
   update sw_player_snapshot set matched_user_id = v_uid, vip_applied_at = v_now where sw_id = v_snap.sw_id;
   return jsonb_build_object('applied', true, 'divi', v_snap.divi_live, 'hasPortal', coalesce(v_snap.has_portal, false));
-end $$;
+end $fn$;
 
 grant execute on function public.apply_sw_legacy_vip() to authenticated;
