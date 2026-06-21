@@ -50,10 +50,13 @@ Deno.serve(async (req) => {
     .find((r) => (r.nft_chain ?? '').toLowerCase() === 'ethereum' && r.nft_collection)
   const portalContract = portalReq?.nft_collection ?? ''
 
-  // Candidates: linked + confirmed, not yet checked (unless recheck).
+  // Candidates: anyone with a (non-empty) DiviGo telegram number, not yet checked (unless recheck).
+  // NOTE: SW never wrote telegramUserIdConfirmed back (it's 0 for everyone), so a SET telegram_id IS
+  // the signal — the DiviGo lookup itself is the real validity check (it returns nothing for a number
+  // DiviGo doesn't know). The export already nulls empty telegram strings.
   let q = admin.from('sw_player_snapshot')
     .select('sw_id, email, telegram_id, telegram_confirmed')
-    .not('telegram_id', 'is', null).eq('telegram_confirmed', 1).limit(limit)
+    .not('telegram_id', 'is', null).limit(limit)
   if (!body.recheck) q = q.is('holdings_checked_at', null)
   const { data: rows } = await q
   const candidates = (rows as { sw_id: string; email: string | null; telegram_id: string; telegram_confirmed: number }[]) ?? []
