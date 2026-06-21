@@ -20,6 +20,10 @@ const POOL = 4;        // max simultaneous face-lights (nearest to camera)
 // spotlight shadows over the whole world cost ~+108 ms/s of bufferSubData (3 extra
 // full-scene depth passes) and looked backwards. Shadows now come from ONE sun light
 // (FortressLighting) whose shadow camera follows the player.
+const BEAM_ANGLE_DEG = 15;        // full cone angle (narrower than before so the beam reads)
+const BEAM_BRIGHTNESS = 0.5;      // half as bright as authored; range/decay unchanged
+const SWEEP_RAD = 15 * Math.PI / 180; // ±15° → the beam pans across a 30° arc, not locked on you
+const SWEEP_SPEED = 1.1;          // rad/s of the sweep sine (~5.7s per full back-and-forth)
 
 // Built-in default so Shombies ALWAYS have a visible face-beam, even before anyone
 // saves a 'shombie-face' light in the Lights panel. A saved one (or live edit) overrides.
@@ -62,13 +66,14 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
     const pos = new THREE.Vector3();
     const q = new THREE.Quaternion();
     const Z = new THREE.Vector3(0, 0, -1);
+    const swept = new THREE.Vector3();
     // Reused selection buffers — the nearest POOL shombies, chosen in one O(n) pass
     // (no filter/sort, no per-frame allocation) and re-picked at ~5Hz, not 60Hz.
     const chosen: (ShombieInstance | null)[] = new Array(POOL).fill(null);
     const bestDist = new Float64Array(POOL);
     let sinceSelect = 1e9;
 
-    const unreg = frameLoop.register('shombie-face-lights', (delta) => {
+    const unreg = frameLoop.register('shombie-face-lights', (delta, t) => {
       sinceSelect += delta;
       if (sinceSelect >= 0.2) {
         sinceSelect = 0;
@@ -104,12 +109,19 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
         // Smooth swivel toward the target (so it "searches" rather than snapping).
         lastFacing[i].lerp(fwd, 0.12);
         if (lastFacing[i].lengthSq() < 1e-6) lastFacing[i].set(0, 0, -1); else lastFacing[i].normalize();
-        const aim = lastFacing[i];
-        // Lamp sits on the head's surface in the aim direction (front of the head,
-        // tilting up with the beam) and the beam (group -Z) points exactly at the target.
-        pos.set(s.position.x + aim.x * 0.28 * sc, headY + aim.y * 0.28 * sc, s.position.z + aim.z * 0.28 * sc);
+        // Pan the beam horizontally across the player (±15°) so it sweeps visibly past
+        // instead of staying locked on your face. Each light gets a different phase so
+        // the beams don't sweep in unison. Vertical aim is preserved (rotate around Y).
+        const base = lastFacing[i];
+        const sweep = SWEEP_RAD * Math.sin(t * SWEEP_SPEED + i * 1.7);
+        const cs = Math.cos(sweep), sn = Math.sin(sweep);
+        swept.set(base.x * cs - base.z * sn, base.y, base.x * sn + base.z * cs);
+        if (swept.lengthSq() < 1e-6) swept.copy(Z); else swept.normalize();
+        // Lamp sits on the head's surface in the (swept) aim direction; the beam (group -Z)
+        // points where it's currently sweeping, so the lamp/disc move with it.
+        pos.set(s.position.x + swept.x * 0.28 * sc, headY + swept.y * 0.28 * sc, s.position.z + swept.z * 0.28 * sc);
         g.position.copy(pos);
-        q.setFromUnitVectors(Z, aim);
+        q.setFromUnitVectors(Z, swept);
         g.quaternion.copy(q);
       }
     }, 35);
@@ -120,7 +132,10 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
     <>
       {Array.from({ length: POOL }).map((_, i) => (
         <group key={i} ref={(n) => { groupRefs[i].current = n; }}>
-          <GameLight def={{ ...def, shadowOn: false }} idSuffix={`shombie-${i}`} />
+          <GameLight
+            def={{ ...def, shadowOn: false, angleDeg: BEAM_ANGLE_DEG, intensity: def.intensity * BEAM_BRIGHTNESS }}
+            idSuffix={`shombie-${i}`}
+          />
         </group>
       ))}
     </>
