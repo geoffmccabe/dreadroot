@@ -211,6 +211,19 @@ export function FortressBuilderPanel() {
           />
         </div>
 
+        {/* Parapet corner towers */}
+        <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          <Button size="sm" variant={s.parapetOn ? 'default' : 'outline'} className="w-full" onClick={() => builderStore.set({ parapetOn: !s.parapetOn })}>
+            Corner towers (parapet): {s.parapetOn ? 'ON' : 'OFF'}
+          </Button>
+          {s.parapetOn && (
+            <>
+              <Row label={`Tower width: +${s.parapetWidth}`} min={0} max={8} step={1} value={s.parapetWidth} onChange={(v) => builderStore.set({ parapetWidth: v })} />
+              <Row label={`Tower height: +${s.parapetHeight}`} min={0} max={20} step={1} value={s.parapetHeight} onChange={(v) => builderStore.set({ parapetHeight: v })} />
+            </>
+          )}
+        </div>
+
         {/* Entry */}
         <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
           <Label className="text-xs font-semibold">Entry</Label>

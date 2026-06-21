@@ -19,6 +19,9 @@ export interface BuilderState {
   faceFlip: boolean;         // flip which half is the mirror source
   wallSym: '4way' | '2way' | 'none'; // symmetry across the four walls
   chunk: number;             // block size (1 fine .. 5 chunky rectangles)
+  parapetOn: boolean;        // solid corner towers (default on, Khaured look)
+  parapetWidth: number;      // extra width beyond T+2
+  parapetHeight: number;     // extra height beyond the random 2..10
   entryW: number;            // entry tunnel width (blocks); 0 = no entry
   entryH: number;            // entry tunnel height (blocks)
   entryWall: number;         // 0 front, 1 right, 2 back, 3 left
@@ -58,6 +61,9 @@ const initial: BuilderState = {
   faceFlip: false,
   wallSym: '4way',
   chunk: 3,
+  parapetOn: true,
+  parapetWidth: 0,
+  parapetHeight: 0,
   entryW: 4,
   entryH: 9,
   entryWall: 0,

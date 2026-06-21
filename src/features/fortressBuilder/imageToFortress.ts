@@ -40,6 +40,9 @@ export interface FortressBuildOpts {
   faceFlip?: boolean;
   wallSym?: WallSym;
   chunk?: number; // block size (1=fine detail .. 5=chunky/blocky rectangles)
+  parapet?: boolean;       // solid corner towers (2nd-darkest stone), built before the wall-walk
+  parapetWidth?: number;   // extra blocks added to the base tower size (T+2)
+  parapetHeight?: number;  // extra blocks added to the random 2..10 over the tallest block
   entry?: FortressEntry | null;
   stairs?: boolean; // step blocks up to the entry (outside + mirrored inside) when vert >= 2
   // Per-tier extrude (index 0..4 = grey tier 1..5). Outer/inner face each:
@@ -278,6 +281,31 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
         else { placeCol(outPerp, a, height); placeCol(inPerp, a, height); }
       }
     }
+  }
+
+  // --- Parapet corner towers (BEFORE the wall-walk so the walk tunnels through them). ---
+  // A solid tower of the 2nd-darkest stone on each footprint corner, centred on the corner
+  // and (T+2+width) wide so it overhangs the walls by >=2, rising 2..10 (random per tower,
+  // + slider) blocks above the tallest design block.
+  if (opts.parapet) {
+    const pTier = Math.max(1, levels - 1); // second-darkest tier (tiers run 1=light..levels=dark)
+    const size = T + 2 + Math.max(0, Math.round(opts.parapetWidth ?? 0));
+    const rad = size >> 1;
+    const heightAdd = Math.max(0, Math.round(opts.parapetHeight ?? 0));
+    const corners: Array<[number, number]> = [[0, 0], [F - 1, 0], [0, F - 1], [F - 1, F - 1]];
+    corners.forEach(([cgx, cgz], i) => {
+      const rv = mulberry32(((seed || 1) * 31 + i * 1013904223) >>> 0)();
+      const top = maxHeight + 2 + Math.floor(rv * 9) + heightAdd; // maxH+2 .. maxH+10 (+slider)
+      if (top > maxHeight) maxHeight = top;
+      for (let gx = cgx - rad; gx <= cgx + rad; gx++) {
+        for (let gz = cgz - rad; gz <= cgz + rad; gz++) {
+          for (let y = 0; y < top; y++) {
+            removeAt(gx - half, y, gz - half); // force the tower tier over any wall corner
+            place(gx - half, y, gz - half, pTier);
+          }
+        }
+      }
+    });
   }
 
   // --- Wall-walk + stairs around the top edge (only when the wall is >= 3 thick). ---
