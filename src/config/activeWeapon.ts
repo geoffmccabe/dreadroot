@@ -37,7 +37,11 @@ export interface ActiveWeaponStats {
   scopeGraphicUrl?: string | null; // per-weapon full-screen scope overlay image
 }
 
+// LEFT hand (equip slot 1) = the primary weapon all existing fire code reads.
 let active: ActiveWeaponStats | null = null;
+// RIGHT hand (equip slot 5) = the second pistol when dual-wielding. null unless a
+// pistol sits in the right hand. A rifle is two-handed → only `active` is set.
+let right: ActiveWeaponStats | null = null;
 const subs = new Set<() => void>();
 
 export function getActiveWeapon(): ActiveWeaponStats | null {
@@ -52,10 +56,29 @@ export function setActiveWeapon(w: ActiveWeaponStats | null): void {
   subs.forEach((f) => f());
 }
 
+export function getRightWeapon(): ActiveWeaponStats | null {
+  return right;
+}
+
+export function setRightWeapon(w: ActiveWeaponStats | null): void {
+  if (w === right) return;
+  if (w && right && w.itemNumber === right.itemNumber) return;
+  right = w;
+  subs.forEach((f) => f());
+}
+
 export function useActiveWeapon(): ActiveWeaponStats | null {
   return useSyncExternalStore(
     (cb) => { subs.add(cb); return () => { subs.delete(cb); }; },
     getActiveWeapon,
     getActiveWeapon,
+  );
+}
+
+export function useRightWeapon(): ActiveWeaponStats | null {
+  return useSyncExternalStore(
+    (cb) => { subs.add(cb); return () => { subs.delete(cb); }; },
+    getRightWeapon,
+    getRightWeapon,
   );
 }

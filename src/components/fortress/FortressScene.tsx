@@ -39,6 +39,8 @@ import { FirstPersonControls } from './FortressControls';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { setAiming } from '@/config/aimState';
+import { getRightWeapon } from '@/config/activeWeapon';
+import { anyArmedHandGrenade } from '@/config/handGrenade';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
@@ -234,6 +236,7 @@ export function FortressScene({
   onPentabulletChargeChange,
   onUseHotbarSlot,
   consumeGrenade,
+  grenadeThrowRef,
   onGrenadeTogglePress,
   grenadeReady,
   consumeEgg,
@@ -1047,10 +1050,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const [showCrosshairs, setShowCrosshairs] = useState(false);
   const [isAiming, setIsAiming] = useState(false);
   
-  // Track right-click for aiming
+  // Track right-click for aiming. When the RIGHT hand holds a pistol (or a grenade is
+  // armed), FortressControls owns the right button — fire / hold-to-zoom / disarm — and
+  // drives ADS via the aimState store, so we DON'T immediately zoom here.
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 2 && crosshairsEnabled) {
+      if (e.button === 2 && crosshairsEnabled && !getRightWeapon() && !anyArmedHandGrenade()) {
         setIsAiming(true);
       }
     };
@@ -1161,6 +1166,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     if (tier == null) return false;
     return throwGrenade(tier);
   }, [consumeGrenade, throwGrenade]);
+  // Expose the throw up to Fortress's G state machine (which decides fill-vs-throw and
+  // owns inventory) so it can trigger a hand-grenade throw without re-plumbing.
+  useEffect(() => {
+    if (grenadeThrowRef) grenadeThrowRef.current = handleThrowGrenade;
+    return () => { if (grenadeThrowRef) grenadeThrowRef.current = null; };
+  }, [grenadeThrowRef, handleThrowGrenade]);
 
   // (Flame Glove setup is below, after getDefinition is available)
 

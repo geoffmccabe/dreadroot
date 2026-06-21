@@ -9,8 +9,9 @@ import { triggerChop } from './chopFeedbackStore';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
-import { getActiveWeapon, useActiveWeapon } from '@/config/activeWeapon';
-import { getAiming } from '@/config/aimState';
+import { getActiveWeapon, getRightWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
+import { anyArmedHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
+import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
 import { flashCenter } from '@/config/centerFlash';
@@ -265,6 +266,12 @@ export function FirstPersonControls({
   
   // Firing rate limiting
   const lastFireTime = useRef(0);
+  const lastFireTimeRight = useRef(0);   // RIGHT pistol's independent cooldown clock (dual-wield)
+  // Right-pistol "hold to zoom, release fires a 2nd shot": press fires once; if held past
+  // RIGHT_ADS_HOLD_MS we zoom (ADS); releasing after a zoom fires the second shot.
+  const rmbDownAtRef = useRef(0);        // when the right button went down (0 = up)
+  const rmbZoomedRef = useRef(false);    // did this right-hold engage the zoom?
+  const rmbFiredRightRef = useRef(false);// did this right-press fire the right pistol on down?
   const FIRE_RATE_LIMIT = 150;
 
   // Reset the clip whenever the equipped weapon changes (full clip on equip/swap).
@@ -282,7 +289,7 @@ export function FirstPersonControls({
   const autoFiringRef = useRef(false);
   // Shared single-shot fire fn, exposed via ref so the frame loop (no deps) can
   // call the same firing path the click handler uses.
-  const fireWeaponShotRef = useRef<() => void>();
+  const fireWeaponShotRef = useRef<(weapon?: ActiveWeaponStats | null, clock?: React.MutableRefObject<number>) => void>();
   // Phase 2 camera recoil: transient view kick (radians) ADDED on top of the
   // player's pitch/yaw and recovered toward 0 each frame, so it never corrupts
   // the underlying aim. Positive pitch = up.
@@ -780,15 +787,16 @@ export function FirstPersonControls({
         if (event.metaKey || event.ctrlKey || event.altKey) break;
         gKeyHeldRef.current = true;
         if (event.repeat) break;
-        // G is now the THROW key: if a grenade is already armed, G throws it (and
-        // disarms). Otherwise G arms one (parent owns the arm/move-from-INV logic).
-        // Left-click no longer throws — it fires the weapon (pistol) instead.
-        if (grenadeReadyRef.current && onThrowGrenade) {
-          onThrowGrenade();
+        // Dual-wield grenades: ON THE GROUND, G runs the parent's full state machine
+        // (fill a free hand → arm → throw RIGHT-first → re-arm; rifle = old QA flow). It
+        // owns inventory + the fill-vs-throw decision and triggers throws via its ref.
+        // AIRBORNE, arming is disallowed (as before) but you can still THROW an armed one.
+        if (onGround.current || godModeRef.current) {
+          onGrenadeTogglePress?.();
+        } else if (anyArmedHandGrenade() || grenadeReadyRef.current) {
+          onThrowGrenade?.();
           grenadeReadyRef.current = false;
           onGrenadeReadyChange?.(false);
-        } else if ((onGround.current || godModeRef.current) && onGrenadeTogglePress) {
-          onGrenadeTogglePress();
         }
         break;
       case 'KeyH':
@@ -991,28 +999,32 @@ export function FirstPersonControls({
   // shootCooldown (so the auto-fire frame loop can call it every frame and it
   // only fires when due). Shared by the click handler (semi-auto) and the
   // frame-loop repeat (automatic). No-fire-zone, ammo, sound + consume all here.
-  const fireWeaponShot = useCallback(() => {
+  // Fire a hand's weapon. Defaults to the LEFT hand (equip slot 1 = getActiveWeapon, shared
+  // `lastFireTime`). The RIGHT pistol passes its own stats + cooldown clock so the two hands
+  // fire on independent cooldowns; the AMMO pool stays shared (one pool for now).
+  const fireWeaponShot = useCallback((weapon?: ActiveWeaponStats | null, fireClock?: React.MutableRefObject<number>) => {
     if (!onShoot) return;
-    // A weapon must be EQUIPPED in E1 to shoot — no E1 gun = no fire (no default
-    // shot), flash a warning each attempt. (Flame glove = non-gun → handled by the
-    // flame path, never reaches here.)
-    if (!getActiveWeapon()) { flashCenter('NO WEAPON EQUIPPED'); return; }
+    const aw = weapon !== undefined ? weapon : getActiveWeapon();
+    const clock = fireClock ?? lastFireTime;
+    // A weapon must be EQUIPPED to shoot — no gun = no fire (no default shot), flash a
+    // warning each attempt. (Flame glove = non-gun → flame path, never reaches here.)
+    // Exception: if the LEFT hand legitimately holds a grenade, stay silent (throw with G).
+    if (!aw) { if (!getHandGrenades().L) flashCenter('NO WEAPON EQUIPPED'); return; }
     // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot.
     if (isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
       return;
     }
     const now = Date.now();
-    const aw = getActiveWeapon();
     const cooldownMs = aw ? aw.shootCooldown * 1000 : FIRE_RATE_LIMIT;
-    if (now - lastFireTime.current < cooldownMs) return;
+    if (now - clock.current < cooldownMs) return;
     if (!canFire()) {
       if (!getAmmo().reloading) {
         playSpatialSound(getSoundUrl(aw?.emptySound ?? 'empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
       }
       return;
     }
-    lastFireTime.current = now;
+    clock.current = now;
     shootDirectionRef.current.set(0, 0, -1);
     shootDirectionRef.current.applyQuaternion(camera.quaternion);
     shootDirectionRef.current.normalize();
@@ -1366,6 +1378,29 @@ export function FirstPersonControls({
     if (!isLocked.current) return;
     if (event.button === 2) {
       keys.current.rightMouse = true;
+
+      // ── Dual-wield right-click priority ──
+      // 1. An ARMED grenade → DEACTIVATE it (RIGHT hand first), keep it in hand. Wins
+      //    over firing/aiming/inspect.
+      const armedHands = armedHandsRightFirst();
+      if (armedHands.length) {
+        const h = armedHands[0];
+        const cur = getHandGrenades()[h];
+        if (cur) setHandGrenade(h, { ...cur, armed: false });
+        event.preventDefault();
+        return;
+      }
+      // 2. A RIGHT-hand pistol → fire it now, and start the hold-to-zoom timer (the frame
+      //    loop engages ADS past the threshold; release fires a second shot). No inspect/ADS.
+      const rw = getRightWeapon();
+      if (rw && showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
+        fireWeaponShotRef.current?.(rw, lastFireTimeRight);
+        rmbDownAtRef.current = Date.now();
+        rmbZoomedRef.current = false;
+        rmbFiredRightRef.current = true;
+        event.preventDefault();
+        return;
+      }
 
       // Admin block inspect: right-click to see full block info
       const isAdminUser = userRoles.includes('admin') || userRoles.includes('superadmin');
@@ -1784,6 +1819,15 @@ export function FirstPersonControls({
     if (event.button === 2) {
       keys.current.rightMouse = false;
       setHoveredBlockId(null);
+      // Right-pistol hold release: if the hold engaged the zoom, releasing fires a SECOND
+      // right-pistol shot; then end the zoom and reset the hold state.
+      if (rmbFiredRightRef.current) {
+        if (rmbZoomedRef.current) fireWeaponShotRef.current?.(getRightWeapon(), lastFireTimeRight);
+        setAiming(false);
+        rmbDownAtRef.current = 0;
+        rmbZoomedRef.current = false;
+        rmbFiredRightRef.current = false;
+      }
     }
     if (event.button === 0) {
       // Stop flame glove if active
@@ -1957,6 +2001,13 @@ export function FirstPersonControls({
         eulerRef.current.set(appliedPitch, yaw.current + recoilYawRef.current, 0);
         camera.quaternion.setFromEuler(eulerRef.current);
         needsCameraUpdate.current = false;
+      }
+
+      // Dual-wield: holding the RIGHT button past ~180ms (after its first shot) engages
+      // ADS zoom; releasing fires the second shot (handled in mouseUp).
+      if (rmbDownAtRef.current && !rmbZoomedRef.current && getRightWeapon() && Date.now() - rmbDownAtRef.current >= 180) {
+        rmbZoomedRef.current = true;
+        setAiming(true);
       }
 
       // Phase 3 — ADS FOV zoom. Only touch the FOV during an aim cycle so the

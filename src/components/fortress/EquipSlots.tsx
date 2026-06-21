@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
-import { setActiveWeapon } from '@/config/activeWeapon';
+import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
+import { useHandGrenades } from '@/config/handGrenade';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
 import { playSound } from '@/lib/spatialAudio';
@@ -47,28 +48,59 @@ const sb = supabase as unknown as {
 // BROAD field (block/item/seed/…) that most weapons don't tag 'weapon', so the weapon slot ALSO
 // accepts anything the game treats as a weapon: a weapon_stats row (same source the active-weapon
 // system uses) or the flame glove by key. One items query + (weapon only) one weapon_stats query.
-async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean; item: EquipItem | null; reloadKey: string | null }> {
+async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean; item: EquipItem | null; reloadKey: string | null; isRifle: boolean }> {
   const { data: it } = await (supabase as unknown as {
     from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { item_category: string | null; item_number: number | null; key: string | null; name: string; tier: number | null; texture_url: string | null } | null }> } } };
   }).from('items').select('item_category,item_number,key,name,tier,texture_url').eq('id', itemId).maybeSingle();
-  if (!it) return { ok: false, item: null, reloadKey: null };
+  if (!it) return { ok: false, item: null, reloadKey: null, isRifle: false };
   const item: EquipItem = {
     itemId, name: it.name, itemNumber: it.item_number, tier: it.tier, category: it.item_category ?? '',
     spriteUrl: getItemSpriteUrl({ item_number: it.item_number, texture_url: it.texture_url } as { item_number: number | null; texture_url: string | null }),
   };
-  if (it.item_category && def.cats.includes(it.item_category)) return { ok: true, item, reloadKey: null };
+  if (it.item_category && def.cats.includes(it.item_category)) return { ok: true, item, reloadKey: null, isRifle: false };
   if (def.type === 'weapon') {
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
     if (it.item_number != null) {
       const { data: ws } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number; reload_sound: string | null } | null }> } } };
-      }).from('weapon_stats').select('item_number,reload_sound').eq('item_number', it.item_number).maybeSingle();
-      if (ws || isGlove) return { ok: true, item, reloadKey: ws?.reload_sound ?? null };
+        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: { item_number: number; reload_sound: string | null; is_gun: boolean | null; is_pistol: boolean | null } | null }> } } };
+      }).from('weapon_stats').select('item_number,reload_sound,is_gun,is_pistol').eq('item_number', it.item_number).maybeSingle();
+      if (ws || isGlove) return { ok: true, item, reloadKey: ws?.reload_sound ?? null, isRifle: !!ws?.is_gun && !ws?.is_pistol };
     } else if (isGlove) {
-      return { ok: true, item, reloadKey: null };
+      return { ok: true, item, reloadKey: null, isRifle: false };
     }
   }
-  return { ok: false, item, reloadKey: null };
+  return { ok: false, item, reloadKey: null, isRifle: false };
+}
+
+// Load a weapon's stats by item_number → the ActiveWeaponStats the fire code reads, plus
+// whether it's a rifle or pistol (a rifle is two-handed; a pistol is one-handed). Shared by
+// both hand slots (1 = left, 5 = right). Non-gun (e.g. flame glove) → { stats: null }.
+async function loadWeaponStats(itemNumber: number): Promise<{ stats: ActiveWeaponStats | null; kind: 'rifle' | 'pistol' | null }> {
+  const { data } = await (supabase as unknown as {
+    from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
+  }).from('weapon_stats').select('*').eq('item_number', itemNumber).maybeSingle();
+  const d = data as Record<string, number | string | boolean | null> | null;
+  if (!d || !d.is_gun) return { stats: null, kind: null };
+  const clip = typeof d.ammo_clip_amount === 'number' && d.ammo_clip_amount > 0 ? d.ammo_clip_amount : null;
+  const cd = typeof d.shoot_cooldown === 'number' && d.shoot_cooldown > 0 ? d.shoot_cooldown : 0.15;
+  const stats: ActiveWeaponStats = {
+    itemNumber, name: (d.name as string) ?? 'Weapon',
+    shootCooldown: cd, maxDamage: (d.max_damage as number) ?? 25,
+    fireSound: (d.fire_sound as string) ?? null, emptySound: (d.empty_sound as string) ?? null,
+    reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic, isPistol: !!d.is_pistol,
+    ammoClipAmount: clip, reloadTime: (d.reload_time as number) ?? null,
+    projectile: (d.projectile as string) ?? null, bulletsPerTap: (d.bullets_per_tap as number) ?? null,
+    horizontalSpread: (d.horizontal_spread as number) ?? null, verticalSpread: (d.vertical_spread as number) ?? null,
+    recoilDuration: (d.recoil_duration as number) ?? null,
+    recoilPitch: (d.camera_recoil_pitch as number) ?? null,
+    recoilYaw: (d.camera_recoil_yaw as number) ?? null,
+    adsRecoilScale: (d.ads_recoil_scale as number) ?? null,
+    scopedFov: (d.scoped_fov as number) ?? null,
+    zoomSpeed: (d.zoom_speed as number) ?? null,
+    isSniper: (d.is_sniper as boolean) ?? null,
+    scopeGraphicUrl: (d.scope_graphic_url as string) ?? null,
+  };
+  return { stats, kind: d.is_pistol ? 'pistol' : 'rifle' };
 }
 
 function originToRpc(origin: CursorOrigin): { region: string; page: number; slot: number } {
@@ -86,6 +118,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   // between L and R, right hand blocked); a pistol stays in one hand. null = empty/other.
   const [leftKind, setLeftKind] = useState<'rifle' | 'pistol' | null>(null);
   const cursorHeld = useCursorStack((s) => !!s.cursor);
+  const handGren = useHandGrenades();   // grenades shown in the L/R hand boxes (overlay)
 
   // Resolve item defs for the SHARED equip gear (owned by useUserData) and build the slot map. No
   // private query/subscription anymore — equip changes arrive via the unified user_slots realtime.
@@ -115,42 +148,32 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gearKey]);
 
-  // Drive the active-weapon store from the weapon slot (slot 1). Guns only.
+  // LEFT hand (slot 1) drives the primary active weapon + leftKind (rifle vs pistol).
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
   useEffect(() => {
     if (weaponItemNumber == null) { setActiveWeapon(null); setLeftKind(null); return; }
     let cancelled = false;
     (async () => {
-      const { data } = await (supabase as unknown as {
-        from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
-      }).from('weapon_stats').select('*').eq('item_number', weaponItemNumber).maybeSingle();
+      const { stats, kind } = await loadWeaponStats(weaponItemNumber);
       if (cancelled) return;
-      const d = data as Record<string, number | string | boolean | null> | null;
-      if (!d || !d.is_gun) { setActiveWeapon(null); setLeftKind(null); return; }
-      setLeftKind(d.is_pistol ? 'pistol' : 'rifle');
-      const clip = typeof d.ammo_clip_amount === 'number' && d.ammo_clip_amount > 0 ? d.ammo_clip_amount : null;
-      const cd = typeof d.shoot_cooldown === 'number' && d.shoot_cooldown > 0 ? d.shoot_cooldown : 0.15;
-      setActiveWeapon({
-        itemNumber: weaponItemNumber, name: (d.name as string) ?? 'Weapon',
-        shootCooldown: cd, maxDamage: (d.max_damage as number) ?? 25,
-        fireSound: (d.fire_sound as string) ?? null, emptySound: (d.empty_sound as string) ?? null,
-        reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic, isPistol: !!d.is_pistol,
-        ammoClipAmount: clip, reloadTime: (d.reload_time as number) ?? null,
-        projectile: (d.projectile as string) ?? null, bulletsPerTap: (d.bullets_per_tap as number) ?? null,
-        horizontalSpread: (d.horizontal_spread as number) ?? null, verticalSpread: (d.vertical_spread as number) ?? null,
-        recoilDuration: (d.recoil_duration as number) ?? null,
-        // Phase 2/3 (optional columns; undefined → null → fire code defaults).
-        recoilPitch: (d.camera_recoil_pitch as number) ?? null,
-        recoilYaw: (d.camera_recoil_yaw as number) ?? null,
-        adsRecoilScale: (d.ads_recoil_scale as number) ?? null,
-        scopedFov: (d.scoped_fov as number) ?? null,
-        zoomSpeed: (d.zoom_speed as number) ?? null,
-        isSniper: (d.is_sniper as boolean) ?? null,
-        scopeGraphicUrl: (d.scope_graphic_url as string) ?? null,
-      });
+      setActiveWeapon(stats); setLeftKind(kind);
     })();
     return () => { cancelled = true; };
   }, [weaponItemNumber]);
+
+  // RIGHT hand (slot 5) drives the second pistol. Only a PISTOL fires from the right
+  // hand; if the left holds a rifle (two-handed) there is no separate right weapon.
+  const rightItemNumber = equip[5]?.itemNumber ?? null;
+  useEffect(() => {
+    if (rightItemNumber == null || leftKind === 'rifle') { setRightWeapon(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { stats, kind } = await loadWeaponStats(rightItemNumber);
+      if (cancelled) return;
+      setRightWeapon(kind === 'pistol' ? stats : null);
+    })();
+    return () => { cancelled = true; };
+  }, [rightItemNumber, leftKind]);
 
   const firstEmptyInventorySlot = useCallback(async (): Promise<number | null> => {
     if (!user?.id) return null;
@@ -171,6 +194,13 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     if (cur) {
       const r = await resolveDrop(def, cur.itemId);
       if (!r.ok) { toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
+      // Hand rules: a RIFLE is two-handed → only the LEFT hand, and only with the right
+      // hand empty. Nothing else may go in a hand while the left holds a rifle.
+      if (def.hand === 'R') {
+        if (r.isRifle) { toast({ title: 'Equip a rifle in the left hand', duration: 2200 }); return; }
+        if (leftKind === 'rifle') { toast({ title: 'Rifle uses both hands — free the left hand first', duration: 2400 }); return; }
+      }
+      if (def.hand === 'L' && r.isRifle && equip[5]) { toast({ title: 'Free the right hand for a rifle', duration: 2400 }); return; }
       // OPTIMISTIC: show the item in the slot + play the equip sound + clear the cursor INSTANTLY;
       // the DB move + shared reconcile happen in the background, so it feels immediate.
       setEquip((prev) => ({ ...prev, [def.num]: r.item }));
@@ -233,31 +263,35 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
 
   const renderSlot = (def: SlotDef, suppressSprite = false) => {
     const g = equip[def.num];
-    const bootsDefault = def.type === 'boots' && !g;
-    const sprite = suppressSprite ? null : (g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
-    const bright = !suppressSprite && (!!g || bootsDefault);
+    // A grenade assigned to this hand (stored in QA, shown here). Armed = bright, disarmed = dim.
+    const gren = def.hand && !suppressSprite ? handGren[def.hand] : null;
+    const bootsDefault = def.type === 'boots' && !g && !gren;
+    const sprite = suppressSprite ? null : (gren?.spriteUrl ?? g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
+    const spriteOpacity = gren ? (gren.armed ? 1 : 0.5) : ((!!g || bootsDefault) ? 1 : 0.35);
+    const tierBadge = gren?.tier ?? (!suppressSprite ? g?.tier : null) ?? null;
+    const armed = !!gren?.armed;
     return (
       <div
         key={def.num}
-        title={g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
+        title={gren ? `Grenade T${gren.tier} — ${armed ? 'armed: G throws, right-click disarms' : 'disarmed: G arms'}` : (g ? `${g.name} (drag off, or click to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
         onPointerDown={(e) => startEquipDrag(def, e)}
         onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
         onDragStart={(e) => e.preventDefault()}
         style={{
           width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
           background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
-          border: `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
+          border: `1px solid ${armed ? 'hsl(28 90% 55%)' : cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           position: 'relative', cursor: g || cursorHeld ? 'pointer' : 'default', userSelect: 'none',
         }}
       >
         {sprite ? (
-          <img src={sprite} alt={def.label} draggable={false} style={{ width: 46, height: 46, objectFit: 'contain', opacity: bright ? 1 : 0.35, WebkitUserDrag: 'none' } as React.CSSProperties} />
+          <img src={sprite} alt={def.label} draggable={false} style={{ width: 46, height: 46, objectFit: 'contain', opacity: spriteOpacity, WebkitUserDrag: 'none' } as React.CSSProperties} />
         ) : (
           <span style={{ fontSize: 24, opacity: 0.35, filter: 'grayscale(1)' }} aria-hidden>{def.glyph}</span>
         )}
-        {!suppressSprite && g?.tier ? (
-          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{g.tier}</span>
+        {tierBadge ? (
+          <span style={{ position: 'absolute', top: 1, left: 3, fontSize: 9, fontFamily: 'monospace', color: HUD_DIM }}>T{tierBadge}</span>
         ) : null}
         <span style={{
           position: 'absolute', top: 'calc(100% + 1.8px)', left: 0, right: 0,
