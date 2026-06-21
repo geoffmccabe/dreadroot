@@ -451,15 +451,15 @@ export function FirstPersonControls({
   // Collision boxes for fortress walls only (block colliders are now managed by useChunkLoader)
   const collidersArrayRef = useRef<THREE.Box3[]>([]);
   
-  // Get fortress colliders once - they're static
+  // Get fortress colliders once - they're static. NONE in siege (no fortress there).
   useMemo(() => {
-    const fortressColliders = createFortressColliders();
-    
     collidersArrayRef.current.length = 0;
+    if (isSiege) return;
+    const fortressColliders = createFortressColliders();
     for (let i = 0; i < fortressColliders.length; i++) {
       collidersArrayRef.current.push(fortressColliders[i]);
     }
-  }, []);
+  }, [isSiege]);
   
   const colliders = collidersArrayRef.current;
 
