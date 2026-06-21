@@ -170,7 +170,7 @@ function BarrierWalls({ D }: { D: number }) {
 export function FortressBuilderPreview() {
   const {
     isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed,
-    faceSym, faceFlip, wallSym, entryW, entryH, entryWall, entryVert, stairs,
+    faceSym, faceFlip, wallSym, chunk, entryW, entryH, entryWall, entryVert, stairs,
     extrudeOut, extrudeIn,
     extrudeLightOn, extrudeLightColor, extrudeLightIntensity, extrudeLightSpread,
     insetLightOn, insetLightColor, insetLightIntensity, insetLightSpread,
@@ -227,11 +227,11 @@ export function FortressBuilderPreview() {
   const result = useMemo(
     () => (grid ? buildFortressVoxels(grid, {
       D, T, heightScale, seed: rebuildSeed,
-      faceSym, faceFlip, wallSym, stairs,
+      faceSym, faceFlip, wallSym, chunk, stairs,
       entry: entryW > 0 ? { w: entryW, h: entryH, wall: entryWall, vert: entryVert } : null,
       extrudeOut, extrudeIn,
     }) : null),
-    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, stairs, entryW, entryH, entryWall, entryVert, extrudeOut, extrudeIn]
+    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, chunk, stairs, entryW, entryH, entryWall, entryVert, extrudeOut, extrudeIn]
   );
 
   // Register/clear the dynamic monster-exclusion barrier (20-60-20 outer ring = D).

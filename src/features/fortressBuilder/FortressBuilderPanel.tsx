@@ -190,6 +190,7 @@ export function FortressBuilderPanel() {
         <Row label={`Diameter: ${s.D} (fortress ${Math.round(0.6 * s.D)})`} min={20} max={100} step={1} value={s.D} onChange={(v) => builderStore.set({ D: v })} />
         <Row label={`Height: ${s.heightScale.toFixed(2)}×`} min={0.3} max={2} step={0.05} value={s.heightScale} onChange={(v) => builderStore.set({ heightScale: v })} />
         <Row label={`Wall thickness: ${s.T}`} min={1} max={5} step={1} value={s.T} onChange={(v) => builderStore.set({ T: v })} />
+        <Row label={`Block size (chunkier): ${s.chunk}`} min={1} max={5} step={1} value={s.chunk} onChange={(v) => builderStore.set({ chunk: v })} />
 
         {/* Symmetry */}
         <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>

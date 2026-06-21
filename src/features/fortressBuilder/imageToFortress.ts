@@ -37,6 +37,7 @@ export interface FortressBuildOpts {
   faceSym?: FaceSym;
   faceFlip?: boolean;
   wallSym?: WallSym;
+  chunk?: number; // block size (1=fine detail .. 5=chunky/blocky rectangles)
   entry?: FortressEntry | null;
   stairs?: boolean; // step blocks up to the entry (outside + mirrored inside) when vert >= 2
   // Per-tier extrude (index 0..4 = grey tier 1..5). Outer/inner face each:
@@ -70,7 +71,7 @@ interface Profile { topH: number[]; greyCol: number[]; } // per column 0..F-1
 
 // One wall's silhouette: topmost present pixel per column -> block height (+ optional
 // seeded jitter), and which image column to sample grey from.
-function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: number): Profile {
+function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: number, chunk: number): Profile {
   const { present, H, W } = grid;
   const colAt = (gx: number) => (W === F ? gx : Math.min(W - 1, Math.floor((gx / F) * W)));
   const rnd = seed ? mulberry32(seed) : null;
@@ -113,6 +114,20 @@ function baseProfile(grid: GrayGrid, F: number, heightScale: number, seed: numbe
     }
     topH[gx] = Math.max(0, Math.min(maxBlockH, h));
   }
+
+  // Chunkiness: collapse every `chunk`-wide group of columns to ONE height (the group's
+  // max, so towers/merlons stay solid) and ONE grey column (the group centre). This
+  // turns fine 1-block detail into blocky N-wide rectangles — the brutalist look.
+  if (chunk > 1) {
+    for (let c0 = 0; c0 < F; c0 += chunk) {
+      const end = Math.min(F, c0 + chunk);
+      let hMax = 0;
+      for (let c = c0; c < end; c++) if (topH[c] > hMax) hMax = topH[c];
+      const gc = greyCol[Math.min(F - 1, c0 + (chunk >> 1))];
+      for (let c = c0; c < end; c++) { topH[c] = hMax; greyCol[c] = gc; }
+    }
+  }
+
   return { topH, greyCol };
 }
 
@@ -146,6 +161,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const flip = opts.faceFlip ?? false;
   const wallSym = opts.wallSym ?? '4way';
   const entry = opts.entry ?? null;
+  const chunk = Math.max(1, Math.round(opts.chunk ?? 1)); // block size for the chunky/blocky look
   const F = Math.max(1, Math.round(0.6 * D));
   const { gray, present, H } = grid;
 
@@ -163,7 +179,7 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   const span = bMax - bMin;
   const norm = (b: number) => (span < 0.05 ? b : (b - bMin) / span);
 
-  const mk = (group: number) => applyFaceSym(baseProfile(grid, F, heightScale, groupSeed(seed, group)), F, faceSym, flip);
+  const mk = (group: number) => applyFaceSym(baseProfile(grid, F, heightScale, groupSeed(seed, group), chunk), F, faceSym, flip);
   // wallProfiles indexed by wall: 0 front, 1 right, 2 back, 3 left
   let wallProfiles: Profile[];
   if (wallSym === '4way') { const p = mk(0); wallProfiles = [p, p, p, p]; }
@@ -217,7 +233,10 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
       for (let y = 0; y < h; y++) {
         if (y >= carveLo && y <= carveHi) continue; // entry tunnel (through full thickness)
         const r = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y / Math.max(heightScale, 1e-6))));
-        const tier = tierFor(norm(gray[r][greyCol]), levels);
+        // Snap the sampled row to the chunk grid too, so the facade reads as N×N
+        // rectangles (greyCol is already chunked horizontally in baseProfile).
+        const rC = chunk > 1 ? Math.min(H - 1, Math.floor(r / chunk) * chunk + (chunk >> 1)) : r;
+        const tier = tierFor(norm(gray[rC][greyCol]), levels);
         const exOut = clamp(exOutArr[tier - 1] ?? 0, -T, 2);
         const exIn = clamp(exInArr[tier - 1] ?? 0, -T, 2);
         const dStart = -exOut;        // outer extent (negative = protrude; positive = recess)

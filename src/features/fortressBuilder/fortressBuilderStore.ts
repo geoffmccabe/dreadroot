@@ -18,6 +18,7 @@ export interface BuilderState {
   faceSym: 'lr' | 'none';    // per-face symmetry
   faceFlip: boolean;         // flip which half is the mirror source
   wallSym: '4way' | '2way' | 'none'; // symmetry across the four walls
+  chunk: number;             // block size (1 fine .. 5 chunky rectangles)
   entryW: number;            // entry tunnel width (blocks); 0 = no entry
   entryH: number;            // entry tunnel height (blocks)
   entryWall: number;         // 0 front, 1 right, 2 back, 3 left
@@ -56,6 +57,7 @@ const initial: BuilderState = {
   faceSym: 'lr',
   faceFlip: false,
   wallSym: '4way',
+  chunk: 3,
   entryW: 4,
   entryH: 9,
   entryWall: 0,
