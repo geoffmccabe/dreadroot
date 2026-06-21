@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useGlowPanel } from '@/hooks/useGlowPanel';
 import { usePanelDrag } from '@/hooks/usePanelDrag';
+import { PanelGrabBar } from '@/components/ui/PanelGrabBar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAdminPanel, type NPCSubtab, type SeedSubtab, type ItemsSubtab, type WorldsSubtab } from '@/contexts/AdminPanelContext';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -182,6 +183,7 @@ export function AdminPanel({
           className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize hover:bg-white/10 z-50"
           onMouseDown={handleCornerResizeStart}
         />
+        <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
         <DialogHeader style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
