@@ -647,12 +647,34 @@ export function FortressHUD(props: FortressHUDProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [setCursor]);
 
-  // Releasing a held item over the game CANVAS used to EJECT it into the world
-  // (delete from inventory + spawn a world drop). That silently destroyed items on a
-  // near-miss while aiming for a slot — and mis-mapped equip-origin drags to the vault.
-  // DISABLED for safety: a canvas release now KEEPS the item on the cursor (pickup is
-  // non-destructive, so ESC returns it to its slot — nothing can be lost this way).
-  // If a deliberate "drop to world" is wanted later, it should be an explicit gesture.
+  // Drop-into-world: releasing a held item over the game CANVAS (not a panel/tile)
+  // ejects it into the world at the player's feet — an intended feature. The real bug
+  // was the EQUIP origin: it fell through to the vault branch (wrong region/slot) and
+  // eject_slot_to_world only accepts inventory/quick_select/vault, so an equipped drag
+  // could corrupt/mis-eject. Fix: equip-origin releases over the world KEEP the cursor
+  // (unequip to inventory first to world-drop) — everything else ejects as before.
+  useEffect(() => {
+    const onPointerUp = (e: PointerEvent) => {
+      const c = cursorStackApi.getCursor();
+      if (!c) return;
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement | null;
+      const onGameCanvas = target?.tagName === 'CANVAS' || !!target?.closest('canvas');
+      if (!onGameCanvas) return;
+      const origin = c.origin;
+      const from =
+        origin.region === 'inventory' ? { region: 'inventory' as const, page: 0, slot: origin.gridSlot } :
+        origin.region === 'hotbar'    ? { region: 'quick_select' as const, page: 0, slot: origin.slot } :
+        origin.region === 'vault'     ? { region: 'vault' as const, page: origin.page, slot: origin.slot } :
+        null;   // equip → not world-droppable directly; keep the cursor (item stays safe)
+      if (!from) return;
+      slotClickHandlers.ejectSlotToWorld(from).then((ok) => {
+        if (ok) setCursor(null);
+      });
+    };
+    window.addEventListener('pointerup', onPointerUp);
+    return () => window.removeEventListener('pointerup', onPointerUp);
+  }, [slotClickHandlers, setCursor]);
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
   // Drag source ref — stored in ref to avoid stale closures, survives re-renders.
