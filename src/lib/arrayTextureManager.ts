@@ -164,23 +164,30 @@ class ArrayTextureManagerImpl {
     }
   }
 
-  private bitmapToPixels(bmp: ImageBitmap): Uint8ClampedArray {
+  // Draw vertically FLIPPED so the stored layer is bottom-up — DataArrayTexture ignores
+  // flipY (unlike CanvasTexture, which the atlas relies on), so without this every real
+  // texture would sample upside down. Storing flipped lets shaders use standard UVs and
+  // matches the atlas convention.
+  private drawFlipped(src: CanvasImageSource): Uint8ClampedArray {
     const ctx = this.decodeCtx!;
+    ctx.save();
     ctx.clearRect(0, 0, this.layerRes, this.layerRes);
-    ctx.drawImage(bmp, 0, 0, this.layerRes, this.layerRes);
+    ctx.translate(0, this.layerRes);
+    ctx.scale(1, -1);
+    ctx.drawImage(src, 0, 0, this.layerRes, this.layerRes);
+    ctx.restore();
     return ctx.getImageData(0, 0, this.layerRes, this.layerRes).data;
+  }
+
+  private bitmapToPixels(bmp: ImageBitmap): Uint8ClampedArray {
+    return this.drawFlipped(bmp);
   }
 
   private urlToPixelsViaImg(url: string): Promise<Uint8ClampedArray> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const ctx = this.decodeCtx!;
-        ctx.clearRect(0, 0, this.layerRes, this.layerRes);
-        ctx.drawImage(img, 0, 0, this.layerRes, this.layerRes);
-        resolve(ctx.getImageData(0, 0, this.layerRes, this.layerRes).data);
-      };
+      img.onload = () => resolve(this.drawFlipped(img));
       img.onerror = reject;
       img.src = url;
     });
