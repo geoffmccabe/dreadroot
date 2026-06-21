@@ -32,6 +32,7 @@ import { getGlobalAtlasTexture, incrementAtlasVersion } from '@/hooks/useTexture
 import { initLogStartStep, initLogFinishStep, initLogStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { isArrayBackend } from '@/config/textureBackend';
 import { registerTextureId } from '@/lib/arrayTextureRegistry';
+import { parseStripMetadata } from '@/lib/animationToStrip';
 
 interface SyncResult {
   added: number;
@@ -561,9 +562,11 @@ export async function syncAtlasOnInit(): Promise<void> {
   // us verify the array path holds the real game textures before any renderer uses it.
   if (isArrayBackend()) {
     for (const s of specs) {
-      // The slot the atlas assigned this texture — lets renderers map slot → layer.
+      // The BASE slot the atlas assigned + the animation frame count (consecutive slots
+      // baseSlot..+frames-1). Lets the array stream one layer per frame (Stage 2c).
       const slot = atlasManager.getSlotForTexture(s.textureId)?.slotIndex ?? null;
-      registerTextureId(s.textureId, s.sourceUrl, slot);
+      const frames = parseStripMetadata(s.sourceUrl)?.frames ?? 1;
+      registerTextureId(s.textureId, s.sourceUrl, slot, frames);
     }
   }
 

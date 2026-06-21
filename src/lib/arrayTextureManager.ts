@@ -58,6 +58,9 @@ class ArrayTextureManagerImpl {
   // In-flight loads keyed by LAYER (not url): a url evicted then re-resolved gets a new
   // layer that must still load even while the old layer's load is finishing.
   private loadingLayers = new Set<number>();
+  // For animation-frame layers: maps a composite key (`url#frame`) to which strip URL to
+  // fetch + which frame to slice. Plain (static) keys are just the url, absent from here.
+  private keyInfo = new Map<string, { url: string; frame: number; frameCount: number }>();
   private freeLayers: number[] = [];
   private decodeCanvas: HTMLCanvasElement | null = null;
   private decodeCtx: CanvasRenderingContext2D | null = null;
@@ -127,6 +130,15 @@ class ArrayTextureManagerImpl {
     return { layer, ready: false };
   }
 
+  /** Resolve a single ANIMATION FRAME of a sprite-strip to its own layer (frame i is the
+   *  i-th horizontal slice). frameCount<=1 behaves exactly like resolve(url). */
+  resolveFrame(url: string, frame: number, frameCount: number): LayerResolution {
+    if (!url || frameCount <= 1) return this.resolve(url);
+    const key = `${url}#${frame}`;
+    if (!this.keyInfo.has(key)) this.keyInfo.set(key, { url, frame, frameCount });
+    return this.resolve(key);
+  }
+
   getTexture(): THREE.DataArrayTexture | null { return this.tex; }
 
   stats(): ArrayTextureManagerStats {
@@ -158,28 +170,35 @@ class ArrayTextureManagerImpl {
     return layer;
   }
 
-  private async load(url: string, layer: number): Promise<void> {
-    // Dedup per LAYER: a url re-resolved to a NEW layer must still load even if its old
+  private async load(key: string, layer: number): Promise<void> {
+    // Dedup per LAYER: a key re-resolved to a NEW layer must still load even if its old
     // layer's load is mid-flight (the old one bails via the layerToUrl guard below).
     if (this.loadingLayers.has(layer)) return;
     this.loadingLayers.add(layer);
+    const info = this.keyInfo.get(key);
+    const fetchUrl = info ? info.url : key; // frame keys fetch the underlying strip URL
     try {
-      const resp = await fetch(url);
+      const resp = await fetch(fetchUrl);
       const blob = await resp.blob();
       let px: Uint8ClampedArray;
-      try {
-        const bmp = await createImageBitmap(blob, {
-          resizeWidth: this.layerRes, resizeHeight: this.layerRes, resizeQuality: 'high',
-        } as ImageBitmapOptions);
-        px = this.bitmapToPixels(bmp);
-        bmp.close?.();
-      } catch {
-        // Safari fallback: decode the SAME fetched blob via <img> (matches CORS state of
-        // the primary path — re-fetching the url could taint the canvas instead).
-        px = await this.blobToPixelsViaImg(blob);
+      if (info && info.frameCount > 1) {
+        // Slice out this frame (horizontal sprite-strip), flipped into the layer.
+        px = await this.sliceFrameToPixels(blob, info.frame, info.frameCount);
+      } else {
+        try {
+          const bmp = await createImageBitmap(blob, {
+            resizeWidth: this.layerRes, resizeHeight: this.layerRes, resizeQuality: 'high',
+          } as ImageBitmapOptions);
+          px = this.bitmapToPixels(bmp);
+          bmp.close?.();
+        } catch {
+          // Safari fallback: decode the SAME fetched blob via <img> (matches CORS state of
+          // the primary path — re-fetching the url could taint the canvas instead).
+          px = await this.blobToPixelsViaImg(blob);
+        }
       }
       // Bail if the layer was evicted/reassigned while we were loading.
-      if (this.layerToUrl[layer] !== url) return;
+      if (this.layerToUrl[layer] !== key) return;
       this.writeLayer(layer, px);
       this.readyLayers.add(layer);
       this.revision++; // image arrived
@@ -188,6 +207,22 @@ class ArrayTextureManagerImpl {
     } finally {
       this.loadingLayers.delete(layer);
     }
+  }
+
+  // Decode a sprite-strip blob and draw frame `frame` (the i-th equal horizontal slice)
+  // flipped into one layer.
+  private async sliceFrameToPixels(blob: Blob, frame: number, frameCount: number): Promise<Uint8ClampedArray> {
+    const bmp = await createImageBitmap(blob);
+    const fw = bmp.width / frameCount;
+    const ctx = this.decodeCtx!;
+    ctx.save();
+    ctx.clearRect(0, 0, this.layerRes, this.layerRes);
+    ctx.translate(0, this.layerRes);
+    ctx.scale(1, -1);
+    ctx.drawImage(bmp, frame * fw, 0, fw, bmp.height, 0, 0, this.layerRes, this.layerRes);
+    ctx.restore();
+    bmp.close?.();
+    return ctx.getImageData(0, 0, this.layerRes, this.layerRes).data;
   }
 
   // Draw vertically FLIPPED so the stored layer is bottom-up — DataArrayTexture ignores

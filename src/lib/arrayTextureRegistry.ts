@@ -12,27 +12,38 @@ import { getArrayTextureManager } from './arrayTextureManager';
 interface Entry { textureId: string; layer: number; }
 
 const idToUrl = new Map<string, string>();
-const slotToUrl = new Map<number, string>();
-const pending: Array<{ textureId: string; url: string; slot: number | null }> = [];
+// slot → the engine KEY whose layer holds that atlas slot's image. For animated textures,
+// each frame occupies a consecutive slot (baseSlot+frame) with key `url#frame`; static
+// textures are one slot with key = url. The shader maps slot → layer via this.
+const slotToKey = new Map<number, string>();
+const pending: Array<{ textureId: string; url: string; slot: number | null; frameCount: number }> = [];
 
-function doRegister(textureId: string, url: string, slot: number | null): void {
+function doRegister(textureId: string, url: string, baseSlot: number | null, frameCount: number): void {
   idToUrl.set(textureId, url);
-  if (slot !== null && slot >= 0) slotToUrl.set(slot, url);
-  // Kick off streaming so the layer exists; the live layer is read later via the manager.
-  getArrayTextureManager().resolve(url);
+  const mgr = getArrayTextureManager();
+  const frames = Math.max(1, frameCount);
+  for (let f = 0; f < frames; f++) {
+    // Stream this frame into its own layer; record which slot it fills.
+    mgr.resolveFrame(url, f, frames);
+    if (baseSlot !== null && baseSlot >= 0) {
+      const key = frames > 1 ? `${url}#${f}` : url;
+      slotToKey.set(baseSlot + f, key);
+    }
+  }
 }
 
-/** Record (or queue) a texture's source URL + the atlas slot it occupies. */
-export function registerTextureId(textureId: string, url: string | null | undefined, slot: number | null = null): void {
+/** Record (or queue) a texture: its source URL, the atlas BASE slot it occupies, and how
+ *  many animation frames it has (consecutive slots baseSlot..baseSlot+frameCount-1). */
+export function registerTextureId(textureId: string, url: string | null | undefined, slot: number | null = null, frameCount = 1): void {
   if (!url) return;
-  if (getArrayTextureManager().isInited()) doRegister(textureId, url, slot);
-  else pending.push({ textureId, url, slot });
+  if (getArrayTextureManager().isInited()) doRegister(textureId, url, slot, frameCount);
+  else pending.push({ textureId, url, slot, frameCount });
 }
 
 /** Resolve any registrations queued before the engine had a GL context. */
 export function flushPendingRegistrations(): void {
   if (!getArrayTextureManager().isInited()) return;
-  for (const p of pending) doRegister(p.textureId, p.url, p.slot);
+  for (const p of pending) doRegister(p.textureId, p.url, p.slot, p.frameCount);
   pending.length = 0;
 }
 
@@ -43,11 +54,11 @@ export function getTextureIdLayer(textureId: string): number | null {
 }
 
 /** The CURRENT array layer for an atlas slot (side-effect-free — does NOT touch LRU, so
- *  baking the whole lookup can't defeat eviction). null if its url isn't resident. */
+ *  baking the whole lookup can't defeat eviction). null if its key isn't resident. */
 export function getSlotLayer(slot: number): number | null {
-  const url = slotToUrl.get(slot);
-  if (url === undefined) return null;
-  return getArrayTextureManager().currentLayerOf(url);
+  const key = slotToKey.get(slot);
+  if (key === undefined) return null;
+  return getArrayTextureManager().currentLayerOf(key);
 }
 
 export function getRegisteredEntries(): Entry[] {
@@ -65,11 +76,11 @@ export function getRegisteredEntries(): Entry[] {
 export function buildSlotLayerData(slots = 1024): Float32Array {
   const data = new Float32Array(slots); // defaults to 0 (placeholder layer)
   const mgr = getArrayTextureManager();
-  for (const [slot, url] of slotToUrl) {
+  for (const [slot, key] of slotToKey) {
     if (slot < 0 || slot >= slots) continue;
-    data[slot] = mgr.currentLayerOf(url) ?? 0;
+    data[slot] = mgr.currentLayerOf(key) ?? 0;
   }
   return data;
 }
 
-export function slotLayerCount(): number { return slotToUrl.size; }
+export function slotLayerCount(): number { return slotToKey.size; }
