@@ -7,9 +7,10 @@ import React from 'react';
 import { useSupporterStatus } from '@/features/supporters/useSupporterStatus';
 import { vipColorVar } from '@/components/admin-users/vipStyle';
 
-export function VipCornerBorder({ userId }: { userId: string | null }) {
+export function VipCornerBorder({ userId, isSuperadmin = false }: { userId: string | null; isSuperadmin?: boolean }) {
   const { currentLevel } = useSupporterStatus(userId);
-  const color = vipColorVar(currentLevel);
+  // Superadmin is a role, not a purchasable tier — it overrides the tier color.
+  const color = isSuperadmin ? 'var(--vip-super)' : vipColorVar(currentLevel);
   return (
     <div
       aria-hidden

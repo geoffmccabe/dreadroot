@@ -413,7 +413,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         }}
       >
         <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
-        <VipCornerBorder userId={user?.id ?? null} />
+        <VipCornerBorder userId={user?.id ?? null} isSuperadmin={userRoles.includes('superadmin')} />
         <DialogHeader className="flex-shrink-0 relative" style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle className="flex items-center gap-2" style={{ color: 'hsl(var(--hud-text-bright))' }}>
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
