@@ -80,34 +80,43 @@ silently drop — per project rule).
   queue (fetch → ImageBitmap → upload to layer), a reserved "loading/missing" layer.
 - A tiny debug panel (admin) showing resident layers / evictions. No gameplay impact.
 
-### Phase 2 — Blocks behind the flag (first real surface)
+### Phase 2 — Atlas block/tree renderer behind the flag (first real surface)
+Architecture note: regular placed blocks (`InstancedBlockGroup`) load INDIVIDUAL
+per-block textures and do NOT use the atlas — so they aren't part of the overflow and
+are converted later (Phase 6, new). The real atlas consumers are `InstancedAtlasBlockGroup`
+(tree blocks) and `atlasMaterial.ts` (monsters). So Phase 2 = the atlas tree-block
+renderer (this merges the old "blocks" + "trees" phases — same renderer):
 - Add a per-instance `aLayer` attribute to `InstancedAtlasBlockGroup`.
 - In its `onBeforeCompile`, when backend==='array', sample
   `texture(uArray, vec3(slotUv, aLayer))` instead of `texture2D(map, uvOffset+…)`.
-- Verify blocks (incl. UGC block textures) render identically; measure VRAM + FPS vs
-  atlas. Atlas remains the fallback.
+- Feed each block-type texture through the engine (url → layer); atlas stays default.
+- Verify tree blocks render identically; measure VRAM + FPS vs atlas.
 
-### Phase 3 — Trees
-- Same per-instance layer treatment for the tree atlas path. Verify tree variety +
-  growth still correct.
-
-### Phase 4 — Monsters (fixes the reported bug)
+### Phase 3 — Monsters (fixes the reported bug)
 - Route `atlasMaterial.ts` (Lambert/Standard/hue-shift) + `ShombieRenderer` (and
   shnake/shroomer/etc.) through the layer-index path. No slot limit → ALL animated
   tiers + frames get layers. Verify every tier textures + animates in-world.
 - **This is the phase that restores the missing shombie textures.**
 
-### Phase 5 — KTX2 compressed layers (VRAM win)
+### Phase 4 — KTX2 compressed layers (VRAM win)
 - Switch the array to `CompressedArrayTexture` + `KTX2Loader` transcoding (the KTX2
   *encoding* half already exists: `src/lib/ktx2.ts`, `*_url_ktx2` columns, backfill
   button). Load the `*_url_ktx2` siblings; transcode to the device's compressed format.
   ~4× VRAM saving → more resident layers. Keep uncompressed fallback for unsupported
   devices.
 
-### Phase 6 — Streaming, eviction & UGC at scale
+### Phase 5 — Streaming, eviction & UGC at scale
 - Tune LRU for world/challenge switching; prefetch a world's set on enter.
 - UGC pipeline: upload → KTX2 encode (exists) → on-view stream into a layer → visible
   cross-game, deduped by hash. Add size/dimension limits + a moderation hook.
+
+### Phase 6 — Remaining per-texture surfaces (NEW)
+Convert everything that loads its OWN texture (not the atlas) onto the array engine too,
+so there's ONE texture system: regular placed blocks (`InstancedBlockGroup`, incl.
+`texture_url` overrides + the cliff/grass defaults), `FruitRenderer`, and any other
+per-texture loaders (banners, fortress-builder preview, effect billboards, etc. — audit
+for `new THREE.TextureLoader` / `useAnimatedTexture` consumers). Each resolves its url →
+layer via the engine, deduped/streamed like the rest. Behind the same flag.
 
 ### Phase 7 — Cutover + cleanup
 - Flip default to `array` per game after soak (DreadRoot first). Keep atlas fallback one
