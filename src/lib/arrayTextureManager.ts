@@ -45,23 +45,43 @@ class ArrayTextureManagerImpl {
   private tex: THREE.DataArrayTexture | null = null;
   private inited = false;
   private evictions = 0;
+  // Bumped on every layer mapping change (assign / evict / image-uploaded). Consumers
+  // (the slot→layer lookup) rebuild when this changes, since a url's layer can change
+  // under LRU without the resident COUNT changing.
+  private revision = 0;
 
   // Resident map in LRU order: re-inserting on access moves a url to the end (newest);
   // the first key is the least-recently-used eviction candidate.
   private urlToLayer = new Map<string, number>();
   private layerToUrl: (string | null)[] = [];
   private readyLayers = new Set<number>();
-  private loading = new Set<string>();
+  // In-flight loads keyed by LAYER (not url): a url evicted then re-resolved gets a new
+  // layer that must still load even while the old layer's load is finishing.
+  private loadingLayers = new Set<number>();
   private freeLayers: number[] = [];
   private decodeCanvas: HTMLCanvasElement | null = null;
   private decodeCtx: CanvasRenderingContext2D | null = null;
 
   isInited(): boolean { return this.inited; }
+  getRevision(): number { return this.revision; }
+  /** The layer a url currently occupies, or null if not resident (no side effects). */
+  currentLayerOf(url: string): number | null {
+    const l = this.urlToLayer.get(url);
+    return l === undefined ? null : l;
+  }
 
-  /** Detect device caps and create the array texture. Pass the R3F renderer's gl. */
+  /** Detect device caps and create the array texture. Pass the R3F renderer's gl.
+   *  No-op on WebGL1 (sampler2DArray / R32F texelFetch need WebGL2) — renderers then
+   *  fall back to the atlas since the engine stays un-inited. */
   init(gl: THREE.WebGLRenderer): void {
     if (this.inited) return;
     const ctx = gl.getContext() as WebGL2RenderingContext;
+    const isWebGL2 = !!gl.capabilities?.isWebGL2 ||
+      (typeof WebGL2RenderingContext !== 'undefined' && ctx instanceof WebGL2RenderingContext);
+    if (!isWebGL2) {
+      console.warn('[ArrayTexture] WebGL2 required — staying on the atlas backend.');
+      return;
+    }
     const maxLayers = (ctx && ctx.getParameter && ctx.getParameter(ctx.MAX_ARRAY_TEXTURE_LAYERS)) || 256;
     const budget = isMobile() ? MOBILE_BUDGET : DESKTOP_BUDGET;
     this.layerCount = Math.max(16, Math.min(maxLayers, budget));
@@ -102,6 +122,7 @@ class ArrayTextureManagerImpl {
     this.urlToLayer.set(url, layer);
     this.layerToUrl[layer] = url;
     this.fillLayer(layer, 60, 60, 70); // placeholder until the image loads
+    this.revision++;
     void this.load(url, layer);
     return { layer, ready: false };
   }
@@ -115,7 +136,7 @@ class ArrayTextureManagerImpl {
       layerRes: this.layerRes,
       resident: this.urlToLayer.size,
       ready: this.readyLayers.size,
-      loading: this.loading.size,
+      loading: this.loadingLayers.size,
       free: this.freeLayers.length,
       evictions: this.evictions,
     };
@@ -131,14 +152,17 @@ class ArrayTextureManagerImpl {
     this.urlToLayer.delete(oldestUrl);
     this.layerToUrl[layer] = null;
     this.readyLayers.delete(layer);
-    this.loading.delete(oldestUrl);
+    this.loadingLayers.delete(layer);
     this.evictions++;
+    this.revision++; // the evicted url's layer changed (now unresolved)
     return layer;
   }
 
   private async load(url: string, layer: number): Promise<void> {
-    if (this.loading.has(url)) return;
-    this.loading.add(url);
+    // Dedup per LAYER: a url re-resolved to a NEW layer must still load even if its old
+    // layer's load is mid-flight (the old one bails via the layerToUrl guard below).
+    if (this.loadingLayers.has(layer)) return;
+    this.loadingLayers.add(layer);
     try {
       const resp = await fetch(url);
       const blob = await resp.blob();
@@ -150,17 +174,19 @@ class ArrayTextureManagerImpl {
         px = this.bitmapToPixels(bmp);
         bmp.close?.();
       } catch {
-        // Safari fallback: <img> → canvas (no resize option on createImageBitmap).
-        px = await this.urlToPixelsViaImg(url);
+        // Safari fallback: decode the SAME fetched blob via <img> (matches CORS state of
+        // the primary path — re-fetching the url could taint the canvas instead).
+        px = await this.blobToPixelsViaImg(blob);
       }
       // Bail if the layer was evicted/reassigned while we were loading.
-      if (this.layerToUrl[layer] !== url) { this.loading.delete(url); return; }
+      if (this.layerToUrl[layer] !== url) return;
       this.writeLayer(layer, px);
       this.readyLayers.add(layer);
+      this.revision++; // image arrived
     } catch {
       // leave the placeholder in place
     } finally {
-      this.loading.delete(url);
+      this.loadingLayers.delete(layer);
     }
   }
 
@@ -183,13 +209,13 @@ class ArrayTextureManagerImpl {
     return this.drawFlipped(bmp);
   }
 
-  private urlToPixelsViaImg(url: string): Promise<Uint8ClampedArray> {
+  private blobToPixelsViaImg(blob: Blob): Promise<Uint8ClampedArray> {
     return new Promise((resolve, reject) => {
+      const objUrl = URL.createObjectURL(blob);
       const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(this.drawFlipped(img));
-      img.onerror = reject;
-      img.src = url;
+      img.onload = () => { try { resolve(this.drawFlipped(img)); } finally { URL.revokeObjectURL(objUrl); } };
+      img.onerror = (e) => { URL.revokeObjectURL(objUrl); reject(e); };
+      img.src = objUrl;
     });
   }
 

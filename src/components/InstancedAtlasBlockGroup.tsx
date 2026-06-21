@@ -229,7 +229,7 @@ function createAtlasMaterial(atlasTexture: THREE.Texture): THREE.MeshLambertMate
 // Only used when the 'array' backend flag is on; the atlas path is unchanged.
 import { isArrayBackend } from '@/config/textureBackend';
 import { getArrayTextureManager } from '@/lib/arrayTextureManager';
-import { buildSlotLayerData, slotLayerCount } from '@/lib/arrayTextureRegistry';
+import { buildSlotLayerData } from '@/lib/arrayTextureRegistry';
 
 // 1×1 white dummy map → gives the material USE_MAP/vMapUv plumbing without an atlas.
 let _dummyMap: THREE.DataTexture | null = null;
@@ -244,24 +244,26 @@ function getDummyMap(): THREE.DataTexture {
 // slot→layer lookup as an R-float texture (1024 slots wide), rebuilt as textures stream in.
 const SLOT_TEX_W = 1024;
 let _slotLayerTex: THREE.DataTexture | null = null;
-let _slotLayerLastCount = -1;
+let _slotLayerLastRev = -1;
 function getSlotLayerTexture(): THREE.DataTexture {
   if (!_slotLayerTex) {
     _slotLayerTex = new THREE.DataTexture(buildSlotLayerData(SLOT_TEX_W), SLOT_TEX_W, 1, THREE.RedFormat, THREE.FloatType);
-    _slotLayerTex.minFilter = THREE.NearestFilter;
+    _slotLayerTex.minFilter = THREE.NearestFilter; // NearestFilter is load-bearing — see refresh
     _slotLayerTex.magFilter = THREE.NearestFilter;
     _slotLayerTex.needsUpdate = true;
-    _slotLayerLastCount = slotLayerCount();
+    _slotLayerLastRev = getArrayTextureManager().getRevision();
   }
   return _slotLayerTex;
 }
-/** Refresh the slot→layer texture if new textures have registered since last bake. */
+/** Rebuild the slot→layer texture whenever any layer mapping changed (a url's layer can
+ *  move under LRU eviction without the resident COUNT changing — gate on the revision). */
 export function refreshSlotLayerTexture(): void {
   if (!_slotLayerTex) return;
-  if (slotLayerCount() === _slotLayerLastCount) return;
+  const rev = getArrayTextureManager().getRevision();
+  if (rev === _slotLayerLastRev) return;
   (_slotLayerTex.image.data as Float32Array).set(buildSlotLayerData(SLOT_TEX_W));
   _slotLayerTex.needsUpdate = true;
-  _slotLayerLastCount = slotLayerCount();
+  _slotLayerLastRev = rev;
 }
 
 function createArrayAtlasMaterial(arrayTex: THREE.Texture): THREE.MeshLambertMaterial {
