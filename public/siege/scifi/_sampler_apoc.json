@@ -1,7 +1,7 @@
 {
  "set": "apoc",
  "cell": 19.0,
- "count": 54,
+ "count": 64,
  "items": [
   {
    "file": "apoc_SM_Bld_Apartment_01.gltf",
@@ -95,10 +95,38 @@
    "category": "environment"
   },
   {
+   "file": "apoc_SM_Env_Road_Bare_01.gltf",
+   "w": 5.0,
+   "h": 0.105,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Road_Median_02.gltf",
+   "w": 5.0,
+   "h": 0.105,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
    "file": "apoc_SM_Env_DirtPile_01.gltf",
    "w": 2.263,
    "h": 0.298,
    "d": 2.312,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Driveway_PathBoth_01.gltf",
+   "w": 5.0,
+   "h": 0.08,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Flowers_Large_02.gltf",
+   "w": 4.05,
+   "h": 1.362,
+   "d": 6.915,
    "category": "environment"
   },
   {
@@ -109,10 +137,38 @@
    "category": "environment"
   },
   {
+   "file": "apoc_SM_Env_GroundLeaves_02.gltf",
+   "w": 2.719,
+   "h": 0.274,
+   "d": 3.207,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Motorway_Middle_Destroyed_01.gltf",
+   "w": 5.054,
+   "h": 1.114,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
    "file": "apoc_SM_Env_Motorway_Support_Beam_01.gltf",
    "w": 3.349,
    "h": 7.896,
    "d": 11.355,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Overgrowth_04.gltf",
+   "w": 2.402,
+   "h": 1.721,
+   "d": 4.315,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Overgrowth_Wall_01.gltf",
+   "w": 0.268,
+   "h": 1.59,
+   "d": 1.299,
    "category": "environment"
   },
   {
@@ -123,24 +179,24 @@
    "category": "environment"
   },
   {
-   "file": "apoc_SM_Env_Road_YellowLines_02.gltf",
+   "file": "apoc_SM_Env_Road_03.gltf",
    "w": 5.0,
    "h": 0.0,
    "d": 5.0,
    "category": "environment"
   },
   {
-   "file": "apoc_SM_Env_Sidewalk_Gutter_01.gltf",
-   "w": 5.0,
-   "h": 1.263,
-   "d": 5.0,
+   "file": "apoc_SM_Env_Road_Dirt_Straight_01.gltf",
+   "w": 11.911,
+   "h": 0.273,
+   "d": 7.102,
    "category": "environment"
   },
   {
-   "file": "apoc_SM_Env_StormCanal_Pipe_End_01.gltf",
-   "w": 0.725,
-   "h": 2.273,
-   "d": 2.273,
+   "file": "apoc_SM_Env_Road_YellowLines_02.gltf",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0,
    "category": "environment"
   },
   {
@@ -263,10 +319,17 @@
    "category": "misc"
   },
   {
-   "file": "apoc_SM_Chr_Attach_Patient_Female_Hair_01.gltf",
-   "w": 0.367,
-   "h": 0.586,
-   "d": 0.311,
+   "file": "apoc_SM_Chr_Attach_Islander_Male_Hair_01.gltf",
+   "w": 0.448,
+   "h": 0.274,
+   "d": 0.218,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_Chr_Attach_Teen_Male_Hat_01.gltf",
+   "w": 0.439,
+   "h": 0.266,
+   "d": 0.265,
    "category": "misc"
   },
   {
@@ -277,10 +340,17 @@
    "category": "misc"
   },
   {
-   "file": "apoc_SM_Item_Book_Open_01.gltf",
-   "w": 0.526,
-   "h": 0.057,
-   "d": 0.533,
+   "file": "apoc_SM_DeadBody_Male_17.gltf",
+   "w": 1.545,
+   "h": 0.405,
+   "d": 1.22,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_Item_MouseTrap_01.gltf",
+   "w": 0.375,
+   "h": 0.086,
+   "d": 0.187,
    "category": "misc"
   },
   {

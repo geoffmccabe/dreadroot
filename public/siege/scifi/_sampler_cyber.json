@@ -1,7 +1,7 @@
 {
  "set": "cyber",
  "cell": 15.1,
- "count": 54,
+ "count": 59,
  "items": [
   {
    "file": "cyber_SM_Bld_Base_45_Floor_01.gltf",
@@ -144,6 +144,27 @@
    "category": "environment"
   },
   {
+   "file": "cyber_SM_Env_Junk_Pile_04.gltf",
+   "w": 3.202,
+   "h": 0.714,
+   "d": 1.949,
+   "category": "environment"
+  },
+  {
+   "file": "cyber_SM_Env_Junk_Pile_05.gltf",
+   "w": 2.079,
+   "h": 0.714,
+   "d": 2.246,
+   "category": "environment"
+  },
+  {
+   "file": "cyber_SM_Env_Junk_Pile_Insert_01.gltf",
+   "w": 2.317,
+   "h": 0.308,
+   "d": 1.662,
+   "category": "environment"
+  },
+  {
    "file": "cyber_SM_FX_Bullet_Mesh_01.gltf",
    "w": 0.128,
    "h": 0.134,
@@ -151,10 +172,17 @@
    "category": "misc"
   },
   {
-   "file": "cyber_SM_FX_Paper_Mesh_01.gltf",
-   "w": 0.507,
-   "h": 0.033,
-   "d": 0.422,
+   "file": "cyber_SM_FX_Leaf_01.gltf",
+   "w": 0.395,
+   "h": 0.068,
+   "d": 0.395,
+   "category": "misc"
+  },
+  {
+   "file": "cyber_SM_FX_Paper_Mesh_02.gltf",
+   "w": 0.617,
+   "h": 0.09,
+   "d": 0.695,
    "category": "misc"
   },
   {
@@ -165,10 +193,17 @@
    "category": "misc"
   },
   {
-   "file": "cyber_SM_FX_Plane_Wall_01.gltf",
-   "w": 2.5,
+   "file": "cyber_SM_FX_Plane_Tall_01.gltf",
+   "w": 1.25,
    "h": 3.0,
    "d": 0.0,
+   "category": "misc"
+  },
+  {
+   "file": "cyber_SM_FX_Scrap_01.gltf",
+   "w": 1.64,
+   "h": 1.64,
+   "d": 1.64,
    "category": "misc"
   },
   {

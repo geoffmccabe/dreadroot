@@ -265,6 +265,14 @@ export const MECH_SAMPLER_WORLD = samplerWorld('mech-demo', 'Mech', 6);
 export const WORLDS_SAMPLER_WORLD = samplerWorld('worlds-demo', 'SciFi Worlds', 7);
 export const APOC_SAMPLER_WORLD = samplerWorld('apoc-demo', 'Apocalypse', 8);
 export const DARK_SAMPLER_WORLD = samplerWorld('dark-demo', 'Dark Fantasy', 9);
+// Nature biome asset libraries (no baked scene) shown as sampler grids; also the palette
+// for the future biome terrain-painting builder.
+export const NATURE_SAMPLER_WORLD = samplerWorld('nature-demo', 'Nature', 10);
+export const ALPINE_SAMPLER_WORLD = samplerWorld('alpine-demo', 'Alpine Mountain', 11);
+export const DESERT_SAMPLER_WORLD = samplerWorld('desert-demo', 'Arid Desert', 12);
+export const MEADOW_SAMPLER_WORLD = samplerWorld('meadow-demo', 'Meadow Forest', 13);
+export const SWAMP_SAMPLER_WORLD = samplerWorld('swamp-demo', 'Swamp Marshland', 14);
+export const JUNGLE_SAMPLER_WORLD = samplerWorld('jungle-demo', 'Tropical Jungle', 15);
 
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
@@ -277,6 +285,12 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [WORLDS_SAMPLER_WORLD.id]: WORLDS_SAMPLER_WORLD,
   [APOC_SAMPLER_WORLD.id]: APOC_SAMPLER_WORLD,
   [DARK_SAMPLER_WORLD.id]: DARK_SAMPLER_WORLD,
+  [NATURE_SAMPLER_WORLD.id]: NATURE_SAMPLER_WORLD,
+  [ALPINE_SAMPLER_WORLD.id]: ALPINE_SAMPLER_WORLD,
+  [DESERT_SAMPLER_WORLD.id]: DESERT_SAMPLER_WORLD,
+  [MEADOW_SAMPLER_WORLD.id]: MEADOW_SAMPLER_WORLD,
+  [SWAMP_SAMPLER_WORLD.id]: SWAMP_SAMPLER_WORLD,
+  [JUNGLE_SAMPLER_WORLD.id]: JUNGLE_SAMPLER_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

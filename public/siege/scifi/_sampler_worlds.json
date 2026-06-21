@@ -1,7 +1,7 @@
 {
  "set": "worlds",
  "cell": 19.8,
- "count": 56,
+ "count": 66,
  "items": [
   {
    "file": "worlds_SM_Bld_Billboard_07.gltf",
@@ -95,24 +95,38 @@
    "category": "misc"
   },
   {
-   "file": "worlds_SM_Chr_Attach_Hair_Male_01.gltf",
-   "w": 0.247,
-   "h": 0.228,
-   "d": 0.251,
+   "file": "worlds_SM_Chr_Attach_GasMask_Thin_01.gltf",
+   "w": 0.318,
+   "h": 0.197,
+   "d": 0.178,
    "category": "misc"
   },
   {
-   "file": "worlds_SM_Chr_Attach_Helmet_Space_02.gltf",
-   "w": 0.412,
-   "h": 0.492,
-   "d": 0.453,
+   "file": "worlds_SM_Chr_Attach_Hat_01.gltf",
+   "w": 0.433,
+   "h": 0.276,
+   "d": 0.475,
    "category": "misc"
   },
   {
-   "file": "worlds_SM_Chr_Attach_VR_02_Hair_02.gltf",
-   "w": 0.289,
-   "h": 0.24,
-   "d": 0.342,
+   "file": "worlds_SM_Chr_Attach_Helmet_05.gltf",
+   "w": 0.363,
+   "h": 0.405,
+   "d": 0.354,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_Shoulder_Large_L_02.gltf",
+   "w": 0.388,
+   "h": 0.141,
+   "d": 0.249,
+   "category": "misc"
+  },
+  {
+   "file": "worlds_SM_Chr_Attach_VR_03_Hair_01.gltf",
+   "w": 0.296,
+   "h": 0.324,
+   "d": 0.331,
    "category": "misc"
   },
   {
@@ -123,10 +137,24 @@
    "category": "environment"
   },
   {
+   "file": "worlds_SM_Env_Artifact_AlienRuin_22.gltf",
+   "w": 14.31,
+   "h": 17.315,
+   "d": 4.462,
+   "category": "environment"
+  },
+  {
    "file": "worlds_SM_Env_Detail_Crater_Fill_01.gltf",
    "w": 7.451,
    "h": 0.0,
    "d": 7.451,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Detail_Spikey_Group_02.gltf",
+   "w": 7.0,
+   "h": 8.638,
+   "d": 7.906,
    "category": "environment"
   },
   {
@@ -137,10 +165,24 @@
    "category": "environment"
   },
   {
+   "file": "worlds_SM_Env_Floating_Rocks_Single_08.gltf",
+   "w": 0.695,
+   "h": 2.365,
+   "d": 0.81,
+   "category": "environment"
+  },
+  {
    "file": "worlds_SM_Env_Ground_Greeble_04.gltf",
    "w": 3.901,
    "h": 0.359,
    "d": 3.644,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Plant_Balloon_Group_02.gltf",
+   "w": 1.363,
+   "h": 0.814,
+   "d": 0.932,
    "category": "environment"
   },
   {
@@ -151,10 +193,24 @@
    "category": "environment"
   },
   {
+   "file": "worlds_SM_Env_Plant_Flower_03.gltf",
+   "w": 0.761,
+   "h": 0.953,
+   "d": 0.711,
+   "category": "environment"
+  },
+  {
    "file": "worlds_SM_Env_Plant_Hallowed_02.gltf",
    "w": 5.433,
    "h": 11.052,
    "d": 6.887,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Plant_Large_Spiral_03.gltf",
+   "w": 3.96,
+   "h": 13.951,
+   "d": 4.188,
    "category": "environment"
   },
   {
@@ -165,10 +221,24 @@
    "category": "environment"
   },
   {
+   "file": "worlds_SM_Env_Plant_Spikey_02.gltf",
+   "w": 7.494,
+   "h": 5.795,
+   "d": 6.741,
+   "category": "environment"
+  },
+  {
    "file": "worlds_SM_Env_Road_Slope_Up_01.gltf",
    "w": 5.356,
    "h": 1.963,
    "d": 16.755,
+   "category": "environment"
+  },
+  {
+   "file": "worlds_SM_Env_Rock_Large_01.gltf",
+   "w": 15.192,
+   "h": 23.369,
+   "d": 16.296,
    "category": "environment"
   },
   {

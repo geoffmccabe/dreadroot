@@ -61,4 +61,11 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyE', key: 'E', name: 'SciFi Worlds', mapId: 'worlds-demo', pos: [0, 3, 0] },
   { code: 'KeyF', key: 'F', name: 'Apocalypse',  mapId: 'apoc-demo',   pos: [0, 3, 0] },
   { code: 'KeyG', key: 'G', name: 'Dark Fantasy', mapId: 'dark-demo',  pos: [0, 3, 0] },
+  // Nature biomes (asset libraries → future biome-painting palette).
+  { code: 'KeyH', key: 'H', name: 'Nature',         mapId: 'nature-demo', pos: [0, 3, 0] },
+  { code: 'KeyI', key: 'I', name: 'Alpine Mountain', mapId: 'alpine-demo', pos: [0, 3, 0] },
+  { code: 'KeyJ', key: 'J', name: 'Arid Desert',    mapId: 'desert-demo', pos: [0, 3, 0] },
+  { code: 'KeyK', key: 'K', name: 'Meadow Forest',  mapId: 'meadow-demo', pos: [0, 3, 0] },
+  { code: 'KeyL', key: 'L', name: 'Swamp Marshland', mapId: 'swamp-demo', pos: [0, 3, 0] },
+  { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
 ];

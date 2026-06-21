@@ -1,7 +1,7 @@
 {
  "set": "dark",
  "cell": 17.4,
- "count": 39,
+ "count": 47,
  "items": [
   {
    "file": "dark_SM_Bld_Base_45_Floor_01.gltf",
@@ -95,7 +95,21 @@
    "category": "environment"
   },
   {
+   "file": "dark_SM_Env_Basalt_04.gltf",
+   "w": 8.154,
+   "h": 5.914,
+   "d": 2.785,
+   "category": "environment"
+  },
+  {
    "file": "dark_SM_Env_Ground_Dirt_Round_01.gltf",
+   "w": 7.797,
+   "h": 0.088,
+   "d": 7.525,
+   "category": "environment"
+  },
+  {
+   "file": "dark_SM_Env_Ground_Grass_Round_01.gltf",
    "w": 7.797,
    "h": 0.088,
    "d": 7.525,
@@ -109,10 +123,24 @@
    "category": "environment"
   },
   {
+   "file": "dark_SM_Env_Grunge_07.gltf",
+   "w": 3.805,
+   "h": 0.0,
+   "d": 0.402,
+   "category": "environment"
+  },
+  {
    "file": "dark_SM_Env_Grunge_11.gltf",
    "w": 0.942,
    "h": 0.0,
    "d": 1.305,
+   "category": "environment"
+  },
+  {
+   "file": "dark_SM_Env_Moss_04.gltf",
+   "w": 1.239,
+   "h": 0.0,
+   "d": 0.89,
    "category": "environment"
   },
   {
@@ -123,10 +151,24 @@
    "category": "environment"
   },
   {
+   "file": "dark_SM_Env_Rock_03.gltf",
+   "w": 1.341,
+   "h": 0.997,
+   "d": 0.929,
+   "category": "environment"
+  },
+  {
    "file": "dark_SM_Env_Rock_Cliff_03.gltf",
    "w": 9.282,
    "h": 10.172,
    "d": 9.889,
+   "category": "environment"
+  },
+  {
+   "file": "dark_SM_Env_Rock_Stairs_02.gltf",
+   "w": 2.607,
+   "h": 2.838,
+   "d": 3.719,
    "category": "environment"
   },
   {
@@ -137,10 +179,24 @@
    "category": "environment"
   },
   {
+   "file": "dark_SM_Env_Tree_Trunk_01.gltf",
+   "w": 2.511,
+   "h": 1.676,
+   "d": 1.794,
+   "category": "environment"
+  },
+  {
    "file": "dark_SM_Env_Vine_04.gltf",
    "w": 1.301,
    "h": 1.395,
    "d": 0.063,
+   "category": "environment"
+  },
+  {
+   "file": "dark_SM_Env_Vine_08.gltf",
+   "w": 2.538,
+   "h": 2.816,
+   "d": 0.122,
    "category": "environment"
   },
   {
