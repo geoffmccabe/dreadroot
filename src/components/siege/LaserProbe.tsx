@@ -29,11 +29,8 @@ export function LaserProbe() {
   }, []);
 
   const LASER_FAR = 600;            // beam reach (m)
-  const CULL2 = 600 * 600;          // raycast meshes within ~600m (generous; don't drop items)
   const MAX_TRIS = 120000;          // skip ultra-dense meshes (e.g. 22MB wildflower patches)
                                     // whose brute-force triangle test is what froze the map
-  const cands = useMemo<THREE.Object3D[]>(() => [], []);
-  const wp = useMemo(() => new THREE.Vector3(), []);
   const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = LASER_FAR; return r; }, []);
   const dir = useMemo(() => new THREE.Vector3(), []);
   const down = useMemo(() => new THREE.Vector3(), []);
@@ -123,24 +120,20 @@ export function LaserProbe() {
       rc.last = now;
       ray.set(camera.position, dir);
       ray.far = LASER_FAR;
-      // CRITICAL: raycasting the WHOLE scene froze dense maps (biomes/city = thousands of
-      // separate meshes). Build a small candidate list of meshes near the camera (cheap
-      // origin distance-cull, capped) and raycast only those.
-      cands.length = 0;
+      // The freeze was a few ULTRA-high-poly meshes (e.g. 22MB wildflower patches) getting
+      // brute-force ray-tested — NOT the mesh count. Give those a no-op raycast (once) so
+      // they're skipped, then raycast the WHOLE scene recursively (which reliably hits the
+      // normal items — the earlier candidate-cull was dropping them).
       scene.traverse((o) => {
-        if (cands.length >= 2500) return;
         const m = o as THREE.Mesh;
-        if (!m.isMesh || m === dot || m === box || m === line) return;
-        wp.setFromMatrixPosition(m.matrixWorld);   // read existing matrix (no re-update)
-        if (wp.distanceToSquared(camera.position) > CULL2) return;
-        // Skip ultra-high-poly meshes (no BVH) — their brute-force ray test froze the map.
+        if (!m.isMesh || m.userData.__laserChk) return;
+        m.userData.__laserChk = true;
         const g = m.geometry as THREE.BufferGeometry | undefined;
         const tris = g ? (g.index ? g.index.count : (g.getAttribute('position')?.count ?? 0)) / 3 : 0;
-        if (tris > MAX_TRIS) return;
-        cands.push(m);
+        if (tris > MAX_TRIS) m.raycast = () => {};   // skip in all raycasts
       });
-      const hits = ray.intersectObjects(cands, false)
-        .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
+      const hits = ray.intersectObjects(scene.children, true)
+        .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot && h.object !== box && h.object !== line);
       if (hits.length) {
         const h = hits[0];
         rc.hit = true; rc.dist = camera.position.distanceTo(h.point);
