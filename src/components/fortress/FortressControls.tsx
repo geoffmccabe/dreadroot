@@ -9,8 +9,9 @@ import { triggerChop } from './chopFeedbackStore';
 import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
-import { getActiveWeapon, getRightWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
+import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { anyArmedHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
+import { getFlameGlove } from '@/config/flameGlove';
 import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
@@ -275,6 +276,7 @@ export function FirstPersonControls({
   const rmbDownAtRef = useRef(0);        // when the right button went down (0 = up)
   const rmbZoomedRef = useRef(false);    // did this right-hold engage the zoom?
   const rmbFiredRightRef = useRef(false);// did this right-press fire the right pistol on down?
+  const rmbFlamingRef = useRef(false);   // is the RIGHT-hand flame glove flaming (right button held)?
   const FIRE_RATE_LIMIT = 150;
 
   // Reset the clip whenever the equipped weapon changes (full clip on equip/swap).
@@ -1007,12 +1009,12 @@ export function FirstPersonControls({
   // fire on independent cooldowns; the AMMO pool stays shared (one pool for now).
   const fireWeaponShot = useCallback((weapon?: ActiveWeaponStats | null, fireClock?: React.MutableRefObject<number>) => {
     if (!onShoot) return;
-    const aw = weapon !== undefined ? weapon : getActiveWeapon();
+    const aw = weapon !== undefined ? weapon : getFireWeapon();   // left-click: E1, else fall back to E2
     const clock = fireClock ?? lastFireTime;
     // A weapon must be EQUIPPED to shoot — no gun = no fire (no default shot), flash a
     // warning each attempt. (Flame glove = non-gun → flame path, never reaches here.)
     // Exception: if the LEFT hand legitimately holds a grenade, stay silent (throw with G).
-    if (!aw) { if (!getHandGrenades().L) flashCenter('NO WEAPON EQUIPPED'); return; }
+    if (!aw) { if (!getHandGrenades().L && !getFlameGlove()) flashCenter('NO WEAPON EQUIPPED'); return; }
     // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot. DreadRoot only — no fortress in siege.
     if (!isSiege && isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
@@ -1232,9 +1234,9 @@ export function FirstPersonControls({
     } else if (showCrosshairs && onShoot) {
       // Grenade armed + a RIFLE (not a pistol) → the click does NOTHING; throw the
       // grenade with G. A PISTOL fires even with a grenade armed (dual-wield).
-      if (grenadeReadyRef.current && !getActiveWeapon()?.isPistol) return;
-      // Flame Glove uses continuous hold, not click-to-fire
-      if (isFlameGloveSelected) return;
+      if (grenadeReadyRef.current && !getFireWeapon()?.isPistol) return;
+      // A LEFT-hand flame glove uses continuous hold on the left button, not click-to-fire.
+      if (getFlameGlove()?.hand === 'L') return;
 
       // Skip normal shot if pentabullet is charging (>1s hold)
       if (pentabulletChargeRef.current >= 1.0) {
@@ -1243,7 +1245,7 @@ export function FirstPersonControls({
 
       // Automatic weapons fire on mousedown + frame-loop repeat (hold-to-fire),
       // NOT on the click event — otherwise a tap would double-fire.
-      if (getActiveWeapon()?.isAutomatic) return;
+      if (getFireWeapon()?.isAutomatic) return;
 
       fireWeaponShot();
     }
@@ -1393,9 +1395,18 @@ export function FirstPersonControls({
         event.preventDefault();
         return;
       }
-      // 2. A RIGHT-hand pistol → fire it now, and start the hold-to-zoom timer (the frame
-      //    loop engages ADS past the threshold; release fires a second shot). No inspect/ADS.
-      const rw = getRightWeapon();
+      // 2. A RIGHT-hand flame glove → right button starts the flamethrower (held). The left
+      //    hand's pistol/grenade is unaffected.
+      if (getFlameGlove()?.hand === 'R' && showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
+        onFlameStart?.();
+        rmbFlamingRef.current = true;
+        event.preventDefault();
+        return;
+      }
+      // 3. DUAL-WIELD — right-click fires the RIGHT gun (hold-to-zoom + release-2nd-shot)
+      //    when the LEFT hand is occupied (gun OR glove), so left-click is taken by the
+      //    left hand. With a lone gun, left-click fires it and right-click stays ADS.
+      const rw = (getActiveWeapon() || getFlameGlove()?.hand === 'L') ? getRightWeapon() : null;
       if (rw && showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         fireWeaponShotRef.current?.(rw, lastFireTimeRight);
         rmbDownAtRef.current = Date.now();
@@ -1799,12 +1810,12 @@ export function FirstPersonControls({
 
       // Start flame glove, automatic rapid-fire, or pentabullet charge (shooting mode).
       // Grenade armed + RIFLE (not a pistol) → mousedown does nothing (throw with G).
-      const grenadeBlocksFire = grenadeReadyRef.current && !getActiveWeapon()?.isPistol;
+      const grenadeBlocksFire = grenadeReadyRef.current && !getFireWeapon()?.isPistol;
       if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode && !grenadeBlocksFire) {
-        if (isFlameGloveSelected && onFlameStart) {
-          // Flame Glove selected — start flamethrower
+        if (getFlameGlove()?.hand === 'L' && onFlameStart) {
+          // LEFT-hand flame glove → left button starts the flamethrower
           onFlameStart();
-        } else if (getActiveWeapon()?.isAutomatic) {
+        } else if (getFireWeapon()?.isAutomatic) {
           // Automatic weapon: hold to rapid-fire. Fire the first round now; the
           // frame loop repeats at the weapon's cooldown. No pentabullet charge.
           autoFiringRef.current = true;
@@ -1822,6 +1833,8 @@ export function FirstPersonControls({
     if (event.button === 2) {
       keys.current.rightMouse = false;
       setHoveredBlockId(null);
+      // Stop the RIGHT-hand flame glove (right button released).
+      if (rmbFlamingRef.current) { onFlameStop?.(); rmbFlamingRef.current = false; }
       // Right-pistol hold release: if the hold engaged the zoom, releasing fires a SECOND
       // right-pistol shot; then end the zoom and reset the hold state.
       if (rmbFiredRightRef.current) {
@@ -1833,10 +1846,8 @@ export function FirstPersonControls({
       }
     }
     if (event.button === 0) {
-      // Stop flame glove if active
-      if (isFlameGloveSelected && onFlameStop) {
-        onFlameStop();
-      }
+      // Stop the LEFT-hand flame glove (left button released).
+      if (getFlameGlove()?.hand === 'L' && onFlameStop) onFlameStop();
 
       // Check for pentabullet release
       if (pentabulletChargeRef.current >= 5.0 && showCrosshairs) {
@@ -2282,7 +2293,7 @@ export function FirstPersonControls({
       // Conflict rule: a weapon equipped in E1 (a gun, or the flame glove) DISABLES
       // block/tree chopping — empty the equip slot to chop. Prevents left-click
       // doing double-duty as fire AND chop.
-      const noWeaponEquipped = getActiveWeapon() === null && !isFlameGloveSelectedRef.current;
+      const noWeaponEquipped = getFireWeapon() === null && !isFlameGloveSelectedRef.current;
       if (leftMouseDownRef.current && !showCrosshairsRef.current && !fruitHarvestActive && isOwnedTreeAtPositionRef.current && noWeaponEquipped) {
         // Raycast to find what we're looking at
         const meshesArray = meshesArrayCache.current;

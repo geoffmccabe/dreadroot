@@ -12,7 +12,7 @@ export function LaserProbe() {
   const { camera, scene } = useThree();
   const [on, setOn] = useState(false);
 
-  const { grp, line, dot } = useMemo(() => {
+  const { grp, line, dot, box } = useMemo(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
     const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xff3030, depthTest: false, transparent: true }));
