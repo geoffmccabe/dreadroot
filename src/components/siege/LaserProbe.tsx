@@ -28,7 +28,11 @@ export function LaserProbe() {
     return { grp, line, dot, box };
   }, []);
 
-  const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = 8000; return r; }, []);
+  const LASER_FAR = 400;            // beam reach (m) — also bounds raycast cost
+  const CULL2 = 260 * 260;          // only raycast meshes within ~260m of the camera
+  const cands = useMemo<THREE.Object3D[]>(() => [], []);
+  const wp = useMemo(() => new THREE.Vector3(), []);
+  const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = LASER_FAR; return r; }, []);
   const dir = useMemo(() => new THREE.Vector3(), []);
   const down = useMemo(() => new THREE.Vector3(), []);
   const start = useMemo(() => new THREE.Vector3(), []);
@@ -111,12 +115,24 @@ export function LaserProbe() {
     down.set(0, -1, 0).applyQuaternion(camera.quaternion);
     start.copy(camera.position).addScaledVector(dir, 1.2).addScaledVector(down, 1.0);
 
-    // THROTTLED raycast (the expensive part) — ~12x/sec, not every frame.
+    // THROTTLED raycast (the expensive part) — ~8x/sec, not every frame.
     const now = performance.now();
-    if (rc.last < 0 || now - rc.last > 80) {
+    if (rc.last < 0 || now - rc.last > 120) {
       rc.last = now;
       ray.set(camera.position, dir);
-      const hits = ray.intersectObjects(scene.children, true)
+      ray.far = LASER_FAR;
+      // CRITICAL: raycasting the WHOLE scene froze dense maps (biomes/city = thousands of
+      // separate meshes). Build a small candidate list of meshes near the camera (cheap
+      // origin distance-cull, capped) and raycast only those.
+      cands.length = 0;
+      scene.traverse((o) => {
+        if (cands.length >= 500) return;
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || m === dot || m === box || m === line) return;
+        wp.setFromMatrixPosition(m.matrixWorld);   // read existing matrix (no re-update)
+        if (wp.distanceToSquared(camera.position) <= CULL2) cands.push(m);
+      });
+      const hits = ray.intersectObjects(cands, false)
         .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
       if (hits.length) {
         const h = hits[0];
