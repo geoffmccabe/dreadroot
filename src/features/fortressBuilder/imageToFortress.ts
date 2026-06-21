@@ -11,6 +11,8 @@
 //    derived seeds so they vary even from a single image.
 // Entry: a tunnel carved through one wall at the bottom (width x height, liftable).
 
+import { addWallWalk } from './wallWalk';
+
 export interface GrayGrid {
   gray: number[][];      // brightness 0..1, [row][col]; row 0 = TOP
   present: boolean[][];  // structure mask, [row][col]
@@ -205,10 +207,12 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   // reach beyond the footprint (extrude protrusions, stairs), so offset before packing.
   const OFF = 1500, MUL = 4096;
   const occupied = new Map<number, number>(); // key -> tier
+  const keyOf = (lx: number, y: number, lz: number) => ((lx + OFF) * MUL + (y + OFF)) * MUL + (lz + OFF);
   const place = (lx: number, y: number, lz: number, tier: number, light = 0) => {
-    const k = ((lx + OFF) * MUL + (y + OFF)) * MUL + (lz + OFF);
+    const k = keyOf(lx, y, lz);
     if (!occupied.has(k)) occupied.set(k, tier | (light << 4)); // pack tier (low) + light (high)
   };
+  const removeAt = (lx: number, y: number, lz: number) => { occupied.delete(keyOf(lx, y, lz)); };
   // (w, column, depth) -> footprint (gx, gz). depth 0 = outer face, T-1 = inner face.
   const coordFor = (w: number, col: number, d: number): [number, number] => {
     if (w === 0) return [col, d];            // front: outer at gz 0, inward +z
@@ -274,6 +278,19 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
         else { placeCol(outPerp, a, height); placeCol(inPerp, a, height); }
       }
     }
+  }
+
+  // --- Wall-walk + stairs around the top edge (only when the wall is >= 3 thick). ---
+  if (T >= 3) {
+    const innerProt = Math.max(0, ...exInArr.map((v) => clamp(v, -T, 2)));
+    addWallWalk({
+      F, T, half, levels,
+      topH: wallProfiles.map((p) => p.topH),
+      innerProt,
+      coordFor,
+      place,
+      removeAt,
+    });
   }
 
   // Materialize dedup'd voxels.
