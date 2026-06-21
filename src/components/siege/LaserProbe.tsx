@@ -21,15 +21,17 @@ export function LaserProbe() {
     line.frustumCulled = false; dot.frustumCulled = false;
     // Highlight box around whatever the laser points at (works for ANY mesh, incl. the
     // plain sampler models that the instanced-tint highlight can't touch).
-    const box = new THREE.BoxHelper(dot, 0xffee00);
+    const box = new THREE.BoxHelper(dot, 0xff2020);   // red highlight box around the pointed item
     (box.material as THREE.LineBasicMaterial).depthTest = false;
     box.renderOrder = 1000; box.frustumCulled = false; box.visible = false;
     const grp = new THREE.Group(); grp.add(line); grp.add(box);
     return { grp, line, dot, box };
   }, []);
 
-  const LASER_FAR = 400;            // beam reach (m) — also bounds raycast cost
-  const CULL2 = 260 * 260;          // only raycast meshes within ~260m of the camera
+  const LASER_FAR = 600;            // beam reach (m)
+  const CULL2 = 600 * 600;          // raycast meshes within ~600m (generous; don't drop items)
+  const MAX_TRIS = 120000;          // skip ultra-dense meshes (e.g. 22MB wildflower patches)
+                                    // whose brute-force triangle test is what froze the map
   const cands = useMemo<THREE.Object3D[]>(() => [], []);
   const wp = useMemo(() => new THREE.Vector3(), []);
   const ray = useMemo(() => { const r = new THREE.Raycaster(); r.far = LASER_FAR; return r; }, []);
@@ -126,11 +128,16 @@ export function LaserProbe() {
       // origin distance-cull, capped) and raycast only those.
       cands.length = 0;
       scene.traverse((o) => {
-        if (cands.length >= 500) return;
+        if (cands.length >= 2500) return;
         const m = o as THREE.Mesh;
         if (!m.isMesh || m === dot || m === box || m === line) return;
         wp.setFromMatrixPosition(m.matrixWorld);   // read existing matrix (no re-update)
-        if (wp.distanceToSquared(camera.position) <= CULL2) cands.push(m);
+        if (wp.distanceToSquared(camera.position) > CULL2) return;
+        // Skip ultra-high-poly meshes (no BVH) — their brute-force ray test froze the map.
+        const g = m.geometry as THREE.BufferGeometry | undefined;
+        const tris = g ? (g.index ? g.index.count : (g.getAttribute('position')?.count ?? 0)) / 3 : 0;
+        if (tris > MAX_TRIS) return;
+        cands.push(m);
       });
       const hits = ray.intersectObjects(cands, false)
         .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot);
@@ -141,6 +148,9 @@ export function LaserProbe() {
         const name = ud.fbx || h.object.name || '(unknown)';
         const sub = ud.mesh && ud.mesh !== '(whole)' ? ` / ${ud.mesh}` : '';
         const inst = h.instanceId != null ? ` [instance ${h.instanceId}]` : '';
+        const hg = (h.object as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+        probeState.tris = hg ? Math.round((hg.index ? hg.index.count : (hg.getAttribute('position')?.count ?? 0)) / 3) : 0;
+        probeState.dist = rc.dist;
         probeState.hasHit = true;
         probeState.hit = `${name}${sub}${inst}`;
         probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;

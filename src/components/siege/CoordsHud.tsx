@@ -66,6 +66,11 @@ export function CoordsHud() {
           ? <>pointing at: <b style={{ color: '#ffe' }}>{hitName}</b></>
           : <span style={{ opacity: 0.7 }}>pointing at: nothing</span>}
       </div>
+      {hitName && (
+        <div style={{ marginTop: 2, opacity: 0.85 }}>
+          {probeState.tris.toLocaleString()} tris · {probeState.dist.toFixed(1)}m away
+        </div>
+      )}
       <div style={{ marginTop: 3, opacity: 0.85 }}>
         <b style={{ color: '#ff8a8a' }}>B</b> = flag Bad &nbsp;·&nbsp; <b style={{ color: '#8aff8a' }}>G</b> = flag Good
       </div>

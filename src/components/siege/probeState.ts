@@ -10,4 +10,6 @@ export const probeState = {
   hx: 0, hy: 0, hz: 0,             // hit point (engine coords)
   mesh: null as THREE.InstancedMesh | THREE.Mesh | null, // pointed-at mesh (for V voxelize)
   instanceId: -1,                  // instance index within the mesh, or -1 for a plain mesh
+  tris: 0,                         // triangle count of the pointed-at mesh's geometry
+  dist: 0,                         // distance (m) from camera to the hit
 };
