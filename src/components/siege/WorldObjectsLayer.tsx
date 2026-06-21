@@ -150,6 +150,15 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
         m.side = THREE.DoubleSide;
+        // Kill the baked GREEN self-illumination artifact: 113 world objects (PP_Standard_Material
+        // rocks, tents, rune-stones, stone-mushrooms, cave interiors) ship with a flat emissive
+        // (0.23,0.39,0.25) and NO emissiveMap, so they glow solid pastel green and wash out their
+        // texture entirely. Zero any flat COLORED emissive (spread>0.1) that has no map; keep
+        // neutral/white glows (ores, forge) which are intended.
+        if ('emissive' in m && m.emissive && !m.emissiveMap) {
+          const e = m.emissive;
+          if (Math.max(e.r, e.g, e.b) - Math.min(e.r, e.g, e.b) > 0.1) { e.setRGB(0, 0, 0); m.needsUpdate = true; }
+        }
         // per-material real texture (prefab -> .mat -> _MainTex); fall back to pack atlas
         const tu = (matMap && matMap[m.name]) || atlasUrl;
         if (tu) {
