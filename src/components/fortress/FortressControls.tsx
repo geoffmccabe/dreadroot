@@ -778,9 +778,15 @@ export function FirstPersonControls({
         // grenade (parent owns inventory/equipped state + slot selection).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
         gKeyHeldRef.current = true;
-        // Arm a grenade on the ground OR while flying (god mode) — god mode has no glide, so
-        // there's no air-glide conflict, and you can still arm/throw while flying the map.
-        if ((onGround.current || godModeRef.current) && onGrenadeTogglePress) {
+        if (event.repeat) break;
+        // G is now the THROW key: if a grenade is already armed, G throws it (and
+        // disarms). Otherwise G arms one (parent owns the arm/move-from-INV logic).
+        // Left-click no longer throws — it fires the weapon (pistol) instead.
+        if (grenadeReadyRef.current && onThrowGrenade) {
+          onThrowGrenade();
+          grenadeReadyRef.current = false;
+          onGrenadeReadyChange?.(false);
+        } else if ((onGround.current || godModeRef.current) && onGrenadeTogglePress) {
           onGrenadeTogglePress();
         }
         break;
@@ -1202,21 +1208,15 @@ export function FirstPersonControls({
         );
         onWideTreePlace(position);
       }
-    } else if (grenadeReadyRef.current && onThrowGrenade) {
-      // Grenade-ready mode takes priority over normal weapon fire and
-      // works without a weapon equipped (COD-style). Throw, clear the
-      // ready flag whether it succeeded or not — a failed throw (e.g.
-      // empty inventory) disarms cleanly so the user knows to press G
-      // again.
-      onThrowGrenade();
-      grenadeReadyRef.current = false;
-      onGrenadeReadyChange?.(false);
     } else if (eggReadyRef.current && onThrowEgg) {
-      // Egg-ready mode same priority as grenade. Clear ref so the
-      // crosshair clears even if the throw failed.
+      // Egg-ready mode: click throws. Clear ref so the crosshair clears even if
+      // the throw failed. (Grenades are now thrown with G, not click.)
       onThrowEgg();
       eggReadyRef.current = false;
     } else if (showCrosshairs && onShoot) {
+      // Grenade armed + a RIFLE (not a pistol) → the click does NOTHING; throw the
+      // grenade with G. A PISTOL fires even with a grenade armed (dual-wield).
+      if (grenadeReadyRef.current && !getActiveWeapon()?.isPistol) return;
       // Flame Glove uses continuous hold, not click-to-fire
       if (isFlameGloveSelected) return;
 
@@ -1759,7 +1759,9 @@ export function FirstPersonControls({
       choppingPositionRef.current = null;
 
       // Start flame glove, automatic rapid-fire, or pentabullet charge (shooting mode).
-      if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
+      // Grenade armed + RIFLE (not a pistol) → mousedown does nothing (throw with G).
+      const grenadeBlocksFire = grenadeReadyRef.current && !getActiveWeapon()?.isPistol;
+      if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode && !grenadeBlocksFire) {
         if (isFlameGloveSelected && onFlameStart) {
           // Flame Glove selected — start flamethrower
           onFlameStart();

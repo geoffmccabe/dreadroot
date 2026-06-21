@@ -127,7 +127,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         itemNumber: weaponItemNumber, name: (d.name as string) ?? 'Weapon',
         shootCooldown: cd, maxDamage: (d.max_damage as number) ?? 25,
         fireSound: (d.fire_sound as string) ?? null, emptySound: (d.empty_sound as string) ?? null,
-        reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic,
+        reloadSound: (d.reload_sound as string) ?? null, isAutomatic: !!d.is_automatic, isPistol: !!d.is_pistol,
         ammoClipAmount: clip, reloadTime: (d.reload_time as number) ?? null,
         projectile: (d.projectile as string) ?? null, bulletsPerTap: (d.bullets_per_tap as number) ?? null,
         horizontalSpread: (d.horizontal_spread as number) ?? null, verticalSpread: (d.vertical_spread as number) ?? null,

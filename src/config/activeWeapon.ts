@@ -15,6 +15,9 @@ export interface ActiveWeaponStats {
   emptySound: string | null;
   reloadSound: string | null;
   isAutomatic: boolean;
+  // One-handed pistol → can fire while a grenade is armed (dual-wield). A rifle
+  // (default) can't: with a grenade armed, clicking does nothing (throw with G).
+  isPistol?: boolean | null;
   ammoClipAmount: number | null;
   reloadTime: number | null;
   projectile: string | null; // type string (Normal_Bullet, shotgun, rocket_shell…)
