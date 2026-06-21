@@ -21,7 +21,9 @@ class ModelBoundary extends Component<{ children: ReactNode }, { failed: boolean
 }
 
 function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
-  const { scene } = useGLTF(`/siege/scifi/${file}`);
+  // '/draco/' so draco-compressed models (e.g. the big assembled mech) decode; plain
+  // models ignore it.
+  const { scene } = useGLTF(`/siege/scifi/${file}`, '/draco/');
   const obj = useMemo(() => {
     const model = scene.clone(true);
     const box = new THREE.Box3().setFromObject(model);

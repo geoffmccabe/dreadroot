@@ -131,6 +131,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {world.id === 'cyber-demo' && <SetSampler set="cyber" />}
           {world.id === 'mech-demo' && <SetSampler set="mech" />}
           {world.id === 'worlds-demo' && <SetSampler set="worlds" />}
+          {world.id === 'apoc-demo' && <SetSampler set="apoc" />}
+          {world.id === 'dark-demo' && <SetSampler set="dark" />}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}

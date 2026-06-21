@@ -263,6 +263,8 @@ function samplerWorld(id: string, name: string, wireId: number): WorldDefinition
 export const CYBER_SAMPLER_WORLD = samplerWorld('cyber-demo', 'CyberCity', 5);
 export const MECH_SAMPLER_WORLD = samplerWorld('mech-demo', 'Mech', 6);
 export const WORLDS_SAMPLER_WORLD = samplerWorld('worlds-demo', 'SciFi Worlds', 7);
+export const APOC_SAMPLER_WORLD = samplerWorld('apoc-demo', 'Apocalypse', 8);
+export const DARK_SAMPLER_WORLD = samplerWorld('dark-demo', 'Dark Fantasy', 9);
 
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
@@ -273,6 +275,8 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [CYBER_SAMPLER_WORLD.id]: CYBER_SAMPLER_WORLD,
   [MECH_SAMPLER_WORLD.id]: MECH_SAMPLER_WORLD,
   [WORLDS_SAMPLER_WORLD.id]: WORLDS_SAMPLER_WORLD,
+  [APOC_SAMPLER_WORLD.id]: APOC_SAMPLER_WORLD,
+  [DARK_SAMPLER_WORLD.id]: DARK_SAMPLER_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

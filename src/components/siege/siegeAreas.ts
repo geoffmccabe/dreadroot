@@ -59,4 +59,6 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyC', key: 'C', name: 'CyberCity',   mapId: 'cyber-demo',  pos: [0, 3, 0] },
   { code: 'KeyD', key: 'D', name: 'Mech',        mapId: 'mech-demo',   pos: [0, 3, 0] },
   { code: 'KeyE', key: 'E', name: 'SciFi Worlds', mapId: 'worlds-demo', pos: [0, 3, 0] },
+  { code: 'KeyF', key: 'F', name: 'Apocalypse',  mapId: 'apoc-demo',   pos: [0, 3, 0] },
+  { code: 'KeyG', key: 'G', name: 'Dark Fantasy', mapId: 'dark-demo',  pos: [0, 3, 0] },
 ];

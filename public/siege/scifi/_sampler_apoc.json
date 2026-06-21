@@ -1,0 +1,385 @@
+{
+ "set": "apoc",
+ "cell": 19.0,
+ "count": 54,
+ "items": [
+  {
+   "file": "apoc_SM_Bld_Apartment_01.gltf",
+   "w": 9.572,
+   "h": 14.909,
+   "d": 10.313,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_IndustrialWalkway_Preset_Large_02.gltf",
+   "w": 4.811,
+   "h": 6.216,
+   "d": 8.877,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Quarantine_DomeTent_01.gltf",
+   "w": 6.277,
+   "h": 3.619,
+   "d": 6.277,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Apartment_Glass_01.gltf",
+   "w": 0.033,
+   "h": 12.132,
+   "d": 7.838,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Bunker_Hatch_Round_01.gltf",
+   "w": 5.32,
+   "h": 0.603,
+   "d": 5.32,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Bunker_Wall_Curved_End_Concrete_Door_x2_01.gltf",
+   "w": 5.385,
+   "h": 3.087,
+   "d": 0.25,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Commercial_Small_01_Attachment_01.gltf",
+   "w": 9.618,
+   "h": 2.531,
+   "d": 15.953,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Diner_Text_02.gltf",
+   "w": 0.486,
+   "h": 1.9,
+   "d": 5.011,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_HighRise_Medium_01_Interior_Stack_Destroyed_01.gltf",
+   "w": 12.39,
+   "h": 11.285,
+   "d": 14.226,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Junk_Shelter_03_Tarp.gltf",
+   "w": 3.266,
+   "h": 1.02,
+   "d": 2.966,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Motel_01_Sign_01.gltf",
+   "w": 1.257,
+   "h": 3.99,
+   "d": 11.803,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Bld_Shop_Medium_Glass_01.gltf",
+   "w": 2.791,
+   "h": 5.647,
+   "d": 10.641,
+   "category": "building"
+  },
+  {
+   "file": "apoc_SM_Env_RoadPiece_Damaged_09.gltf",
+   "w": 2.299,
+   "h": 1.164,
+   "d": 2.149,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_DirtPile_01.gltf",
+   "w": 2.263,
+   "h": 0.298,
+   "d": 2.312,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_GrassBlob_12.gltf",
+   "w": 0.313,
+   "h": 0.048,
+   "d": 0.46,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Motorway_Support_Beam_01.gltf",
+   "w": 3.349,
+   "h": 7.896,
+   "d": 11.355,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_RoadPiece_Damaged_04.gltf",
+   "w": 3.385,
+   "h": 0.303,
+   "d": 9.218,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Road_YellowLines_02.gltf",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_Sidewalk_Gutter_01.gltf",
+   "w": 5.0,
+   "h": 1.263,
+   "d": 5.0,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Env_StormCanal_Pipe_End_01.gltf",
+   "w": 0.725,
+   "h": 2.273,
+   "d": 2.273,
+   "category": "environment"
+  },
+  {
+   "file": "apoc_SM_Prop_Ramp_03.gltf",
+   "w": 3.157,
+   "h": 1.748,
+   "d": 1.928,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Barrel_Nuke_01.gltf",
+   "w": 0.705,
+   "h": 1.045,
+   "d": 0.726,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_BathroomSink_02.gltf",
+   "w": 0.676,
+   "h": 1.24,
+   "d": 0.928,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Bookshelf_01.gltf",
+   "w": 0.293,
+   "h": 1.026,
+   "d": 0.888,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Car_Wrecked_Overgrowth_01.gltf",
+   "w": 5.239,
+   "h": 1.682,
+   "d": 2.424,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Construction_Blocks_03.gltf",
+   "w": 1.418,
+   "h": 1.471,
+   "d": 1.458,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_DeadBody_Spiked_Male_02.gltf",
+   "w": 0.523,
+   "h": 4.978,
+   "d": 0.616,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_FirePit_Frame_01.gltf",
+   "w": 0.238,
+   "h": 1.502,
+   "d": 1.939,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Glass_Shard_03.gltf",
+   "w": 3.453,
+   "h": 0.066,
+   "d": 2.354,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Ladder_02.gltf",
+   "w": 0.342,
+   "h": 3.0,
+   "d": 0.532,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Mannequin_Female_03.gltf",
+   "w": 0.379,
+   "h": 1.776,
+   "d": 0.765,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Pipes_Valves_01.gltf",
+   "w": 0.403,
+   "h": 3.0,
+   "d": 2.5,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Roof_Satellite_Dish_01.gltf",
+   "w": 0.922,
+   "h": 1.54,
+   "d": 0.911,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_ShopCounter_01.gltf",
+   "w": 0.635,
+   "h": 0.966,
+   "d": 2.906,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Skull_Silver_01.gltf",
+   "w": 0.363,
+   "h": 0.338,
+   "d": 0.317,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Prop_Tool_Bucket_01.gltf",
+   "w": 0.372,
+   "h": 0.283,
+   "d": 0.364,
+   "category": "prop"
+  },
+  {
+   "file": "apoc_SM_Chr_Attach_Backpack_Small_01.gltf",
+   "w": 0.173,
+   "h": 0.37,
+   "d": 0.319,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_Chr_Attach_Patient_Female_Hair_01.gltf",
+   "w": 0.367,
+   "h": 0.586,
+   "d": 0.311,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_DeadBody_Female_13.gltf",
+   "w": 2.079,
+   "h": 0.351,
+   "d": 1.295,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_Item_Book_Open_01.gltf",
+   "w": 0.526,
+   "h": 0.057,
+   "d": 0.533,
+   "category": "misc"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Bumper_02.gltf",
+   "w": 1.533,
+   "h": 0.967,
+   "d": 2.252,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Bumper_13.gltf",
+   "w": 0.84,
+   "h": 0.506,
+   "d": 1.676,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Frameing_11.gltf",
+   "w": 0.165,
+   "h": 1.221,
+   "d": 1.202,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Intake_Valve_01.gltf",
+   "w": 0.106,
+   "h": 0.124,
+   "d": 0.464,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Plating_02.gltf",
+   "w": 0.498,
+   "h": 0.16,
+   "d": 1.752,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Plating_13.gltf",
+   "w": 0.951,
+   "h": 0.648,
+   "d": 0.156,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Plating_24.gltf",
+   "w": 0.093,
+   "h": 0.597,
+   "d": 1.356,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Veh_Attach_Plating_35.gltf",
+   "w": 0.498,
+   "h": 0.672,
+   "d": 2.473,
+   "category": "vehicle"
+  },
+  {
+   "file": "apoc_SM_Wep_AssaultRifle_01.gltf",
+   "w": 1.029,
+   "h": 0.243,
+   "d": 0.059,
+   "category": "weapon"
+  },
+  {
+   "file": "apoc_SM_Wep_Mod_Attach_Misc_04.gltf",
+   "w": 0.58,
+   "h": 0.086,
+   "d": 0.024,
+   "category": "weapon"
+  },
+  {
+   "file": "apoc_SM_Wep_Mod_Body_24.gltf",
+   "w": 0.369,
+   "h": 0.128,
+   "d": 0.081,
+   "category": "weapon"
+  },
+  {
+   "file": "apoc_SM_Wep_PipeWrench_Knife_01.gltf",
+   "w": 0.515,
+   "h": 0.129,
+   "d": 0.049,
+   "category": "weapon"
+  },
+  {
+   "file": "apoc_SM_Wep_Veh_Harpoon_Ammo_02.gltf",
+   "w": 0.915,
+   "h": 0.082,
+   "d": 0.095,
+   "category": "weapon"
+  },
+  {
+   "file": "apoc_SM_Wep_Mod_Barrel_14.gltf",
+   "w": 0.317,
+   "h": 0.088,
+   "d": 0.038,
+   "category": "weapon"
+  }
+ ]
+}
