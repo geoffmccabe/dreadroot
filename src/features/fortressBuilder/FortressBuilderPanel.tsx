@@ -71,14 +71,6 @@ export function FortressBuilderPanel() {
 
   if (!isAdmin) return null;
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => builderStore.set({ imageSrc: String(ev.target?.result || ''), imageName: f.name });
-    reader.readAsDataURL(f);
-  };
-
   const onSaveSnapshot = async () => {
     const name = snapName.trim();
     if (!name) return;
@@ -115,24 +107,6 @@ export function FortressBuilderPanel() {
           alt="Khaured Fortress"
           className="w-full rounded"
         />
-
-        {/* Source image preview (the uploaded image being built) */}
-        {s.imageSrc ? (
-          <img
-            src={s.imageSrc}
-            alt={s.imageName}
-            className="w-full max-h-40 object-contain rounded"
-            style={{ background: 'hsla(var(--hud-bg-dim))' }}
-          />
-        ) : null}
-
-        {/* Image upload — admins/superadmins only */}
-        {isAdmin && (
-          <div className="space-y-1">
-            <Label className="text-xs">Image{s.imageName ? `: ${s.imageName}` : ''}</Label>
-            <input type="file" accept="image/*" onChange={onFile} className="block w-full text-xs" />
-          </div>
-        )}
 
         {/* Prompt + Rebuild */}
         <div className="space-y-1">
@@ -267,7 +241,7 @@ export function FortressBuilderPanel() {
         </Button>
 
         <div className="text-xs opacity-70">
-          {s.imageSrc ? `${s.blockCount.toLocaleString()} blocks` : 'Upload an image to begin'}
+          {`${s.blockCount.toLocaleString()} blocks`}
         </div>
         <div className="text-[10px] opacity-50">Shift+B toggles · preview builds ~35 blocks ahead of you</div>
 
@@ -282,12 +256,9 @@ export function FortressBuilderPanel() {
                 className="h-7 flex-1 rounded"
                 title={`Stone ${i + 1}`}
                 style={{
-                  // Show the actual cliff stone, multiplied by the tier grey (so the
-                  // swatch matches the in-world block) instead of a flat colour.
-                  backgroundImage: 'url(/cliff_texture_seamless.webp)',
+                  // Flat tier grey — 5 clearly distinct shades (the multiply-over-texture
+                  // blend washed them all to the same mid-grey).
                   backgroundColor: c,
-                  backgroundBlendMode: 'multiply',
-                  backgroundSize: 'cover',
                   outline: s.exTier === i ? '2px solid hsl(var(--hud-text-bright))' : '1px solid hsla(var(--hud-border))',
                   outlineOffset: '-1px',
                 }}

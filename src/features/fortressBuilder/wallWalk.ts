@@ -62,12 +62,22 @@ export function addWallWalk(ctx: WallWalkCtx): void {
   }
 
   // --- 3) Continuous floor ring at floorY (repairs gaps from short columns / recesses). ---
+  // The WALKABLE surface (the band between the two skins) is laid as a checkerboard of the
+  // two lightest fortress tiers; the skins (d=0 outer, d=T-1 inner) keep the wall tier.
+  const light1 = 1;                       // lightest tier
+  const light2 = Math.min(2, levels);     // second-lightest
   for (let w = 0; w < 4; w++) {
     for (let col = 0; col < F; col++) {
       if (topH[w][col] <= 0) continue;
       for (let d = 0; d <= T - 1; d++) {
         const [gx, gz] = coordFor(w, col, d);
-        place(G(gx), floorY, G(gz), tier);
+        if (d >= 1 && d <= T - 2) {
+          const wt = ((gx + gz) & 1) === 0 ? light1 : light2; // checkerboard walk floor
+          removeAt(G(gx), floorY, G(gz));
+          place(G(gx), floorY, G(gz), wt);
+        } else {
+          place(G(gx), floorY, G(gz), tier); // skin gap-fill
+        }
       }
     }
   }
@@ -101,9 +111,10 @@ export function addWallWalk(ctx: WallWalkCtx): void {
   }
 
   // --- 4) Floating stairs hugging the inner courtyard edge, climbing to the walk floor. ---
-  // Start 2 blocks off the wall (room for a base landing). Steps are 2-wide floating treads
-  // (just the tread, NOT filled down to the ground).
-  const B = T + innerProt + 2;      // first courtyard ring, 2 off the inner wall/extrusions
+  // The flight climbs right next to the inner wall; the 2x2 base landing sticks out into the
+  // courtyard (90° from the wall). Steps are 2-wide floating treads (just the tread, NOT
+  // filled down to the ground).
+  const B = T + innerProt;          // first courtyard ring, hugging the inner wall/extrusions
   if (F - 1 - B - B < 2) return;    // courtyard too small for stairs (walk still built)
 
   // Build the inner ring at inset `b`, ordered front-left → along left, back, right, front.

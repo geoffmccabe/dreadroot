@@ -47,8 +47,8 @@ export interface BuilderState {
 
 const initial: BuilderState = {
   isOpen: false,
-  imageSrc: null,
-  imageName: '',
+  imageSrc: '/Khaured_fortress.jpg', // fixed Khaured silhouette for everyone (no upload UI)
+  imageName: 'Khaured',
   D: 67,
   T: 3,
   heightScale: 1,
