@@ -559,22 +559,9 @@ All colors MUST be HSL.
     scrollbar-color: hsla(var(--hud-border-h) / 0.55) hsla(var(--hud-bg-dim));
   }
 
-  /* Drag affordance — a small centered grab bar at the top of movable panels.
-     Purely visual (pointer-events:none) so the click falls through to the
-     header's drag handler beneath it. Only on panels wired for dragging. */
-  .hud-draggable::before {
-    content: "";
-    position: absolute;
-    top: 5px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 46px;
-    height: 4px;
-    border-radius: 2px;
-    background: hsla(var(--hud-border-h) / 0.75);
-    pointer-events: none;
-    z-index: 6;
-  }
+  /* Drag affordance (the grab bar) is the shared <PanelGrabBar> element, not a
+     CSS pseudo — a pseudo at top:0 lands in the panel's padding above the
+     header, so the click never reaches the drag handler. See PanelGrabBar.tsx. */
 
   /* Active tab inside user panel: subtle highlight, not bright white */
   .user-panel-dialog [data-state="active"][role="tab"] {

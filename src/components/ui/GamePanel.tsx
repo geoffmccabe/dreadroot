@@ -5,6 +5,7 @@
 import { ReactNode, useEffect, useState, type CSSProperties } from 'react';
 import { useGlowPanel } from '@/hooks/useGlowPanel';
 import { usePanelDrag } from '@/hooks/usePanelDrag';
+import { PanelGrabBar } from '@/components/ui/PanelGrabBar';
 
 interface GamePanelProps {
   open: boolean;
@@ -83,6 +84,7 @@ export function GamePanel({
         ...drag.dragStyle,
       }}
     >
+      <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
       <div
         className="flex-shrink-0 flex items-center justify-between px-3 pt-3 pb-2 select-none"
         style={{ cursor: 'move', color: 'hsl(var(--hud-text-bright))' }}

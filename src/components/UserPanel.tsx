@@ -46,6 +46,7 @@ import { SupportLevelPanel } from '@/features/supporters/SupportLevelPanel';
 import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '@/features/marketplace/types';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
+import { PanelGrabBar } from '@/components/ui/PanelGrabBar';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -130,6 +131,10 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
     width: activeTab === 'p2p' ? Math.max(basePanelSize.width, 900) : basePanelSize.width,
     height: basePanelSize.height
   };
+  // Usable height for tab content = panel height minus the fixed chrome above it:
+  // p-6 top+bottom padding (48) + header (~28) + gap-4 (16) + TabsList h-10 (40) = 132.
+  // The old hard-coded "- 104" under-counted by ~28px, so the bottom was clipped.
+  const contentH = panelSize.height - 132;
   
   const coinImageUrl = currentTheme?.coin_image_url || '/waterfall_coin.png';
   const tokenDisplayName = currentTheme?.display_name || 'Waterfall';
@@ -406,6 +411,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           ...drag.dragStyle,
         }}
       >
+        <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
         <DialogHeader className="flex-shrink-0 relative" style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle className="flex items-center gap-2" style={{ color: 'hsl(var(--hud-text-bright))' }}>
             <img src={coinImageUrl} alt="coin" className="w-6 h-6" />
@@ -433,7 +439,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             value="user" 
             className="space-y-4 overflow-y-auto" 
             style={{ 
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -598,7 +604,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             value="level" 
             className="overflow-y-auto" 
             style={{ 
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -606,7 +612,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <LevelTab 
               totalPoints={profile?.total_points || 0}
               currentLevel={profile?.current_level || 1}
-              height={panelSize.height - 104}
+              height={contentH}
             />
           </TabsContent>
 
@@ -615,7 +621,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             value="wallet" 
             className="space-y-4 overflow-y-auto" 
             style={{ 
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -664,31 +670,31 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           <TabsContent
             value="items"
             style={{
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
           >
-            <ItemsTab height={panelSize.height - 104} />
+            <ItemsTab height={contentH} />
           </TabsContent>
 
           {/* Kills Tab */}
           <TabsContent
             value="kills"
             style={{
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
           >
-            <KillsTab height={panelSize.height - 104} />
+            <KillsTab height={contentH} />
           </TabsContent>
 
           {/* Blocks Tab (formerly Inventory) */}
           <TabsContent 
             value="blocks"
             style={{ 
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -708,7 +714,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   paddingTop: '1rem'
                 }}
               >
-                <ScrollArea style={{ height: `${panelSize.height - 160}px` }}>
+                <ScrollArea style={{ height: `${contentH - 56}px` }}>
                 <div className="space-y-2 pr-4">
                 {(() => {
                   const blocksInClass = availableBlocks
@@ -792,7 +798,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           <TabsContent 
             value="market"
             style={{ 
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -821,7 +827,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                     paddingTop: '1rem'
                   }}
                 >
-                  <ScrollArea style={{ height: `${panelSize.height - 160}px` }}>
+                  <ScrollArea style={{ height: `${contentH - 56}px` }}>
                   <div className="space-y-4 pr-4">
                   {availableBlocks
                     .filter(block => block.class === storeActiveClass)
@@ -899,13 +905,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <TabsContent
               value="trees"
               style={{
-                height: `${panelSize.height - 104}px`,
+                height: `${contentH}px`,
                 marginTop: 0,
                 paddingTop: '1rem'
               }}
             >
               <TreesTab
-                height={panelSize.height - 104}
+                height={contentH}
                 inventory={inventory}
                 seedDefinitions={seedDefinitions}
                 plantedTrees={allUserTrees}
@@ -917,7 +923,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
           <TabsContent
             value="p2p"
             style={{
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
@@ -945,7 +951,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="browse" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                <TabsContent value="browse" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${contentH - 96}px` }}>
                   <BrowseTab
                     filters={p2pFilters}
                     setFilters={setP2pFilters}
@@ -956,19 +962,19 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                   />
                 </TabsContent>
 
-                <TabsContent value="my-listings" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                <TabsContent value="my-listings" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${contentH - 96}px` }}>
                   <MyListingsTab userId={user?.id ?? null} />
                 </TabsContent>
 
-                <TabsContent value="my-store" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                <TabsContent value="my-store" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${contentH - 96}px` }}>
                   <MyStoreTab userId={user?.id ?? null} />
                 </TabsContent>
 
-                <TabsContent value="history" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                <TabsContent value="history" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${contentH - 96}px` }}>
                   <TransactionHistoryTab userId={user?.id ?? null} />
                 </TabsContent>
 
-                <TabsContent value="watchlist" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${panelSize.height - 200}px` }}>
+                <TabsContent value="watchlist" className="flex-1 overflow-hidden mt-0 pt-4" style={{ height: `${contentH - 96}px` }}>
                   <WatchlistTab userId={user?.id ?? null} userBalance={diviBalance} />
                 </TabsContent>
               </Tabs>
@@ -979,13 +985,13 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             <TabsContent
               value="fruits"
               style={{
-                height: `${panelSize.height - 104}px`,
+                height: `${contentH}px`,
                 marginTop: 0,
                 paddingTop: '1rem'
               }}
             >
               <FruitsTab
-                height={panelSize.height - 104}
+                height={contentH}
                 userFruits={userFruits}
                 userId={user?.id ?? null}
                 isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')}
@@ -997,7 +1003,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             value="leaders"
             className="overflow-y-auto"
             style={{
-              height: `${panelSize.height - 104}px`,
+              height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
