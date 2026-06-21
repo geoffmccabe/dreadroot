@@ -28,6 +28,8 @@ import { VaultPanel } from '@/features/vault';
 import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
 import { EquipSlots } from './EquipSlots';
 import { AmmoCounter } from './AmmoCounter';
+import { useSupporterStatus } from '@/features/supporters/useSupporterStatus';
+import { vipColorVar, vipLabel } from '@/components/admin-users/vipStyle';
 import {
   useCursorStack,
   cursorStackApi,
@@ -106,6 +108,8 @@ export function FortressHUD(props: FortressHUDProps) {
   } = props;
 
   const activeGame = useActiveGame();
+  // Supporter tier of the logged-in player → name prefix ("User"/"VIP1/2/3") + color in the status bar.
+  const { currentLevel: vipLevel } = useSupporterStatus(user?.id ?? null);
   const isSiege = activeGame === 'siege-worlds';
 
   // ⌘-] toggles Siege "work mode" (dev/review overlays: monster lineup, character pair,
@@ -977,8 +981,8 @@ export function FortressHUD(props: FortressHUDProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {/* Row 1: Name - Level - Coins - Blocks */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-              <span style={{ fontWeight: 600 }}>
-                {profile?.display_name || 'Unknown'}
+              <span style={{ fontWeight: 600, color: vipColorVar(vipLevel) }}>
+                {vipLabel(vipLevel)}: {profile?.display_name || 'Unknown'}
               </span>
 
               <span style={{ fontWeight: 600, opacity: 0.85 }}>

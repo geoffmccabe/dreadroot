@@ -23,6 +23,8 @@ export interface SnapshotRow {
   suspicious_reasons: string | null;
   flagged: boolean;
   admin_note: string | null;
+  divi_live: number | null;   // real DIVI from the DiviGo backfill
+  has_portal: boolean | null; // owns a LightningWorks Portal
 }
 export interface LiveAccount {
   id: string;
@@ -47,10 +49,10 @@ export function verdictOf(r: { flagged: boolean; admin_note: string | null }): V
 
 export type SortCol =
   | 'username' | 'player_rights' | 'last_login_date' | 'total_minutes_played'
-  | 'total_kills' | 'accuracy' | 'total_items_held' | 'max_single_stack';
+  | 'total_kills' | 'accuracy' | 'total_items_held' | 'max_single_stack' | 'divi_live';
 
 const LIST_COLS =
-  'sw_id,username,email,player_rights,last_login_date,total_minutes_played,total_kills,accuracy,distinct_items,total_items_held,max_single_stack,suspicious,suspicious_reasons,flagged,admin_note';
+  'sw_id,username,email,player_rights,last_login_date,total_minutes_played,total_kills,accuracy,distinct_items,total_items_held,max_single_stack,suspicious,suspicious_reasons,flagged,admin_note,divi_live,has_portal';
 
 export function useAdminPlayers() {
   const [rows, setRows] = useState<PlayerRow[]>([]);
@@ -67,18 +69,38 @@ export function useAdminPlayers() {
 
   const accountsByEmail = useRef<Map<string, LiveAccount>>(new Map());
   const accountsLoaded = useRef(false);
+  // Tier thresholds (config-driven) so the backfilled DIVI / Portal map to a VIP level.
+  const diviThresholds = useRef<{ min: number; lvl: number }[]>([]);
+  const portalTierLevel = useRef(0);
+
+  // VIP a SW snapshot row earns from its backfilled on-chain holdings (DIVI amount / Portal NFT).
+  const backfillVip = useCallback((divi: number | null, portal: boolean | null) => {
+    let lvl = 0;
+    for (const t of diviThresholds.current) if ((divi ?? 0) >= t.min) lvl = Math.max(lvl, t.lvl);
+    if (portal) lvl = Math.max(lvl, portalTierLevel.current);
+    return lvl;
+  }, []);
 
   const loadAccounts = useCallback(async () => {
     if (accountsLoaded.current) return;
     accountsLoaded.current = true;
     try {
       // VIP per account = highest active-subscription tier level
-      const [{ data: au }, { data: tiers }, { data: subs }] = await Promise.all([
+      const [{ data: au }, { data: tiers }, { data: subs }, { data: reqs }, { data: diviTheme }] = await Promise.all([
         supabase.functions.invoke('get-all-users'),
         supabase.from('supporter_tiers' as never).select('id, level').then(r => r, () => ({ data: [] as any[] })),
         supabase.from('user_subscriptions' as never).select('user_id, tier_id, status, paid_until').then(r => r, () => ({ data: [] as any[] })),
+        supabase.from('supporter_requirements' as never).select('tier_id, gate_kind, min_amount, token_theme_id').then(r => r, () => ({ data: [] as any[] })),
+        supabase.from('token_themes').select('id').eq('name', 'divi').maybeSingle().then(r => r, () => ({ data: null })),
       ]);
       const tierLevel = new Map<string, number>(((tiers as any[]) || []).map(t => [t.id, t.level]));
+      // Build the DIVI thresholds + Portal tier from the same requirements the live gate uses.
+      const diviThemeId = (diviTheme as any)?.id ?? null;
+      diviThresholds.current = ((reqs as any[]) || [])
+        .filter(r => r.gate_kind === 'token' && (!diviThemeId || r.token_theme_id === diviThemeId))
+        .map(r => ({ min: Number(r.min_amount) || 0, lvl: tierLevel.get(r.tier_id) ?? 0 }));
+      portalTierLevel.current = Math.max(0, ...((reqs as any[]) || [])
+        .filter(r => r.gate_kind === 'nft').map(r => tierLevel.get(r.tier_id) ?? 0));
       const now = Date.now();
       const vipByUser = new Map<string, number>();
       for (const s of ((subs as any[]) || [])) {
@@ -114,6 +136,7 @@ export function useAdminPlayers() {
           player_rights: null, last_login_date: null, total_minutes_played: 0, total_kills: 0,
           accuracy: 0, distinct_items: 0, total_items_held: 0, max_single_stack: 0,
           suspicious: false, suspicious_reasons: null, flagged: false, admin_note: null,
+          divi_live: null, has_portal: null,
           account: a, nativeOnly: true, vip: a.vip,
         } as PlayerRow;
       }));
@@ -134,13 +157,15 @@ export function useAdminPlayers() {
     let list = ((data as any[]) ?? []) as PlayerRow[];
     for (const r of list) {
       const a = r.email ? accountsByEmail.current.get(r.email.toLowerCase()) : undefined;
-      r.account = a; r.vip = a?.vip ?? 0;
+      r.account = a;
+      // Highest of: their paid subscription, or what their backfilled DIVI / Portal earns.
+      r.vip = Math.max(a?.vip ?? 0, backfillVip(r.divi_live, r.has_portal));
     }
     if (accountsOnly) list = list.filter(r => r.account);
     setRows(list);
     setTotal(count ?? 0);
     setLoading(false);
-  }, [loadAccounts, search, suspiciousOnly, accountsOnly, sortCol, sortAsc, page, pageSize]);
+  }, [loadAccounts, backfillVip, search, suspiciousOnly, accountsOnly, sortCol, sortAsc, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
 

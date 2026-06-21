@@ -52,6 +52,9 @@ function Row({ r, onClick }: { r: PlayerRow; onClick: () => void }) {
       <td className="px-2 py-1">
         <span className={cn(vipSize(r.vip), r.vip > 0 && 'font-bold')} style={{ color: vipColorVar(r.vip) }}>{r.vip}</span>
       </td>
+      <td className="px-2 py-1 tabular-nums text-white" title={r.has_portal ? 'Holds a LightningWorks Portal' : ''}>
+        {r.divi_live != null ? Math.round(r.divi_live).toLocaleString() : '—'}{r.has_portal ? ' 🌀' : ''}
+      </td>
       <td className="px-2 py-1 whitespace-nowrap text-[10px] text-white">{r.last_login_date || '—'}</td>
       <td className="px-2 py-1 tabular-nums text-white">{r.total_kills?.toLocaleString()}</td>
       <td className="px-2 py-1 tabular-nums text-white">{r.total_minutes_played?.toLocaleString()}</td>
@@ -78,6 +81,7 @@ function HeaderRow({ sortCol, sortAsc, onSort }: {
     <tr className="text-left">
       {COLUMNS.map(c => th(c.key, c.label))}
       <th className="px-2 py-1.5 font-medium text-white">VIP</th>
+      {th('divi_live', 'DIVI')}
       {COLUMNS2.map(c => th(c.key, c.label))}
       <th className="px-2 py-1.5 font-medium text-white">Flags</th>
     </tr>
