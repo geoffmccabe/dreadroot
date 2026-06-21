@@ -5,6 +5,7 @@ import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
 import { ChallengePointsCounter } from '@/components/siege/challenge/ChallengePointsCounter';
+import { DropToWorldGlobe } from '@/components/fortress/DropToWorldGlobe';
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
@@ -647,33 +648,24 @@ export function FortressHUD(props: FortressHUDProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [setCursor]);
 
-  // Drop-into-world: releasing a held item over the game CANVAS (not a panel/tile)
-  // ejects it into the world at the player's feet — an intended feature. The real bug
-  // was the EQUIP origin: it fell through to the vault branch (wrong region/slot) and
-  // eject_slot_to_world only accepts inventory/quick_select/vault, so an equipped drag
-  // could corrupt/mis-eject. Fix: equip-origin releases over the world KEEP the cursor
-  // (unequip to inventory first to world-drop) — everything else ejects as before.
-  useEffect(() => {
-    const onPointerUp = (e: PointerEvent) => {
-      const c = cursorStackApi.getCursor();
-      if (!c) return;
-      if (e.button !== 0) return;
-      const target = e.target as HTMLElement | null;
-      const onGameCanvas = target?.tagName === 'CANVAS' || !!target?.closest('canvas');
-      if (!onGameCanvas) return;
-      const origin = c.origin;
-      const from =
-        origin.region === 'inventory' ? { region: 'inventory' as const, page: 0, slot: origin.gridSlot } :
-        origin.region === 'hotbar'    ? { region: 'quick_select' as const, page: 0, slot: origin.slot } :
-        origin.region === 'vault'     ? { region: 'vault' as const, page: origin.page, slot: origin.slot } :
-        null;   // equip → not world-droppable directly; keep the cursor (item stays safe)
-      if (!from) return;
-      slotClickHandlers.ejectSlotToWorld(from).then((ok) => {
-        if (ok) setCursor(null);
-      });
-    };
-    window.addEventListener('pointerup', onPointerUp);
-    return () => window.removeEventListener('pointerup', onPointerUp);
+  // Drop-into-world is NOW only via the DropToWorldGlobe target (deliberate hover +
+  // release + YES confirm). A plain release over the game view does nothing — it keeps the
+  // item on the cursor — so a near-miss of a slot can never silently dump an item.
+  // This callback performs the actual eject for whatever is on the cursor.
+  const dropCursorToWorld = useCallback(async (): Promise<boolean> => {
+    const c = cursorStackApi.getCursor();
+    if (!c) return false;
+    const o = c.origin;
+    const from =
+      o.region === 'inventory' ? { region: 'inventory' as const, page: 0, slot: o.gridSlot } :
+      o.region === 'hotbar'    ? { region: 'quick_select' as const, page: 0, slot: o.slot } :
+      o.region === 'vault'     ? { region: 'vault' as const, page: o.page, slot: o.slot } :
+      o.region === 'equip'     ? { region: 'equip' as const, page: 0, slot: o.slot } :
+      null;
+    if (!from) return false;
+    const ok = await slotClickHandlers.ejectSlotToWorld(from);
+    if (ok) setCursor(null);
+    return ok;
   }, [slotClickHandlers, setCursor]);
 
   // ── Drag source ref (legacy — preserved temporarily) ──────────
@@ -1426,6 +1418,9 @@ export function FortressHUD(props: FortressHUDProps) {
                 </div>
               );
             })}
+            {/* Drop-to-world target: half a slot right of the last QA slot, only while
+                carrying an item. The ONLY way to world-drop (deliberate + confirm). */}
+            <DropToWorldGlobe onDrop={dropCursorToWorld} />
             {/* Challenge wave timer (red) + points (light blue), right of slot 6. */}
             <ChallengePointsCounter />
           </div>
