@@ -100,8 +100,10 @@ export function addWallWalk(ctx: WallWalkCtx): void {
     }
   }
 
-  // --- 4) Switchback stairs hugging the inner courtyard edge, climbing to walkSurface. ---
-  const B = T + innerProt;          // first courtyard ring inboard of walls + inner extrusions
+  // --- 4) Floating stairs hugging the inner courtyard edge, climbing to the walk floor. ---
+  // Start 2 blocks off the wall (room for a base landing). Steps are 2-wide floating treads
+  // (just the tread, NOT filled down to the ground).
+  const B = T + innerProt + 2;      // first courtyard ring, 2 off the inner wall/extrusions
   if (F - 1 - B - B < 2) return;    // courtyard too small for stairs (walk still built)
 
   // Build the inner ring at inset `b`, ordered front-left → along left, back, right, front.
@@ -118,48 +120,52 @@ export function addWallWalk(ctx: WallWalkCtx): void {
     return ring;
   };
 
-  const placeStep = (c: RingCell, h: number) => {
-    // 2-wide solid step (the cell + its inward neighbour), filled down to the ground.
-    for (let y = 0; y < h; y++) {
-      place(G(c.gx), y, G(c.gz), tier);
-      place(G(c.gx + c.px), y, G(c.gz + c.pz), tier);
-    }
+  const placeTread = (c: RingCell, ty: number) => {
+    // 2-wide floating tread (the cell + its inward neighbour) at a single height.
+    place(G(c.gx), ty, G(c.gz), tier);
+    place(G(c.gx + c.px), ty, G(c.gz + c.pz), tier);
   };
 
-  let height = 1;
-  let last: RingCell | null = null;
-  let b = B;
-  // Spiral inward one lap at a time until we reach the walk surface (or run out of room).
-  while (height <= walkSurface && F - 1 - b - b >= 1) {
-    const ring = ringAt(b);
-    if (ring.length === 0) break;
-    for (const c of ring) {
-      if (height > walkSurface) break;
-      placeStep(c, height);
-      last = c;
-      height++;
-    }
-    b += 2; // next lap hugs 2 blocks further in (stair width) so flights don't overlap
-  }
-  if (!last) return;
+  let ring = ringAt(B);
+  if (ring.length < 2) return;
+  // 2x2 base landing at ground level (two consecutive 2-wide cells) — you step onto this
+  // from the courtyard, then climb.
+  placeTread(ring[0], 0);
+  placeTread(ring[1], 0);
 
-  // --- 5) Top landing (2x3) + door punched through the inner skin onto the walk. ---
+  // Each tread rises 1 and advances 1 along the ring; the top tread sits at the walk floor
+  // (floorY) so you step straight onto the walk — no jump up at the end.
+  let ty = 1;
+  let last: RingCell = ring[1];
+  let lastB = B;
+  let b = B;
+  let idx = 2;                       // continue past the 2-cell base landing
+  while (ty <= floorY && F - 1 - b - b >= 1) {
+    if (idx >= ring.length) { b += 2; ring = ringAt(b); idx = 0; if (ring.length === 0) break; continue; }
+    const c = ring[idx++];
+    placeTread(c, ty);
+    last = c; lastB = b;
+    ty++;
+  }
+
+  // --- 5) Top landing + bridge/door across to the wall walk (4 blocks tall). ---
   // Along-wall axis is perpendicular to the inward direction (px,pz).
   const alongX = last.pz !== 0 ? 1 : 0; // back/front walls run along X
   const alongZ = last.px !== 0 ? 1 : 0; // left/right walls run along Z
+  const gap = Math.max(1, lastB - (T - 1)); // blocks from the stair top out to the inner skin
   for (let s = -1; s <= 1; s++) {        // 3 cells along the wall
     for (let dlt = 0; dlt <= 1; dlt++) { // 2 cells into the courtyard (landing depth)
       const gx = last.gx + alongX * s + last.px * dlt;
       const gz = last.gz + alongZ * s + last.pz * dlt;
-      place(G(gx), floorY, G(gz), tier); // flush landing at the walk floor
+      place(G(gx), floorY, G(gz), tier); // top landing flush with the walk floor
     }
-    // Door: clear the inner skin (+ any inner extrusions) from the landing into the walk,
-    // 2 blocks tall, so you can step from the landing onto the walkway.
-    for (let k = 1; k <= innerProt + 1; k++) {
+    // Bridge the gap to the wall (floor at walk level) and punch a 4-tall opening through it
+    // and the inner skin so you can walk straight onto the rampart.
+    for (let k = 1; k <= gap; k++) {
       const gx = last.gx + alongX * s - last.px * k;
       const gz = last.gz + alongZ * s - last.pz * k;
-      removeAt(G(gx), walkSurface, G(gz));
-      removeAt(G(gx), walkSurface + 1, G(gz));
+      place(G(gx), floorY, G(gz), tier);
+      for (let h = 0; h < 4; h++) removeAt(G(gx), walkSurface + h, G(gz));
     }
   }
 }
