@@ -117,6 +117,7 @@ export function ArrayTextureDebug() {
         glslVersion: THREE.GLSL3,
         uniforms: { uMap: { value: tex }, uLayer: { value: t.layer } },
         vertexShader: VERT, fragmentShader: FRAG,
+        side: THREE.DoubleSide, // the grid faces the camera's forward → show both sides
       });
       const x = (i % cols) * 0.42 - (cols - 1) * 0.21;
       const y = -Math.floor(i / cols) * 0.42 + 0.8;
