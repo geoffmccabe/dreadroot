@@ -1291,25 +1291,14 @@ export function FortressHUD(props: FortressHUDProps) {
                         // or a prior pickup), let the per-tile or
                         // global pointerUp handler deliver the drop.
                         if (cursorStackApi.getCursor()) return;
-                        // Pure click with no cursor. When an inventory
-                        // or vault panel is open, the QS grid is in
-                        // cursor-stack mode — a click PICKS UP (spec §6),
-                        // it does not activate the item. With both panels
-                        // closed, a click activates (use) the slot.
+                        // Pure click (no drag) with no cursor held → ACTIVATE this QA slot
+                        // (use the item / select it), ALWAYS — even with an inventory or
+                        // vault panel open. Picking a QA item UP to move it is drag-only
+                        // (the pointermove handler above lifts it past the drag threshold).
                         if (!p.didDrag) {
-                          if (inventoryOpen || vaultOpen) {
-                            handleSlotClick({
-                              location: { region: 'hotbar', slot: p.slot },
-                              occupant: p.occupant,
-                              button: 'left',
-                              shift: ev.shiftKey,
-                              doubleClick: false,
-                            });
-                          } else {
-                            setSelectedSlot(p.slot);
-                            if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
-                            registerSlotTapRef.current(p.slot);
-                          }
+                          setSelectedSlot(p.slot);
+                          if (onUseHotbarSlot && slot.itemId) onUseHotbarSlot(p.slot);
+                          registerSlotTapRef.current(p.slot);
                         }
                       };
                       document.addEventListener('pointermove', onMove);
