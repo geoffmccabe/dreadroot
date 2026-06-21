@@ -56,6 +56,7 @@ import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/Si
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
 import { SiegeCharacterPair } from '@/components/siege/SiegeCharacterPair';
 import { SiegeNewMonsterLineup } from '@/components/siege/SiegeNewMonsterLineup';
+import { useWorkMode } from '@/components/siege/siegeWorkMode';
 import { getWorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
@@ -286,6 +287,8 @@ export function FortressScene({
   // is only for inspecting the real SWW open world. isSiegeReview = real SWW map only.
   const isBuilderMap = activeWorld.ground.kind === 'flat' || activeWorld.ground.kind === 'heightmap';
   const isSiegeReview = isSiege && !isBuilderMap;
+  // Work mode (⌘-]) gates the dev/review overlays so they don't clutter normal play.
+  const workMode = useWorkMode();
   // Spawn comes from the active map's WorldDefinition (no hardcoded point).
   const siegeSpawn = useMemo(() => new THREE.Vector3(...activeWorld.spawn.position), [activeWorld]);
   // useThree() camera — MUST be declared before the live-swap effect below, which reads
@@ -1835,7 +1838,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {false && isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
       {/* Standalone diagnostic: Thorn + Shi Yang standing side-by-side near spawn, animated
           (idle), with name tags — walk up to compare arm/hand distortion. No dropdown/avatar. */}
-      {isSiegeReview && <SiegeCharacterPair />}
+      {isSiegeReview && workMode && <SiegeCharacterPair />}
       {/* Monster spawner (@<#>#<qty> command) + combat — enabled on ALL siege maps so you can
           spawn enemies and fight them for testing/demos, not just the SWW review map. */}
       {isSiege && <SiegeNewMonsterLineup />}

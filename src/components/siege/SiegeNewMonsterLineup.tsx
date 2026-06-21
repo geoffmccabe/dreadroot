@@ -17,6 +17,7 @@ import { APP_VERSION } from '@/version';
 import { MonsterEnemy, type MonsterConfig } from './MonsterEnemy';
 import { throwBoulder, getBoulders, updateBoulders } from './boulderSystem';
 import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
+import { useWorkMode } from './siegeWorkMode';
 
 // id (for @ command) | glb | display name | height m | walk speed m/s | animSpeed (anim playback)
 // All glbs are ~2.0 m intrinsic, so render scale = height/2. Bigger ⇒ slower animSpeed (no skating).
@@ -81,9 +82,10 @@ function ReviewMonster({ mon, x, z, first }: { mon: Mon; x: number; z: number; f
   );
 }
 
-// Press M to cycle kept animations; big 3s name label.
-function useCyclePanel() {
+// Press M to cycle kept animations; big 3s name label. Only active in work mode (⌘-]).
+function useCyclePanel(enabled: boolean) {
   useEffect(() => {
+    if (!enabled) return;
     const flash = document.createElement('div');
     flash.style.cssText = 'position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:10001;background:rgba(10,12,16,.92);border:2px solid #5a7cff;border-radius:12px;padding:14px 32px;font:700 22px sans-serif;color:#fff;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center';
     const hint = document.createElement('div');
@@ -100,7 +102,7 @@ function useCyclePanel() {
     window.addEventListener('keydown', onKey);
     document.body.appendChild(flash); document.body.appendChild(hint);
     return () => { window.removeEventListener('keydown', onKey); subs.delete(show); clearTimeout(hideT); flash.remove(); hint.remove(); };
-  }, []);
+  }, [enabled]);
 }
 
 let spawnSeq = 0;
@@ -179,7 +181,8 @@ function BoulderField() {
 }
 
 export function SiegeNewMonsterLineup() {
-  useCyclePanel();
+  const workMode = useWorkMode();
+  useCyclePanel(workMode);
   const camera = useThree((s) => s.camera);
   const [spawned, setSpawned] = useState<Spawned[]>([]);
   const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
@@ -218,7 +221,8 @@ export function SiegeNewMonsterLineup() {
 
   return (
     <Suspense fallback={null}>
-      {placed.map(({ m, x }, i) => (
+      {/* The standing review lineup is a work/review display — hidden unless work mode (⌘-]). */}
+      {workMode && placed.map(({ m, x }, i) => (
         <ReviewMonster key={m.glb} mon={m} x={x} z={cz} first={i === 0} />
       ))}
       {spawned.map((s) => (

@@ -12,6 +12,7 @@ import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
+import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
 import { useActiveGame } from '@/config/activeGame';
 import { HealthBar } from '@/features/shwarm';
 import { supabase } from '@/integrations/supabase/client';
@@ -102,6 +103,10 @@ export function FortressHUD(props: FortressHUDProps) {
 
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
+
+  // ⌘-] toggles Siege "work mode" (dev/review overlays: monster lineup, character pair,
+  // anim hint, SIEGE DEBUG panel). Off by default so they don't disrupt normal testing.
+  useEffect(() => installWorkModeHotkey(), []);
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
   const selectedSlot = selectedSlotProp;

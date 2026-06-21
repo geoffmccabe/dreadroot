@@ -1,16 +1,22 @@
 // SW debug readout — small on-screen panel of live siege state so we can SEE why
 // behaviors do/don't fire (God Mode, terrain-walk, colliders, fps). Reads the sdbg store.
-// Renders nothing outside Siege Worlds. Temporary debug aid.
+// Hidden unless work mode (⌘-]) is on. Styled to match the Laser Inspector panel and
+// draggable by its title bar. Temporary debug aid.
 import { useEffect, useState, useRef } from 'react';
-import { Card } from '@/components/ui/card';
 import { sdbg } from './siegeDebug';
 import { useActiveGame } from '@/config/activeGame';
+import { useWorkMode } from './siegeWorkMode';
+import { useDraggablePanel } from './useDraggablePanel';
 
 export function SiegeDebugOverlay() {
   const active = useActiveGame();
+  const workMode = useWorkMode();
   const [, tick] = useState(0);
   const [copied, setCopied] = useState(false);
   const fps = useRef(0);
+  // Default position: 8px from the left, 20px lower than the old top (23 → 43).
+  const { pos, handleProps } = useDraggablePanel({ left: 8, top: 43 });
+
   useEffect(() => {
     let raf = 0, last = performance.now(), frames = 0, acc = 0;
     const loop = (t: number) => {
@@ -23,10 +29,10 @@ export function SiegeDebugOverlay() {
     return () => { cancelAnimationFrame(raf); clearInterval(id); };
   }, []);
 
-  if (active !== 'siege-worlds') return null;
+  if (active !== 'siege-worlds' || !workMode) return null;
   const row = (k: string, v: string | number | boolean, warn = false) => (
-    <div className={warn ? 'text-destructive' : 'text-muted-foreground'}>
-      {k}: <b className="text-foreground">{String(v)}</b>
+    <div style={{ opacity: warn ? 1 : 0.8, color: warn ? '#ff8a8a' : undefined }}>
+      {k}: <b style={{ color: warn ? '#ffb3b3' : '#ffe' }}>{String(v)}</b>
     </div>
   );
   const f3 = (n: number) => n.toFixed(3);
@@ -42,8 +48,18 @@ export function SiegeDebugOverlay() {
   };
 
   return (
-    <Card className="waterfall-card fixed left-2 top-[23px] z-50 min-w-[210px] pointer-events-auto font-mono text-[11px] leading-relaxed">
-      <div className="mb-1 font-bold text-primary">⚔ SIEGE DEBUG</div>
+    <div
+      style={{
+        position: 'fixed', left: pos.left, top: pos.top, width: 220, zIndex: 50,
+        color: 'rgba(255,255,255,0.92)', font: '12px ui-monospace, monospace', lineHeight: 1.5,
+        background: 'rgba(8, 24, 16, 0.82)', border: '1px solid rgba(90,200,140,0.55)',
+        borderRadius: 12, padding: '8px 10px', pointerEvents: 'auto',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+      }}
+    >
+      <div {...handleProps} style={{ ...handleProps.style, color: '#7fe6a8', fontWeight: 700, marginBottom: 4 }}>
+        ⚔ SIEGE DEBUG
+      </div>
       {row('fps', fps.current, fps.current < 25)}
       {row('godMode', sdbg.godMode, sdbg.godMode)}
       {row('onGround', sdbg.onGround)}
@@ -55,10 +71,17 @@ export function SiegeDebugOverlay() {
       {row('fwd', `${f3(sdbg.fwdX)}, ${f3(sdbg.fwdY)}, ${f3(sdbg.fwdZ)}`)}
       {row('terrainY', sdbg.terrainY == null ? 'NULL' : sdbg.terrainY.toFixed(1), sdbg.terrainY == null)}
       {row('monsters', sdbg.monsters)}
-      <button onClick={copy}
-        className="mt-1 w-full rounded border border-border bg-secondary px-2 py-1 text-foreground hover:bg-accent">
+      <button
+        onClick={copy}
+        style={{
+          marginTop: 5, width: '100%', pointerEvents: 'auto', cursor: 'pointer',
+          font: '11px ui-monospace, monospace', color: '#fff',
+          background: copied ? 'rgba(60,160,90,0.9)' : 'rgba(255,255,255,0.12)',
+          border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, padding: '2px 8px',
+        }}
+      >
         {copied ? 'Copied!' : 'Copy pos + view'}
       </button>
-    </Card>
+    </div>
   );
 }

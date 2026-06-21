@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { heading } from './playerState';
 import { probeState } from './probeState';
+import { useDraggablePanel } from './useDraggablePanel';
 import { APP_VERSION } from '@/version';
 
 // Full report from the REAL laser state (camera pos + what the laser points at). The old
@@ -33,6 +34,12 @@ function report(): string {
 export function CoordsHud() {
   const [, tick] = useState(0);
   const [copied, setCopied] = useState(false);
+  // Draggable by the title bar. Default near the old bottom-left spot (left-aligned with the
+  // user menu); top is derived from the window height so it starts low.
+  const { pos, handleProps } = useDraggablePanel({
+    left: 16,
+    top: typeof window !== 'undefined' ? Math.max(60, window.innerHeight - 320) : 400,
+  });
 
   useEffect(() => {
     // C is handled by TriagePanel (capture pointed item); keep just the live readout.
@@ -56,14 +63,14 @@ export function CoordsHud() {
   return (
     <div
       style={{
-        position: 'fixed', left: 16, bottom: 150, width: 300,
+        position: 'fixed', left: pos.left, top: pos.top, width: 300,
         color: 'rgba(255,255,255,0.92)', font: '12px ui-monospace, monospace',
         background: 'rgba(8, 24, 16, 0.82)', border: '1px solid rgba(90,200,140,0.55)',
         borderRadius: 12, padding: '8px 10px', pointerEvents: 'auto',
         boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
       }}
     >
-      <div style={{ color: '#7fe6a8', fontWeight: 700, marginBottom: 4 }}>⌖ Laser inspector</div>
+      <div {...handleProps} style={{ ...handleProps.style, color: '#7fe6a8', fontWeight: 700, marginBottom: 4 }}>⌖ Laser inspector</div>
       <div style={{ wordBreak: 'break-all' }}>
         {hitName
           ? <>pointing at: <b style={{ color: '#ffe' }}>{hitName}</b></>
