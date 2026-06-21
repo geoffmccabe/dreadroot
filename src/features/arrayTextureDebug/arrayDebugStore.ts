@@ -7,7 +7,7 @@ interface Snapshot {
   open: boolean;
   stats: ArrayTextureManagerStats | null;
   seq: number;
-  action: { type: 'load' | 'stress' | 'clear'; n: number } | null;
+  action: { type: 'load' | 'stress' | 'clear' | 'game'; n: number } | null;
 }
 
 let open = false;
@@ -26,7 +26,7 @@ export const arrayDebug = {
   isOpen: () => open,
   toggle: () => { open = !open; emit(); },
   setStats: (s: ArrayTextureManagerStats) => { stats = s; emit(); },
-  dispatch: (type: 'load' | 'stress' | 'clear', n = 0) => { action = { type, n }; seq++; emit(); },
+  dispatch: (type: 'load' | 'stress' | 'clear' | 'game', n = 0) => { action = { type, n }; seq++; emit(); },
   subscribe: (cb: () => void) => { subs.add(cb); return () => { subs.delete(cb); }; },
   getSnapshot: () => snapshot,
 };

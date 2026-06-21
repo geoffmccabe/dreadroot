@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
 import { getArrayTextureManager } from '@/lib/arrayTextureManager';
+import { flushPendingRegistrations, getRegisteredEntries } from '@/lib/arrayTextureRegistry';
+import { isArrayBackend } from '@/config/textureBackend';
 import { arrayDebug, useArrayDebug } from './arrayDebugStore';
 
 // Synthetic test tile → data URL (coloured background + index number).
@@ -45,9 +47,15 @@ export function ArrayTextureDebug() {
   const groupRef = useRef<THREE.Group>(null);
   const lastSeq = useRef(0);
 
-  // Init the manager ONLY when the debug panel is first opened — it allocates a large
-  // layer buffer, so we don't pay that for everyone at boot (init is idempotent).
-  useEffect(() => { if (snap.open) getArrayTextureManager().init(gl); }, [snap.open, gl]);
+  // Init the manager when the array backend is active (so atlas-sync registrations
+  // resolve) OR when the debug panel is opened. Default-off flag means nobody else pays
+  // the buffer cost. After init, flush any registrations queued before GL was ready.
+  useEffect(() => {
+    if (isArrayBackend() || snap.open) {
+      getArrayTextureManager().init(gl);
+      flushPendingRegistrations();
+    }
+  }, [snap.open, gl]);
 
   // Publish stats ~2×/sec while open.
   useEffect(() => {
@@ -76,6 +84,11 @@ export function ArrayTextureDebug() {
       // Resolve far more than layerCount to force LRU eviction (watch the counter).
       const n = Math.max(1, snap.action.n || 2000);
       for (let i = 0; i < n; i++) mgr.resolve(makeTile(10000 + i));
+    } else if (snap.action.type === 'game') {
+      // Show REAL game textures (registered by atlas-sync) sampled from the array.
+      flushPendingRegistrations();
+      const entries = getRegisteredEntries().slice(0, 64);
+      setTiles(entries.map((e) => ({ layer: e.layer })));
     } else if (snap.action.type === 'clear') {
       setTiles([]);
     }
