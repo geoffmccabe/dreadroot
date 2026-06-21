@@ -17,6 +17,7 @@ import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
 import { SetSampler } from './scifi/SetSampler';
+import { NightDimmer } from './NightDimmer';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -69,10 +70,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           all object textures read clearly (esp. the tall city buildings). */}
       {isBlank && (
         <>
-          <ambientLight intensity={0.7} />
-          <hemisphereLight args={['#ffffff', '#b9c4d0', 0.6]} />
+          <ambientLight intensity={world.fill?.ambient ?? 0.7} />
+          <hemisphereLight args={['#ffffff', '#b9c4d0', world.fill?.hemi ?? 0.6]} />
         </>
       )}
+      {/* Night maps (SciFi City): dim the shared sun/sky so emissive signs/windows glow. */}
+      {world.night && <NightDimmer />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}

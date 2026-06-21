@@ -5,6 +5,7 @@
 	},
 	"extensionsUsed":[
 		"KHR_draco_mesh_compression",
+		"KHR_materials_emissive_strength",
 		"KHR_materials_specular",
 		"EXT_texture_webp"
 	],
@@ -34446,7 +34447,18 @@
 		},
 		{
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":1
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":1.600000023841858
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34457,18 +34469,29 @@
 			},
 			"name":"Mat_PolygonScifi_01_A",
 			"normalTexture":{
-				"index":1
+				"index":2
 			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":2
+					"index":3
 				},
 				"metallicFactor":0
 			}
 		},
 		{
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":4
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":2.200000047683716
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34480,14 +34503,25 @@
 			"name":"Mat_PolygonScifi_Signs",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":3
+					"index":5
 				},
 				"metallicFactor":0
 			}
 		},
 		{
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":6
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":2
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34499,7 +34533,7 @@
 			"name":"Mat_PolygonScifi_Bkgrnd_Bld_Emissive_01",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":4
+					"index":7
 				},
 				"metallicFactor":0
 			}
@@ -34525,7 +34559,7 @@
 					0
 				],
 				"baseColorTexture":{
-					"index":5
+					"index":8
 				},
 				"metallicFactor":0
 			}
@@ -34533,7 +34567,18 @@
 		{
 			"alphaMode":"BLEND",
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":9
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":2.200000047683716
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34545,7 +34590,7 @@
 			"name":"Mat_PolygonScifi_Billboards",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":6
+					"index":10
 				},
 				"metallicFactor":0
 			}
@@ -34558,9 +34603,12 @@
 				1
 			],
 			"emissiveTexture":{
-				"index":7
+				"index":11
 			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":3
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34572,14 +34620,25 @@
 			"name":"Mat_PolygonScifi_Neon",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":8
+					"index":12
 				},
 				"metallicFactor":0
 			}
 		},
 		{
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":13
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":1.600000023841858
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34591,7 +34650,7 @@
 			"name":"Default_Material",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":9
+					"index":14
 				},
 				"metallicFactor":0
 			}
@@ -34627,7 +34686,18 @@
 		{
 			"alphaMode":"BLEND",
 			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				1
+			],
+			"emissiveTexture":{
+				"index":15
+			},
 			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":2
+				},
 				"KHR_materials_specular":{
 					"specularColorFactor":[
 						2.0,
@@ -34639,7 +34709,7 @@
 			"name":"Mat_PolygonSciFi_Planet_Background",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":10
+					"index":16
 				},
 				"metallicFactor":0
 			}
@@ -85089,7 +85159,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":2
+					"source":4
 				}
 			},
 			"sampler":0
@@ -85105,7 +85175,15 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":6
+					"source":5
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":3
 				}
 			},
 			"sampler":0
@@ -85114,14 +85192,6 @@
 			"extensions":{
 				"EXT_texture_webp":{
 					"source":6
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
-					"source":2
 				}
 			},
 			"sampler":0
@@ -85133,6 +85203,54 @@
 				}
 			},
 			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":8
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":8
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":1
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":3
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":5
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":9
+				}
+			},
+			"sampler":0
 		}
 	],
 	"images":[
@@ -85140,6 +85258,11 @@
 			"mimeType":"image/webp",
 			"name":"PolygonSciFi_Road_01",
 			"uri":"PolygonSciFi_Road_01.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"PolygonScifi_Emissive_01",
+			"uri":"PolygonScifi_Emissive_01.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -85160,6 +85283,11 @@
 			"mimeType":"image/webp",
 			"name":"PolygonScifi_Background_Building_Emissive",
 			"uri":"PolygonScifi_Background_Building_Emissive.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"Billboards",
+			"uri":"Billboards.webp"
 		},
 		{
 			"mimeType":"image/webp",

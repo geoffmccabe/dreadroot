@@ -24,11 +24,27 @@ export function DemoScene({ file, group }: { file: string; group: string }) {
 
   const root = useMemo(() => {
     const model = scene.clone(true);
-    const box = new THREE.Box3().setFromObject(model);
+    model.updateMatrixWorld(true);
+    // Ground/recenter using ONLY solid meshes — backdrop spheres (sky/planets) can be
+    // tens of km across, and including them would catapult the real content into the sky
+    // (the Space scene's bug). Center the solid content on the spawn and sit it on ground.
+    const box = new THREE.Box3();
+    const tmp = new THREE.Box3();
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh) return;
+      const mats = Array.isArray(m.material) ? m.material : [m.material];
+      const matName = mats.map((x) => (x as THREE.Material)?.name ?? '').join(',').toLowerCase();
+      if (SKIP.test(matName) || SKIP.test((m.name ?? '').toLowerCase())) return;
+      tmp.setFromObject(m);
+      if (!tmp.isEmpty()) box.union(tmp);
+    });
+    if (box.isEmpty()) box.setFromObject(model);   // fallback: all meshes
     const ground = sampleHeight(0, 0) ?? 0;
+    const c = box.getCenter(new THREE.Vector3());
     const wrap = new THREE.Group();
     wrap.add(model);
-    wrap.position.set(0, ground - box.min.y, 0);   // lowest point sits on the ground
+    wrap.position.set(-c.x, ground - box.min.y, -c.z);
     wrap.updateMatrixWorld(true);
     return wrap;
   }, [scene]);

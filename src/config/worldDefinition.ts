@@ -135,6 +135,15 @@ export interface WorldDefinition {
 
   ground: GroundConfig;
 
+  /**
+   * Builder/blank maps get extra fill light (no SWW horror fog). Override per map for mood —
+   * e.g. a night city uses low fill so emissive signs/windows glow. Omitted = bright default.
+   */
+  fill?: { ambient: number; hemi: number };
+
+  /** Night map: dims the shared scene sun/sky so emissive (glowing) materials stand out. */
+  night?: boolean;
+
   /** Where the player spawns. */
   spawn: { position: Vec3; yaw?: number };
 
@@ -219,6 +228,8 @@ export const CITY_DEMO_WORLD: WorldDefinition = {
   meshColliders: false, // the demo wires its own colliders via DemoScene
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
   ground: { kind: 'heightmap', surfaceY: 0 }, // same editable grass terrain as Starblink
+  fill: { ambient: 0.28, hemi: 0.22 }, // NIGHT city — dim fill so neon/windows glow (not black)
+  night: true,
   spawn: { position: [0, 3, 0], yaw: 0 },
   props: undefined,
 };
