@@ -43,10 +43,13 @@ export function setTextureBackend(b: TextureBackend): void {
   subs.forEach((f) => f());
 }
 
+// Stable subscribe identity — a fresh inline closure each render makes
+// useSyncExternalStore unsubscribe+resubscribe every render. Hoisting it fixes that.
+function subscribe(cb: () => void): () => void {
+  subs.add(cb);
+  return () => { subs.delete(cb); };
+}
+
 export function useTextureBackend(): TextureBackend {
-  return useSyncExternalStore(
-    (cb) => { subs.add(cb); return () => { subs.delete(cb); }; },
-    getTextureBackend,
-    getTextureBackend,
-  );
+  return useSyncExternalStore(subscribe, getTextureBackend, getTextureBackend);
 }
