@@ -13,6 +13,8 @@ import { TerrainLayer } from './TerrainLayer';
 import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
+import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
+import { BuilderController } from './builder/BuilderController';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
@@ -79,6 +81,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}
+      {/* Drop-in object builder: render placed objects always (so saved maps show them in play),
+          and the placement controller (no-ops unless build mode is on). */}
+      {isHeightmap && <BuilderObjectsLayer />}
+      {isHeightmap && <BuilderController />}
       {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />

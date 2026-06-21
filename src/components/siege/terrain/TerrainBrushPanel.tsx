@@ -13,6 +13,7 @@ import { useBrushState, setBrushState } from './terrainBrushState';
 import { serializeField, type BrushMode } from './heightField';
 import { BRUSH_SHAPES } from './brushShapes';
 import { saveMap } from './mapPersistence';
+import { getBuilder } from '../builder/builderObjectsState';
 
 const MODES: { key: BrushMode; label: string }[] = [
   { key: 'raise', label: 'Raise (R)' },
@@ -35,6 +36,7 @@ export function TerrainBrushPanel() {
       name: world.name,
       heightField: serializeField(),
       water: { on: bs.waterOn, level: bs.waterLevel },
+      objects: getBuilder().objects,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);

@@ -5,6 +5,8 @@
 // when that lands, ONLY this file changes; callers (HeightmapTerrain load, panel Save)
 // stay the same. Keyed by map id (= world id).
 
+import type { PlacedObject } from '../builder/builderObjectsState';
+
 export interface MapSaveData {
   id: string;
   name?: string;
@@ -12,11 +14,12 @@ export interface MapSaveData {
   version: number;
   heightField: { baseY: number; samples: number[] };
   water: { on: boolean; level: number };
+  objects?: PlacedObject[];   // drop-in builder placements (added v2; absent in v1 saves → [])
 }
 
 const DB_NAME = 'siege-maps';
 const STORE = 'maps';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 let dbp: Promise<IDBDatabase> | null = null;
 function db(): Promise<IDBDatabase> {

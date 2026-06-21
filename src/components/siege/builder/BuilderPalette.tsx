@@ -1,0 +1,124 @@
+// BuilderPalette — styled (game CSS) drop-in object builder panel, rendered OUTSIDE the Canvas
+// like the terrain panel. Shows only on editable (heightmap) siege maps. Toggle build mode, pick
+// an asset set + asset to ARM, then place it in-world with the crosshair (BuilderController does
+// the placing). Save writes terrain + water + objects together via mapPersistence.
+import { useEffect, useMemo, useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useActiveGame } from '@/config/activeGame';
+import { useActiveMapId } from '@/config/activeMap';
+import { getWorldDefinition } from '@/config/worldDefinition';
+import { serializeField } from '../terrain/heightField';
+import { getBrushState } from '../terrain/terrainBrushState';
+import { saveMap } from '../terrain/mapPersistence';
+import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
+
+// The converted asset sets (catalogs live at /siege/scifi/_catalog_<set>.json).
+const SETS: { id: string; label: string }[] = [
+  { id: 'nature', label: 'Nature' }, { id: 'alpine', label: 'Alpine' }, { id: 'meadow', label: 'Meadow' },
+  { id: 'swamp', label: 'Swamp' }, { id: 'jungle', label: 'Jungle' }, { id: 'desert', label: 'Desert' },
+  { id: 'apoc', label: 'Apocalypse' }, { id: 'dark', label: 'Dark Fantasy' }, { id: 'city', label: 'SciFi City' },
+  { id: 'cyber', label: 'Cyber City' }, { id: 'space', label: 'SciFi Space' }, { id: 'mech', label: 'Mech' },
+  { id: 'worlds', label: 'SciFi Worlds' },
+];
+interface CatItem { id: string; name: string; set: string; file: string; category?: string }
+const catalogCache = new Map<string, CatItem[]>();
+
+export function BuilderPalette() {
+  const game = useActiveGame();
+  const mapId = useActiveMapId();
+  const world = getWorldDefinition(mapId);
+  const b = useBuilder();
+  const [set, setSet] = useState('nature');
+  const [items, setItems] = useState<CatItem[]>([]);
+  const [q, setQ] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    const cached = catalogCache.get(set);
+    if (cached) { setItems(cached); return; }
+    fetch(`/siege/scifi/_catalog_${set}.json`).then((r) => r.json()).then((d) => {
+      const its = (d.items ?? []) as CatItem[];
+      catalogCache.set(set, its);
+      if (alive) setItems(its);
+    }).catch(() => { if (alive) setItems([]); });
+    return () => { alive = false; };
+  }, [set]);
+
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    const list = t ? items.filter((i) => i.name.toLowerCase().includes(t)) : items;
+    return list.slice(0, 200);
+  }, [items, q]);
+
+  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap') return null;
+
+  const onSave = async () => {
+    await saveMap({
+      id: world.id, name: world.name,
+      heightField: serializeField(),
+      water: { on: getBrushState().waterOn, level: getBrushState().waterLevel },
+      objects: getBuilder().objects,
+    });
+    setSaved(true); setTimeout(() => setSaved(false), 1500);
+  };
+  const selected = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
+
+  return (
+    <Card className="waterfall-card fixed right-4 top-1/2 -translate-y-1/2 z-50 w-60 p-3 text-xs font-mono">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-bold text-primary">🧱 Builder</span>
+        <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
+          onClick={() => setBuilder({ enabled: !b.enabled })}>
+          {b.enabled ? 'Build ON' : 'Build off'}
+        </Button>
+      </div>
+
+      {b.enabled && (
+        <>
+          <select value={set} onChange={(e) => setSet(e.target.value)}
+            className="mb-2 w-full rounded bg-background/60 px-1 py-1 text-[11px]">
+            {SETS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search…"
+            className="mb-2 w-full rounded bg-background/60 px-2 py-1 text-[11px]" />
+          <div className="mb-2 max-h-44 overflow-y-auto rounded border border-border/40">
+            {filtered.map((i) => (
+              <div key={i.id}
+                onClick={() => setBuilder({ armed: { set: i.set, file: i.file, name: i.name } })}
+                className={`cursor-pointer truncate px-2 py-0.5 text-[10px] hover:bg-accent ${b.armed?.file === i.file ? 'bg-primary/30 text-foreground' : 'text-muted-foreground'}`}>
+                {i.name}
+              </div>
+            ))}
+            {!filtered.length && <div className="px-2 py-1 text-[10px] text-muted-foreground">no matches</div>}
+          </div>
+
+          {b.armed ? (
+            <div className="mb-2 rounded bg-primary/15 p-1.5 text-[10px] leading-snug">
+              <div>Placing: <b className="text-foreground">{b.armed.name}</b></div>
+              <div className="text-muted-foreground">click = place · [ ] rotate · - = scale · Esc cancel</div>
+            </div>
+          ) : (
+            <div className="mb-2 text-[10px] text-muted-foreground">Pick an asset to place, or click a placed object to select.</div>
+          )}
+
+          {selected && (
+            <div className="mb-2 flex items-center justify-between rounded bg-accent/30 p-1.5 text-[10px]">
+              <span className="truncate">Selected: {selected.name}</span>
+              <Button size="sm" variant="destructive" className="h-5 px-1.5 text-[9px]" onClick={() => removeObject(selected.id)}>Delete</Button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground">{b.objects.length} placed</span>
+            <span className="flex gap-1">
+              <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSave}>{saved ? 'Saved!' : 'Save map'}</Button>
+              <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => clearObjects()}>Clear</Button>
+            </span>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
