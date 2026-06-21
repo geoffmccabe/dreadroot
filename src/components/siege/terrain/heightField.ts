@@ -14,6 +14,8 @@ export const CELL_M = 128;            // streaming cell + network zone size (met
 export const SAMPLE_M = 1;            // height-sample spacing (meters) = terrain detail
 export const SAMPLES = CELL_M / SAMPLE_M + 1; // 129 verts per cell side (shared edges)
 
+import { shapeT, shapeExtent, type BrushShape } from './brushShapes';
+
 export type BrushMode = 'raise' | 'lower' | 'smooth' | 'flat';
 
 const OFF = 32768;                    // ±32768 lattice range, packed to one int32 key
@@ -78,19 +80,26 @@ function neighborAvg(sx: number, sz: number): number {
 /**
  * Stamp the brush at world (x,z). `strength` is meters/second (scaled by dt so it's
  * frame-rate independent). `edge` (0..1) is the edge-blur softness. `flatTarget` is
- * the height the 'flat' mode pulls toward (else baseline).
+ * the height the 'flat' mode pulls toward (else baseline). `shape` + `yaw` orient a
+ * non-circular dig footprint (rect/oval/wedge) to the player's facing.
  */
 export function applyBrush(
   x: number, z: number, radius: number, strength: number, mode: BrushMode,
-  dt: number, edge = 0.5, flatTarget?: number,
+  dt: number, edge = 0.5, flatTarget?: number, shape: BrushShape = 'circle', yaw = 0,
 ) {
   const r = Math.max(1, radius);
   const amp = strength * dt;
-  const sx0 = Math.floor(x - r), sx1 = Math.ceil(x + r);
-  const sz0 = Math.floor(z - r), sz1 = Math.ceil(z + r);
+  const e = shapeExtent(shape);
+  const reach = r * Math.max(e.x, e.z) + 1;   // rotation-safe iteration bounds
+  const cos = Math.cos(-yaw), sin = Math.sin(-yaw);
+  const sx0 = Math.floor(x - reach), sx1 = Math.ceil(x + reach);
+  const sz0 = Math.floor(z - reach), sz1 = Math.ceil(z + reach);
   for (let sz = sz0; sz <= sz1; sz++) {
     for (let sx = sx0; sx <= sx1; sx++) {
-      const d = Math.hypot(sx - x, sz - z) / r;
+      // rotate the world offset into brush-local space (x = across facing, z = along)
+      const ox = sx - x, oz = sz - z;
+      const lx = ox * cos - oz * sin, lz = ox * sin + oz * cos;
+      const d = shapeT(shape, lx, lz, r);
       if (d > 1) continue;
       const w = falloff(d, edge);
       if (w <= 0) continue;

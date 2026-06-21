@@ -11,6 +11,7 @@ import { getWorldDefinition } from '@/config/worldDefinition';
 import { useState } from 'react';
 import { useBrushState, setBrushState } from './terrainBrushState';
 import { serializeField, type BrushMode } from './heightField';
+import { BRUSH_SHAPES } from './brushShapes';
 import { saveMap } from './mapPersistence';
 
 const MODES: { key: BrushMode; label: string }[] = [
@@ -65,6 +66,26 @@ export function TerrainBrushPanel() {
             {m.label}
           </Button>
         ))}
+      </div>
+
+      {/* Tool Shape — hover the icon to reveal the shape menu, click to pick. The shape
+          orients to the way you're facing (e.g. a long rect digs a trench ahead). */}
+      <div className="group relative mt-2">
+        <div className="flex h-7 cursor-pointer items-center justify-between rounded border border-border/50 px-2 text-[10px] hover:border-primary">
+          <span className="text-muted-foreground">Shape</span>
+          <b className="text-foreground">{BRUSH_SHAPES.find((s) => s.id === bs.shape)?.label}</b>
+        </div>
+        <div className="absolute left-0 right-0 top-full z-50 hidden flex-col gap-1 rounded border border-border/60 bg-background/95 p-1 group-hover:flex">
+          {BRUSH_SHAPES.map((s) => (
+            <button
+              key={s.id}
+              className={`rounded px-2 py-1 text-left text-[10px] hover:bg-primary/20 ${bs.shape === s.id ? 'text-primary font-bold' : 'text-foreground'}`}
+              onClick={() => setBrushState({ shape: s.id })}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="mt-3 space-y-2 text-muted-foreground">

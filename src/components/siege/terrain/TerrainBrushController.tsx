@@ -10,6 +10,12 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { applyBrush, getHeight } from './heightField';
 import { getBrushState, setBrushState } from './terrainBrushState';
+import { shapeOutline, type BrushShape } from './brushShapes';
+
+// Indicator colour cycle: light blue → dark grey-blue, ~1 rev/sec, so the ring stays
+// visible over ANY ground colour (incl. blue water).
+const COL_A = new THREE.Color(0x9fe4ff); // light blue
+const COL_B = new THREE.Color(0x33506b); // dark grey-blue
 
 const MARCH_MAX = 700; // meters the brush ray reaches
 const MARCH_STEP = 2;  // coarse step (m); refined by bisection on crossing
@@ -17,19 +23,40 @@ const MARCH_STEP = 2;  // coarse step (m); refined by bisection on crossing
 export function TerrainBrushController() {
   const cam = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
-  const ring = useRef<THREE.Mesh>(null);
   const applying = useRef(false);
   const flatTarget = useRef<number | undefined>(undefined);
   const ro = useMemo(() => new THREE.Vector3(), []); // ray origin (reused)
   const rd = useMemo(() => new THREE.Vector3(), []); // ray dir (reused)
   const hit = useRef(new THREE.Vector3());
   const hasHit = useRef(false);
+  const yaw = useRef(0);
+
+  // Ground indicator: a flat line-loop outline of the current shape, rebuilt when the
+  // shape/size changes, oriented to facing, colour-cycling each frame.
+  const indicator = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const mat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.95, depthTest: false });
+    const line = new THREE.LineLoop(geo, mat);
+    line.renderOrder = 999;
+    line.visible = false;
+    return line;
+  }, []);
+  const indShape = useRef<BrushShape | null>(null);
+  const indR = useRef(-1);
+  const rebuildOutline = (shape: BrushShape, r: number) => {
+    if (indShape.current === shape && indR.current === r) return;
+    indShape.current = shape; indR.current = r;
+    const pts = shapeOutline(shape, r);
+    indicator.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    indicator.geometry.computeBoundingSphere();
+  };
 
   // Analytic ray-march of the crosshair ray vs the height function — a few hundred cheap
   // getHeight() calls instead of raycasting ~2.6M terrain triangles every frame.
   const marchToGround = (): boolean => {
     cam.getWorldPosition(ro);
     cam.getWorldDirection(rd);
+    yaw.current = Math.atan2(rd.x, rd.z);   // facing → orients non-circular shapes
     let prev = ro.y - getHeight(ro.x, ro.z);
     for (let t = MARCH_STEP; t <= MARCH_MAX; t += MARCH_STEP) {
       const diff = (ro.y + rd.y * t) - getHeight(ro.x + rd.x * t, ro.z + rd.z * t);
@@ -96,29 +123,30 @@ export function TerrainBrushController() {
     };
   }, [gl]);
 
+  const tRef = useRef(0);
   useFrame((_, dt) => {
     const bs = getBrushState();
-    if (ring.current) ring.current.visible = bs.enabled && hasHit.current;
+    indicator.visible = bs.enabled && hasHit.current;
     if (!bs.enabled) { applying.current = false; return; }
 
     // Ground point under the crosshair (analytic ray-march vs the height function).
     hasHit.current = marchToGround();
-    if (hasHit.current && ring.current) {
-      ring.current.position.set(hit.current.x, hit.current.y + 0.2, hit.current.z);
-      ring.current.scale.setScalar(bs.radius);
+    if (hasHit.current) {
+      rebuildOutline(bs.shape, bs.radius);
+      indicator.position.set(hit.current.x, hit.current.y + 0.25, hit.current.z);
+      indicator.rotation.y = -yaw.current;   // orient shape to facing
+      // colour cycle ~1 rev/sec (triangle wave light↔dark blue)
+      tRef.current += dt;
+      const k = 0.5 - 0.5 * Math.cos(tRef.current * Math.PI * 2);
+      (indicator.material as THREE.LineBasicMaterial).color.copy(COL_A).lerp(COL_B, k);
     }
 
     if (applying.current && hasHit.current) {
       if (bs.mode === 'flat' && flatTarget.current === undefined) flatTarget.current = hit.current.y;
-      applyBrush(hit.current.x, hit.current.z, bs.radius, bs.strength, bs.mode, Math.min(dt, 0.05), bs.edge, flatTarget.current);
+      applyBrush(hit.current.x, hit.current.z, bs.radius, bs.strength, bs.mode,
+                 Math.min(dt, 0.05), bs.edge, flatTarget.current, bs.shape, yaw.current);
     }
   });
 
-  // Unit ring (scaled to radius each frame), laid flat on the ground.
-  return (
-    <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
-      <ringGeometry args={[0.92, 1, 48]} />
-      <meshBasicMaterial color={0x33ddff} transparent opacity={0.85} depthTest={false} />
-    </mesh>
-  );
+  return <primitive object={indicator} />;
 }
