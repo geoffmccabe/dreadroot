@@ -31,7 +31,9 @@ const TIER_COLOR_DEFAULTS: Record<number, { color1: string; color2: string; colo
 };
 
 const getDefaultFlamethrowerTier = (tier: number): FlamethrowerTierDef => {
-  const colors = TIER_COLOR_DEFAULTS[tier] || { color1: '#FFFFFF', color2: '#00FFFF', color3: '#0044FF' };
+  // Unknown/out-of-range tier → fall back to TIER 1 (yellow), NOT blue. The old blue fallback
+  // was identical to tier 3, so any tier mis-read silently showed the wrong (blue) flame.
+  const colors = TIER_COLOR_DEFAULTS[tier] || TIER_COLOR_DEFAULTS[1];
   return {
     tier,
     width: 1.0,

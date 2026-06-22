@@ -27,6 +27,7 @@ import { useVaultBridge } from '@/contexts/VaultBridgeContext';
 import { VaultPanel } from '@/features/vault';
 import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
 import { EquipSlots } from './EquipSlots';
+import { FlameTierCheat } from './FlameTierCheat';
 import { AmmoCounter } from './AmmoCounter';
 import { useSupporterStatus } from '@/features/supporters/useSupporterStatus';
 import { vipColorVar, vipLabel } from '@/components/admin-users/vipStyle';
@@ -1143,6 +1144,8 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
           old "R for crosshairs" instructions panel. */}
       <EquipSlots gear={equippedGear} onMoved={refetchInventoryAndQs} />
+      {/* Superadmin: "#F<digit>" sets the flame-glove tier live for testing (no-op without a glove). */}
+      <FlameTierCheat isSuperadmin={!!(userRoles?.includes?.('superadmin'))} />
       <AmmoCounter />
 
       {/* Bottom-center hotbar + inventory grid + vault */}

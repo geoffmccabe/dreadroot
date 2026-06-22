@@ -43,6 +43,7 @@ import { setAiming } from '@/config/aimState';
 import { getRightWeapon } from '@/config/activeWeapon';
 import { anyArmedHandGrenade } from '@/config/handGrenade';
 import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
+import { useFlameTierOverride, setFlameTierOverride } from '@/config/flameTierOverride';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
@@ -1505,7 +1506,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   // so a glove works alongside a pistol/grenade in the other hand.
   const flameGloveState = useFlameGlove();
   const isFlameGloveSelected = flameGloveState !== null;
-  const flameGloveTier = flameGloveState?.tier ?? 1;
+  // Superadmin "#F<digit>" test override (FlameTierCheat) wins over the equipped glove's real
+  // tier — drives colors, range AND damage since everything below reads flameGloveTier.
+  const flameTierOverride = useFlameTierOverride();
+  const flameGloveTier = flameTierOverride ?? (flameGloveState?.tier ?? 1);
+  // Drop the test override the moment the glove is unequipped, so it can't stick to a different glove.
+  useEffect(() => { if (!isFlameGloveSelected) setFlameTierOverride(null); }, [isFlameGloveSelected]);
   const ftTiers = useFlamethrowerTiers();
   const ftTierDef = ftTiers.getDefinition(flameGloveTier);
 
