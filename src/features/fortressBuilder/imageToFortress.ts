@@ -34,6 +34,7 @@ export interface FortressBuildOpts {
   D: number;
   T: number;
   heightScale?: number;
+  heightCap?: number; // hard ceiling on procedural wall height (blocks); from the seed tier
   greyLevels?: number;
   seed?: number;
   faceSym?: FaceSym;
@@ -251,6 +252,13 @@ export function buildFortressVoxels(grid: GrayGrid, opts: FortressBuildOpts): Fo
   else { walls = [mkWall(0), mkWall(1), mkWall(2), mkWall(3)]; }
   const wallProfiles = walls.map((w) => w.profile);
   const tierFields = walls.map((w) => w.tiles);
+
+  // Seed-tier height ceiling: clamp the procedural skyline (owners stack blocks higher
+  // themselves afterwards). Profiles may be shared (4-way) — clamping is idempotent.
+  const heightCap = opts.heightCap && opts.heightCap > 0 ? Math.round(opts.heightCap) : Infinity;
+  if (heightCap !== Infinity) {
+    for (const p of wallProfiles) for (let c = 0; c < F; c++) if (p.topH[c] > heightCap) p.topH[c] = heightCap;
+  }
 
   // Entry width must share the fortress parity so the opening (and stairs) are
   // perfectly centered/symmetric: even fortress -> even entry, odd -> odd.

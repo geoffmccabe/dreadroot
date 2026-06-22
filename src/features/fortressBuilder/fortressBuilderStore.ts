@@ -15,6 +15,7 @@ export interface BuilderState {
   blockCount: number;        // published back by the preview
   centerX: number | null;    // world center the preview pinned (for placement)
   centerZ: number | null;
+  heightCap: number | null;  // max procedural height (blocks) from the seed tier; null = uncapped
   prompt: string;            // text prompt for rebuilds (drives AI image-gen in a later phase)
   barrierOn: boolean;        // show + enforce the 20-60-20 monster barrier around the preview
   rebuildSeed: number;       // bumped by "Rebuild" to get a different variation
@@ -59,6 +60,7 @@ const initial: BuilderState = {
   blockCount: 0,
   centerX: null,
   centerZ: null,
+  heightCap: null,
   prompt: '',
   barrierOn: false,
   rebuildSeed: 0,

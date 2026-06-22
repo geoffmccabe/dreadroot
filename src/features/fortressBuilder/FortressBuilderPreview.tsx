@@ -169,7 +169,7 @@ function BarrierWalls({ D }: { D: number }) {
 
 export function FortressBuilderPreview() {
   const {
-    isOpen, imageSrc, D, T, heightScale, tintHex, barrierOn, rebuildSeed,
+    isOpen, imageSrc, D, T, heightScale, heightCap, tintHex, barrierOn, rebuildSeed,
     faceSym, faceFlip, wallSym, chunk, parapetOn, parapetWidth, parapetHeight, entryW, entryH, entryWall, entryVert, stairs,
     extrudeOut, extrudeIn,
     extrudeLightOn, extrudeLightColor, extrudeLightIntensity, extrudeLightSpread,
@@ -227,13 +227,13 @@ export function FortressBuilderPreview() {
   const grid = useMemo(() => (img ? imageToGrayGrid(img, F, rebuildSeed) : null), [img, F, rebuildSeed]);
   const result = useMemo(
     () => (grid ? buildFortressVoxels(grid, {
-      D, T, heightScale, seed: rebuildSeed,
+      D, T, heightScale, heightCap: heightCap ?? undefined, seed: rebuildSeed,
       faceSym, faceFlip, wallSym, chunk, stairs,
       parapet: parapetOn, parapetWidth, parapetHeight,
       entry: entryW > 0 ? { w: entryW, h: entryH, wall: entryWall, vert: entryVert } : null,
       extrudeOut, extrudeIn,
     }) : null),
-    [grid, D, T, heightScale, rebuildSeed, faceSym, faceFlip, wallSym, chunk, parapetOn, parapetWidth, parapetHeight, stairs, entryW, entryH, entryWall, entryVert, extrudeOut, extrudeIn]
+    [grid, D, T, heightScale, heightCap, rebuildSeed, faceSym, faceFlip, wallSym, chunk, parapetOn, parapetWidth, parapetHeight, stairs, entryW, entryH, entryWall, entryVert, extrudeOut, extrudeIn]
   );
 
   // Register/clear the dynamic monster-exclusion barrier (20-60-20 outer ring = D).

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUserData } from '@/hooks/useUserData';
 import { supabase } from '@/integrations/supabase/client';
 import { useBlocks } from '@/contexts/BlocksContext';
-import { FORTRESS_SEED_KEY } from './fortressSeed';
+import { seedConfigFor } from './fortressSeed';
 import { placeFortress, removeFortress } from './fortressPlacement';
 import { saveSnapshot, listSnapshots, deleteSnapshot, type Snapshot } from './fortressBuilderSnapshots';
 import { Slider } from '@/components/ui/slider';
@@ -50,18 +50,34 @@ export function FortressBuilderPanel() {
   const isAdmin = !!userRoles?.some((r: string) => r === 'admin' || r === 'superadmin');
   const s = useBuilder();
 
-  // Resolve the Fortress Seed item id once, then detect whether the player has one equipped
-  // (in any equip slot — the Special slot in practice). Admins can always open the builder.
-  const [seedItemId, setSeedItemId] = useState<string | null>(null);
+  // Load all fortress-seed item defs (keys fortress_seed%), map id -> {number,tier}. Then find
+  // which one the player has equipped → its tier config (diameter range + height cap).
+  const [seedDefs, setSeedDefs] = useState<Record<string, { number: number | null; tier: number | null }>>({});
   useEffect(() => {
     let ok = true;
-    (supabase as any).from('items').select('id').eq('key', FORTRESS_SEED_KEY).maybeSingle()
-      .then(({ data }: { data: { id: string } | null }) => { if (ok) setSeedItemId(data?.id ?? null); })
-      .catch(() => {});
+    (supabase as any).from('items').select('id,item_number,tier').like('key', 'fortress_seed%')
+      .then(({ data }: { data: Array<{ id: string; item_number: number | null; tier: number | null }> | null }) => {
+        if (!ok) return;
+        const m: Record<string, { number: number | null; tier: number | null }> = {};
+        for (const it of data ?? []) m[it.id] = { number: it.item_number, tier: it.tier };
+        setSeedDefs(m);
+      }).catch(() => {});
     return () => { ok = false; };
   }, []);
-  const hasSeedEquipped = !!seedItemId && (equippedGear ?? []).some((g) => g.itemId === seedItemId);
+  const equippedSeed = (equippedGear ?? []).map((g) => seedDefs[g.itemId]).find(Boolean) ?? null;
+  const seedCfg = equippedSeed ? seedConfigFor(equippedSeed.number, equippedSeed.tier) : null;
+  const hasSeedEquipped = !!equippedSeed;
   const canBuild = isAdmin || hasSeedEquipped;
+  const dMin = seedCfg?.minD ?? 20;
+  const dMax = seedCfg?.maxD ?? 100;
+
+  // Keep D inside the seed-tier range, and publish the height cap (max procedural height =
+  // heightMult × width; owners stack higher themselves). Admins with no seed = free range.
+  useEffect(() => {
+    if (!seedCfg) { builderStore.set({ heightCap: null }); return; }
+    const clamped = Math.min(seedCfg.maxD, Math.max(seedCfg.minD, builderStore.get().D));
+    builderStore.set({ heightCap: Math.ceil(seedCfg.heightMult * clamped), ...(clamped !== builderStore.get().D ? { D: clamped } : {}) });
+  }, [seedCfg?.minD, seedCfg?.maxD, seedCfg?.heightMult, s.D]);
 
   // Placement: write the previewed fortress into the world / take it back down (chop the seed).
   const { currentWorldId, placeBlocksBatch, removeBlocksByPositions } = useBlocks();
@@ -231,7 +247,7 @@ export function FortressBuilderPanel() {
           )}
         </div>
 
-        <Row label={`Diameter: ${s.D} (fortress ${Math.round(0.6 * s.D)})`} min={20} max={100} step={1} value={s.D} onChange={(v) => builderStore.set({ D: v })} />
+        <Row label={`Diameter: ${s.D}${seedCfg ? ` (Tier ${seedCfg.tier}${seedCfg.angelic ? ' Angelic' : ''}: ${dMin}-${dMax})` : ''}`} min={dMin} max={dMax} step={1} value={Math.min(dMax, Math.max(dMin, s.D))} onChange={(v) => builderStore.set({ D: v })} />
         <Row label={`Height: ${s.heightScale.toFixed(2)}×`} min={0.3} max={2} step={0.05} value={s.heightScale} onChange={(v) => builderStore.set({ heightScale: v })} />
         <Row label={`Wall thickness: ${s.T}`} min={1} max={5} step={1} value={s.T} onChange={(v) => builderStore.set({ T: v })} />
         <Row label={`Block size (chunkier): ${s.chunk}`} min={1} max={5} step={1} value={s.chunk} onChange={(v) => builderStore.set({ chunk: v })} />
