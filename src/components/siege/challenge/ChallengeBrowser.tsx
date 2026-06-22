@@ -31,7 +31,7 @@ const WORLD_ROW1 = [
   { label: "NERO'S ISLAND", t: tpBySlot(5) },
 ];
 const WORLD_ROW2 = [
-  { label: 'CYBER CITY', d: demoByCode('KeyC') },
+  { label: 'SCI-FI CITY', d: demoByCode('KeyA') },
   { label: 'ADVENTURE TOWN', d: demoByCode('KeyN') },
 ];
 
@@ -116,7 +116,7 @@ export function ChallengeBrowser() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 12 }}>
             {WORLD_ROW2.map((w) => (
-              <WorldCard key={w.label} label={w.label} onClick={() => goWorld(w.d.mapId, w.d.pos)} />
+              <WorldCard key={w.label} label={w.label} onClick={() => goWorld(w.d.mapId, w.d.pos, w.d.yaw, w.d.pitch)} />
             ))}
           </div>
 

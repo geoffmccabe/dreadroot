@@ -57,7 +57,7 @@ export function SiegeTeleportMenu() {
       <div style={{ ...headStyle, marginTop: 10 }}>⊹ Asset Demos</div>
       <div style={grid}>
         {SIEGE_DEMOS.map((d) => (
-          <button key={d.mapId} style={cell} onClick={() => go(d.mapId, d.pos)}>
+          <button key={d.mapId} style={cell} onClick={() => go(d.mapId, d.pos, d.yaw, d.pitch)}>
             <span style={keyBadge}>{d.key}</span><span>{d.name}</span>
           </button>
         ))}

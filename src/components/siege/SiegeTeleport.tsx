@@ -71,7 +71,7 @@ export function SiegeTeleport() {
       const demo = DEMO_BY_CODE[e.code];
       if (demo) {
         e.preventDefault(); e.stopPropagation();
-        jump(demo.mapId, demo.pos);
+        jump(demo.mapId, demo.pos, demo.yaw, demo.pitch);
         disarm(); return;
       }
       if (/^Digit[0-9]$/.test(e.code)) {
