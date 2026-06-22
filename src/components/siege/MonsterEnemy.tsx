@@ -119,6 +119,10 @@ export interface MonsterConfig {
                               // it end-over-end (1-5 rev/s) instead of a small slide.
   deathStyle?: 'deflate' | 'topple';   // 'deflate' = mushroom (face-first → flatten → sink);
                               // 'topple' = heel-pivot backward fall, slope-aware; corpse persists in challenges.
+  // A weapon glb attached to the Hand_R bone. scale is a multiplier on top of the rig (the FR
+  // hand bone has a 0.01 intrinsic scale, so ~100 ≈ a 1 m weapon that scales with the monster);
+  // pos/rotDeg seat the grip in the fist. The blade collider for hits is derived from bladeLen.
+  weapon?: { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number]; bladeLen?: number };
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -239,6 +243,27 @@ const monsterBoxes = new Set<THREE.Box3>();
 // another monster that is supported AND lower-priority — so two can't climb each other into the
 // air (mutual-support deadlock), and a chain only stacks once each link has actually landed.
 const monsterSupport = new Map<THREE.Box3, { g: boolean; pri: number }>();
+
+// Attaches a weapon glb to the monster's Hand_R bone (inside the already-cloned rig). The weapon
+// is wrapped in a group so the glb's intrinsic scale is preserved; the wrapper carries the grip
+// transform. Returns null — it only mutates the bone hierarchy.
+function HandWeapon({ root, w }: { root: THREE.Group; w: NonNullable<MonsterConfig['weapon']> }) {
+  const { scene } = useGLTF(w.url);
+  useEffect(() => {
+    let hand: THREE.Object3D | undefined;
+    root.traverse((o) => { if (o.name === 'Hand_R') hand = o; });
+    if (!hand) return;
+    const wrap = new THREE.Group();
+    wrap.scale.setScalar(w.scale ?? 100);
+    if (w.pos) wrap.position.set(w.pos[0], w.pos[1], w.pos[2]);
+    if (w.rotDeg) wrap.rotation.set(w.rotDeg[0] * Math.PI / 180, w.rotDeg[1] * Math.PI / 180, w.rotDeg[2] * Math.PI / 180);
+    wrap.add(scene.clone(true));
+    hand.add(wrap);
+    const h = hand;
+    return () => { h.remove(wrap); };
+  }, [root, scene, w]);
+  return null;
+}
 
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
@@ -1404,6 +1429,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
    <>
     <group ref={group} scale={scale}>
       <primitive object={cloned} />
+      {c.weapon && <HandWeapon root={cloned} w={c.weapon} />}
       {/* !hb debug: the BODY collision box (the exact geometry the bullet test uses).
           Root-anchored, inside the scale-cancelling group so it rotates with facing.
           The HEAD box is a bone-followed sibling below. Edited box = yellow. */}

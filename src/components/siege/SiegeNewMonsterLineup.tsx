@@ -126,7 +126,21 @@ function useLineupToggle(toggle: () => void) {
 }
 
 let spawnSeq = 0;
-type Spawned = { key: number; mon: Mon; pos: [number, number, number] };
+type WeaponAttach = { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number] };
+type Spawned = { key: number; mon: Mon; pos: [number, number, number]; weapon?: WeaponAttach };
+
+// TEST: random melee weapons for the Pig Butcher. Consistent Synty SM_Wep set (handle ~through
+// the origin); scale 100 compensates the rig's 0.01 hand-bone scale → ~1 m, scaling with the
+// monster. Grip seating (pos/rotDeg) is rough for now — fine-tune once the look is approved.
+const PIG_WEAPONS: WeaponAttach[] = [
+  { url: '/siege/world/SM_Wep_Sword_01.glb', scale: 100 },
+  { url: '/siege/world/SM_Wep_Sword_02.glb', scale: 100 },
+  { url: '/siege/world/SM_Wep_Sword_03.glb', scale: 100 },
+  { url: '/siege/world/SM_Wep_Axe_01.glb',   scale: 100 },
+  { url: '/siege/world/SM_Wep_Axe_02.glb',   scale: 100 },
+  { url: '/siege/world/SM_Wep_Spear_01.glb', scale: 100 },
+  { url: '/siege/world/SM_Item_Hammer_01.glb', scale: 100 },
+];
 
 // @ <monster#> # <qty>  staged keyboard parser → spawn active monsters at the camera.
 function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void) {
@@ -227,7 +241,9 @@ export function SiegeNewMonsterLineup() {
   useCyclePanel(showLineup);
   const [spawned, setSpawned] = useState<Spawned[]>([]);
   const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
-    setSpawned((s) => [...s, { key: spawnSeq++, mon, pos }]);
+    // Pig Butcher gets a RANDOM melee weapon (testing the hand-attach + variety).
+    const weapon = mon.glb === 'pigbutcher' ? PIG_WEAPONS[(Math.random() * PIG_WEAPONS.length) | 0] : undefined;
+    setSpawned((s) => [...s, { key: spawnSeq++, mon, pos, weapon }]);
   }, []);
   useSpawnCommand(add);
 
@@ -284,7 +300,7 @@ export function SiegeNewMonsterLineup() {
         <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
           modelHeight={INTRINSIC} height={s.mon.height} speed={s.mon.speed} animSpeed={s.mon.animSpeed}
           health={healthFor(s.mon.height)} gait="climb" deathStyle="topple" attackRange={Math.max(1.6, s.mon.height * 0.5 + 0.8)} attackMs={1400}
-          meleeContact={{ dmg: [s.mon.height * 3, s.mon.height * 7], kb: [2, 8], cooldownMs: 1300 }} {...extraProps(s.mon)} />
+          meleeContact={{ dmg: [s.mon.height * 3, s.mon.height * 7], kb: [2, 8], cooldownMs: 1300 }} weapon={s.weapon} {...extraProps(s.mon)} />
       ))}
       <BoulderField />
     </Suspense>
