@@ -18,7 +18,7 @@ import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
 import { GAME_LIST } from '@/config/gameRegistry';
 import { playSound } from '@/lib/spatialAudio';
-import type { Challenge, ChallengeWave, MonsterDrop, BossMods } from './challengeTypes';
+import { WAVES_PER_CHALLENGE, type Challenge, type ChallengeWave, type MonsterDrop, type BossMods } from './challengeTypes';
 
 const REGIONS = SIEGE_TELEPORTS.map((t) => t.name);   // Open-World regions for the superadmin spawner
 
@@ -160,6 +160,7 @@ export function ChallengeCreatorPanel() {
   const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
   const dragHover = useRef<number | null>(null);
   const [confirmDel, setConfirmDel] = useState<{ wave: number; drop: number } | null>(null);
+  const [confirmDelCh, setConfirmDelCh] = useState(false);   // confirm deleting the WHOLE loaded challenge
   const [preview, setPreview] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);  // card hover
   const [pinned, setPinned] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);    // dropdown open
   const [hoverType, setHoverType] = useState<number | null>(null);                                              // hovered option
@@ -179,9 +180,14 @@ export function ChallengeCreatorPanel() {
   const savedJson = useRef<string | null>(null);
   const markSaved = (c: Challenge) => { savedJson.current = JSON.stringify(c); };
   const newChallenge = () => {
-    const fresh = clone(TEST_CHALLENGE); delete fresh.id;
-    fresh.creator = user?.email?.split('@')[0] ?? fresh.creator;
-    fresh.game = getActiveGame();
+    // A genuinely BLANK challenge (not the demo gauntlet): empty name + 10 empty waves,
+    // so "＋ New" visibly clears the editor to a fresh slate.
+    const fresh: Challenge = {
+      name: '',
+      creator: user?.email?.split('@')[0] ?? 'anon',
+      game: getActiveGame(),
+      waves: Array.from({ length: WAVES_PER_CHALLENGE }, (_, i) => ({ name: `Wave ${i + 1}`, timeSec: 60, drops: [] })),
+    };
     setCh(fresh); markSaved(fresh); setSaveMsg('New challenge — unsaved');
   };
   const onSave = async () => {
@@ -208,11 +214,14 @@ export function ChallengeCreatorPanel() {
     setCh(loaded); markSaved(loaded);
     setPicker(null); setSaveMsg(`Loaded "${r.name}"`);
   };
-  const onDeleteRow = async (r: ChallengeRow) => {
-    const err = await deleteChallenge(r.id);
-    if (err) { setSaveMsg('Delete failed: ' + err); return; }
-    setPicker((p) => (p ? { ...p, rows: p.rows.filter((x) => x.id !== r.id) } : p));
-    if (ch.id === r.id) { setCh((c) => { const n = clone(c); delete n.id; return n; }); }
+  // Delete the challenge currently loaded in the editor, then reset to a fresh one.
+  const deleteCurrentChallenge = async () => {
+    if (!ch.id) { setConfirmDelCh(false); return; }
+    const err = await deleteChallenge(ch.id);
+    if (err) { setSaveMsg('Delete failed: ' + err); setConfirmDelCh(false); return; }
+    setConfirmDelCh(false);
+    newChallenge();
+    setSaveMsg('Challenge deleted');
   };
   const msgErr = /^(Error|Delete|Sign)/.test(saveMsg);
 
@@ -447,6 +456,7 @@ export function ChallengeCreatorPanel() {
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
                 <button style={btn()} onClick={newChallenge}>＋ New</button>
                 <button style={btn()} onClick={onOpen}>📂 Open</button>
+                {ch.id && <button style={{ ...btn(), background: '#7a2b2b' }} onClick={() => setConfirmDelCh(true)}>🗑 Delete</button>}
                 <button className={dirty ? 'chal-save-pulse' : undefined} style={{ ...btn(true), background: dirty ? '#2e8b57' : undefined }} onClick={onSave}>💾 Save</button>
                 <button style={{ ...btn(true), background: '#3a6ea8' }} onClick={run}>▶ Run</button>
                 {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
@@ -593,7 +603,6 @@ export function ChallengeCreatorPanel() {
                     <div style={{ fontSize: 11, color: '#7e90ad' }}>{r.creator_name ?? '—'} · {new Date(r.updated_at).toLocaleString()}</div>
                   </div>
                   <button style={btn(true)} onClick={() => loadRow(r)}>Open</button>
-                  {(isAdmin || r.user_id === user?.id) && <button style={{ ...btn(), background: '#7a2b2b' }} onClick={() => onDeleteRow(r)}>Delete</button>}
                 </div>
               ))}
           </div>
@@ -608,6 +617,20 @@ export function ChallengeCreatorPanel() {
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
               <button style={{ ...btn(), background: '#a83232' }} onClick={() => { removeDrop(confirmDel.wave, confirmDel.drop); setConfirmDel(null); }}>Delete</button>
               <button style={btn()} onClick={() => setConfirmDel(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete-challenge confirmation. */}
+      {confirmDelCh && (
+        <div onClick={() => setConfirmDelCh(false)} style={{ position: 'fixed', inset: 0, zIndex: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ ...card, padding: 20, minWidth: 320, textAlign: 'center', boxShadow: '0 14px 44px #000' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Delete this challenge?</div>
+            <div style={{ fontSize: 12, color: '#9fb4d0', marginBottom: 16 }}>"{ch.name || 'Untitled'}" will be permanently removed. This can't be undone.</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button style={{ ...btn(true), background: '#a83232' }} onClick={deleteCurrentChallenge}>🗑 Delete</button>
+              <button style={btn()} onClick={() => setConfirmDelCh(false)}>Cancel</button>
             </div>
           </div>
         </div>
