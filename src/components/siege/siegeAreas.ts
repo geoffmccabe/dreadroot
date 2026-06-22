@@ -37,7 +37,7 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 1, name: 'Lobby',         pos: [-96, 31, 325] },
   { slot: 2, name: 'Beach',         pos: [-537, 46, 688] },
   { slot: 3, name: 'Bleakrock',     pos: [-1039, 24, 1108] },
-  { slot: 4, name: 'Harold',        pos: [-1039, 24, 1108] }, // separate instance — Shift+4 to set
+  { slot: 4, name: 'Harold',        pos: [-352.854, 36.602, 1289.084], yaw: -1.806, pitch: 0.020 }, // from laser readout (yaw 76.5°, pitch 1.1°)
   { slot: 5, name: "Nero's Island", pos: [-1484, 82, 690] },  // best guess — Shift+5 to set
   { slot: 6, name: 'Gauntlet',      pos: [-1484, 82, 690] },
   { slot: 7, name: 'Shanty',        pos: [-394, 32, 744] },
