@@ -70,4 +70,12 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
   // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
   { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [0, 3, 0] },
+  // "Various 2" component sampler grids (loose pieces for map/challenge building).
+  { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
+  { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
+  { code: 'KeyQ', key: 'Q', name: 'Dungeon Props',   mapId: 'dungeon-grid',   pos: [0, 3, 0] },
+  { code: 'KeyR', key: 'R', name: 'Elven Realm',     mapId: 'elven-grid',     pos: [0, 3, 0] },
+  { code: 'KeyS', key: 'S', name: 'Enchanted Forest', mapId: 'enchanted-grid', pos: [0, 3, 0] },
+  { code: 'KeyT', key: 'T', name: 'Fantasy Kingdom', mapId: 'kingdom-grid',   pos: [0, 3, 0] },
+  { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
 ];

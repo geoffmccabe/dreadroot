@@ -290,6 +290,16 @@ export const MEADOW_SAMPLER_WORLD = samplerWorld('meadow-demo', 'Meadow Forest',
 export const SWAMP_SAMPLER_WORLD = samplerWorld('swamp-demo', 'Swamp Marshland', 14);
 export const JUNGLE_SAMPLER_WORLD = samplerWorld('jungle-demo', 'Tropical Jungle', 15);
 
+// Synty "Various 2" packs — component sampler grids (each its own map, Cmd-J + letter O–U).
+// 'adventure-grid' is the loose pieces; the assembled Adventure town is 'adventure-demo' (N).
+export const ADVENTURE_GRID_WORLD = samplerWorld('adventure-grid', 'Adventure Pieces', 17);
+export const ANCIENT_GRID_WORLD = samplerWorld('ancient-grid', 'Ancient Empire', 18);
+export const DUNGEON_GRID_WORLD = samplerWorld('dungeon-grid', 'Dungeon Props', 19);
+export const ELVEN_GRID_WORLD = samplerWorld('elven-grid', 'Elven Realm', 20);
+export const ENCHANTED_GRID_WORLD = samplerWorld('enchanted-grid', 'Enchanted Forest', 21);
+export const KINGDOM_GRID_WORLD = samplerWorld('kingdom-grid', 'Fantasy Kingdom', 22);
+export const SAMURAI_GRID_WORLD = samplerWorld('samurai-grid', 'Samurai Empire', 23);
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
@@ -308,6 +318,13 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [MEADOW_SAMPLER_WORLD.id]: MEADOW_SAMPLER_WORLD,
   [SWAMP_SAMPLER_WORLD.id]: SWAMP_SAMPLER_WORLD,
   [JUNGLE_SAMPLER_WORLD.id]: JUNGLE_SAMPLER_WORLD,
+  [ADVENTURE_GRID_WORLD.id]: ADVENTURE_GRID_WORLD,
+  [ANCIENT_GRID_WORLD.id]: ANCIENT_GRID_WORLD,
+  [DUNGEON_GRID_WORLD.id]: DUNGEON_GRID_WORLD,
+  [ELVEN_GRID_WORLD.id]: ELVEN_GRID_WORLD,
+  [ENCHANTED_GRID_WORLD.id]: ENCHANTED_GRID_WORLD,
+  [KINGDOM_GRID_WORLD.id]: KINGDOM_GRID_WORLD,
+  [SAMURAI_GRID_WORLD.id]: SAMURAI_GRID_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

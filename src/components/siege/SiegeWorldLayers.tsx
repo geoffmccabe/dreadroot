@@ -152,6 +152,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {world.id === 'meadow-demo' && <SetSampler set="meadow" />}
           {world.id === 'swamp-demo' && <SetSampler set="swamp" />}
           {world.id === 'jungle-demo' && <SetSampler set="jungle" />}
+          {/* "Various 2" component grids (Cmd-J O–U). */}
+          {world.id === 'adventure-grid' && <SetSampler set="adventure" />}
+          {world.id === 'ancient-grid' && <SetSampler set="ancient" />}
+          {world.id === 'dungeon-grid' && <SetSampler set="dungeon" />}
+          {world.id === 'elven-grid' && <SetSampler set="elven" />}
+          {world.id === 'enchanted-grid' && <SetSampler set="enchanted" />}
+          {world.id === 'kingdom-grid' && <SetSampler set="kingdom" />}
+          {world.id === 'samurai-grid' && <SetSampler set="samurai" />}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}

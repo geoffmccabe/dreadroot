@@ -20,6 +20,11 @@ const SETS: { id: string; label: string }[] = [
   { id: 'apoc', label: 'Apocalypse' }, { id: 'dark', label: 'Dark Fantasy' }, { id: 'city', label: 'SciFi City' },
   { id: 'cyber', label: 'Cyber City' }, { id: 'space', label: 'SciFi Space' }, { id: 'mech', label: 'Mech' },
   { id: 'worlds', label: 'SciFi Worlds' },
+  // Synty "Various 2" packs.
+  { id: 'adventure', label: 'Adventure' }, { id: 'ancient', label: 'Ancient Empire' },
+  { id: 'dungeon', label: 'Dungeon Props' }, { id: 'elven', label: 'Elven Realm' },
+  { id: 'enchanted', label: 'Enchanted Forest' }, { id: 'kingdom', label: 'Fantasy Kingdom' },
+  { id: 'samurai', label: 'Samurai Empire' },
 ];
 interface CatItem { id: string; name: string; set: string; file: string; category?: string }
 const catalogCache = new Map<string, CatItem[]>();
