@@ -75,7 +75,7 @@ export function ChestsPanel() {
         {chests.length === 0 && <div className="text-muted-foreground">No chests defined yet.</div>}
         {chests.map((c) => (
           <div key={c.id} className="flex items-center justify-between border-t border-border/40 py-1">
-            <span><b>#{c.chest_number}</b> · {CHEST_STYLES.find((s) => s.id === c.model_style)?.label ?? c.model_style}
+            <span><b style={{ fontSize: '14px' }}>CHEST #{c.chest_number}</b> &nbsp;·&nbsp; {CHEST_STYLES.find((s) => s.id === c.model_style)?.label ?? c.model_style}
               {' · '}DT: {tables.find((t) => t.id === c.drop_table_id)?.name ?? '(none)'}</span>
             <Button size="sm" variant="destructive" className="h-6 px-2 text-[10px]" onClick={() => del(c.id)}>✕</Button>
           </div>
