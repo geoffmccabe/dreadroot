@@ -10,6 +10,7 @@
 //      effect, not just a flat dim.
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { getSiegeFog } from './siegeFog';
 import * as THREE from 'three';
 
 const CENTER = new THREE.Vector3(-1039, 24, 1108);   // Bleakrock centroid (teleport slot 3)
@@ -82,7 +83,9 @@ export function BleakrockLighting() {
   useFrame((_, dt) => {
     const dx = camera.position.x - CENTER.x, dz = camera.position.z - CENTER.z;
     const dist = Math.hypot(dx, dz);
-    const t = Math.max(0, Math.min(1, (RADIUS + FADE - dist) / FADE));
+    // Fog toggle (Admin/Weather panel): when off, force intensity 0 so the scrim hides and the
+    // restore-fog branch below clears scene.fog — lets you see/fly to distant objects.
+    const t = getSiegeFog() ? Math.max(0, Math.min(1, (RADIUS + FADE - dist) / FADE)) : 0;
 
     const mat = scrim.material as THREE.ShaderMaterial;
     mat.uniforms.uTime.value += Math.min(dt, 0.05);

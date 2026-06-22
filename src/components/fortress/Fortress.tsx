@@ -19,7 +19,7 @@ import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
 import { PlayerDamageHealthBar } from '@/components/hud/PlayerDamageHealthBar';
-import { getActiveGame } from '@/config/activeGame';
+import { getActiveGame, useActiveGame } from '@/config/activeGame';
 import { setActiveWorldId } from '@/config/activeWorld';
 import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
@@ -337,7 +337,9 @@ export function Fortress() {
   // Siege lobby proximity zones (vault + market). In Siege, the vault range feeds the existing
   // vaultInRange flow (prompt + V-open + auto-close); the market range drives its own prompt.
   const lobbyZones = useSiegeLobbyZones();
-  const siegeActive = getActiveGame() === 'siege-worlds';
+  const siegeActive = useActiveGame() === 'siege-worlds';   // REACTIVE — must update so the
+  // vault mirror runs; otherwise vaultInRange stays false and the auto-close effect below
+  // slams the vault shut the instant V opens it.
   useEffect(() => { if (siegeActive) setVaultInRange(lobbyZones.vaultInRange); }, [siegeActive, lobbyZones.vaultInRange]);
 
   // View settings — local state for immediate reactivity, synced from/to Supabase
@@ -2588,7 +2590,7 @@ export function Fortress() {
           color: 'hsl(0, 0%, 95%)', fontSize: 14, fontFamily: 'var(--hud-font)', letterSpacing: 0.3,
           zIndex: 100, pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.8)',
         }}>
-          Press <b style={{ color: 'hsl(45, 80%, 70%)' }}>V</b> for the <b>MARKETPLACE</b>
+          <b>MARKETPLACE</b> — press <b style={{ color: 'hsl(45, 80%, 70%)' }}>V</b>
         </div>
       )}
 
