@@ -31,6 +31,7 @@ import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useSiegeLobbyZones } from '@/components/siege/siegeLobbyZones';
+import { setBrowserOpen } from '@/components/siege/challenge/challengeBrowserStore';
 import { MarketplacePanel } from '@/features/marketplace';
 import { ForgePanel } from '@/features/forge/ForgePanel';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
@@ -342,6 +343,8 @@ export function Fortress() {
   // vault mirror runs; otherwise vaultInRange stays false and the auto-close effect below
   // slams the vault shut the instant V opens it.
   useEffect(() => { if (siegeActive) setVaultInRange(lobbyZones.vaultInRange); }, [siegeActive, lobbyZones.vaultInRange]);
+  // Stepping into the gate's portal opens the !c challenge browser (jump points / challenges).
+  useEffect(() => { if (siegeActive && lobbyZones.portalInRange) setBrowserOpen(true); }, [siegeActive, lobbyZones.portalInRange]);
   // Forge zone: the Forge panel auto-opens on enter and closes on leave. (Manual close stays
   // closed until the player leaves and re-enters, since this only fires on the range edge.)
   const [forgeOpen, setForgeOpen] = useState(false);

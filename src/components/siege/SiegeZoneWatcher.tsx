@@ -13,8 +13,8 @@ export function SiegeZoneWatcher() {
   useFrame(() => {
     if (++n.current % 10 !== 0) return;
     camera.getWorldPosition(p);   // world space (camera may be nested) → matches the zone coords
-    const { v, m, f } = rangesAt(p.x, p.z);
-    setLobbyRanges(v, m, f);
+    const { v, m, f, p: portal } = rangesAt(p.x, p.z);
+    setLobbyRanges(v, m, f, portal);
   });
   return null;
 }

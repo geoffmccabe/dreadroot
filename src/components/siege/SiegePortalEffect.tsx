@@ -2,7 +2,7 @@
 // swirling spirals + fractal tendrils + whirling, cycling colors with a bright pulsing core,
 // masked to an oval so it reads as a magic gateway. Pure fragment-shader VFX on one plane —
 // cheap (a single quad). Positioned to fill the meadow_SM_Bld_Warpgate_01 opening.
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -14,6 +14,7 @@ const PORTAL_H = 6.0 * 0.8;
 const FRAG = `
 varying vec2 vUv;
 uniform float uTime;
+uniform float uDir;   // +1 / -1 → spiral handedness + spin direction
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -25,8 +26,8 @@ void main(){
   vec2 uv = vUv * 2.0 - 1.0;            // -1..1, center origin
   float r = length(uv);
   float ang = atan(uv.y, uv.x);
-  // spiral swirl — angle wound with radius, rotating over time
-  float swirl = ang + r * 6.0 - uTime * 1.4;
+  // spiral swirl — angle wound with radius, rotating over time. uDir flips handedness + spin.
+  float swirl = (ang + r * 6.0) * uDir - uTime * 1.4 * uDir;
   float spiral = sin(swirl * 3.0) * 0.5 + 0.5;
   // fractal tendrils sampled in the swirled frame
   vec2 sp = vec2(cos(swirl), sin(swirl)) * r;
@@ -50,20 +51,30 @@ const VERT = `
 varying vec2 vUv;
 void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
-export function SiegePortalEffect() {
+function Spiral({ z, dir, speed }: { z: number; dir: number; speed: number }) {
   const mat = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 } },
+    uniforms: { uTime: { value: 0 }, uDir: { value: dir } },
     vertexShader: VERT,
     fragmentShader: FRAG,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-  }), []);
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame((_, dt) => { mat.uniforms.uTime.value += dt; });
+  }), [dir]);
+  useFrame((_, dt) => { mat.uniforms.uTime.value += dt * speed; });
   return (
-    <mesh ref={ref} position={PORTAL_POS} material={mat}>
+    <mesh position={[PORTAL_POS[0], PORTAL_POS[1], z]} material={mat}>
       <planeGeometry args={[PORTAL_W, PORTAL_H]} />
     </mesh>
+  );
+}
+
+export function SiegePortalEffect() {
+  // Two counter-rotating layers: the base swirl, and a reverse one spinning 50% faster, set 10cm
+  // deeper into the gate (away from spawn).
+  return (
+    <>
+      <Spiral z={PORTAL_POS[2]} dir={1} speed={1} />
+      <Spiral z={PORTAL_POS[2] - 0.1} dir={-1} speed={1.5} />
+    </>
   );
 }
