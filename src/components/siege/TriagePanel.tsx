@@ -54,11 +54,12 @@ export function TriagePanel() {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      // C = plain capture. While the laser is ON + pointing at something: B = flag BAD,
-      // G = flag GOOD — one keypress per item, no clicking. (Gated on the laser so it can't
-      // clash with other B/G keys.)
+      // All triage keys are GATED on the laser being ON, so they never clash with normal
+      // play keys. While the laser is ON: C = plain capture; B = flag BAD, G = flag GOOD
+      // (B/G also need a hit) — one keypress per item, no clicking. With the laser OFF,
+      // C falls through so the "!c" challenge-browser command keeps working.
       let flag: string[] | null = null;
-      if (e.code === 'KeyC') flag = [];
+      if (probeState.on && e.code === 'KeyC') flag = [];
       else if (probeState.on && probeState.hasHit && e.code === 'KeyB') flag = ['bad'];
       else if (probeState.on && probeState.hasHit && e.code === 'KeyG') flag = ['good'];
       if (!flag) return;
