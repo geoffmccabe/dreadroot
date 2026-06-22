@@ -68,4 +68,6 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyK', key: 'K', name: 'Meadow Forest',  mapId: 'meadow-demo', pos: [0, 3, 0] },
   { code: 'KeyL', key: 'L', name: 'Swamp Marshland', mapId: 'swamp-demo', pos: [0, 3, 0] },
   { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
+  // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
+  { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [0, 3, 0] },
 ];

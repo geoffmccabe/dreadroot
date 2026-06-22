@@ -96,3 +96,4 @@ export function DemoScene({ file, group, scale = 1 }: { file: string; group: str
 
 useGLTF.preload('/siege/scifi_demo/city_demo.gltf', '/draco/');
 useGLTF.preload('/siege/scifi_demo/space_demo.gltf', '/draco/');
+useGLTF.preload('/siege/scifi_demo/adventure_demo.gltf', '/draco/');

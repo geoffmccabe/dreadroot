@@ -133,6 +133,13 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <MeshColliderPlayer />
             </Suspense>
           )}
+          {world.id === 'adventure-demo' && (
+            <Suspense fallback={null}>
+              {/* Baked Synty Adventure fantasy village — auto-grounded/recentered by DemoScene. */}
+              <DemoScene file="adventure_demo.gltf" group="adventuredemo" />
+              <MeshColliderPlayer />
+            </Suspense>
+          )}
           {/* Component-only sets shown as auto-arranged sampler grids. */}
           {world.id === 'cyber-demo' && <SetSampler set="cyber" />}
           {world.id === 'mech-demo' && <SetSampler set="mech" />}

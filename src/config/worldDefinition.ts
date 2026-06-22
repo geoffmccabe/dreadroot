@@ -249,6 +249,22 @@ export const SPACE_DEMO_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/** Adventure Pack — the baked Synty Adventure fantasy-village demo scene (the only set in
+ *  "Various 2" that ships a fully-assembled map). Daytime, bright fill, same treatment as City. */
+export const ADVENTURE_DEMO_WORLD: WorldDefinition = {
+  id: 'adventure-demo',
+  name: 'Adventure Town',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 16,
+  kind: 'siege',
+  meshColliders: false, // the demo wires its own colliders via DemoScene
+  bounds: { min: [-1500, -1500], max: [1500, 1500] },
+  ground: { kind: 'heightmap', surfaceY: 0 }, // flat editable grass terrain under the town
+  spawn: { position: [0, 3, 0], yaw: 0 },
+  props: undefined,
+};
+
 /** Component-only sets (no baked scene) shown as auto-arranged sampler grids, each its
  *  own map. Same heightmap ground + fill light + per-model BVH colliders as the demos. */
 function samplerWorld(id: string, name: string, wireId: number): WorldDefinition {
@@ -280,6 +296,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
   [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
+  [ADVENTURE_DEMO_WORLD.id]: ADVENTURE_DEMO_WORLD,
   [CYBER_SAMPLER_WORLD.id]: CYBER_SAMPLER_WORLD,
   [MECH_SAMPLER_WORLD.id]: MECH_SAMPLER_WORLD,
   [WORLDS_SAMPLER_WORLD.id]: WORLDS_SAMPLER_WORLD,
