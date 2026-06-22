@@ -52,6 +52,7 @@ import { setSprayDamage } from '@/components/siege/spray/sprayAttackSystem';
 import { fireChallengeLose } from '@/components/siege/challenge/challengeControl';
 import { sdbg } from '@/components/siege/siegeDebug';
 import { LaserProbe } from '@/components/siege/LaserProbe';
+import { SiegeZoneWatcher } from '@/components/siege/SiegeZoneWatcher';
 import { VoxelizeTool } from '@/components/siege/VoxelizeTool';
 import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/SiegeExplosion';
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
@@ -1836,6 +1837,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {isSiege && <SiegeSpawner />}
       {isSiege && <BullseyeTestTracer />}
       {isSiege && <LaserProbe />}
+      {isSiege && <SiegeZoneWatcher />}
       {isSiege && <VoxelizeTool />}
       {isSiege && <SiegeExplosion ref={siegeExplosionRef} />}
       {/* Local blue avatar (SiegeCharacter) disabled per user request — it rendered a

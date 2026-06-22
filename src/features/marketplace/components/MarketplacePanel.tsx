@@ -25,7 +25,11 @@ export function MarketplacePanel({ isOpen, onClose }: MarketplacePanelProps) {
   const [activeTab, setActiveTab] = useState<MarketplaceTab>('browse');
   const [filters, setFilters] = useState<MarketplaceFilters>({});
   const [sortOption, setSortOption] = useState<MarketplaceSortOption>('date_desc');
-  const [panelSize, setPanelSize] = useState({ width: 900, height: 720 });
+  // Open near-fullscreen (95% of the viewport) — used as the standalone Siege marketplace.
+  const [panelSize, setPanelSize] = useState(() => ({
+    width: Math.round((typeof window !== 'undefined' ? window.innerWidth : 1280) * 0.95),
+    height: Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.95),
+  }));
   const [isResizing, setIsResizing] = useState(false);
   const hasLoadedOnce = useRef(false);
 
@@ -51,8 +55,8 @@ export function MarketplacePanel({ isOpen, onClose }: MarketplacePanelProps) {
       const deltaY = moveEvent.clientY - startY;
 
       setPanelSize({
-        width: Math.max(600, Math.min(1200, startWidth + deltaX)),
-        height: Math.max(500, Math.min(900, startHeight + deltaY)),
+        width: Math.max(600, Math.min(window.innerWidth, startWidth + deltaX)),
+        height: Math.max(500, Math.min(window.innerHeight, startHeight + deltaY)),
       });
     };
 

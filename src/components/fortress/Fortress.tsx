@@ -30,6 +30,8 @@ import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
+import { useSiegeLobbyZones } from '@/components/siege/siegeLobbyZones';
+import { MarketplacePanel } from '@/features/marketplace';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useToast } from '@/hooks/use-toast';
@@ -332,6 +334,11 @@ export function Fortress() {
   });
   const { isOpen: panelOpen, openPanel, isMarketplaceOpen, openMarketplace, closeMarketplace } = useUserPanel();
   const { openPanel: openAdminPanel } = useAdminPanel();
+  // Siege lobby proximity zones (vault + market). In Siege, the vault range feeds the existing
+  // vaultInRange flow (prompt + V-open + auto-close); the market range drives its own prompt.
+  const lobbyZones = useSiegeLobbyZones();
+  const siegeActive = getActiveGame() === 'siege-worlds';
+  useEffect(() => { if (siegeActive) setVaultInRange(lobbyZones.vaultInRange); }, [siegeActive, lobbyZones.vaultInRange]);
 
   // View settings — local state for immediate reactivity, synced from/to Supabase
   const [viewSettings, setViewSettings] = useState<ViewSettings>(DEFAULT_VIEW_SETTINGS);
@@ -2569,6 +2576,25 @@ export function Fortress() {
           Press <b style={{ color: 'hsl(45, 80%, 70%)' }}>V</b> to open your <b>VAULT</b>
         </div>
       )}
+
+      {/* Siege MARKET proximity prompt — same style as the vault prompt; V opens the marketplace
+          (the zones never overlap, so V is unambiguous). */}
+      {siegeActive && lobbyZones.marketInRange && !isMarketplaceOpen && (
+        <div style={{
+          position: 'fixed', bottom: 120, left: '50%', transform: 'translateX(-50%)',
+          padding: '10px 18px', borderRadius: 'var(--hud-radius)',
+          background: 'hsla(211, 30%, 20%, 0.7)', border: '1px solid hsla(var(--hud-border-h) / 0.6)',
+          backdropFilter: 'blur(8px) saturate(140%)', WebkitBackdropFilter: 'blur(8px) saturate(140%)',
+          color: 'hsl(0, 0%, 95%)', fontSize: 14, fontFamily: 'var(--hud-font)', letterSpacing: 0.3,
+          zIndex: 100, pointerEvents: 'none', textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+        }}>
+          Press <b style={{ color: 'hsl(45, 80%, 70%)' }}>V</b> for the <b>MARKETPLACE</b>
+        </div>
+      )}
+
+      {/* Marketplace panel (near-fullscreen) — opened by the lobby market zone or the HUD button.
+          Rendered here so it shows above the game; was previously never mounted. */}
+      {isMarketplaceOpen && <MarketplacePanel isOpen onClose={closeMarketplace} />}
       </FortressProviders>
     </div>
   );

@@ -46,6 +46,7 @@ import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { type WaterType } from '@/lib/pondGenerator';
 import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
 import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
+import { getVaultInRange, getMarketInRange } from '@/components/siege/siegeLobbyZones';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -836,10 +837,14 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyV':
-        // Open vault if the player is near the fortress back-wall. DreadRoot only — no vault in siege.
-        // No modifier — Cmd/Ctrl+V is left alone (browser paste).
+        // V opens the vault near the fortress back-wall (DreadRoot). In Siege the lobby has two
+        // proximity zones — vault + market (~18m apart, never overlap) — so V opens whichever the
+        // player is standing in. No modifier — Cmd/Ctrl+V is left alone (browser paste).
         if (event.metaKey || event.ctrlKey || event.altKey) break;
-        if (!isSiege && onOpenVault) {
+        if (isSiege) {
+          if (getVaultInRange() && onOpenVault) { event.preventDefault(); onOpenVault(); }
+          else if (getMarketInRange() && onOpenMarketplace) { event.preventDefault(); document.exitPointerLock?.(); onOpenMarketplace(); }
+        } else if (onOpenVault) {
           event.preventDefault();
           onOpenVault();
         }
