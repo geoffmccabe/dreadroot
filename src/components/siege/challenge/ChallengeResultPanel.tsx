@@ -49,7 +49,10 @@ export function ChallengeResultPanel() {
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 124, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}>
-      <div style={{ width: 360, background: 'hsla(222, 32%, 10%, 0.97)', border: `1px solid ${win ? 'hsla(140,50%,55%,0.5)' : 'hsla(0,55%,55%,0.5)'}`, borderRadius: 14, boxShadow: '0 14px 60px #000', color: '#e8eefb', padding: 24, textAlign: 'center' }}>
+      <div style={{ width: 360, background: 'hsla(222, 32%, 10%, 0.97)', border: `1px solid ${win ? 'hsla(140,50%,55%,0.5)' : 'hsla(0,55%,55%,0.5)'}`, borderRadius: 14, boxShadow: '0 14px 60px #000', color: '#e8eefb', overflow: 'hidden', textAlign: 'center' }}>
+        {/* Challenge banner as a full-width header, flush to the top edge (no gap). */}
+        {res.challenge.banner && <img src={res.challenge.banner} alt="" style={{ width: '100%', aspectRatio: '4 / 1', objectFit: 'cover', display: 'block' }} />}
+        <div style={{ padding: 24, paddingTop: res.challenge.banner ? 16 : 24 }}>
         <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1, color: win ? '#8fe6a0' : '#ff9b9b' }}>{win ? 'VICTORY!' : 'DEFEATED'}</div>
         <div style={{ fontSize: 15, fontWeight: 700, color: '#cfe3ff', marginTop: 4 }}>{res.name}</div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 16 }}>
@@ -80,10 +83,11 @@ export function ChallengeResultPanel() {
             )}
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9, marginTop: 18 }}>
-          <button style={btn('go')} onClick={playAgain}>▶ Play Again</button>
-          <button style={btn('alt')} onClick={browse}>📂 Choose Another</button>
-          <button style={btn('plain')} onClick={close}>✕ Close</button>
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 9, marginTop: 18 }}>
+          <button style={{ ...btn('go'), flex: 1, minHeight: 48, padding: '7px 6px', lineHeight: 1.15, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={playAgain}>Play Again</button>
+          <button style={{ ...btn('alt'), flex: 1, minHeight: 48, padding: '7px 6px', lineHeight: 1.15, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={browse}>Choose Another</button>
+          <button style={{ ...btn('plain'), flex: 1, minHeight: 48, padding: '7px 6px', lineHeight: 1.15, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={close}>Close</button>
+        </div>
         </div>
       </div>
     </div>,
