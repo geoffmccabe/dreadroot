@@ -32,6 +32,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUserPanel } from '@/contexts/UserPanelContext';
 import { useSiegeLobbyZones } from '@/components/siege/siegeLobbyZones';
 import { MarketplacePanel } from '@/features/marketplace';
+import { ForgePanel } from '@/features/forge/ForgePanel';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
 import { useCoinTheme } from '@/contexts/CoinThemeContext';
 import { useToast } from '@/hooks/use-toast';
@@ -341,6 +342,15 @@ export function Fortress() {
   // vault mirror runs; otherwise vaultInRange stays false and the auto-close effect below
   // slams the vault shut the instant V opens it.
   useEffect(() => { if (siegeActive) setVaultInRange(lobbyZones.vaultInRange); }, [siegeActive, lobbyZones.vaultInRange]);
+  // Forge zone: the Forge panel auto-opens on enter and closes on leave. (Manual close stays
+  // closed until the player leaves and re-enters, since this only fires on the range edge.)
+  const [forgeOpen, setForgeOpen] = useState(false);
+  useEffect(() => {
+    if (!siegeActive) return;
+    setForgeOpen(lobbyZones.forgeInRange);
+    // Free the cursor so the player can click Forge buttons when it pops up.
+    if (lobbyZones.forgeInRange) document.exitPointerLock?.();
+  }, [siegeActive, lobbyZones.forgeInRange]);
 
   // View settings — local state for immediate reactivity, synced from/to Supabase
   const [viewSettings, setViewSettings] = useState<ViewSettings>(DEFAULT_VIEW_SETTINGS);
@@ -2597,6 +2607,9 @@ export function Fortress() {
       {/* Marketplace panel (near-fullscreen) — opened by the lobby market zone or the HUD button.
           Rendered here so it shows above the game; was previously never mounted. */}
       {isMarketplaceOpen && <MarketplacePanel isOpen onClose={closeMarketplace} />}
+
+      {/* Forge panel — auto-opens when standing in the lobby forge zone (SWW). */}
+      {forgeOpen && <ForgePanel open onClose={() => setForgeOpen(false)} />}
       </FortressProviders>
     </div>
   );

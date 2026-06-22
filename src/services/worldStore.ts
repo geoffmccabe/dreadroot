@@ -470,6 +470,23 @@ export async function forgeItems(
   return adaptConsume(data as RawConsumeRpcResult);
 }
 
+// forge_slots — forge N identical source items (inventory / quick_select) into 1
+// of the next tier, on the unified user_slots table. Pass the exact source row
+// ids + the resolved next-tier item id. Atomic server-side.
+export async function forgeSlots(
+  sourceRowIds: string[],
+  resultItemId: string,
+  requestId?: string,
+): Promise<void> {
+  const reqId = requestId ?? crypto.randomUUID();
+  const { error } = await supabase.rpc('forge_slots' as any, {
+    p_source_row_ids: sourceRowIds,
+    p_result_item_id: resultItemId,
+    p_client_request_id: reqId,
+  });
+  if (error) throw error;
+}
+
 // ── Admin grants (D-admin) ──────────────────────────────────────────
 
 /** Admin-only grant on behalf of another user. Caller must have the
@@ -1222,6 +1239,7 @@ export const worldStore = {
   grantPoints,
   pickupEgg,
   forgeItems,
+  forgeSlots,
   adminGrantInventoryRow,
   ensureTokenBalance,
   spawnWorldDrop,

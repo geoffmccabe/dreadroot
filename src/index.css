@@ -575,6 +575,12 @@ All colors MUST be HSL.
      CSS pseudo — a pseudo at top:0 lands in the panel's padding above the
      header, so the click never reaches the drag handler. See PanelGrabBar.tsx. */
 
+  /* Forge animation — the item pulses/scales while it's being forged. */
+  @keyframes forgePulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.18); }
+  }
+
   /* Active tab inside user panel: subtle highlight, not bright white */
   .user-panel-dialog [data-state="active"][role="tab"] {
     background: hsla(211, 30%, 51%, 0.5) !important;
