@@ -16,6 +16,7 @@ import { groundAt } from './siegeGround';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
+import { getChallengeState } from './challenge/challengeStore';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
@@ -116,7 +117,8 @@ export interface MonsterConfig {
                               // toward its height (face in your view) during the swing, then snap back.
   bulletTumble?: boolean;     // mushroom grunt: a BULLET launches it 1-10m away from the shot + tumbles
                               // it end-over-end (1-5 rev/s) instead of a small slide.
-  deathStyle?: 'deflate';     // mushroom grunt: fall face-first → deflate (mesh flattens) → sink in.
+  deathStyle?: 'deflate' | 'topple';   // 'deflate' = mushroom (face-first → flatten → sink);
+                              // 'topple' = heel-pivot backward fall, slope-aware; corpse persists in challenges.
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -308,7 +310,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
     tumbleYaw: 0, bulletTumble: false, killFired: false,
     // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
-    beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0 });
+    beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0, beDone: false });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -614,28 +616,45 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     //    spin-fall as the stagger (360°+90° to flat, back/face by direction), then
     //    lies flat and sinks into the ground → despawn. Overrides the per-monster
     //    death style so every bullseye kill gets the signature fall. ──
-    if (inst.dead && inst.bullseyeAt) {
-      if (s.beFor !== inst.bullseyeAt) { s.beFor = inst.bullseyeAt; s.beSlideV = 0; s.beSliding = false; s.beFell = false; s.beFellVY = 0; s.beSettledAt = 0; }
-      const bdx = inst.bullseyeDirX ?? 0, bdz = inst.bullseyeDirZ ?? 1;
-      const FALL = 333, LIE = 2500, SINK = 3000;
+    if (inst.dead && (inst.bullseyeAt || c.deathStyle === 'topple')) {
+      if (s.beDone) return;   // finalized challenge corpse: transform + collider frozen, zero per-frame cost
+      const key = inst.bullseyeAt || inst.deadAt;
+      if (s.beFor !== key) { s.beFor = key; s.beSlideV = 0; s.beSliding = false; s.beFell = false; s.beFellVY = 0; s.beSettledAt = 0; }
+      // Bullseye kills fall in the BULLET direction; a normal topple falls straight BACKWARD
+      // (away from the monster's facing) so it lands on its back, pivoting over the heels.
+      const bdx = inst.bullseyeAt ? (inst.bullseyeDirX ?? 0) : -Math.sin(inst.yaw);
+      const bdz = inst.bullseyeAt ? (inst.bullseyeDirZ ?? 1) : -Math.cos(inst.yaw);
+      const inChal = getChallengeState().active;
+      const FALL = 380, LIE = 2500, SINK = 3000;
       const settle = bullseyeSettle(s, bdx, bdz, H, delta);      // slide/fall-off/rest on terrain
       const td = now - inst.deadAt;
       const fellIn = td >= FALL;
+      play(clips.idle);   // freeze the body; the fall is procedural (the death CLIP spins about the mesh centre → floats)
       if (!fellIn || settle.moving) {                            // still tipping in, sliding, or falling off
         const e = Math.min(1, td / FALL), eo = e * e * (3 - 2 * e);
         bullseyeQuat(g.quaternion, inst.yaw, 0, fellIn ? settle.tip : settle.tip * eo, bdx, bdz);
         g.position.set(s.x, s.y, s.z);
         s.beSettledAt = 0;
-      } else {                                                   // at rest on the slope → lie, then sink
+      } else {                                                   // at rest on the slope
         if (s.beSettledAt === 0) s.beSettledAt = now;
         const held = now - s.beSettledAt;
         bullseyeQuat(g.quaternion, inst.yaw, 0, settle.tip, bdx, bdz);
-        const yOff = held >= LIE ? -H * Math.min(1, (held - LIE) / SINK) : 0;
-        g.position.set(s.x, s.y + yOff, s.z);
-        if (!inst.despawned && held > LIE + SINK) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+        if (inChal) {
+          // Challenge corpse: STAYS put (piles up) with a low collider until the challenge ends
+          // (ChallengeRunner clears all mobs on finish/stop/player-death).
+          g.position.set(s.x, s.y, s.z);
+          const cr = Math.max(0.4, H * 0.3);
+          box.min.set(s.x - cr, s.y, s.z - cr);
+          box.max.set(s.x + cr, s.y + Math.max(0.5, H * 0.3), s.z + cr);
+          worldCollisionGrid.update(box);
+          s.beDone = true;                                       // freeze: stop per-frame terrain settle
+        } else {                                                 // open world: lie, then sink → despawn
+          const yOff = held >= LIE ? -H * Math.min(1, (held - LIE) / SINK) : 0;
+          g.position.set(s.x, s.y + yOff, s.z);
+          if (!inst.despawned && held > LIE + SINK) { inst.despawned = true; cfg.onDespawn?.(inst.id); }
+        }
       }
       inst.x = g.position.x; inst.y = g.position.y; inst.z = g.position.z;
-      play(clips.idle);
       return;
     }
 
@@ -715,6 +734,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // ── DEATH: play the death clip once, slide out the last knockback, then despawn ──
     if (inst.dead) {
+      if (s.beDone) return;   // finalized challenge corpse: frozen
       if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }  // kill the spin whir
       play(clips.death, true);
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
@@ -722,7 +742,18 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
       g.position.set(s.x, s.y, s.z);
       inst.x = s.x; inst.y = s.y; inst.z = s.z;
-      if (!inst.despawned && now - inst.deadAt > DEATH_DESPAWN_MS) {
+      // In a challenge the corpse STAYS (with a low collider) and piles up until the challenge
+      // ends; in the open world it despawns after the death clip. (Deflate/spintroll deaths
+      // handled above are exempt — they disappear by design.)
+      if (getChallengeState().active) {
+        if (now - inst.deadAt > DEATH_DESPAWN_MS) {
+          const cr = Math.max(0.4, H * 0.3);
+          box.min.set(s.x - cr, s.y, s.z - cr);
+          box.max.set(s.x + cr, s.y + Math.max(0.5, H * 0.3), s.z + cr);
+          worldCollisionGrid.update(box);
+          s.beDone = true;   // freeze the corpse
+        }
+      } else if (!inst.despawned && now - inst.deadAt > DEATH_DESPAWN_MS) {
         inst.despawned = true; cfg.onDespawn?.(inst.id);
       }
       return;

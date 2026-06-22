@@ -8,7 +8,7 @@ import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
-export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 export type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
                    desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -44,7 +44,9 @@ export const CFG: Partial<Record<MType, {
   attackRange?: number; attackMs?: number;
   attackStyle?: 'spin-lunge'; hitSound?: string; missSound?: string; attackSound?: string; roarSound?: string;
   walkSound?: string; hurtSound?: string; lungeOnSwing?: boolean; callSound?: string; annoyedSound?: string;
-  bulletTumble?: boolean; deathStyle?: 'deflate';
+  bulletTumble?: boolean; deathStyle?: 'deflate' | 'topple';
+  clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
+  zombie?: boolean;   // false = a distinct creature (no horde size/speed/desat jitter)
 }>> = {
   1: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 1.8,  speed: 3.2, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.30, health: 100, attackRange: 1.2, attackMs: 1200, meleeContact: { dmg: [10, 50], kb: [3, 7], cooldownMs: 1200 }, attackSound: '/demon_attack.mp3', missSound: '/swoosh_miss_low.mp3', roarSound: '/demon_roar_1.mp3', lungeOnSwing: true },
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [3, 17], kb: [1, 5], cooldownMs: 1200 }, attackStyle: 'spin-lunge', hitSound: '/little_slap.mp3', missSound: '/swoosh_miss_high.mp3', bulletTumble: true, deathStyle: 'deflate' },
@@ -62,6 +64,19 @@ export const CFG: Partial<Record<MType, {
   // The BIG original red demon — its own monster, separate from the small Demon Horde (#1). Same
   // model + sounds for now, but independently tunable (HP/damage/AI/sounds).
   8: { url: '/siege/monsters/reddemon.glb',          modelHeight: 1.886, height: 4.0,  speed: 3.2, gait: 'climb', sizeJitter: 0.05, speedJitter: 0.10, health: 1000, noStun: true, attackRange: 2.2, attackMs: 1500, meleeContact: { dmg: [20, 60], kb: [4, 9], cooldownMs: 1500 }, attackSound: '/demon_attack.mp3', missSound: '/swoosh_miss_low.mp3', roarSound: '/demon_roar_1.mp3' },
+
+  // ── FantasyRivals set (10-17). Shared BASIC melee fighting style for now; per-monster
+  //    behaviors/effects/AI come next. Heel-pivot backward topple death (deathStyle 'topple').
+  //    The 7 non-ForestGuardian monsters walk with their clean 'run' clip; attacks use the
+  //    sword strike clip. modelHeight 2.0 matches the rebake (scale = height/2). ──
+  10: { url: '/siege/monsters/slayer.glb',          modelHeight: 2.0, height: 2.0,  speed: 3.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 100, animSpeed: 1.0,  zombie: false, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [6, 14],  kb: [2, 5],  cooldownMs: 1200 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  11: { url: '/siege/monsters/pigbutcher.glb',      modelHeight: 2.0, height: 2.2,  speed: 2.8, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 110, animSpeed: 1.0,  zombie: false, attackRange: 1.9, attackMs: 1300, meleeContact: { dmg: [7, 17],  kb: [2, 5],  cooldownMs: 1300 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  12: { url: '/siege/monsters/mutant.glb',          modelHeight: 2.0, height: 2.6,  speed: 3.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 130, animSpeed: 1.0,  zombie: false, attackRange: 2.1, attackMs: 1100, meleeContact: { dmg: [9, 21],  kb: [2, 6],  cooldownMs: 1100 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  13: { url: '/siege/monsters/forestguardian.glb',  modelHeight: 2.0, height: 3.5,  speed: 2.5, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 175, animSpeed: 0.85, zombie: false, attackRange: 2.6, attackMs: 1500, meleeContact: { dmg: [14, 30], kb: [3, 7],  cooldownMs: 1500 }, deathStyle: 'topple', clips: { attack: 'weapon_strike1' } },
+  14: { url: '/siege/monsters/barbariangiant.glb',  modelHeight: 2.0, height: 6.0,  speed: 2.6, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 300, animSpeed: 0.65, zombie: false, attackRange: 3.8, attackMs: 1800, meleeContact: { dmg: [22, 48], kb: [4, 9],  cooldownMs: 1800 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  15: { url: '/siege/monsters/elementalgolem.glb',  modelHeight: 2.0, height: 8.0,  speed: 2.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 400, animSpeed: 0.55, zombie: false, attackRange: 4.6, attackMs: 2000, meleeContact: { dmg: [30, 60], kb: [5, 11], cooldownMs: 2000 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  16: { url: '/siege/monsters/mechanicalgolem.glb', modelHeight: 2.0, height: 10.0, speed: 2.4, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 500, animSpeed: 0.5,  zombie: false, attackRange: 5.4, attackMs: 2000, meleeContact: { dmg: [38, 72], kb: [6, 12], cooldownMs: 2000 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
+  17: { url: '/siege/monsters/fortgolem.glb',       modelHeight: 2.0, height: 12.0, speed: 2.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 600, animSpeed: 0.45, zombie: false, attackRange: 6.4, attackMs: 2200, meleeContact: { dmg: [48, 92], kb: [7, 14], cooldownMs: 2200 }, deathStyle: 'topple', clips: { walk: 'run', attack: 'weapon_strike1' } },
 };
 
 // Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.
@@ -75,6 +90,14 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 7, name: 'Spintroll',                baseHeight: 3.0,  baseHealth: 200 },
   { id: 8, name: 'Red Demon',                baseHeight: 4.0,  baseHealth: 1000 },
   { id: 9, name: 'Ghost',                    baseHeight: 4.0,  baseHealth: 100 },
+  { id: 10, name: 'Slayer',                  baseHeight: 2.0,  baseHealth: 100 },
+  { id: 11, name: 'Pig Butcher',             baseHeight: 2.2,  baseHealth: 110 },
+  { id: 12, name: 'Mutant',                  baseHeight: 2.6,  baseHealth: 130 },
+  { id: 13, name: 'Forest Guardian',         baseHeight: 3.5,  baseHealth: 175 },
+  { id: 14, name: 'Barbarian Giant',         baseHeight: 6.0,  baseHealth: 300 },
+  { id: 15, name: 'Elemental Golem',         baseHeight: 8.0,  baseHealth: 400 },
+  { id: 16, name: 'Mechanical Golem',        baseHeight: 10.0, baseHealth: 500 },
+  { id: 17, name: 'Fort Golem',              baseHeight: 12.0, baseHealth: 600 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
@@ -95,7 +118,8 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ri
     <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
       modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={400}
       speed={(o?.speed ?? m!.speed) * sp} wanderRadius={6} health={(o?.health ?? m!.health) * hp}
-      animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie gait={m?.gait ?? 'climb'}
+      animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
+      clips={m?.clips}
       sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
       desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed} colorMods={color}
       moanSounds={o ? HORDE6_MOANS : undefined}

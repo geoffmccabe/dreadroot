@@ -237,7 +237,10 @@ export function SiegeNewMonsterLineup() {
     // The 7 non-ForestGuardian monsters shipped with a sideways STRAFE clip baked as 'walk'
     // (legs cross). Their 'run' is a clean forward locomotion, so use it for walking too.
     // ForestGuardian's 'walk' is correct, so leave it alone.
-    if (mon.glb !== 'forestguardian') props.clips = { walk: 'run' };
+    // Attack uses the sword strike clip; the 7 non-ForestGuardian monsters walk with 'run'.
+    props.clips = mon.glb === 'forestguardian'
+      ? { attack: 'weapon_strike1' }
+      : { walk: 'run', attack: 'weapon_strike1' };
     if (mon.glb === 'elementalgolem') {
       props.clips = { ...props.clips, walk: 'run', attack: 'weapon_strike1' };   // throw uses Attack #1
       Object.assign(props, {
@@ -280,7 +283,8 @@ export function SiegeNewMonsterLineup() {
       {spawned.map((s) => (
         <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
           modelHeight={INTRINSIC} height={s.mon.height} speed={s.mon.speed} animSpeed={s.mon.animSpeed}
-          health={healthFor(s.mon.height)} gait="climb" {...extraProps(s.mon)} />
+          health={healthFor(s.mon.height)} gait="climb" deathStyle="topple" attackRange={Math.max(1.6, s.mon.height * 0.5 + 0.8)} attackMs={1400}
+          meleeContact={{ dmg: [s.mon.height * 3, s.mon.height * 7], kb: [2, 8], cooldownMs: 1300 }} {...extraProps(s.mon)} />
       ))}
       <BoulderField />
     </Suspense>
