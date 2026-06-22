@@ -58,6 +58,11 @@ export async function validatePlacement(worldId: string, bounds: FortressBounds)
       return { ok: false, reason: 'There are already blocks in that space.' };
     }
   } catch { /* query failed — fall through (don't hard-block on a transient error) */ }
+  // NOTE: build PERMISSIONS (owner + tribe only) are scaffolded in fortressTribe.ts but not
+  // enforced yet — the owner placing their own fortress here is always allowed. The tribe
+  // gate (blocking OTHER players from building in this zone) wires into the shared block-
+  // placement path when the Tribe UI ships. [TODO: tribe]
+  //
   // 3) Overlap with another fortress (including its courtyard).
   try {
     const { data } = await (supabase as any)
