@@ -69,7 +69,7 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyL', key: 'L', name: 'Swamp Marshland', mapId: 'swamp-demo', pos: [0, 3, 0] },
   { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
   // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
-  { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [0, 3, 0] },
+  { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 }, // laser readout yaw 183.9°, pitch 5.2°
   // "Various 2" component sampler grids (loose pieces for map/challenge building).
   { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
   { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
