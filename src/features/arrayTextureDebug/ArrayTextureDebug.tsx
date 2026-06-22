@@ -10,6 +10,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { getArrayTextureManager } from '@/lib/arrayTextureManager';
 import { flushPendingRegistrations, getRegisteredEntries } from '@/lib/arrayTextureRegistry';
 import { isArrayBackend } from '@/config/textureBackend';
+import { initKtx2 } from '@/lib/ktx2Runtime';
 import { arrayDebug, useArrayDebug } from './arrayDebugStore';
 
 // Synthetic test tile → data URL (coloured background + index number).
@@ -54,6 +55,9 @@ export function ArrayTextureDebug() {
     if (isArrayBackend() || snap.open) {
       getArrayTextureManager().init(gl);
       flushPendingRegistrations();
+      // Phase 4a: stand up the KTX2 runtime + detect the device's compressed format
+      // (needs a live renderer). Cheap; no textures loaded until something asks.
+      initKtx2(gl);
     }
   }, [snap.open, gl]);
 

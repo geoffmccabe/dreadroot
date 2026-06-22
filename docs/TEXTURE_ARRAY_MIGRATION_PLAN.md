@@ -104,6 +104,22 @@ renderer (this merges the old "blocks" + "trees" phases — same renderer):
   button). Load the `*_url_ktx2` siblings; transcode to the device's compressed format.
   ~4× VRAM saving → more resident layers. Keep uncompressed fallback for unsupported
   devices.
+- **Slice 4a — runtime foundation [DONE].** Basis *transcoder* (decoder) wasm copied to
+  `/public/basis/`; `src/lib/ktx2Runtime.ts` wraps `KTX2Loader` (singleton +
+  `detectSupport(gl)` + `loadKtx2(url)` → CompressedTexture + probe). Inited from
+  `ArrayTextureDebug` alongside the engine. Admin panel "Probe KTX2 decode" button loads
+  a real `.ktx2` from `shombie_definitions` and reports the device format / size / mips.
+  No render-path change.
+- **Slice 4b — compressed array.** Make the engine hold a `CompressedArrayTexture`:
+  transcode each `.ktx2` and write its (pre-baked) mip levels into a layer via
+  `compressedTexSubImage3D`. No runtime mip-gen (compressed). All layers share ONE format
+  + size (256²).
+- **Slice 4c — fallback rule.** Single texture = one format, so keep the RGBA array as
+  fallback; use the compressed array when the texture has a `.ktx2` AND the device
+  supports the format. Audit KTX2 coverage; flag gaps.
+- **Slice 4d — wire monsters + measure + ship.** Point the monster path at the compressed
+  array, backfill missing monster KTX2, measure VRAM/heap drop; if ~4× lighter, flip the
+  default to `array` (monster-only) → shombie fix goes live.
 
 ### Phase 5 — Streaming, eviction & UGC at scale
 - Tune LRU for world/challenge switching; prefetch a world's set on enter.

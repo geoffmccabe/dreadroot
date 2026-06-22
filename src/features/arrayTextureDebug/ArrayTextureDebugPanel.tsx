@@ -2,17 +2,42 @@
 // Buttons load synthetic tiles, stress-load to force LRU eviction, and clear. The grid
 // of layer-quads renders in the Canvas (ArrayTextureDebug). Proves the engine before
 // any renderer uses it. Does nothing in the live render path.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useUserData } from '@/hooks/useUserData';
 import { GamePanel } from '@/components/ui/GamePanel';
 import { Button } from '@/components/ui/button';
 import { isArrayBackend, setTextureBackend } from '@/config/textureBackend';
+import { supabase } from '@/integrations/supabase/client';
+import { loadKtx2, isKtx2Ready } from '@/lib/ktx2Runtime';
 import { arrayDebug, useArrayDebug } from './arrayDebugStore';
 
 export function ArrayTextureDebugPanel() {
   const { userRoles } = useUserData();
   const isAdmin = !!userRoles?.some((r: string) => r === 'admin' || r === 'superadmin');
   const snap = useArrayDebug();
+  const [ktx2Status, setKtx2Status] = useState<string>('');
+
+  // Phase 4a proof: grab a real `.ktx2` from the DB, decode it via the runtime, and show
+  // the device's transcoded format + dimensions + mip count. Confirms the decode path
+  // works end-to-end before 4b wires it into the compressed array.
+  const probeKtx2 = async () => {
+    setKtx2Status('probing…');
+    if (!isKtx2Ready()) { setKtx2Status('runtime not inited (flip to ARRAY + reload)'); return; }
+    try {
+      const { data } = await supabase
+        .from('shombie_definitions' as never)
+        .select('texture_url_ktx2')
+        .not('texture_url_ktx2', 'is', null)
+        .limit(1);
+      const url = (data?.[0] as { texture_url_ktx2?: string } | undefined)?.texture_url_ktx2;
+      if (!url) { setKtx2Status('no encoded .ktx2 found in shombie_definitions'); return; }
+      const { texture, probe } = await loadKtx2(url);
+      setKtx2Status(`${probe.formatLabel} · ${probe.width}×${probe.height} · ${probe.mipCount} mips · ${probe.compressed ? 'COMPRESSED ✓' : 'rgba fallback'}`);
+      texture.dispose();
+    } catch (e) {
+      setKtx2Status('load failed: ' + ((e as Error)?.message ?? String(e)));
+    }
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -78,6 +103,12 @@ export function ArrayTextureDebugPanel() {
         <div className="text-[10px] opacity-50">
           The coloured numbered grid in front of you is each tile sampled from its own array layer
           (proves sampler2DArray works). Stress-load forces LRU eviction — watch Evictions climb.
+        </div>
+        <div className="border-t border-white/10 pt-2 space-y-1">
+          <Button size="sm" variant="outline" className="w-full" onClick={() => { void probeKtx2(); }}>
+            Probe KTX2 decode (Phase 4a)
+          </Button>
+          {ktx2Status && <div className="text-[10px] font-mono opacity-80 break-all">{ktx2Status}</div>}
         </div>
       </div>
     </GamePanel>
