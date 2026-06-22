@@ -10,10 +10,13 @@ export function ShadowToggleSync() {
   const { gl, scene } = useThree();
   const enabled = useShadowsEnabled();
 
-  // '-' / '_' key toggles shadows (single press; the key is otherwise unused).
+  // The UNDERSCORE character ('_' = Shift+Minus) toggles shadows. Match e.key === '_', NOT
+  // e.code === 'Minus' — the latter is the same physical key as '-', so it (and its
+  // preventDefault) was hijacking plain Cmd+'-' and blocking Chrome's zoom-out. Plain '-'
+  // (with or without Cmd) now passes straight through to the browser.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== 'Minus') return;
+      if (e.key !== '_') return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       e.preventDefault();
