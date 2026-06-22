@@ -7,13 +7,10 @@ import { useSyncExternalStore } from 'react';
 
 export interface LobbyZone { id: 'vault' | 'market' | 'forge'; x: number; z: number; r: number; }
 // Engine-space points + radii from the user's laser readout.
-// TODO(forge-coords): replace the forge x/z below with the real laser readout for the lobby
-// forge. Placeholder for now (offset from market) so the zone exists but won't trigger at the
-// right spot until the true coordinates are dropped in.
 export const SIEGE_LOBBY_ZONES: LobbyZone[] = [
-  { id: 'vault',  x: -90.335, z: 308.073, r: 4 },
-  { id: 'market', x: -83.886, z: 325.554, r: 3 },
-  { id: 'forge',  x: -77.000, z: 315.000, r: 3 },
+  { id: 'vault',  x: -90.335,  z: 308.073, r: 4 },
+  { id: 'market', x: -83.886,  z: 325.554, r: 3 },
+  { id: 'forge',  x: -101.840, z: 327.472, r: 3 },
 ];
 
 let vaultInRange = false;
