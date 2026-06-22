@@ -317,6 +317,12 @@ export function FortressScene({
       if (activeGame === 'siege-worlds') {
         if (wasGame && wasGame !== 'siege-worlds') drReturnPosRef.current = camera.position.clone();
         setWorldSwapTarget(siegeSpawn.clone());
+        // Apply the world's spawn facing (yaw/pitch radians) via the controls' view setter.
+        const sp = activeWorld.spawn;
+        if (sp.yaw != null) {
+          const sv = (window as unknown as { __siegeSetView?: (y: number, p?: number) => void }).__siegeSetView;
+          if (sv) setTimeout(() => sv(sp.yaw!, sp.pitch ?? 0), 0);
+        }
         // Drop DreadRoot colliders so they aren't invisible walls in Siege maps:
         // the voxel block field AND the central fortress structure boxes (at the origin).
         worldCollisionGrid.clearVoxels();
