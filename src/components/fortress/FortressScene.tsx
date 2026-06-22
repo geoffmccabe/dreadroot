@@ -1112,14 +1112,16 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   
   // Wisp block system
   const { blocks: allBlocks, blocksMap } = useBlocksData();
-  const basicBlocks = useMemo(() => 
-    allBlocks.filter(block => block.class === 'basic'),
+  // Only wisp-class blocks (the 10 tiers) can now spawn as the in-game wisp.
+  // The hook weights selection by tier (tier 1 common ... tier 10 ultra-rare).
+  const wispBlocks = useMemo(() =>
+    allBlocks.filter(block => block.class === 'wisp'),
     [allBlocks]
   );
   // Store blocksMap in ref to access in useFrame without stale closures
   const blocksMapRef = useRef(blocksMap);
   blocksMapRef.current = blocksMap;
-  const { wispState, wispPositionRef, collectWisp } = useWispBlock(basicBlocks, blocks);
+  const { wispState, wispPositionRef, collectWisp } = useWispBlock(wispBlocks, blocks);
   const wispMeshRef = useRef<THREE.Mesh | null>(null);
   
   // Wisp particles - use refs to avoid useFrame setState

@@ -1555,7 +1555,7 @@ export function Fortress() {
 
   // Block rain trigger
   const handleBlockRain = useCallback(() => {
-    let blockTypes = ['fortress_block', 'grass_block', 'crystal_block'];
+    let blockTypes = ['fortress_block', 'grass_block', 'glowing_block'];
     let rainSettings = {
       blocksPerSecond: 10,
       totalBlocks: 100,

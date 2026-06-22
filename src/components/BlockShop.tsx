@@ -31,6 +31,7 @@ const getRarityColor = (rarity: string) => {
     case 'mystic': return 'bg-indigo-100 text-indigo-800';
     case 'rainbow': return 'bg-gradient-to-r from-red-100 via-purple-100 to-blue-100 text-gray-800';
     case 'apocalyptic': return 'bg-red-100 text-red-800';
+    case 'cosmic': return 'bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-500 text-amber-900';
     case 'infinite': return 'bg-cyan-100 text-cyan-800';
     default: return 'bg-gray-100 text-gray-800';
   }
@@ -90,7 +91,7 @@ const SeedIcon: React.FC<{ textureUrl: string | null }> = ({ textureUrl }) => {
   );
 };
 
-type ShopTab = 'seed' | 'fruit' | 'magic' | 'mystery' | 'iconic';
+type ShopTab = 'seed' | 'fruit' | 'magic' | 'mystery' | 'iconic' | 'wisp';
 
 export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPurchased }) => {
   const { user } = useAuth();
@@ -198,12 +199,13 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
         </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ShopTab)} className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="seed">SEED</TabsTrigger>
             <TabsTrigger value="fruit">FRUIT</TabsTrigger>
             <TabsTrigger value="magic">MAGIC</TabsTrigger>
             <TabsTrigger value="mystery">MYSTERY</TabsTrigger>
             <TabsTrigger value="iconic">ICONIC</TabsTrigger>
+            <TabsTrigger value="wisp">WISP</TabsTrigger>
           </TabsList>
           
           <TabsContent value={activeTab} className="space-y-4 max-h-96 overflow-y-auto mt-4">
@@ -281,8 +283,16 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
                     </p>
                     
                     <div className="flex items-center gap-2 flex-wrap">
-                      <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
-                      <span className="text-sm font-medium">{block.cost} coins</span>
+                      {activeTab === 'wisp' ? (
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Only obtainable by shooting a wisp
+                        </span>
+                      ) : (
+                        <>
+                          <img src={coinImageUrl} alt="coin" className="w-4 h-4" />
+                          <span className="text-sm font-medium">{block.cost} coins</span>
+                        </>
+                      )}
                       <Badge variant="outline" className="text-xs">
                         {activeTab === 'fruit' ? 'FRUIT' : block.category.toUpperCase()}
                       </Badge>
@@ -291,19 +301,23 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
                       </Badge>
                     </div>
                   </div>
-                  
+
                   <div className="text-center flex-shrink-0">
                     <div className="text-xs text-muted-foreground mb-2">
                       Owned: {getBlockQuantity(block.key)}
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleBuyBlock(block.key, block.cost)}
-                      disabled={!profile || profile.coins < block.cost || isPurchasing}
-                      className="min-w-[60px]"
-                    >
-                      Buy
-                    </Button>
+                    {activeTab === 'wisp' ? (
+                      <Badge variant="secondary" className="text-xs">Wisp drop</Badge>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => handleBuyBlock(block.key, block.cost)}
+                        disabled={!profile || profile.coins < block.cost || isPurchasing}
+                        className="min-w-[60px]"
+                      >
+                        Buy
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

@@ -18,8 +18,13 @@ const MAP_BOUNDS = {
   maxY: 10.5
 };
 
+// Spawn weight by tier: tier 1 = 512 ... tier 10 = 1 (2^(10-tier)).
+// Total 1023 → tier 1 ≈ 50.05%, tier 10 ≈ 0.098%, matching the design chart.
+const wispTierWeight = (tier: number | undefined): number =>
+  Math.pow(2, 10 - Math.max(1, Math.min(10, tier ?? 1)));
+
 export const useWispBlock = (
-  basicBlocks: BlockType[],
+  wispBlocks: BlockType[],
   placedBlocks: PlacedBlock[]
 ) => {
   const [wispState, setWispState] = useState<WispState | null>(null);
@@ -68,11 +73,18 @@ export const useWispBlock = (
 
   // Spawn new wisp
   const spawnWisp = useCallback(() => {
-    if (basicBlocks.length === 0) return;
-    
-    // Select random basic block
-    const randomBlock = basicBlocks[Math.floor(Math.random() * basicBlocks.length)];
-    
+    if (wispBlocks.length === 0) return;
+
+    // Weighted random by tier (rarer tiers far less likely to appear).
+    let total = 0;
+    for (const b of wispBlocks) total += wispTierWeight(b.tier);
+    let r = Math.random() * total;
+    let randomBlock = wispBlocks[0];
+    for (const b of wispBlocks) {
+      r -= wispTierWeight(b.tier);
+      if (r <= 0) { randomBlock = b; break; }
+    }
+
     // Random lifetime between 5-30 seconds
     const lifetime = 5000 + Math.random() * 25000;
     
@@ -95,7 +107,7 @@ export const useWispBlock = (
     lifetimeCheckRef.current = setTimeout(() => {
       spawnWisp(); // Respawn at new location
     }, lifetime);
-  }, [basicBlocks, generateRandomPosition]);
+  }, [wispBlocks, generateRandomPosition]);
 
   // Move wisp 2-4 blocks in random direction (jumps around quickly)
   const moveWisp = useCallback(() => {
@@ -175,7 +187,7 @@ export const useWispBlock = (
 
   // Initialize wisp on mount
   useEffect(() => {
-    if (basicBlocks.length > 0) {
+    if (wispBlocks.length > 0) {
       spawnWisp();
     }
     
@@ -187,7 +199,7 @@ export const useWispBlock = (
         clearTimeout(lifetimeCheckRef.current);
       }
     };
-  }, [basicBlocks.length, spawnWisp]);
+  }, [wispBlocks.length, spawnWisp]);
 
   // Set up movement interval
   useEffect(() => {
