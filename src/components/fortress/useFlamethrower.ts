@@ -12,6 +12,7 @@ import { QuarksLoader, BatchedParticleRenderer, ParticleSystem, ParticleEmitter 
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { getFlameGlove } from '@/config/flameGlove';
 
 // Flame Glove constants
 const MAX_USE_DURATION = 10; // seconds
@@ -53,8 +54,10 @@ const _tempDir = new THREE.Vector3();
 const _tempEnemyDir = new THREE.Vector3();
 // 180° rotation around Y to flip particles from +Z (cone emitter default) to -Z (camera look direction)
 const _flipQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
-// Offset so flame originates from the left side of view (flame glove hand position)
+// Offset so flame originates from the HAND that holds the glove. Left hand = left side
+// (x negative); right hand mirrors to the right (x positive). Magnitude is shared.
 const _localOffset = new THREE.Vector3(-0.35, -0.15, -0.3);
+const FLAME_HAND_X = Math.abs(_localOffset.x);   // 0.35 — mirrored by hand each frame
 const _worldOffset = new THREE.Vector3();
 
 export function useFlamethrower(config: FlamethrowerConfig) {
@@ -531,12 +534,17 @@ export function useFlamethrower(config: FlamethrowerConfig) {
       return;
     }
 
-    // Position the flame at camera with left-side offset (flame glove hand)
-    // Cone emitter fires along +Z, but camera looks along -Z, so flip 180° around Y
+    // Position the flame at the camera, offset to the HAND that holds the glove. Right hand =
+    // mirror to the right side (+x) and flip the visual horizontally (negative x-scale) so it
+    // reads as a right-hand flame aiming toward the middle; left hand keeps the original look.
+    // Cone emitter fires along +Z, but camera looks along -Z, so flip 180° around Y.
     const group = loadedGroupRef.current;
-    _worldOffset.copy(_localOffset).applyQuaternion(camera.quaternion);
+    const isRightHand = getFlameGlove()?.hand === 'R';
+    _worldOffset.set(isRightHand ? FLAME_HAND_X : -FLAME_HAND_X, _localOffset.y, _localOffset.z)
+      .applyQuaternion(camera.quaternion);
     group.position.copy(camera.position).add(_worldOffset);
     group.quaternion.copy(camera.quaternion).multiply(_flipQuat);
+    group.scale.x = Math.abs(group.scale.x) * (isRightHand ? -1 : 1);
   });
 
   // Cone-based enemy hit detection (call from frame loop)
