@@ -8,9 +8,10 @@ import { useSyncExternalStore } from 'react';
 
 let hitboxes = false;
 let paused = false;
-// TEMP (testing): when true, ANY headshot counts as a bullseye, so the bullseye
-// effects are easy to trigger without hitting the tiny gold box. Toggle with `!ba`.
-let bullseyeAnyHead = true;
+// TESTING aid: when true, ANY headshot counts as a bullseye, so the bullseye
+// effects are easy to trigger without hitting the tiny gold box. Default OFF so
+// the real (small, head-centered) bullseye box is used in play. Toggle with `!a`.
+let bullseyeAnyHead = false;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
