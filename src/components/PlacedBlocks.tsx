@@ -5,6 +5,7 @@ import { PlacedBlock, BlockType } from '@/types/blocks';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { InstancedBlockGroup, clearTextureCache as clearInstancedTextureCache } from './InstancedBlockGroup';
 import { InstancedAtlasBlockGroup } from './InstancedAtlasBlockGroup';
+import { InstancedFruitGroup } from './InstancedFruitGroup';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { frameLoop } from '@/lib/frameLoop';
 // collisionGrid import removed — collision handled by useChunkLoader (ensureBlockCollider)
@@ -484,6 +485,19 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [atlasTreeBlocks, seedState.version]);
 
+  // Split fruit out of the atlas list: fruit render in their own instanced
+  // group (InstancedFruitGroup) with a pulsing emissive glow. Removing them
+  // from the atlas group guarantees one renderer per fruit (no z-fighting).
+  const { fruitBlocks, atlasNonFruitBlocks } = useMemo(() => {
+    const fruit: PlacedBlock[] = [];
+    const rest: PlacedBlock[] = [];
+    for (const b of culledAtlasTreeBlocks) {
+      if (getBaseTreeBlockType(b.block_type) === 'fruit') fruit.push(b);
+      else rest.push(b);
+    }
+    return { fruitBlocks: fruit, atlasNonFruitBlocks: rest };
+  }, [culledAtlasTreeBlocks]);
+
   // Log render state to init overlay (once per session)
   if (!_loggedTreeBlocksReady && atlasTreeBlocks.length > 0) {
     _loggedTreeBlocksReady = true;
@@ -515,7 +529,7 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
       {atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0 && (
         <InstancedAtlasBlockGroup
           key="tree-atlas"
-          blocks={culledAtlasTreeBlocks}
+          blocks={atlasNonFruitBlocks}
           blockDef={TREE_BLOCK_FALLBACK}
           geometry={geometry}
           atlasTexture={atlasTexture}
@@ -525,6 +539,15 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
           hoveredBlockId={hoveredBlockId}
           onMeshReady={onMeshReady ? (mesh) => onMeshReady('tree_atlas', mesh) : undefined}
           performanceMode={effectivePerformanceMode}
+        />
+      )}
+
+      {/* Fruit (seeds): own instanced group with a GPU pulsing glow */}
+      {atlasReady && atlasTexture && fruitBlocks.length > 0 && (
+        <InstancedFruitGroup
+          key="fruit-glow"
+          blocks={fruitBlocks}
+          atlasTexture={atlasTexture}
         />
       )}
 
