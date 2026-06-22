@@ -7,8 +7,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // Gate opening (meadow warpgate at (-91,24,301.5); opening faces +Z toward the lobby).
-const PORTAL_POS: [number, number, number] = [-91, 28, 299.5]; // moved a further 1m from spawn (−z)
-const PORTAL_W = 4.6 * 0.8;   // 80% diameter
+const PORTAL_POS: [number, number, number] = [-91, 28, 299.2]; // back another 30cm from spawn (−z)
+const PORTAL_W = 4.6 * 0.8 * 1.15;   // +15% width so the oval reads round
 const PORTAL_H = 6.0 * 0.8;
 
 const FRAG = `
@@ -34,12 +34,16 @@ void main(){
   // whirling, cycling colors
   vec3 col = hue(ang / 6.28318 + r * 0.5 + uTime * 0.08);
   col = mix(col, hue(uTime * 0.13 + f), 0.5);
-  col *= (0.35 + 0.85 * spiral) * (0.55 + 0.85 * f);
+  col *= (0.55 + 0.75 * spiral) * (0.7 + 0.6 * f);
   // bright pulsing core sucked toward the center
-  col += vec3(0.6, 0.75, 1.0) * smoothstep(0.55, 0.0, r) * (0.55 + 0.45 * sin(uTime * 3.0));
-  // oval mask: opaque swirl, soft fade at the rim
-  float mask = smoothstep(1.0, 0.72, r);
-  gl_FragColor = vec4(col, mask);
+  col += vec3(0.6, 0.75, 1.0) * smoothstep(0.6, 0.0, r) * (0.7 + 0.3 * sin(uTime * 3.0));
+  // Brighten + keep a floor so it never reads as "just dark colors", and stays vivid against
+  // the bright sky (normal-blended, so unlike additive it doesn't wash out over white).
+  col = col * 1.7 + 0.06;
+  // Mostly-opaque disc (so you can't see sky through it) with a quick soft fade only at the rim.
+  float mask = smoothstep(1.0, 0.9, r);
+  float alpha = max(mask * 0.92, mask * clamp(length(col) * 0.7, 0.0, 1.0));
+  gl_FragColor = vec4(col, alpha);
 }`;
 
 const VERT = `
