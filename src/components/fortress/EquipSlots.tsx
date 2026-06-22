@@ -177,10 +177,19 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   // True when this slot's item is currently riding the cursor (drag-out / pickup in progress).
   const isGhosted = (slot: number) => cursor?.origin.region === 'equip' && cursor.origin.slot === slot;
 
+  // A flame glove fires via the FLAME path (setFlameGlove below + the flame-button bindings),
+  // NEVER as a gun — even though its weapon_stats row carries is_gun=true (so the equip slot
+  // accepts it). It must not populate the active/right weapon store, or in the RIGHT hand the
+  // left mouse button would fall back to it (getFireWeapon) and fire BULLETS with the flame
+  // sound. Detect by name, same as the publish effect below.
+  const isGloveItem = (it: EquipItem | null) => !!it?.name && it.name.toLowerCase().includes('flame glove');
+  const leftIsGlove = isGloveItem(equip[1]);
+  const rightIsGlove = isGloveItem(equip[5]);
+
   // LEFT hand (slot 1) drives the primary active weapon + leftKind (rifle vs pistol).
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
   useEffect(() => {
-    if (weaponItemNumber == null) { setActiveWeapon(null); setLeftKind(null); return; }
+    if (weaponItemNumber == null || leftIsGlove) { setActiveWeapon(null); setLeftKind(null); return; }
     let cancelled = false;
     (async () => {
       const { stats, kind } = await loadWeaponStats(weaponItemNumber);
@@ -188,14 +197,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       setActiveWeapon(stats); setLeftKind(kind);
     })();
     return () => { cancelled = true; };
-  }, [weaponItemNumber]);
+  }, [weaponItemNumber, leftIsGlove]);
 
   // RIGHT hand (slot 5) drives the second weapon. ANY gun here is fireable (left-click
   // falls back to it; with a left pistol too, right-click fires it). If the left holds a
   // rifle (two-handed) it owns both hands → no separate right weapon.
   const rightItemNumber = equip[5]?.itemNumber ?? null;
   useEffect(() => {
-    if (rightItemNumber == null || leftKind === 'rifle') { setRightWeapon(null); return; }
+    if (rightItemNumber == null || leftKind === 'rifle' || rightIsGlove) { setRightWeapon(null); return; }
     let cancelled = false;
     (async () => {
       const { stats } = await loadWeaponStats(rightItemNumber);
@@ -203,16 +212,15 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       setRightWeapon(stats);
     })();
     return () => { cancelled = true; };
-  }, [rightItemNumber, leftKind]);
+  }, [rightItemNumber, leftKind, rightIsGlove]);
 
   // Flame glove (one-handed) — active in EITHER hand, preferring the RIGHT if a glove is
   // worn in both (only one is used). Binds the flame to that hand's mouse button downstream.
   useEffect(() => {
-    const isGlove = (it: EquipItem | null) => !!it?.name && it.name.toLowerCase().includes('flame glove');
-    if (isGlove(equip[5])) setFlameGlove({ hand: 'R', tier: equip[5]!.tier ?? 1 });
-    else if (isGlove(equip[1])) setFlameGlove({ hand: 'L', tier: equip[1]!.tier ?? 1 });
+    if (rightIsGlove) setFlameGlove({ hand: 'R', tier: equip[5]!.tier ?? 1 });
+    else if (leftIsGlove) setFlameGlove({ hand: 'L', tier: equip[1]!.tier ?? 1 });
     else setFlameGlove(null);
-  }, [equip]);
+  }, [equip, leftIsGlove, rightIsGlove]);
 
   // Rocket Belt (Special slot = 4, shown as E5) → publish the equipped tier so the movement
   // code can grant the Shift+E forward boost. Identified by item_number (239–248).
