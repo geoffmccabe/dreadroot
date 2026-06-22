@@ -2,6 +2,7 @@
 // in-Canvas preview — a module store (not React context) because context does not
 // bridge across the R3F <Canvas> boundary. Subscribe via useBuilder().
 import { useSyncExternalStore } from 'react';
+import type { FortressVoxel } from './imageToFortress';
 
 export interface BuilderState {
   isOpen: boolean;
@@ -12,6 +13,8 @@ export interface BuilderState {
   heightScale: number;       // multiplies silhouette height
   tintHex: string;           // color tint over the grey tiers
   blockCount: number;        // published back by the preview
+  centerX: number | null;    // world center the preview pinned (for placement)
+  centerZ: number | null;
   prompt: string;            // text prompt for rebuilds (drives AI image-gen in a later phase)
   barrierOn: boolean;        // show + enforce the 20-60-20 monster barrier around the preview
   rebuildSeed: number;       // bumped by "Rebuild" to get a different variation
@@ -54,6 +57,8 @@ const initial: BuilderState = {
   heightScale: 1,
   tintHex: '#ffffff',
   blockCount: 0,
+  centerX: null,
+  centerZ: null,
   prompt: '',
   barrierOn: false,
   rebuildSeed: 0,
@@ -89,6 +94,10 @@ let state: BuilderState = initial;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
+// Latest computed voxels (local coords). Held OUTSIDE reactive state so publishing it on
+// every slider drag doesn't re-render subscribers; the DOM panel reads it on "Place".
+let latestVoxels: FortressVoxel[] = [];
+
 export const builderStore = {
   get: (): BuilderState => state,
   set: (patch: Partial<BuilderState>): void => {
@@ -99,6 +108,8 @@ export const builderStore = {
     state = { ...state, isOpen: !state.isOpen };
     emit();
   },
+  setVoxels: (v: FortressVoxel[]): void => { latestVoxels = v; },
+  getVoxels: (): FortressVoxel[] => latestVoxels,
   subscribe: (l: () => void): (() => void) => {
     listeners.add(l);
     return () => listeners.delete(l);

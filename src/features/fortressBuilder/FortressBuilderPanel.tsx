@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useUserData } from '@/hooks/useUserData';
 import { supabase } from '@/integrations/supabase/client';
+import { useBlocks } from '@/contexts/BlocksContext';
 import { FORTRESS_SEED_KEY } from './fortressSeed';
+import { placeFortress, removeFortress } from './fortressPlacement';
 import { saveSnapshot, listSnapshots, deleteSnapshot, type Snapshot } from './fortressBuilderSnapshots';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
@@ -60,6 +62,45 @@ export function FortressBuilderPanel() {
   }, []);
   const hasSeedEquipped = !!seedItemId && (equippedGear ?? []).some((g) => g.itemId === seedItemId);
   const canBuild = isAdmin || hasSeedEquipped;
+
+  // Placement: write the previewed fortress into the world / take it back down (chop the seed).
+  const { currentWorldId, placeBlocksBatch, removeBlocksByPositions } = useBlocks();
+  const [placeBusy, setPlaceBusy] = useState(false);
+  const [placeMsg, setPlaceMsg] = useState<string | null>(null);
+  const [fortressPlaced, setFortressPlaced] = useState(false);
+  // Detect an existing placed fortress for this owner+world (dormant seed state).
+  useEffect(() => {
+    if (!s.isOpen || !currentWorldId) return;
+    let ok = true;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth.user?.id;
+      if (!uid) return;
+      const { data } = await (supabase as any).from('placed_fortresses')
+        .select('id').eq('world_id', currentWorldId).eq('owner_id', uid).limit(1);
+      if (ok) setFortressPlaced(!!(data && data.length));
+    })().catch(() => {});
+    return () => { ok = false; };
+  }, [s.isOpen, currentWorldId]);
+
+  const onPlace = async () => {
+    if (!currentWorldId) { setPlaceMsg('No world loaded.'); return; }
+    setPlaceBusy(true); setPlaceMsg(null);
+    const { centerX, centerZ } = builderStore.get();
+    if (centerX == null || centerZ == null) { setPlaceBusy(false); setPlaceMsg('Move so the preview is positioned, then try again.'); return; }
+    const r = await placeFortress(currentWorldId, centerX, centerZ, builderStore.getVoxels(), { placeBlocksBatch });
+    setPlaceBusy(false);
+    if (r.ok) { setFortressPlaced(true); setPlaceMsg(`Fortress placed (${r.count?.toLocaleString()} blocks). Seed is now dormant.`); }
+    else setPlaceMsg(r.reason ?? 'Could not place there.');
+  };
+  const onTakeDown = async () => {
+    if (!currentWorldId) return;
+    setPlaceBusy(true); setPlaceMsg(null);
+    const r = await removeFortress(currentWorldId, { removeBlocksByPositions });
+    setPlaceBusy(false);
+    if (r.ok) { setFortressPlaced(false); setPlaceMsg('Fortress taken down — seed freed.'); }
+    else setPlaceMsg(r.reason ?? 'Could not take it down.');
+  };
 
   // Shift+B toggles the builder (admins, or anyone with a Fortress Seed equipped).
   useEffect(() => {
@@ -141,6 +182,20 @@ export function FortressBuilderPanel() {
           >
             Rebuild (try a different idea)
           </Button>
+        </div>
+
+        {/* Place into the world / take it down (chop the seed) */}
+        <div className="space-y-2 pt-1" style={{ borderTop: '1px solid hsla(var(--hud-border))' }} data-no-drag>
+          {!fortressPlaced ? (
+            <Button size="sm" className="w-full" disabled={placeBusy} onClick={onPlace}>
+              {placeBusy ? 'Placing…' : 'Place fortress here'}
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="w-full" disabled={placeBusy} onClick={onTakeDown}>
+              {placeBusy ? 'Working…' : 'Take down fortress (free the seed)'}
+            </Button>
+          )}
+          {placeMsg && <div className="text-[11px] opacity-80">{placeMsg}</div>}
         </div>
 
         {/* Saved creations */}

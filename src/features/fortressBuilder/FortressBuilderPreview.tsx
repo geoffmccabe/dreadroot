@@ -213,6 +213,7 @@ export function FortressBuilderPreview() {
       c.z = Math.round(c.z);
       c.y = 0;
       centerRef.current = c;
+      builderStore.set({ centerX: c.x, centerZ: c.z }); // publish for DOM-side placement
       // Default the entry to the wall facing the player (so they see it). Nearest
       // wall normal ≈ -forward. 0 front(-z) 1 right(+x) 2 back(+z) 3 left(-x).
       const nx = -fwd.x, nz = -fwd.z;
@@ -246,9 +247,10 @@ export function FortressBuilderPreview() {
     return () => setBuilderBarrier(null);
   }, [isOpen, barrierOn, D]);
 
-  // Publish block count back to the panel.
+  // Publish block count + the voxels (for DOM-side placement) back to the store.
   useEffect(() => {
     builderStore.set({ blockCount: result?.voxels.length ?? 0 });
+    builderStore.setVoxels(result?.voxels ?? []);
   }, [result]);
 
   const groups = useMemo(() => {
