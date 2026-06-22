@@ -41,6 +41,10 @@ let probeCeilingY = -Infinity;
 let simplifierReady = false;
 MeshoptSimplifier.ready.then(() => { simplifierReady = true; }).catch(() => {});
 
+// Auto step-up height: obstacles shorter than this don't block the player horizontally
+// (they flow over them; the ground system lifts them onto the surface).
+const STEP_HEIGHT = 0.5;
+
 // Scratch — never allocate in the per-frame resolve.
 const _segA = new THREE.Vector3();
 const _seg = new THREE.Line3();
@@ -292,9 +296,14 @@ function resolveOne(
 ): boolean {
   const bvh = bvhByKey.get(inst.key);
   if (!bvh) return false;
-  _segA.set(feetX, feetY + radius, feetZ).applyMatrix4(inst.inverse);
+  // STEP-UP: raise the collision capsule's BOTTOM by STEP_HEIGHT so obstacles shorter than that
+  // (ramp lips, small clutter, 1-inch details) don't block horizontally — the player flows over
+  // them and the ground system lifts them onto the surface. Taller walls (above STEP_HEIGHT) are
+  // still hit by the capsule above the step, so they block as before.
+  const lowY = feetY + STEP_HEIGHT + radius;
+  _segA.set(feetX, lowY, feetZ).applyMatrix4(inst.inverse);
   _seg.start.copy(_segA);
-  _seg.end.set(feetX, feetY + Math.max(radius, height - radius), feetZ).applyMatrix4(inst.inverse);
+  _seg.end.set(feetX, Math.max(lowY, feetY + (height - radius)), feetZ).applyMatrix4(inst.inverse);
   const localRadius = radius / inst.scale;
 
   _lbox.makeEmpty();

@@ -7,9 +7,9 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // Gate opening (meadow warpgate at (-91,24,301.5); opening faces +Z toward the lobby).
-const PORTAL_POS: [number, number, number] = [-91, 28, 300.5]; // 1m toward the gate (away from spawn) + 1m up
-const PORTAL_W = 4.6;
-const PORTAL_H = 6.0;
+const PORTAL_POS: [number, number, number] = [-91, 28, 299.5]; // moved a further 1m from spawn (−z)
+const PORTAL_W = 4.6 * 0.8;   // 80% diameter
+const PORTAL_H = 6.0 * 0.8;
 
 const FRAG = `
 varying vec2 vUv;
