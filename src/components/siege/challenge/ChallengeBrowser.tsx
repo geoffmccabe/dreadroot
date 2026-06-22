@@ -24,28 +24,27 @@ const sectionTitle: React.CSSProperties = { fontSize: 18, fontWeight: 900, lette
 const tpBySlot = (s: number) => SIEGE_TELEPORTS.find((t) => t.slot === s)!;
 const demoByCode = (c: string) => SIEGE_DEMOS.find((d) => d.code === c)!;
 const WORLD_ROW1 = [
-  { label: 'LOBBY', t: tpBySlot(1) },
-  { label: 'THE BEACH', t: tpBySlot(2) },
-  { label: 'BLEAKROCK', t: tpBySlot(3) },
-  { label: 'HAROLD', t: tpBySlot(4) },
-  { label: "NERO'S ISLAND", t: tpBySlot(5) },
+  { label: 'LOBBY', t: tpBySlot(1), img: '/world_cards/lobby.webp', desc: 'Central hub — vendors, vault, forge, and portals to every world.' },
+  { label: 'THE BEACH', t: tpBySlot(2), img: '/world_cards/beach.webp', desc: 'Sun-soaked shoreline at the open world’s edge.' },
+  { label: 'BLEAKROCK', t: tpBySlot(3), img: '/world_cards/bleakrock.webp', desc: 'The volcanic Mushroom isle — your spawn and home base.' },
+  { label: 'HAROLD', t: tpBySlot(4), img: '/world_cards/harold.webp', desc: 'A separate instance — seek out Harold.' },
+  { label: "NERO'S ISLAND", t: tpBySlot(5), img: '/world_cards/nero.webp', desc: 'Nero’s remote island stronghold.' },
 ];
 const WORLD_ROW2 = [
-  { label: 'SCI-FI CITY', d: demoByCode('KeyA') },
-  { label: 'ADVENTURE TOWN', d: demoByCode('KeyN') },
+  { label: 'SCI-FI CITY', d: demoByCode('KeyA'), img: '/world_cards/scifi_city.webp', desc: 'A neon Synty sci-fi metropolis to explore.' },
+  { label: 'ADVENTURE TOWN', d: demoByCode('KeyN'), img: '/world_cards/adventure_town.webp', desc: 'A cozy fantasy village, fully built to wander.' },
 ];
 
-function WorldCard({ label, onClick }: { label: string; onClick: () => void }) {
+// Mirrors the challenge card: a 4:1 banner image + name + short description. The
+// images are placeholders (public/world_cards/*.webp) — swap in real renders later.
+function WorldCard({ label, img, desc, onClick }: { label: string; img: string; desc: string; onClick: () => void }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        ...card, cursor: 'pointer', aspectRatio: '4 / 3', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', padding: 10, textAlign: 'center', fontWeight: 800, fontSize: 14,
-        color: '#e8eefb', background: 'linear-gradient(135deg,#243049,#3a4a6b)',
-      }}
-    >
-      {label}
+    <button onClick={onClick} style={{ ...card, cursor: 'pointer', padding: 0, textAlign: 'left', color: '#e8eefb', font: 'inherit', width: '100%' }}>
+      <img src={img} alt="" style={{ width: '100%', aspectRatio: '4 / 1', objectFit: 'cover', display: 'block' }} />
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 800 }}>{label}</div>
+        <div style={{ fontSize: 11, color: '#9fb4d0', lineHeight: 1.3 }}>{desc}</div>
+      </div>
     </button>
   );
 }
@@ -110,13 +109,13 @@ export function ChallengeBrowser() {
           <div style={sectionTitle}>Worlds</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
             {WORLD_ROW1.map((w) => (
-              <WorldCard key={w.label} label={w.label}
+              <WorldCard key={w.label} label={w.label} img={w.img} desc={w.desc}
                 onClick={() => goWorld(w.t.mapId ?? 'siege-test', w.t.pos, w.t.yaw, w.t.pitch)} />
             ))}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 12 }}>
             {WORLD_ROW2.map((w) => (
-              <WorldCard key={w.label} label={w.label} onClick={() => goWorld(w.d.mapId, w.d.pos, w.d.yaw, w.d.pitch)} />
+              <WorldCard key={w.label} label={w.label} img={w.img} desc={w.desc} onClick={() => goWorld(w.d.mapId, w.d.pos, w.d.yaw, w.d.pitch)} />
             ))}
           </div>
 
