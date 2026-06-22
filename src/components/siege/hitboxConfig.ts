@@ -63,8 +63,17 @@ export function defaultHitbox(radius: number, height: number, headFrac: number):
  *  normalized so they're scaled by this monster's height. */
 export function getHitboxFor(url: string, radius: number, height: number, headFrac: number): MonsterHitbox {
   const norm = overrides[url] ?? BAKED[url];
-  if (norm) return { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) };
-  return defaultHitbox(radius, height, headFrac);
+  const hb = norm
+    ? { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) }
+    : defaultHitbox(radius, height, headFrac);
+  // Always extend the BODY box down to the feet (y=0). A torso-only box leaves the LEGS
+  // unhittable — invisible on a normal monster (you aim at center mass) but glaring on a
+  // boss-/giant-scaled monster whose legs fill your view at eye level: shots hit the broad-
+  // phase cylinder but miss the refined body box → no damage. Top is preserved; the head box
+  // (headshot/bullseye) is untouched.
+  const top = hb.body.ly + hb.body.hy;
+  if (hb.body.ly - hb.body.hy > 0.001) hb.body = { ...hb.body, ly: top / 2, hy: top / 2 };
+  return hb;
 }
 
 export function hasOverride(url: string): boolean { return !!(overrides[url] || BAKED[url]); }
