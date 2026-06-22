@@ -43,7 +43,7 @@ const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 function useClipIdx() { return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => clipIdx); }
 
-function ReviewMonster({ mon, x, z, first }: { mon: Mon; x: number; z: number; first: boolean }) {
+function ReviewMonster({ mon, x, z, y: yOverride, first }: { mon: Mon; x: number; z: number; y?: number; first: boolean }) {
   const { scene, animations } = useGLTF(`/siege/monsters/${mon.glb}.glb?v=${APP_VERSION}`);
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
@@ -60,7 +60,7 @@ function ReviewMonster({ mon, x, z, first }: { mon: Mon; x: number; z: number; f
   const { actions, names } = useAnimations(animations, group);
   const idx = useClipIdx();
   const keep = useMemo(() => KEEP.filter((k) => names.includes(k)), [names]);
-  const y = useMemo(() => sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1], [x, z]);
+  const y = useMemo(() => yOverride ?? sampleHeight(x, z) ?? SIEGE_SPAWN_POINT[1], [x, z, yOverride]);
   const scale = mon.height / INTRINSIC;
 
   useEffect(() => {
@@ -113,11 +113,12 @@ function useLineupToggle(toggle: () => void) {
     let t: ReturnType<typeof setTimeout> | null = null;
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (e.key !== '@') return;
+      // '@' (US) or Shift+physical-2 (layout-independent via e.code), matching the spawn/NPC commands.
+      if (!(e.key === '@' || (e.shiftKey && e.code === 'Digit2'))) return;
       count++;
       if (t) clearTimeout(t);
       if (count >= 3) { count = 0; toggle(); return; }
-      t = setTimeout(() => { count = 0; }, 900);
+      t = setTimeout(() => { count = 0; }, 1200);
     };
     window.addEventListener('keydown', onKey);
     return () => { window.removeEventListener('keydown', onKey); if (t) clearTimeout(t); };
@@ -201,12 +202,29 @@ function BoulderField() {
 
 export function SiegeNewMonsterLineup() {
   const workMode = useWorkMode();
+  const camera = useThree((s) => s.camera);
   const [lineupShown, setLineupShown] = useState(false);
-  const toggleLineup = useMemo(() => () => setLineupShown((v) => !v), []);
+  // When @@@ turns the lineup ON, snapshot a row in front of the camera so it appears
+  // wherever the player is standing — not pinned to the Bleakrock spawn. (rx,rz) = the
+  // camera-right unit vector the row is laid along; y = ground under that point.
+  const [anchor, setAnchor] = useState<{ cx: number; cz: number; rx: number; rz: number; y: number } | null>(null);
+  const toggleLineup = useMemo(() => () => {
+    setLineupShown((v) => {
+      const nv = !v;
+      if (nv) {
+        const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0;
+        if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
+        const cx = camera.position.x + fwd.x * 16;
+        const cz = camera.position.z + fwd.z * 16;
+        const y = groundAt(cx, cz, camera.position.y + 1) ?? (camera.position.y - 1.6);
+        setAnchor({ cx, cz, rx: -fwd.z, rz: fwd.x, y });
+      } else setAnchor(null);
+      return nv;
+    });
+  }, [camera]);
   useLineupToggle(toggleLineup);
   const showLineup = workMode || lineupShown;   // ⌘-] work mode OR typed @@@
   useCyclePanel(showLineup);
-  const camera = useThree((s) => s.camera);
   const [spawned, setSpawned] = useState<Spawned[]>([]);
   const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
     setSpawned((s) => [...s, { key: spawnSeq++, mon, pos }]);
@@ -231,22 +249,26 @@ export function SiegeNewMonsterLineup() {
     };
   };
 
-  // Review row at Bleakrock, spaced so big monsters don't overlap.
-  const cx = SIEGE_SPAWN_POINT[0];
-  const cz = SIEGE_SPAWN_POINT[2] + 8;
+  // Spaced so big monsters don't overlap. Laid along the camera-right axis when summoned via
+  // @@@ (anchor set), else along world-X at the Bleakrock spawn (work-mode display).
   const placed = useMemo(() => {
-    let x = cx;
     const half = MONSTERS.map((m) => Math.max(1.2, m.height * 0.35));
     const total = half.reduce((a, h) => a + 2 * h + 2.5, 0);
-    x = cx - total / 2;
-    return MONSTERS.map((m, i) => { x += half[i] + 1.25; const px = x; x += half[i] + 1.25; return { m, x: px }; });
-  }, [cx]);
+    const cx = anchor ? anchor.cx : SIEGE_SPAWN_POINT[0];
+    const cz = anchor ? anchor.cz : SIEGE_SPAWN_POINT[2] + 8;
+    const rx = anchor ? anchor.rx : 1, rz = anchor ? anchor.rz : 0;
+    let off = -total / 2;
+    return MONSTERS.map((m, i) => {
+      off += half[i] + 1.25; const o = off; off += half[i] + 1.25;
+      return { m, x: cx + rx * o, z: cz + rz * o, y: anchor ? anchor.y : undefined };
+    });
+  }, [anchor]);
 
   return (
     <Suspense fallback={null}>
       {/* The standing review lineup — shown in work mode (⌘-]) OR after typing @@@. */}
-      {showLineup && placed.map(({ m, x }, i) => (
-        <ReviewMonster key={m.glb} mon={m} x={x} z={cz} first={i === 0} />
+      {showLineup && placed.map((p, i) => (
+        <ReviewMonster key={p.m.glb} mon={p.m} x={p.x} z={p.z} y={p.y} first={i === 0} />
       ))}
       {spawned.map((s) => (
         <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
