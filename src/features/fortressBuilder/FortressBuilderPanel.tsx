@@ -2,6 +2,8 @@
 // matches the User Panel). Always mounted so it owns the Shift+B hotkey (admins only).
 import { useEffect, useState } from 'react';
 import { useUserData } from '@/hooks/useUserData';
+import { supabase } from '@/integrations/supabase/client';
+import { FORTRESS_SEED_KEY } from './fortressSeed';
 import { saveSnapshot, listSnapshots, deleteSnapshot, type Snapshot } from './fortressBuilderSnapshots';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
@@ -42,13 +44,26 @@ const WALL_NAMES = ['Front', 'Right', 'Back', 'Left'];
 const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a']; // matches the preview tiers
 
 export function FortressBuilderPanel() {
-  const { userRoles } = useUserData();
+  const { userRoles, equippedGear } = useUserData();
   const isAdmin = !!userRoles?.some((r: string) => r === 'admin' || r === 'superadmin');
   const s = useBuilder();
 
-  // Shift+B toggles the builder (admins only).
+  // Resolve the Fortress Seed item id once, then detect whether the player has one equipped
+  // (in any equip slot — the Special slot in practice). Admins can always open the builder.
+  const [seedItemId, setSeedItemId] = useState<string | null>(null);
   useEffect(() => {
-    if (!isAdmin) return;
+    let ok = true;
+    (supabase as any).from('items').select('id').eq('key', FORTRESS_SEED_KEY).maybeSingle()
+      .then(({ data }: { data: { id: string } | null }) => { if (ok) setSeedItemId(data?.id ?? null); })
+      .catch(() => {});
+    return () => { ok = false; };
+  }, []);
+  const hasSeedEquipped = !!seedItemId && (equippedGear ?? []).some((g) => g.itemId === seedItemId);
+  const canBuild = isAdmin || hasSeedEquipped;
+
+  // Shift+B toggles the builder (admins, or anyone with a Fortress Seed equipped).
+  useEffect(() => {
+    if (!canBuild) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.shiftKey && e.code === 'KeyB' && !e.repeat) {
         const tag = (e.target as HTMLElement | null)?.tagName;
@@ -59,7 +74,7 @@ export function FortressBuilderPanel() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isAdmin]);
+  }, [canBuild]);
 
   // Snapshot state — MUST be declared before the early return below. React hooks must run in
   // the same order every render; having these after `if (!isAdmin) return null` changed the hook
@@ -69,7 +84,7 @@ export function FortressBuilderPanel() {
   const refreshSnaps = () => listSnapshots().then(setSnaps).catch(() => {});
   useEffect(() => { if (s.isOpen) refreshSnaps(); }, [s.isOpen]);
 
-  if (!isAdmin) return null;
+  if (!canBuild) return null;
 
   const onSaveSnapshot = async () => {
     const name = snapName.trim();

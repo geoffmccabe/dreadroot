@@ -27,7 +27,7 @@ export function getItemSpriteUrl(def: SpriteDef | undefined | null): string | nu
   const tex = def.texture_url ?? def.textureUrl ?? null;
   if (tex) return tex;
   const n = def.item_number ?? def.itemNumber ?? null;
-  if (n != null && n >= 0 && n <= 228) {
+  if (n != null && n >= 0 && n <= 229) {
     return `/item-sprites/${n}.webp${SPRITE_CACHE_BUST}`;
   }
   return null;
