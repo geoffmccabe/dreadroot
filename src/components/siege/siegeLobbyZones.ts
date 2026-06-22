@@ -10,7 +10,7 @@ export const SIEGE_LOBBY_ZONES: LobbyZone[] = [
   { id: 'vault',  x: -78.563,  z: 316.169, r: 4 },
   { id: 'market', x: -86.810,  z: 324.463, r: 1.5 },  // 3 m diameter
   { id: 'forge',  x: -101.818, z: 325.421, r: 3 },    // 6 m diameter
-  { id: 'portal', x: -91.0,    z: 300.5,   r: 2.5 },  // step into the gate → !c menu
+  { id: 'portal', x: -91.370,  z: 299.593, r: 0.75 }, // 1.5m diameter → !c menu (closes on leave)
   { id: 'chest',  x: -84.690,  z: 312.155, r: 1 },    // Magic Chest
 ];
 
