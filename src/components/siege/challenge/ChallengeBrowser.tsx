@@ -13,6 +13,15 @@ import { useActiveGame } from '@/config/activeGame';
 import { getGameDef } from '@/config/gameRegistry';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from '../siegeAreas';
 import { siegeJump } from '../teleportStore';
+// Bundled (content-hashed) so a redeploy busts the cache — public/ assets at
+// stable URLs were serving the old placeholder from the browser/CDN cache.
+import imgLobby from './world_cards/lobby.webp';
+import imgBeach from './world_cards/beach.webp';
+import imgBleakrock from './world_cards/bleakrock.webp';
+import imgHarold from './world_cards/harold.webp';
+import imgNero from './world_cards/nero.webp';
+import imgScifiCity from './world_cards/scifi_city.webp';
+import imgAdventureTown from './world_cards/adventure_town.webp';
 
 const PANEL_BG = 'hsla(222, 32%, 10%, 0.97)';
 const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.85)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
@@ -24,15 +33,15 @@ const sectionTitle: React.CSSProperties = { fontSize: 18, fontWeight: 900, lette
 const tpBySlot = (s: number) => SIEGE_TELEPORTS.find((t) => t.slot === s)!;
 const demoByCode = (c: string) => SIEGE_DEMOS.find((d) => d.code === c)!;
 const WORLD_ROW1 = [
-  { label: 'LOBBY', t: tpBySlot(1), img: '/world_cards/lobby.webp', desc: 'Central hub — vendors, vault, forge, and portals to every world.' },
-  { label: 'THE BEACH', t: tpBySlot(2), img: '/world_cards/beach.webp', desc: 'Sun-soaked shoreline at the open world’s edge.' },
-  { label: 'BLEAKROCK', t: tpBySlot(3), img: '/world_cards/bleakrock.webp', desc: 'The volcanic Mushroom isle — your spawn and home base.' },
-  { label: 'HAROLD', t: tpBySlot(4), img: '/world_cards/harold.webp', desc: 'A separate instance — seek out Harold.' },
-  { label: "NERO'S ISLAND", t: tpBySlot(5), img: '/world_cards/nero.webp', desc: 'Nero’s remote island stronghold.' },
+  { label: 'LOBBY', t: tpBySlot(1), img: imgLobby, desc: 'Central hub — vendors, vault, forge, and portals to every world.' },
+  { label: 'THE BEACH', t: tpBySlot(2), img: imgBeach, desc: 'Sun-soaked shoreline at the open world’s edge.' },
+  { label: 'BLEAKROCK', t: tpBySlot(3), img: imgBleakrock, desc: 'The volcanic Mushroom isle — your spawn and home base.' },
+  { label: 'HAROLD', t: tpBySlot(4), img: imgHarold, desc: 'A separate instance — seek out Harold.' },
+  { label: "NERO'S ISLAND", t: tpBySlot(5), img: imgNero, desc: 'Nero’s remote island stronghold.' },
 ];
 const WORLD_ROW2 = [
-  { label: 'SCI-FI CITY', d: demoByCode('KeyA'), img: '/world_cards/scifi_city.webp', desc: 'A neon Synty sci-fi metropolis to explore.' },
-  { label: 'ADVENTURE TOWN', d: demoByCode('KeyN'), img: '/world_cards/adventure_town.webp', desc: 'A cozy fantasy village, fully built to wander.' },
+  { label: 'SCI-FI CITY', d: demoByCode('KeyA'), img: imgScifiCity, desc: 'A neon Synty sci-fi metropolis to explore.' },
+  { label: 'ADVENTURE TOWN', d: demoByCode('KeyN'), img: imgAdventureTown, desc: 'A cozy fantasy village, fully built to wander.' },
 ];
 
 // Mirrors the challenge card: a 4:1 banner image + name + short description. The
