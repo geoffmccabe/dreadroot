@@ -34,12 +34,14 @@ let pulseRegistered = false;
 function ensureFruitPulse(): void {
   if (pulseRegistered) return;
   pulseRegistered = true;
-  // Gentle 0.2 → 0.8 sine (~2s period) — matches the feel of the old
-  // per-fruit emissiveIntensity pulse, but free.
+  // Gentle 0.2 → 0.55 sine (~2s period). Lower peak than the old per-fruit
+  // pulse (0.8): this material is Lambert (brighter diffuse response than the
+  // old MeshStandard path), so the same emissive number reads hotter — 0.55
+  // keeps a clear glow without blowing out. Tune here if needed.
   frameLoop.register(
     'fruit-glow-pulse',
     (_delta, elapsed) => {
-      sharedFruitPulse.value = 0.5 + 0.3 * Math.sin(elapsed * 3.0);
+      sharedFruitPulse.value = 0.375 + 0.175 * Math.sin(elapsed * 3.0);
     },
     1,
   );
