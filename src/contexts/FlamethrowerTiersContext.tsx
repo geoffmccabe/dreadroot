@@ -16,29 +16,35 @@ export interface FlamethrowerTierDef {
   smokeOpacity: number;
 }
 
-// Per-tier color defaults matching tier color scheme
+// Per-tier color scheme (color1 = bright/inner, color2 = mid, color3 = outer/edge).
+// Rarity → look: 1 Common brown/tan+grey · 2 Uncommon green+teal · 3 Rare blues ·
+// 4 Epic purple · 5 Legendary red/orange+black · 6 Divine white/silver · 7 Mystic
+// pink/fuchsia · 8 Rainbow · 9 Apocalyptic fire (yellow/orange/red) · 10 Cosmic metallic gold.
 const TIER_COLOR_DEFAULTS: Record<number, { color1: string; color2: string; color3: string }> = {
-  1:  { color1: '#FFFF88', color2: '#FF8800', color3: '#553300' },  // yellow/brown
-  2:  { color1: '#88FF88', color2: '#00FF00', color3: '#005500' },  // green
-  3:  { color1: '#FFFFFF', color2: '#00FFFF', color3: '#0044FF' },  // blue (original look)
-  4:  { color1: '#DD88FF', color2: '#8800FF', color3: '#440088' },  // purple
-  5:  { color1: '#FFFF00', color2: '#FF4400', color3: '#880000' },  // red
-  6:  { color1: '#FFFFFF', color2: '#EEEEFF', color3: '#AAAACC' },  // white
-  7:  { color1: '#FFAAFF', color2: '#FF00FF', color3: '#880088' },  // pink/fuchsia
-  8:  { color1: '#FF4444', color2: '#44FF44', color3: '#4444FF' },  // rainbow (R/G/B)
-  9:  { color1: '#FF6600', color2: '#FF0000', color3: '#220000' },  // apocalyptic
-  10: { color1: '#FFFFCC', color2: '#FFD700', color3: '#AA8800' },  // cosmic gold
+  1:  { color1: '#D8C088', color2: '#9C7B4A', color3: '#707070' },  // common — brown/tan, grey
+  2:  { color1: '#BFFFD0', color2: '#20D070', color3: '#0A8C8C' },  // uncommon — green, teal
+  3:  { color1: '#DCF2FF', color2: '#2E8BFF', color3: '#0A2EAA' },  // rare — blue tones
+  4:  { color1: '#E6B0FF', color2: '#9A40FF', color3: '#7A1E5A' },  // epic — purple (blue→reddish)
+  5:  { color1: '#FFC060', color2: '#FF3010', color3: '#1A0000' },  // legendary — red/orange, black
+  6:  { color1: '#FFFFFF', color2: '#EAEAF2', color3: '#B8BEC8' },  // divine — white, silver
+  7:  { color1: '#FFD0F2', color2: '#FF40C0', color3: '#C0008A' },  // mystic — pink, fuchsia
+  8:  { color1: '#FF3030', color2: '#30E030', color3: '#3060FF' },  // rainbow — vivid multi-hue
+  9:  { color1: '#FFE040', color2: '#FF7000', color3: '#E01000' },  // apocalyptic — yellow/orange/red
+  10: { color1: '#FFF2C0', color2: '#FFD000', color3: '#B8860B' },  // cosmic — metallic gold
 };
 
 const getDefaultFlamethrowerTier = (tier: number): FlamethrowerTierDef => {
-  // Unknown/out-of-range tier → fall back to TIER 1 (yellow), NOT blue. The old blue fallback
+  // Unknown/out-of-range tier → fall back to TIER 1, NOT blue. The old blue fallback
   // was identical to tier 3, so any tier mis-read silently showed the wrong (blue) flame.
   const colors = TIER_COLOR_DEFAULTS[tier] || TIER_COLOR_DEFAULTS[1];
   return {
     tier,
     width: 1.0,
-    distance: 3 + tier,
-    speed: 8.0,
+    // Reach scales ~+2m per tier (tier 1 ≈ 5m … tier 10 ≈ 23m). Speed 10 keeps
+    // lifetime = distance/speed ABOVE the 0.5s floor so each tier visibly reaches
+    // farther (at the old speed 21.6 every tier floored to ~0.5s → all looked alike).
+    distance: 3 + 2 * tier,
+    speed: 10.0,
     particles: 80,
     transparency: 1.0,
     color1: colors.color1,

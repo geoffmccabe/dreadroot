@@ -161,8 +161,10 @@ export function useFlamethrower(config: FlamethrowerConfig) {
             const ps = emitter.system;
             if (!ps) continue;
             for (const behavior of (ps as any).behaviors || []) {
+              // three.quarks gradient keys are [value, pos] TUPLES at runtime (k[0] = the
+              // value), NOT { value, pos } objects. Alpha values are plain numbers.
               if (behavior.type === 'ColorOverLife' && behavior.color?.alpha?.keys) {
-                originalAlphasRef.current.set(emitter, behavior.color.alpha.keys.map((k: any) => k.value ?? 1));
+                originalAlphasRef.current.set(emitter, behavior.color.alpha.keys.map((k: any) => (Array.isArray(k) ? k[0] : k.value) ?? 1));
               }
             }
           }
@@ -225,21 +227,24 @@ export function useFlamethrower(config: FlamethrowerConfig) {
 
       const isSmoke = isSmokeEmitter(emitter);
 
-      // Override startColor (use color1 for fire, leave smoke neutral-ish)
+      // Override startColor (use color1 for fire, leave smoke neutral-ish).
+      // At runtime ConstantColor.color is a Vector4 — write x/y/z/w, NOT r/g/b/a
+      // (the old r/g/b writes set phantom props the renderer never reads, so every
+      // tier silently showed the JSON default colour — the "always blue" bug).
       if ((ps as any).startColor) {
         const sc = (ps as any).startColor;
-        if (sc.color) {
+        if (sc.color && sc.color.x !== undefined) {
           if (!isSmoke) {
-            sc.color.r = color1.r;
-            sc.color.g = color1.g;
-            sc.color.b = color1.b;
-            sc.color.a = fireOpacity;
+            sc.color.x = color1.r;
+            sc.color.y = color1.g;
+            sc.color.z = color1.b;
+            sc.color.w = fireOpacity;
           } else {
             // Smoke: tint with color3 (darkest) and apply smoke opacity
-            sc.color.r = color3.r * 0.5 + 0.5;
-            sc.color.g = color3.g * 0.5 + 0.5;
-            sc.color.b = color3.b * 0.5 + 0.5;
-            sc.color.a = smokeOpacity;
+            sc.color.x = color3.r * 0.5 + 0.5;
+            sc.color.y = color3.g * 0.5 + 0.5;
+            sc.color.z = color3.b * 0.5 + 0.5;
+            sc.color.w = smokeOpacity;
           }
         }
       }
@@ -250,13 +255,16 @@ export function useFlamethrower(config: FlamethrowerConfig) {
         if (behavior.type === 'ColorOverLife' && behavior.color) {
           const gradient = behavior.color;
 
+          // Runtime gradient keys are [value, pos] TUPLES: key[0] = value (a Vector3
+          // for colour, x/y/z), key[1] = position. The old key.value/key.pos/.r/.g/.b
+          // access read & wrote nothing, so colours never changed on screen.
           if (!isSmoke) {
             // Fire emitters: map 3 colors across gradient keys by position
             if (gradient.color && gradient.color.keys) {
-              const keys = gradient.color.keys;
-              for (const key of keys) {
-                if (!key.value) continue;
-                const t = key.pos ?? 0;
+              for (const key of gradient.color.keys) {
+                const v = key[0];
+                if (!v || v.x === undefined) continue;
+                const t = key[1] ?? 0;
                 // Lerp: 0.0 = color1, 0.5 = color2, 1.0 = color3
                 let r: number, g: number, b: number;
                 if (t <= 0.5) {
@@ -270,40 +278,37 @@ export function useFlamethrower(config: FlamethrowerConfig) {
                   g = color2.g + (color3.g - color2.g) * f;
                   b = color2.b + (color3.b - color2.b) * f;
                 }
-                key.value.r = r;
-                key.value.g = g;
-                key.value.b = b;
+                v.x = r;
+                v.y = g;
+                v.z = b;
               }
             }
             // Scale fire alpha keys by fireOpacity (from originals to prevent compounding)
             if (gradient.alpha && gradient.alpha.keys) {
-              for (let k = 0; k < gradient.alpha.keys.length; k++) {
-                const key = gradient.alpha.keys[k];
-                if (key.value !== undefined) {
-                  const orig = origAlphas?.[k] ?? 1;
-                  key.value = Math.min(1, orig) * fireOpacity;
-                }
+              const akeys = gradient.alpha.keys;
+              for (let k = 0; k < akeys.length; k++) {
+                const orig = origAlphas?.[k] ?? 1;
+                akeys[k][0] = Math.min(1, orig) * fireOpacity;
               }
             }
           } else {
             // Smoke emitter: tint with color3 and set smoke alpha
             if (gradient.color && gradient.color.keys) {
               for (const key of gradient.color.keys) {
-                if (!key.value) continue;
+                const v = key[0];
+                if (!v || v.x === undefined) continue;
                 // Blend smoke color toward color3
-                key.value.r = color3.r * 0.3 + 0.7 * 0.5;
-                key.value.g = color3.g * 0.3 + 0.7 * 0.5;
-                key.value.b = color3.b * 0.3 + 0.7 * 0.5;
+                v.x = color3.r * 0.3 + 0.7 * 0.5;
+                v.y = color3.g * 0.3 + 0.7 * 0.5;
+                v.z = color3.b * 0.3 + 0.7 * 0.5;
               }
             }
             // Scale smoke alpha keys (from originals to prevent compounding)
             if (gradient.alpha && gradient.alpha.keys) {
-              for (let k = 0; k < gradient.alpha.keys.length; k++) {
-                const key = gradient.alpha.keys[k];
-                if (key.value !== undefined) {
-                  const orig = origAlphas?.[k] ?? 1;
-                  key.value = Math.min(1, orig) * smokeOpacity;
-                }
+              const akeys = gradient.alpha.keys;
+              for (let k = 0; k < akeys.length; k++) {
+                const orig = origAlphas?.[k] ?? 1;
+                akeys[k][0] = Math.min(1, orig) * smokeOpacity;
               }
             }
           }
