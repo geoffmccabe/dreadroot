@@ -528,7 +528,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   }, [cloned, J.desat]);
 
   const clip = (key: string) => {
-    const n = names.find((nm) => nm.toLowerCase().includes(key.toLowerCase()));
+    // EXACT (case-insensitive) match first: many Synty rigs ship several "walk" clips
+    // (walk, walk_strafe, walk_crossover, …). A loose substring match grabs whichever
+    // comes first — often a strafe/crossover clip → "crossed legs" walk. Prefer the clip
+    // named exactly `key` (the same one the review lineup cycles via KEEP), then fall back.
+    const k = key.toLowerCase();
+    const n = names.find((nm) => nm.toLowerCase() === k) ?? names.find((nm) => nm.toLowerCase().includes(k));
     if (n) return actions[n];
     // Synty/Mixamo rigs often ship clips NOT literally named "idle" (e.g. "A_Idle_Standing_Masc",
     // "Armature|Take 001|BaseLayer"). For the idle/default pose, fall back to the FIRST clip so the

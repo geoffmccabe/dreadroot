@@ -89,7 +89,7 @@ function useCyclePanel(enabled: boolean) {
     const flash = document.createElement('div');
     flash.style.cssText = 'position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:10001;background:rgba(10,12,16,.92);border:2px solid #5a7cff;border-radius:12px;padding:14px 32px;font:700 22px sans-serif;color:#fff;opacity:0;transition:opacity .2s;pointer-events:none;text-align:center';
     const hint = document.createElement('div');
-    hint.textContent = 'M = cycle animation   •   @<#>#<qty> = spawn (e.g. @6#3)';
+    hint.textContent = '@@@ = toggle lineup   •   M = cycle animation   •   @<#>#<qty> = spawn (e.g. @6#3)';
     hint.style.cssText = 'position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:10000;background:rgba(10,12,16,.7);border:1px solid #3a4456;border-radius:6px;padding:5px 12px;font:13px sans-serif;color:#aab4c4';
     let hideT: ReturnType<typeof setTimeout>;
     const show = () => { flash.textContent = clipLabel || 'loading…'; flash.style.opacity = '1'; clearTimeout(hideT); hideT = setTimeout(() => { flash.style.opacity = '0'; }, 3000); };
@@ -103,6 +103,25 @@ function useCyclePanel(enabled: boolean) {
     document.body.appendChild(flash); document.body.appendChild(hint);
     return () => { window.removeEventListener('keydown', onKey); subs.delete(show); clearTimeout(hideT); flash.remove(); hint.remove(); };
   }, [enabled]);
+}
+
+// Type "@@@" (three @ in quick succession) to toggle the review lineup on/off anywhere,
+// without needing work mode. Counts @ presses; 3 within ~900ms = toggle.
+function useLineupToggle(toggle: () => void) {
+  useEffect(() => {
+    let count = 0;
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key !== '@') return;
+      count++;
+      if (t) clearTimeout(t);
+      if (count >= 3) { count = 0; toggle(); return; }
+      t = setTimeout(() => { count = 0; }, 900);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); if (t) clearTimeout(t); };
+  }, [toggle]);
 }
 
 let spawnSeq = 0;
@@ -182,7 +201,11 @@ function BoulderField() {
 
 export function SiegeNewMonsterLineup() {
   const workMode = useWorkMode();
-  useCyclePanel(workMode);
+  const [lineupShown, setLineupShown] = useState(false);
+  const toggleLineup = useMemo(() => () => setLineupShown((v) => !v), []);
+  useLineupToggle(toggleLineup);
+  const showLineup = workMode || lineupShown;   // ⌘-] work mode OR typed @@@
+  useCyclePanel(showLineup);
   const camera = useThree((s) => s.camera);
   const [spawned, setSpawned] = useState<Spawned[]>([]);
   const add = useMemo(() => (mon: Mon, pos: [number, number, number]) => {
@@ -221,8 +244,8 @@ export function SiegeNewMonsterLineup() {
 
   return (
     <Suspense fallback={null}>
-      {/* The standing review lineup is a work/review display — hidden unless work mode (⌘-]). */}
-      {workMode && placed.map(({ m, x }, i) => (
+      {/* The standing review lineup — shown in work mode (⌘-]) OR after typing @@@. */}
+      {showLineup && placed.map(({ m, x }, i) => (
         <ReviewMonster key={m.glb} mon={m} x={x} z={cz} first={i === 0} />
       ))}
       {spawned.map((s) => (
