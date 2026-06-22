@@ -43,13 +43,42 @@ void main() {
   float glow = 0.45 + 0.55 * fres;
   // Brightest near the light, fading out toward the far end ("diminishes as it widens").
   float lenFade = 1.0 - vAlong;
-  float a = uStrength * glow * (0.3 + 0.7 * lenFade);
+  // Dissolve the last stretch smoothly to FULLY transparent so the beam melts into space
+  // instead of ending on a hard cone rim (no abrupt cut-off at the tip).
+  float endFade = smoothstep(1.0, 0.6, vAlong);
+  float a = uStrength * glow * (0.3 + 0.7 * lenFade) * endFade;
   gl_FragColor = vec4(uColor, a);
 }`;
 
-export function GameLight({ def, idSuffix = '' }: { def: LightDef; idSuffix?: string }) {
+export type BeamShape = 'cone' | 'star';
+
+// Star-shaped volumetric beam: apex at +Y (light side), a star cross-section base ring at
+// -Y, tapering to the apex. Built to match ConeGeometry's vertex layout so the beam shader
+// (which maps position.y → length) works unchanged. Open-ended (no base cap) like the cone.
+function makeStarBeamGeometry(radius: number, len: number, points = 5, innerRatio = 0.4): THREE.BufferGeometry {
+  const apexY = len / 2, baseY = -len / 2;
+  const n = points * 2; // alternating outer (point) / inner (valley) vertices
+  const pos: number[] = [];
+  const ringX: number[] = [], ringZ: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const ang = (i / n) * Math.PI * 2;
+    const r = (i % 2 === 0) ? radius : radius * innerRatio;
+    ringX.push(Math.cos(ang) * r); ringZ.push(Math.sin(ang) * r);
+  }
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    // apex → ring[i] → ring[j]
+    pos.push(0, apexY, 0, ringX[i], baseY, ringZ[i], ringX[j], baseY, ringZ[j]);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+export function GameLight({ def, idSuffix = '', beamShape = 'cone' }: { def: LightDef; idSuffix?: string; beamShape?: BeamShape }) {
   if (def.type === 'glow') return <GlowLight def={def} idSuffix={idSuffix} />;
-  return <SpotLightImpl def={def} idSuffix={idSuffix} />;
+  return <SpotLightImpl def={def} idSuffix={idSuffix} beamShape={beamShape} />;
 }
 
 // 'glow' type — an omni point light that washes nearby terrain (the Glow Block effect),
@@ -93,7 +122,7 @@ function GlowLight({ def, idSuffix }: { def: LightDef; idSuffix: string }) {
   );
 }
 
-function SpotLightImpl({ def, idSuffix = '' }: { def: LightDef; idSuffix?: string }) {
+function SpotLightImpl({ def, idSuffix = '', beamShape = 'cone' }: { def: LightDef; idSuffix?: string; beamShape?: BeamShape }) {
   const spotRef = useRef<THREE.SpotLight>(null);
   const targetRef = useRef<THREE.Object3D>(null);
 
@@ -147,6 +176,14 @@ function SpotLightImpl({ def, idSuffix = '' }: { def: LightDef; idSuffix?: strin
   }), [def.fogColor, def.fogStrength, coneLen]);
   useEffect(() => () => beamMat.dispose(), [beamMat]);
 
+  // High-tier monsters get a STAR-shaped beam instead of a round cone.
+  const isStar = beamShape === 'star';
+  const starGeo = useMemo(
+    () => (isStar ? makeStarBeamGeometry(coneRad, coneLen) : null),
+    [isStar, coneRad, coneLen]
+  );
+  useEffect(() => () => starGeo?.dispose(), [starGeo]);
+
   // Face disc material (bright core + dark-grey rim). Basic so it always reads bright.
   const discMat = useMemo(() => new THREE.MeshBasicMaterial({
     map: disc, transparent: true, side: THREE.DoubleSide, depthWrite: false, toneMapped: false,
@@ -184,9 +221,13 @@ function SpotLightImpl({ def, idSuffix = '' }: { def: LightDef; idSuffix?: strin
       <object3D ref={targetRef} position={[target.x, target.y, target.z]} />
 
       {def.fogOn && coneLen > 0.1 && (
-        <mesh position={[conePos.x, conePos.y, conePos.z]} quaternion={coneQuat} material={beamMat}>
-          <coneGeometry args={[coneRad, coneLen, 28, 1, true]} />
-        </mesh>
+        isStar && starGeo ? (
+          <mesh position={[conePos.x, conePos.y, conePos.z]} quaternion={coneQuat} material={beamMat} geometry={starGeo} />
+        ) : (
+          <mesh position={[conePos.x, conePos.y, conePos.z]} quaternion={coneQuat} material={beamMat}>
+            <coneGeometry args={[coneRad, coneLen, 28, 1, true]} />
+          </mesh>
+        )
       )}
 
       {def.emitterOn && (

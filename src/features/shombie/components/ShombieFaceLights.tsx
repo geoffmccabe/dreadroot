@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
-import { GameLight } from '@/features/lights/GameLight';
+import { GameLight, type BeamShape } from '@/features/lights/GameLight';
 import { useLightStore } from '@/features/lights/lightStore';
 import { loadLights, getLight } from '@/features/lights/lightsDb';
 import { DEFAULT_LIGHT, type LightDef } from '@/features/lights/lightTypes';
@@ -60,6 +60,10 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
 
   const groupRefs = useMemo(() => Array.from({ length: POOL }, () => ({ current: null as THREE.Group | null })), []);
   const lastFacing = useMemo(() => Array.from({ length: POOL }, () => new THREE.Vector3(0, 0, -1)), []);
+  // Per-pool beam shape: tier ≥7 monsters get a star beam, the rest a cone. Updated only
+  // when a slot's chosen monster crosses the threshold (no per-frame re-render).
+  const [shapes, setShapes] = useState<BeamShape[]>(() => Array(POOL).fill('cone') as BeamShape[]);
+  const shapesRef = useRef(shapes);
 
   useEffect(() => {
     const fwd = new THREE.Vector3();
@@ -91,6 +95,15 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
           while (j > 0 && bestDist[j - 1] > d) { bestDist[j] = bestDist[j - 1]; chosen[j] = chosen[j - 1]; j--; }
           bestDist[j] = d; chosen[j] = s;
         }
+        // Recompute beam shapes for the new selection; re-render only if one changed.
+        let changed = false;
+        const next = shapesRef.current.slice();
+        for (let k = 0; k < POOL; k++) {
+          const tier = chosen[k]?.definition.tier ?? 0;
+          const shp: BeamShape = tier >= 7 ? 'star' : 'cone';
+          if (next[k] !== shp) { next[k] = shp; changed = true; }
+        }
+        if (changed) { shapesRef.current = next; setShapes(next); }
       }
       // Aim each chosen light AT the enemy (the player) in full 3D — so the beam
       // tracks the target and swivels UP when the player is above (e.g. up a tree),
@@ -135,6 +148,7 @@ export function ShombieFaceLights({ shombies }: { shombies: ShombieInstance[] })
           <GameLight
             def={{ ...def, shadowOn: false, angleDeg: BEAM_ANGLE_DEG, intensity: def.intensity * BEAM_BRIGHTNESS }}
             idSuffix={`shombie-${i}`}
+            beamShape={shapes[i]}
           />
         </group>
       ))}
