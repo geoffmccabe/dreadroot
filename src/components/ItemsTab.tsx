@@ -1,15 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { worldStore } from '@/services/worldStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useUserData } from '@/hooks/useUserData';
-import { toast } from 'sonner';
-import { getSoundUrl } from '@/hooks/useGameSounds';
+import { useAuth } from '@/contexts/AuthContext';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
+import { ItemTileVisual } from '@/features/inventory-system';
 
 interface ItemDef {
   id: string;
@@ -20,27 +16,21 @@ interface ItemDef {
   item_category: string;
 }
 
-interface InventoryItemWithDef {
-  inventoryId: string;
+// One aggregated stack to display: a specific item (id → its own tier) and how
+// many of it the player holds in a given region.
+interface DisplayStack {
   itemId: string;
   quantity: number;
   def: ItemDef;
 }
 
-import { getItemSpriteUrl } from '@/lib/itemSprite';
-import { ItemTileVisual } from '@/features/inventory-system';
-
 function getSpriteUrl(def: ItemDef): string | null {
   return getItemSpriteUrl(def);
 }
 
-// ─── Items Grid ──────────────────────────────────────────────────
+// ─── Read-only item grid (no drag/drop — this tab is just a summary) ──────────
 
-function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoading: boolean }) {
-  if (items.length === 0) {
-    return <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>{isLoading ? 'Loading items...' : 'No items yet.'}</p>;
-  }
-
+function ItemsGrid({ items }: { items: DisplayStack[] }) {
   return (
     <div
       style={{
@@ -52,7 +42,7 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
     >
       {items.map((item) => (
         <div
-          key={item.inventoryId}
+          key={item.itemId}
           style={{
             background: 'hsla(var(--hud-bg-dim))',
             border: '1px solid hsla(var(--hud-border))',
@@ -67,9 +57,6 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
             overflow: 'hidden',
           }}
         >
-          {/* Canonical item-tile renderer — same component used in
-              vault, inventory, hotbar, and cursor. Single source of
-              truth for tier badge, sprite, and quantity badge. */}
           <div style={{
             position: 'relative',
             width: '100%',
@@ -89,17 +76,10 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
               spriteSize={56}
             />
           </div>
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 500,
-              lineHeight: '1.2',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              width: '100%',
-            }}
-          >
+          <span style={{
+            fontSize: '10px', fontWeight: 500, lineHeight: '1.2',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%',
+          }}>
             {item.def.name}
           </span>
         </div>
@@ -108,587 +88,141 @@ function ItemsGrid({ items, isLoading }: { items: InventoryItemWithDef[]; isLoad
   );
 }
 
-// ─── Egg Forge Panel ─────────────────────────────────────────────
-// Eggs are non-stackable (one row per egg) and each row carries its
-// own cooldown_until. Forge = combine 2 rows of tier N into 1 row of
-// tier N+1, where the result inherits the LONGER of the two source
-// cooldowns. Caps at tier 9 → 10. Eggs that are cooldown-locked can
-// still participate in forging.
+// ─── One titled storage section (Equipped / QS / Inventory / Vault) ───────────
 
-function EggForgePanel({
-  inventory,
-  itemDefs,
-  onForged,
-}: {
-  inventory: any[];
-  itemDefs: Map<string, ItemDef>;
-  onForged: (fromTier: number, toTier: number) => void;
-}) {
-  const [forgingTier, setForgingTier] = useState<number | null>(null);
+function Section({ label, items }: { label: string; items: DisplayStack[] }) {
+  const total = items.reduce((s, i) => s + i.quantity, 0);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-bold" style={{ color: '#ffffff' }}>{label}</div>
+        <div className="text-xs" style={{ color: 'hsl(var(--hud-text-dim))' }}>{total}</div>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs" style={{ color: 'hsl(var(--hud-text-dim))' }}>Empty.</p>
+      ) : (
+        <ItemsGrid items={items} />
+      )}
+    </div>
+  );
+}
 
-  // Group egg rows by tier. Each tier carries an array of raw rows.
-  const eggsByTier = new Map<number, any[]>();
-  for (const inv of inventory) {
-    if (inv.item_type !== 'item' || !inv.item_id || inv.quantity <= 0) continue;
-    const def = itemDefs.get(inv.item_id);
+// Region order + labels for the Items overview.
+const REGIONS: { key: string; label: string }[] = [
+  { key: 'equip', label: 'Equipped' },
+  { key: 'quick_select', label: 'Quick Select' },
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'vault', label: 'Vault' },
+];
+
+// Aggregate raw user_slots rows for one region into per-item stacks (one tile
+// per item id, so different tiers stay separate — each tier is its own item id).
+function aggregate(rows: any[], defs: Map<string, ItemDef>): DisplayStack[] {
+  const m = new Map<string, DisplayStack>();
+  for (const r of rows) {
+    if (!r.item_id) continue;
+    const def = defs.get(r.item_id);
     if (!def) continue;
-    // Detect egg rows by the item key prefix in the items table. We
-    // already have tier from def; the discriminator is the name. Eggs
-    // always have name "Shpider Egg" per the seed insert.
-    if (def.name !== 'Shpider Egg') continue;
-    const tier = def.tier;
-    if (!eggsByTier.has(tier)) eggsByTier.set(tier, []);
-    eggsByTier.get(tier)!.push(inv);
+    const qty = r.quantity ?? 1;
+    const e = m.get(r.item_id);
+    if (e) e.quantity += qty;
+    else m.set(r.item_id, { itemId: r.item_id, quantity: qty, def });
   }
-
-  // Tiers with at least 2 rows and tier < 10 (tier 10 can't go higher).
-  const forgeableTiers = Array.from(eggsByTier.entries())
-    .filter(([tier, rows]) => tier < 10 && rows.length >= 2)
-    .sort((a, b) => a[0] - b[0]);
-
-  if (forgeableTiers.length === 0) {
-    return (
-      <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>
-        Collect 2 Shpider Eggs of the same tier to forge them into the next tier.
-      </p>
-    );
-  }
-
-  const handleForgeEggs = async (tier: number, rows: any[]) => {
-    if (forgingTier !== null) return;
-    setForgingTier(tier);
-    try {
-      // Pick the 2 rows with the LOWEST cooldown_until so the result
-      // unlocks sooner. (Server still computes MAX of the two for the
-      // result, so this is purely about which two we offer up.)
-      const sorted = [...rows].sort((a, b) => {
-        const ca = a.cooldown_until ? new Date(a.cooldown_until).getTime() : 0;
-        const cb = b.cooldown_until ? new Date(b.cooldown_until).getTime() : 0;
-        return ca - cb;
-      });
-      const pick = sorted.slice(0, 2);
-
-      // Resolve the result item id (next tier of the same forge_family).
-      const nextKey = `shpider_egg_t${tier + 1}`;
-      const { data: nextItem, error: lookupErr } = await supabase
-        .from('items')
-        .select('id')
-        .eq('key', nextKey)
-        .maybeSingle();
-      if (lookupErr || !nextItem) {
-        toast.error(`Missing items row for ${nextKey}`);
-        return;
-      }
-
-      try {
-        await worldStore.forgeItems([pick[0].id, pick[1].id], nextItem.id);
-        onForged(tier, tier + 1);
-      } catch (err: any) {
-        toast.error(`Forge failed: ${err?.message ?? String(err)}`);
-      }
-    } finally {
-      setForgingTier(null);
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      {forgeableTiers.map(([tier, rows]) => {
-        const def = itemDefs.get(rows[0].item_id) || null;
-        const sprite = def ? getSpriteUrl(def) : null;
-        const busy = forgingTier !== null;
-        const groups = Math.floor(rows.length / 2);
-        return (
-          <Card key={tier} className="p-3">
-            <div style={{ textAlign: 'center', fontSize: '11px', fontWeight: 600, marginBottom: '6px', color: 'hsl(var(--hud-text))' }}>
-              Shpider Egg — T{tier} → T{tier + 1}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {[0, 1].map(i => (
-                  <div key={i} style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: 'hsla(var(--hud-bg))' }}>
-                    {sprite ? (
-                      <img src={sprite} alt="" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              <span style={{ fontSize: '14px', color: 'hsl(var(--hud-text-dim))' }}>→</span>
-              <button
-                onClick={() => handleForgeEggs(tier, rows)}
-                disabled={busy}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
-                  padding: '6px',
-                  border: '2px solid hsla(var(--hud-border))',
-                  borderRadius: 'var(--hud-radius)',
-                  background: 'hsla(var(--hud-bg))',
-                  cursor: busy ? 'default' : 'pointer',
-                  opacity: busy ? 0.5 : 1,
-                }}
-              >
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', background: 'hsla(var(--hud-bg))' }}>
-                  {sprite ? (
-                    <img src={sprite} alt="" style={{ width: '48px', height: '48px', objectFit: 'cover' }} />
-                  ) : null}
-                </div>
-                <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>T{tier + 1}</span>
-              </button>
-              <span style={{ fontSize: '10px', color: 'hsl(var(--hud-text-dim))' }}>
-                {groups} forge{groups === 1 ? '' : 's'} available
-              </span>
-            </div>
-          </Card>
-        );
-      })}
-    </div>
+  return Array.from(m.values()).sort(
+    (a, b) => (a.def.item_number ?? 999) - (b.def.item_number ?? 999) || a.def.tier - b.def.tier
   );
 }
-
-// ─── Forge Panel ─────────────────────────────────────────────────
-
-function ForgePanel({
-  items,
-  onForge,
-  onForgeComplete,
-}: {
-  items: InventoryItemWithDef[];
-  onForge: (itemId: string, itemName: string, currentTier: number) => Promise<boolean>;
-  onForgeComplete: (name: string, fromTier: number, toTier: number) => void;
-}) {
-  const [animatingGroup, setAnimatingGroup] = useState<string | null>(null);
-  const [animationStep, setAnimationStep] = useState(0);
-  // Snapshot items during animation so inventory state changes don't remove the card
-  const [snapshotItems, setSnapshotItems] = useState<InventoryItemWithDef[] | null>(null);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // Synchronous guard against double-clicks (state updates are async/batched)
-  const forgingRef = useRef(false);
-  const bgSoundRef = useRef<HTMLAudioElement | null>(null);
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => { timersRef.current.forEach(clearTimeout); };
-  }, []);
-
-  // Use snapshot during animation, live items otherwise
-  const renderItems = snapshotItems ?? items;
-  const forgeable = renderItems.filter((i) => i.quantity >= 4);
-
-  if (forgeable.length === 0 && !animatingGroup) {
-    return (
-      <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>
-        Collect 4 of any item to forge them into a higher tier.
-      </p>
-    );
-  }
-
-  const handleForgeClick = async (groupKey: string, item: InventoryItemWithDef) => {
-    // Synchronous double-click guard
-    if (forgingRef.current) return;
-    forgingRef.current = true;
-
-    // Snapshot items and start animation + sounds IMMEDIATELY
-    setSnapshotItems(items.map(i => ({ ...i })));
-    setAnimatingGroup(groupKey);
-    setAnimationStep(0);
-
-    // Start background forge sound immediately
-    const bgSound = new Audio(getSoundUrl('forge_background', '/forge_bkgd_noise.mp3'));
-    bgSound.volume = 0.4;
-    bgSound.play().catch(() => {});
-    bgSoundRef.current = bgSound;
-
-    // Start slide animation immediately (first hammer at 1s)
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    for (let step = 1; step <= 4; step++) {
-      timers.push(setTimeout(() => {
-        setAnimationStep(step);
-        const hammer = new Audio(getSoundUrl('forge_hammer', '/forge_hammer.mp3'));
-        hammer.volume = 0.5;
-        hammer.play().catch(() => {});
-      }, step * 1000));
-    }
-    timersRef.current = timers;
-
-    // Do DB work in parallel with animation
-    const clickTime = Date.now();
-    const success = await onForge(item.itemId, item.def.name, item.def.tier);
-
-    if (!success) {
-      // DB failed — cancel animation, restore state
-      timers.forEach(clearTimeout);
-      bgSound.pause();
-      setAnimatingGroup(null);
-      setAnimationStep(0);
-      setSnapshotItems(null);
-      forgingRef.current = false;
-      return;
-    }
-
-    // DB succeeded — schedule completion after animation finishes
-    const elapsed = Date.now() - clickTime;
-    const remaining = Math.max(0, 4800 - elapsed);
-
-    timersRef.current.push(setTimeout(() => {
-      bgSound.pause();
-      bgSound.currentTime = 0;
-      setAnimatingGroup(null);
-      setAnimationStep(0);
-      setSnapshotItems(null);
-      forgingRef.current = false;
-      onForgeComplete(item.def.name, item.def.tier, item.def.tier + 1);
-    }, remaining));
-  };
-
-  return (
-    <div className="space-y-3">
-      {forgeable.map((item) => {
-        const numGroups = Math.floor(item.quantity / 4);
-        const sprite = getSpriteUrl(item.def);
-
-        return Array.from({ length: numGroups }, (_, groupIdx) => {
-          const groupKey = `${item.inventoryId}-${groupIdx}`;
-          const isAnimating = animatingGroup === groupKey;
-          const step = isAnimating ? animationStep : 0;
-
-          return (
-            <Card
-              key={groupKey}
-              className="p-3"
-              style={{ overflow: 'hidden' }}
-            >
-              {/* Item name centered across the top */}
-              <div style={{
-                textAlign: 'center',
-                fontSize: '11px',
-                fontWeight: 600,
-                marginBottom: '6px',
-                color: 'hsl(var(--hud-text))',
-              }}>
-                {item.def.name}
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                {/* 4 source sprites */}
-                <div style={{ display: 'flex', gap: '4px', flexShrink: 0, position: 'relative' }}>
-                  {[0, 1, 2, 3].map((i) => (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        transition: 'transform 0.6s ease-in-out, opacity 0.5s ease-in 0.1s',
-                        transform: step > i ? 'translateX(140px)' : 'translateX(0)',
-                        opacity: step > i ? 0 : 1,
-                      }}
-                    >
-                      <div style={{ width: '48px', height: '48px' }}>
-                        {sprite ? (
-                          <img
-                            src={sprite}
-                            alt={item.def.name}
-                            style={{ width: '48px', height: '48px', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <div style={{
-                            width: '48px', height: '48px',
-                            background: 'hsla(var(--hud-bg))', borderRadius: 'var(--hud-radius)',
-                          }} />
-                        )}
-                      </div>
-                      <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
-                        T{item.def.tier}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Arrow */}
-                <span style={{
-                  fontSize: '20px',
-                  color: 'hsl(var(--hud-text-dim))',
-                  flexShrink: 0,
-                  lineHeight: 1,
-                }}>
-                  &rarr;
-                </span>
-
-                {/* Target item — clickable forge button */}
-                <button
-                  onClick={() => handleForgeClick(groupKey, item)}
-                  disabled={animatingGroup !== null}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '2px',
-                    padding: '6px',
-                    border: '2px solid hsla(var(--hud-border))',
-                    borderRadius: 'var(--hud-radius)',
-                    background: 'hsla(var(--hud-bg))',
-                    cursor: animatingGroup ? 'default' : 'pointer',
-                    flexShrink: 0,
-                    transition: 'border-color 0.2s',
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!animatingGroup) e.currentTarget.style.borderColor = 'hsla(var(--hud-highlight))';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'hsla(var(--hud-border))';
-                  }}
-                >
-                  <div style={{ width: '48px', height: '48px' }}>
-                    {sprite ? (
-                      <img
-                        src={sprite}
-                        alt={`${item.def.name} T${item.def.tier + 1}`}
-                        style={{
-                          width: '48px', height: '48px', objectFit: 'contain',
-                          filter: `saturate(${step * 25}%)`,
-                          transition: 'filter 0.3s ease-in',
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '48px', height: '48px',
-                        background: 'hsla(var(--hud-bg))', borderRadius: 'var(--hud-radius)',
-                        filter: `saturate(${step * 25}%)`,
-                        transition: 'filter 0.3s ease-in',
-                      }} />
-                    )}
-                  </div>
-                  <span style={{ fontSize: '9px', color: 'hsl(var(--hud-text-dim))' }}>
-                    T{item.def.tier + 1}
-                  </span>
-                </button>
-              </div>
-            </Card>
-          );
-        });
-      })}
-    </div>
-  );
-}
-
-// ─── Main ItemsTab ───────────────────────────────────────────────
 
 export function ItemsTab({ height = 500 }: { height?: number }) {
-  const { inventory, addItem, removeItems } = useUserData();
-  const [itemDefs, setItemDefs] = useState<Map<string, ItemDef>>(new Map());
+  const { user } = useAuth();
+  const [rows, setRows] = useState<any[]>([]);
+  const [defs, setDefs] = useState<Map<string, ItemDef>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
-  const [forgeModal, setForgeModal] = useState<{ name: string; fromTier: number; toTier: number; sourceCount?: number } | null>(null);
 
-  // Load item definitions for all inventory items
-  const loadDefs = useCallback(async () => {
-    const itemEntries = inventory.filter((i) => i.item_type === 'item' && i.item_id);
-    const itemIds = itemEntries.map((i) => i.item_id!);
+  const load = useCallback(async () => {
+    if (!user?.id) { setRows([]); setDefs(new Map()); setIsLoading(false); return; }
+    setIsLoading(true);
+    // All items across every region live in user_slots (equip / quick_select /
+    // inventory / vault). One round-trip gets the whole picture.
+    const { data: slotRows } = await supabase
+      .from('user_slots' as any)
+      .select('region, item_id, quantity, slot, page')
+      .eq('user_id', user.id);
 
-    if (itemIds.length === 0) {
-      setItemDefs(new Map());
-      setIsLoading(false);
-      return;
-    }
-
-    const { data } = await supabase
-      .from('items')
-      .select('id, name, item_number, tier, texture_url, item_category')
-      .in('id', itemIds);
-
+    const list = (slotRows as any[]) ?? [];
+    const ids = Array.from(new Set(list.map((r) => r.item_id).filter(Boolean)));
     const map = new Map<string, ItemDef>();
-    for (const d of data || []) {
-      map.set(d.id, d as ItemDef);
+    if (ids.length > 0) {
+      const { data } = await supabase
+        .from('items')
+        .select('id, name, item_number, tier, texture_url, item_category')
+        .in('id', ids);
+      for (const d of data || []) map.set(d.id, d as ItemDef);
     }
-    setItemDefs(map);
+    setRows(list);
+    setDefs(map);
     setIsLoading(false);
-  }, [inventory]);
+  }, [user?.id]);
 
-  useEffect(() => {
-    loadDefs();
-  }, [loadDefs]);
+  useEffect(() => { load(); }, [load]);
 
-  // Build display list — aggregate duplicate inventory rows by item_id
-  const aggregated = new Map<string, InventoryItemWithDef>();
-  for (const inv of inventory) {
-    if (inv.item_type !== 'item' || !inv.item_id) continue;
-    const def = itemDefs.get(inv.item_id);
-    if (!def) continue;
-    const existing = aggregated.get(inv.item_id);
-    if (existing) {
-      existing.quantity += inv.quantity;
-    } else {
-      aggregated.set(inv.item_id, {
-        inventoryId: inv.id,
-        itemId: inv.item_id,
-        quantity: inv.quantity,
-        def,
-      });
-    }
+  // Per-region aggregated stacks.
+  const byRegion = new Map<string, DisplayStack[]>();
+  for (const { key } of REGIONS) {
+    byRegion.set(key, aggregate(rows.filter((r) => r.region === key), defs));
   }
-  const displayItems = Array.from(aggregated.values());
-  displayItems.sort((a, b) => (a.def.item_number ?? 999) - (b.def.item_number ?? 999));
 
-  // Forge handler — returns true on success, false on failure
-  const handleForge = async (itemId: string, itemName: string, currentTier: number): Promise<boolean> => {
-    const nextTier = currentTier + 1;
-    console.log(`[Forge] Starting: "${itemName}" T${currentTier} → T${nextTier}, sourceItemId=${itemId}`);
-
-    // Find the next-tier item (same name, tier+1)
-    // Use .limit(1) instead of .maybeSingle() to handle duplicate items gracefully
-    const { data: nextTierRows, error: lookupErr } = await supabase
-      .from('items')
-      .select('id, tier')
-      .eq('name', itemName)
-      .eq('tier', nextTier)
-      .limit(1);
-
-    if (lookupErr) {
-      console.error('[Forge] Lookup error:', lookupErr.message);
-    }
-
-    let nextTierItem = nextTierRows && nextTierRows.length > 0 ? nextTierRows[0] : null;
-    console.log(`[Forge] Next tier lookup:`, nextTierItem ? `found id=${nextTierItem.id} tier=${nextTierItem.tier}` : 'not found, will auto-create');
-
-    // Auto-create the next tier if it doesn't exist
-    if (!nextTierItem) {
-      const { data: currentItem } = await supabase
-        .from('items')
-        .select('key, name, item_number, item_category, rarity, class, texture_url, description')
-        .eq('id', itemId)
-        .single();
-
-      if (!currentItem) {
-        toast.error('Could not find item definition');
-        return false;
-      }
-
-      console.log(`[Forge] Current item key="${currentItem.key}", name="${currentItem.name}"`);
-
-      const baseKey = currentItem.key.replace(/_t\d+$/, '');
-      const newKey = `${baseKey}_t${nextTier}`;
-      console.log(`[Forge] Auto-create: baseKey="${baseKey}", newKey="${newKey}", tier=${nextTier}`);
-
-      // Check if the key already exists (from a previous failed forge attempt)
-      const { data: existingByKey } = await supabase
-        .from('items')
-        .select('id, tier')
-        .eq('key', newKey)
-        .maybeSingle();
-
-      if (existingByKey) {
-        console.log(`[Forge] Found existing by key: id=${existingByKey.id} tier=${existingByKey.tier}`);
-        // Verify the existing item actually has the correct tier
-        if (existingByKey.tier !== nextTier) {
-          console.error(`[Forge] BUG: existing key "${newKey}" has tier=${existingByKey.tier}, expected ${nextTier}`);
-          toast.error(`Forge error: tier mismatch on item key`);
-          return false;
-        }
-        nextTierItem = existingByKey;
-      } else {
-        const { data: created, error: createErr } = await supabase
-          .from('items')
-          .insert({
-            key: newKey,
-            name: currentItem.name,
-            item_number: null,
-            item_category: currentItem.item_category,
-            rarity: currentItem.rarity,
-            tier: nextTier,
-            cost: 0,
-            class: currentItem.class,
-            texture_url: currentItem.texture_url,
-            description: currentItem.description,
-          })
-          .select('id, tier')
-          .single();
-
-        if (createErr || !created) {
-          console.error('[Forge] Failed to create tier item:', createErr?.message);
-          toast.error(`Forge failed: ${createErr?.message || 'unknown error'}`);
-          return false;
-        }
-        console.log(`[Forge] Created new item: id=${created.id} tier=${created.tier}`);
-        nextTierItem = created;
-      }
-    }
-
-    console.log(`[Forge] Will add item id=${nextTierItem.id} tier=${nextTierItem.tier}`);
-
-    // Server-verified: remove 4 of current tier
-    const removed = await removeItems(itemId, 4);
-    if (!removed) {
-      toast.error('Not enough items to forge');
-      return false;
-    }
-
-    // Server-verified: add 1 of next tier
-    const added = await addItem(nextTierItem.id, 1);
-    if (!added) {
-      toast.error('Failed to create forged item');
-      return false;
-    }
-
-    console.log(`[Forge] Success: "${itemName}" T${currentTier} → T${nextTier}`);
-    return true;
-  };
+  // Forge candidates: total held (across ALL regions) of each item. Regular
+  // items forge 4→1 next tier; Shpider Eggs forge 2→1. Display only.
+  const totals = aggregate(rows, defs);
+  const forgeable = totals.filter((s) =>
+    s.def.name === 'Shpider Egg' ? s.quantity >= 2 : s.quantity >= 4
+  );
 
   if (isLoading) {
     return <p className="text-xs p-4" style={{ color: 'hsl(var(--hud-text-dim))' }}>Loading items...</p>;
   }
 
   return (
-    <>
-      <Tabs defaultValue="items" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-3">
-          <TabsTrigger value="items">Items</TabsTrigger>
-          <TabsTrigger value="forge">Forge</TabsTrigger>
-        </TabsList>
+    <Tabs defaultValue="items" className="w-full">
+      <TabsList className="grid w-full grid-cols-2 mb-3">
+        <TabsTrigger value="items">Items</TabsTrigger>
+        <TabsTrigger value="forge">Forge</TabsTrigger>
+      </TabsList>
 
-        <TabsContent value="items" className="mt-0">
-          <ScrollArea style={{ height: `${height - 56}px` }}>
-            <div className="pr-4">
-              <ItemsGrid items={displayItems} isLoading={isLoading} />
-            </div>
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="forge" className="mt-0">
-          <ScrollArea style={{ height: `${height - 56}px` }}>
+      {/* Items — every storage region stacked vertically, read-only */}
+      <TabsContent value="items" className="mt-0">
+        <ScrollArea style={{ height: `${height - 56}px` }}>
           <div className="pr-4 space-y-4">
-          <EggForgePanel
-            inventory={inventory}
-            itemDefs={itemDefs}
-            onForged={(fromTier, toTier) => {
-              setForgeModal({ name: 'Shpider Egg', fromTier, toTier, sourceCount: 2 });
-            }}
-          />
-          <ForgePanel
-            items={displayItems}
-            onForge={handleForge}
-            onForgeComplete={(name, fromTier, toTier) => {
-              setForgeModal({ name, fromTier, toTier });
-            }}
-          />
+            {REGIONS.map(({ key, label }) => (
+              <Section key={key} label={label} items={byRegion.get(key) ?? []} />
+            ))}
           </div>
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
+        </ScrollArea>
+      </TabsContent>
 
-      {/* Forge success modal */}
-      <Dialog open={!!forgeModal} onOpenChange={() => setForgeModal(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Forge Successful</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm">
-            You forged {forgeModal?.sourceCount ?? 4} Tier {forgeModal?.fromTier} {forgeModal?.name} into 1 of Tier {forgeModal?.toTier}!
-          </p>
-          <Button className="w-full mt-2" onClick={() => setForgeModal(null)}>
-            OK
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </>
+      {/* Forge — display only (forging happens at a Forge Point in the world) */}
+      <TabsContent value="forge" className="mt-0">
+        <ScrollArea style={{ height: `${height - 56}px` }}>
+          <div className="pr-4 space-y-3">
+            <Card className="p-3 text-center" style={{ background: 'hsla(var(--hud-bg-dim))' }}>
+              <p className="text-sm font-semibold" style={{ color: 'hsl(var(--hud-text-bright))' }}>
+                Find a Forge Point to Forge
+              </p>
+            </Card>
+            {forgeable.length === 0 ? (
+              <p className="text-xs" style={{ color: 'hsl(var(--hud-text-dim))' }}>
+                Nothing to forge yet — collect 4 of an item (or 2 Shpider Eggs of the same tier).
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="text-sm font-bold" style={{ color: '#ffffff' }}>Forgeable</div>
+                <ItemsGrid items={forgeable} />
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </TabsContent>
+    </Tabs>
   );
 }
