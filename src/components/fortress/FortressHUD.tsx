@@ -909,7 +909,7 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Drop-in object builder palette — same heightmap-map gating. */}
       <BuilderPalette />
       {/* Magic Chest HUD (prompt + spin reel) — only in siege. */}
-      {isSiege && <MagicChestPanel />}
+      {isSiege && <MagicChestPanel superadmin={!!userRoles?.includes?.('superadmin')} />}
       {/* Laser inspector: live "pointing at <item>" readout + flag worklist. On ALL siege
           maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
       {isSiege && <CoordsHud />}

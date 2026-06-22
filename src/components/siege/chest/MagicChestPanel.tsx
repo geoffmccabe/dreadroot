@@ -11,7 +11,7 @@ import { PRIZE_INDEX, generatePrizeList } from './chestDrops';
 const TILE = 72;          // px per reel item
 const sprite = (id: number) => `/item-sprites/${id}.webp`;
 
-export function MagicChestPanel() {
+export function MagicChestPanel({ superadmin = false }: { superadmin?: boolean }) {
   const { chestInRange } = useSiegeLobbyZones();
   const phase = useChestPhase();
   const [msg, setMsg] = useState<string | null>(null);
@@ -33,11 +33,24 @@ export function MagicChestPanel() {
 
   const phaseRef = useRef(phase); phaseRef.current = phase;
 
+  const callRpc = (force: boolean) => supabase.rpc('open_prize_chest', { p_chest_number: 1, p_request_id: crypto.randomUUID(), p_force: force });
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
   const open = async () => {
     setMsg('Opening…');
     try {
-      const { data, error } = await supabase.rpc('open_prize_chest', { p_chest_number: 1, p_request_id: crypto.randomUUID() });
-      const res = data as { ok?: boolean; prize?: number; error?: string } | null;
+      let { data, error } = await callRpc(false);
+      let res = data as { ok?: boolean; prize?: number; error?: string } | null;
+      // ⚠️ TEMP SUPERADMIN BYPASS — REMOVE once the chest economy is proven. If a superadmin has
+      // no Key, show the normal message then force-open (the RPC re-checks the superadmin role).
+      if ((!res?.ok) && superadmin && /need a key/i.test(res?.error ?? '')) {
+        setMsg('You need a Key to open the chest.');
+        await delay(1100);
+        setMsg("OH YES, SUPERADMINS DON'T NEED A KEY 🔓");
+        await delay(1200);
+        ({ data, error } = await callRpc(true));
+        res = data as { ok?: boolean; prize?: number; error?: string } | null;
+      }
       if (error || !res?.ok || res.prize == null) { setMsg(res?.error || error?.message || 'The chest mechanism is not ready yet.'); setTimeout(() => setMsg(null), 2500); return; }
       setMsg(null);
       // Server decided the prize (key already consumed + prize granted server-side). Build a local
