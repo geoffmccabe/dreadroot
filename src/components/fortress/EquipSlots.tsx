@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
+import { setRocketBelt } from '@/config/rocketBelt';
+import { rocketBeltTierFromItemNumber } from '@/features/rocketBelt/rocketBelt';
 import { useHandGrenades } from '@/config/handGrenade';
 import { setFlameGlove } from '@/config/flameGlove';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
@@ -210,6 +212,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     if (isGlove(equip[5])) setFlameGlove({ hand: 'R', tier: equip[5]!.tier ?? 1 });
     else if (isGlove(equip[1])) setFlameGlove({ hand: 'L', tier: equip[1]!.tier ?? 1 });
     else setFlameGlove(null);
+  }, [equip]);
+
+  // Rocket Belt (Special slot = 4, shown as E5) → publish the equipped tier so the movement
+  // code can grant the Shift+E forward boost. Identified by item_number (239–248).
+  useEffect(() => {
+    const belt = equip[4];
+    const tier = rocketBeltTierFromItemNumber(belt?.itemNumber);
+    setRocketBelt(tier ? { tier: belt?.tier ?? tier } : null);
   }, [equip]);
 
   const reportFail = (title: string, err: unknown) => {

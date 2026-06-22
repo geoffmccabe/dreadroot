@@ -12,6 +12,8 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { anyArmedHandGrenade, anyHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
 import { getFlameGlove } from '@/config/flameGlove';
+import { getRocketBelt } from '@/config/rocketBelt';
+import { maxBoostSeconds, BOOST_REFILL_WINDOW_SEC } from '@/features/rocketBelt/rocketBelt';
 import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
@@ -194,6 +196,8 @@ export function FirstPersonControls({
   const jetBoostNextRefillRef = useRef(0);
   const jetBoostRequestRef = useRef(false);
   const spaceKeyEdgeRef = useRef(false); // Edge detection for space key
+  // Rocket Belt forward-boost fuel (seconds remaining in the current refill window).
+  const beltFuelRef = useRef(0);
   const lastJetBoostStateUpdateRef = useRef(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   
@@ -2460,11 +2464,26 @@ export function FirstPersonControls({
       if (userRolesRef.current.includes('admin') || userRolesRef.current.includes('superadmin')) {
         adminEverRef.current = true;
       }
-      const superSprintActive = adminEverRef.current && keys.current.shift && keys.current.e;
-      const superSprintSpeed = baseSpeed * 10; // 10x normal speed for admin Shift+E
+      const wantsBoost = keys.current.shift && keys.current.e;
+      const superSprintSpeed = baseSpeed * 10; // 10x normal speed for the Shift+E forward boost
+      // Admin super-sprint is unlimited. Normal players get the SAME forward boost via a
+      // Rocket Belt in the Special slot, metered by a per-minute fuel budget (tier × 2s).
+      const superSprintActive = adminEverRef.current && wantsBoost;
+      const beltTier = getRocketBelt()?.tier ?? 0;
+      const beltMaxFuel = maxBoostSeconds(beltTier);
+      const fuelDt = Math.min(delta, 1 / 30);
+      if (beltMaxFuel > 0) {
+        // Continuous refill: full budget per refill window → exactly tier×2 seconds per minute.
+        beltFuelRef.current = Math.min(beltMaxFuel, beltFuelRef.current + (beltMaxFuel / BOOST_REFILL_WINDOW_SEC) * fuelDt);
+      } else {
+        beltFuelRef.current = 0;
+      }
+      const beltBoostActive = !superSprintActive && beltTier > 0 && wantsBoost && beltFuelRef.current > 0;
+      if (beltBoostActive) beltFuelRef.current = Math.max(0, beltFuelRef.current - fuelDt);
+      const boostActive = superSprintActive || beltBoostActive;
       const runSpeed = godModeRef.current
         ? godSpeed
-        : (superSprintActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
+        : (boostActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
       
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
