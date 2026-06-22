@@ -11,7 +11,7 @@ export type NPCSubtab = 'enemies' | 'enemies-sw' | 'friends' | 'pathfinding';
 export type SeedSubtab = 'ordinary' | 'wide' | 'fungal';
 
 // Subtab types for Items panel
-export type ItemsSubtab = 'all-items' | 'weapons-items' | 'bullets' | 'drop-tables';
+export type ItemsSubtab = 'all-items' | 'weapons-items' | 'bullets' | 'drop-tables' | 'chests';
 
 // Subtab types for Worlds panel
 export type WorldsSubtab = 'settings' | 'worlds' | 'fix' | 'atlas' | 'view';

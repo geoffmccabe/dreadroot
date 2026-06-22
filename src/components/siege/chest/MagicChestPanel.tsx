@@ -36,7 +36,7 @@ export function MagicChestPanel() {
   const open = async () => {
     setMsg('Opening…');
     try {
-      const { data, error } = await supabase.rpc('open_prize_chest', { p_request_id: crypto.randomUUID() });
+      const { data, error } = await supabase.rpc('open_prize_chest', { p_chest_number: 1, p_request_id: crypto.randomUUID() });
       const res = data as { ok?: boolean; prize?: number; error?: string } | null;
       if (error || !res?.ok || res.prize == null) { setMsg(res?.error || error?.message || 'The chest mechanism is not ready yet.'); setTimeout(() => setMsg(null), 2500); return; }
       setMsg(null);
