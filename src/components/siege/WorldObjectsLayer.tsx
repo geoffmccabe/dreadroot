@@ -335,8 +335,8 @@ export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: b
   });
   const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, _k: i })), [data]);
   const nearGroups = useMemo(() => {
-    const [CX, CZ] = center, R2 = 500 * 500;        // render distance (m): far enough to see distant
-    // landmarks now that the fog can be turned off (was 260 to match the fog).
+    const [CX, CZ] = center, R2 = 320 * 320;        // render distance (m). 500 tanked FPS (≈3.7×
+    // the instances); 320 keeps a decent view with the fog off without the load. (was 260.)
     const out: (Group & { _k: number })[] = [];
     for (const g of allGroups) {
       const near = g.matrices.filter((mx) => {
