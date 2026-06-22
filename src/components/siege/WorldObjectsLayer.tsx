@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
+import { windTime, applyLeafWind } from './siegeWind';
 
 let _meshGroupId = 0;
 import { voxelizeGeometry } from './voxelize';
@@ -35,6 +36,15 @@ const STONE_FAM_RE = /rock|stone|boulder|cliff|rune|pillar|plateau|column|stalag
 const TENT_FAM_RE = /tent|tarp|bedroll/i;
 const STONE_GREY = 0x86827b;   // warm stone grey, to match the other rocks
 const TENT_TAN = 0xb0a585;     // canvas/tan, so the tent isn't near-black
+
+// The SM_Tree_* lobby trees were authored for a texture that isn't cbc2b77227 (the palette they
+// got), so their UVs sample white/wrong swatches → "crazy white" leaves + random trunks. Until a
+// correct tree texture exists, give leaves a leaf-green (varied per tree for a gradient feel) and
+// trunks brown — the Synty flat-shaded look. Leaves also get the subtle wind sway.
+const TREE_RE = /tree|palm|willow|birch|pine|oak|cedar|spruce|fir|trunk|leave|foliage|branch|bush/i;
+const LEAF_GREENS = [0x4f7a32, 0x5d8a3a, 0x42692b, 0x6a9a44, 0x567f2e];
+const BARK_BROWN = 0x584027;
+const hashIdx = (s: string, n: number) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h) % n; };
 
 // Shared atlas cache: each Synty pack atlas is loaded ONCE and reused across every
 // model that uses it — small memory, no per-model textures embedded.
@@ -171,6 +181,22 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           const e = m.emissive;
           if (Math.max(e.r, e.g, e.b) > 0.02) { e.setRGB(0, 0, 0); m.needsUpdate = true; }
         }
+        // TREES: leaves → leaf-green (+ wind), trunks → brown, dead leaves → autumn. Bypass the
+        // broken palette texture entirely.
+        const mn = m.name.toLowerCase();
+        if (TREE_RE.test(fbx)) {
+          const deadTree = /dead|stump|log/i.test(fbx);
+          const isLeaf = /leave|leaf|foliage|canopy|frond/.test(mn);
+          const isTrunk = /trunk|bark|branch|wood|stem/.test(mn);
+          if (isLeaf || isTrunk || mn.startsWith('lambert')) {
+            m.map = null; if ('metalness' in m) m.metalness = 0;
+            if ('emissive' in m && m.emissive) m.emissive.setRGB(0, 0, 0);
+            if (isTrunk || deadTree) m.color.set(BARK_BROWN);   // trunks + bare dead trees → brown
+            else { m.color.set(LEAF_GREENS[hashIdx(fbx, LEAF_GREENS.length)]); applyLeafWind(m); }
+            m.needsUpdate = true;
+            return;   // skip the palette-texture path below
+          }
+        }
         // per-material real texture (prefab -> .mat -> _MainTex); fall back to pack atlas
         const tu = (matMap && matMap[m.name]) || atlasUrl;
         const ppFlat = tu && tu.includes(PP_PALETTE_HASH)
@@ -298,7 +324,8 @@ export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: b
   const camera = useThree((s) => s.camera);
   const [center, setCenter] = useState<[number, number]>([-400, 680]);
   const lastCenter = useRef<[number, number]>([-400, 680]);
-  useFrame(() => {
+  useFrame((_, dt) => {
+    windTime.value += dt;                            // drives the leaf-flutter vertex sway
     const dx = camera.position.x - lastCenter.current[0];
     const dz = camera.position.z - lastCenter.current[1];
     if (dx * dx + dz * dz > 150 * 150) {            // re-center only after ~150m of travel
