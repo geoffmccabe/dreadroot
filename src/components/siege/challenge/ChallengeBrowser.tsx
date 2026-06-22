@@ -36,11 +36,11 @@ const WORLD_ROW2 = [
 ];
 
 // Mirrors the challenge card: a 4:1 banner image + name + short description. The
-// images are placeholders (public/world_cards/*.webp) — swap in real renders later.
+// images live in public/world_cards/*.webp at their native ~1.88:1 ratio.
 function WorldCard({ label, img, desc, onClick }: { label: string; img: string; desc: string; onClick: () => void }) {
   return (
     <button onClick={onClick} style={{ ...card, cursor: 'pointer', padding: 0, textAlign: 'left', color: '#e8eefb', font: 'inherit', width: '100%' }}>
-      <img src={img} alt="" style={{ width: '100%', aspectRatio: '4 / 1', objectFit: 'cover', display: 'block' }} />
+      <img src={img} alt="" style={{ width: '100%', aspectRatio: '1826 / 972', objectFit: 'cover', display: 'block' }} />
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ fontSize: 14, fontWeight: 800 }}>{label}</div>
         <div style={{ fontSize: 11, color: '#9fb4d0', lineHeight: 1.3 }}>{desc}</div>
