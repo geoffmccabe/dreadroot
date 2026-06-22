@@ -97,7 +97,7 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
 
 function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders }:
   { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean }) {
-  const gltf = useGLTF(url);
+  const gltf = useGLTF(url, '/draco/');   // '/draco/' so sampler glbs (e.g. the warpgate) decode; plain world glbs ignore it
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
   const groupId = gidRef.current;
@@ -161,14 +161,15 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
         m.side = THREE.DoubleSide;
-        // Kill the baked GREEN self-illumination artifact: 113 world objects (PP_Standard_Material
-        // rocks, tents, rune-stones, stone-mushrooms, cave interiors) ship with a flat emissive
-        // (0.23,0.39,0.25) and NO emissiveMap, so they glow solid pastel green and wash out their
-        // texture entirely. Zero any flat COLORED emissive (spread>0.1) that has no map; keep
-        // neutral/white glows (ores, forge) which are intended.
+        // Kill baked flat self-illumination artifacts. Many world objects ship with a constant
+        // emissiveFactor and NO emissiveMap, so the WHOLE surface self-illuminates a solid colour
+        // and washes out the texture: green (0.23,0.39,0.25) on PP_ rocks/caves, and WHITE (1,1,1)
+        // on the Forge, World Fountain, WeaponExchange and Ores (that's why the forge reads "all
+        // white"). A genuine glow needs an emissiveMap (so only parts glow) — a flat factor with no
+        // map is always the artifact. Zero ANY flat emissive that has no map (white included).
         if ('emissive' in m && m.emissive && !m.emissiveMap) {
           const e = m.emissive;
-          if (Math.max(e.r, e.g, e.b) - Math.min(e.r, e.g, e.b) > 0.1) { e.setRGB(0, 0, 0); m.needsUpdate = true; }
+          if (Math.max(e.r, e.g, e.b) > 0.02) { e.setRGB(0, 0, 0); m.needsUpdate = true; }
         }
         // per-material real texture (prefab -> .mat -> _MainTex); fall back to pack atlas
         const tu = (matMap && matMap[m.name]) || atlasUrl;
