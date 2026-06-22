@@ -424,7 +424,7 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="relative">
           <TabsList className={`grid w-full ${showTreesTab && showFruitsTab ? 'grid-cols-11' : showTreesTab || showFruitsTab ? 'grid-cols-10' : 'grid-cols-9'}`} style={{ background: 'hsla(var(--hud-bg-dim))', borderRadius: 'var(--hud-radius)' }}>
             <TabsTrigger value="user">User</TabsTrigger>
-            <TabsTrigger value="level">Level</TabsTrigger>
+            <TabsTrigger value="tribe">Tribe</TabsTrigger>
             <TabsTrigger value="wallet">Wallet</TabsTrigger>
             <TabsTrigger value="items">Items</TabsTrigger>
             <TabsTrigger value="kills">Kills</TabsTrigger>
@@ -535,6 +535,9 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
               </div>
             </Card>
 
+            {/* Level — points + level, with a collapsible (default-collapsed) full ladder */}
+            <LevelTab totalPoints={profile?.total_points || 0} />
+
             {/* Support Level — token/NFT-gated or subscription tiers (docs/SUPPORTER_TIERS_PLAN.md) */}
             <SupportLevelPanel userId={user?.id ?? null} />
 
@@ -601,21 +604,24 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
             </Card>
           </TabsContent>
 
-          {/* Level Tab */}
-          <TabsContent 
-            value="level" 
-            className="overflow-y-auto" 
-            style={{ 
+          {/* Tribe Tab — placeholder (feature in progress) */}
+          <TabsContent
+            value="tribe"
+            className="overflow-y-auto"
+            style={{
               height: `${contentH}px`,
               marginTop: 0,
               paddingTop: '1rem'
             }}
           >
-            <LevelTab 
-              totalPoints={profile?.total_points || 0}
-              currentLevel={profile?.current_level || 1}
-              height={contentH}
-            />
+            <Card className="p-6 text-center" style={{ background: 'hsla(var(--hud-bg-dim))' }}>
+              <div className="text-base font-semibold mb-1" style={{ color: 'hsl(var(--hud-text-bright))' }}>
+                Tribes
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Create or join a tribe to build together. Coming soon.
+              </p>
+            </Card>
           </TabsContent>
 
           {/* Wallet Tab */}
