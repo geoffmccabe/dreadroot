@@ -15,6 +15,7 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
+import { SiegePortalEffect } from './SiegePortalEffect';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
@@ -88,6 +89,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           and the placement controller (no-ops unless build mode is on). */}
       {isHeightmap && <BuilderObjectsLayer />}
       {isHeightmap && <BuilderController />}
+      {/* Magic-portal VFX inside the lobby warp gate (SWW world only). */}
+      {!isBlank && <SiegePortalEffect />}
       {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
