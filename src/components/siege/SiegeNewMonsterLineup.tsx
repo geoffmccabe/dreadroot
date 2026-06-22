@@ -249,16 +249,12 @@ export function SiegeNewMonsterLineup() {
 
   // Per-monster special behavior + clip overrides.
   const extraProps = (mon: Mon): Partial<MonsterConfig> => {
-    const props: Partial<MonsterConfig> = {};
-    // The 7 non-ForestGuardian monsters shipped with a sideways STRAFE clip baked as 'walk'
-    // (legs cross). Their 'run' is a clean forward locomotion, so use it for walking too.
-    // ForestGuardian's 'walk' is correct, so leave it alone.
-    // Attack uses the sword strike clip; the 7 non-ForestGuardian monsters walk with 'run'.
-    props.clips = mon.glb === 'forestguardian'
-      ? { attack: 'weapon_strike1' }
-      : { walk: 'run', attack: 'weapon_strike1' };
+    // Clean re-baked walk; SWIPE attack (committed swing → strike, via the swing sound); enrage
+    // to run + 50% speed once shot.
+    const props: Partial<MonsterConfig> = {
+      clips: { attack: 'swipe' }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', enrageOnHit: true,
+    };
     if (mon.glb === 'elementalgolem') {
-      props.clips = { ...props.clips, walk: 'run', attack: 'weapon_strike1' };   // throw uses Attack #1
       Object.assign(props, {
         kiteMin: 50, kiteMax: 100, rangedRange: 100, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
         onRangedAttack: (ox: number, oy: number, oz: number) => {

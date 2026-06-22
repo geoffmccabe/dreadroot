@@ -123,6 +123,7 @@ export interface MonsterConfig {
   // hand bone has a 0.01 intrinsic scale, so ~100 ≈ a 1 m weapon that scales with the monster);
   // pos/rotDeg seat the grip in the fist. The blade collider for hits is derived from bladeLen.
   weapon?: { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number]; bladeLen?: number };
+  enrageOnHit?: boolean;       // once damaged: walk→run clip + 50% faster (charges when shot)
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -1061,14 +1062,18 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
       const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
+      // ENRAGE: once damaged (hp < max), an enrageOnHit monster switches walk→run and +50% speed.
+      const enraged = !!c.enrageOnHit && inst.hp < inst.maxHp;
+      const chaseSpd = enraged ? SPD * 1.5 : SPD;
+      const loco = enraged ? clips.run : clips.walk;
       if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
         // holds the vomit pose during the spit (movement continues).
-        const step = Math.min(SPD * delta, dist - c.attackRange);
+        const step = Math.min(chaseSpd * delta, dist - c.attackRange);
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step;
-        if (now > s.swipeUntil) play(clips.walk);   // vomit/swing pose shows during an attack
+        if (now > s.swipeUntil) play(loco);   // walk, or RUN once enraged
       } else if (c.rangedRange && !c.kiteMin) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
