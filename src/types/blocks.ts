@@ -21,7 +21,7 @@ export interface BlockType {
   description: string;
   cost: number;
   category: 'building' | 'decoration' | 'special';
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'cosmic' | 'infinite';
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'cosmic';
   class: 'basic' | 'magic' | 'mystery' | 'iconic' | 'wisp';
   tier: number;
   texture?: {

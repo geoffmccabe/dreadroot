@@ -5,16 +5,21 @@
 -- NOTE: the `blocks` table is shared by DreadRoot + Pinkland (no game column),
 -- so this intentionally applies to BOTH games.
 
--- 1. Allow the new class 'wisp' and the new rarity 'cosmic'
+-- 1. Retire the 'infinite' rarity → 'cosmic' is the top tier everywhere.
+UPDATE blocks SET rarity = 'cosmic' WHERE rarity = 'infinite';
+
+-- 2. Allow the new class 'wisp' and the rarity set ending in 'cosmic' (no
+--    'infinite'). NOT VALID so a pre-existing off-list legacy row can't block
+--    the add; all new/updated rows are still enforced.
 ALTER TABLE blocks DROP CONSTRAINT IF EXISTS blocks_class_check;
 ALTER TABLE blocks ADD CONSTRAINT blocks_class_check
-  CHECK (class IN ('basic', 'magic', 'mystery', 'iconic', 'wisp'));
+  CHECK (class IN ('basic', 'magic', 'mystery', 'iconic', 'wisp')) NOT VALID;
 
 ALTER TABLE blocks DROP CONSTRAINT IF EXISTS blocks_rarity_check;
 ALTER TABLE blocks ADD CONSTRAINT blocks_rarity_check
-  CHECK (rarity IN ('common','uncommon','rare','epic','legendary','divine','mystic','rainbow','apocalyptic','cosmic','infinite'));
+  CHECK (rarity IN ('common','uncommon','rare','epic','legendary','divine','mystic','rainbow','apocalyptic','cosmic')) NOT VALID;
 
--- 2. The 10 wisp tiers. cost 0 = not shop-bought. Weighted spawn (tier 1 ~50%
+-- 3. The 10 wisp tiers. cost 0 = not shop-bought. Weighted spawn (tier 1 ~50%
 --    ... tier 10 ~0.1%) is enforced client-side in useWispBlock.ts.
 INSERT INTO blocks (key, name, description, cost, tier, category, rarity, class, glow_factor, properties) VALUES
 ('wisp_1', 'Common Wisp',      'Tier 1 wisp block', 0, 1,  'special', 'common',      'wisp', 0,   '{"size":[1,1,1],"color":"#9C7A4F","emissive":false,"transparent":true}'::jsonb),
@@ -32,8 +37,8 @@ ON CONFLICT (key) DO UPDATE SET
   category = EXCLUDED.category, rarity = EXCLUDED.rarity, class = EXCLUDED.class,
   glow_factor = EXCLUDED.glow_factor, properties = EXCLUDED.properties;
 
--- 3. Convert already-placed crystal blocks → Tier 1 wisp (per owner decision)
+-- 4. Convert already-placed crystal blocks → Tier 1 wisp (per owner decision)
 UPDATE placed_blocks SET block_type = 'wisp_1' WHERE block_type = 'crystal_block';
 
--- 4. Retire the crystal_block definition
+-- 5. Retire the crystal_block definition
 DELETE FROM blocks WHERE key = 'crystal_block';

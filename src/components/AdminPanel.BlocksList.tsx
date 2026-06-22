@@ -702,7 +702,7 @@ export function BlocksList({ userRoles }: BlocksListProps) {
                   <option value="mystic">Mystic</option>
                   <option value="rainbow">Rainbow</option>
                   <option value="apocalyptic">Apocalyptic</option>
-                  <option value="infinite">Infinite</option>
+                  <option value="cosmic">Cosmic</option>
                 </select>
               </div>
               <div>
@@ -917,7 +917,7 @@ export function BlocksList({ userRoles }: BlocksListProps) {
                   <option value="mystic">Mystic</option>
                   <option value="rainbow">Rainbow</option>
                   <option value="apocalyptic">Apocalyptic</option>
-                  <option value="infinite">Infinite</option>
+                  <option value="cosmic">Cosmic</option>
                 </select>
               </div>
 

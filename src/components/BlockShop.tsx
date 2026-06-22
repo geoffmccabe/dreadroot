@@ -32,7 +32,6 @@ const getRarityColor = (rarity: string) => {
     case 'rainbow': return 'bg-gradient-to-r from-red-100 via-purple-100 to-blue-100 text-gray-800';
     case 'apocalyptic': return 'bg-red-100 text-red-800';
     case 'cosmic': return 'bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-500 text-amber-900';
-    case 'infinite': return 'bg-cyan-100 text-cyan-800';
     default: return 'bg-gray-100 text-gray-800';
   }
 };

@@ -30,8 +30,8 @@ export interface AdminBlock {
   description: string;
   cost: number;
   category: string;
-  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'infinite';
-  class: 'basic' | 'magic' | 'mystery' | 'iconic';
+  rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'cosmic';
+  class: 'basic' | 'magic' | 'mystery' | 'iconic' | 'wisp';
   tier: number;
   texture_url: string | null;
   glow_factor?: number | null;
