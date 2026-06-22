@@ -16,7 +16,6 @@ import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
 import { SiegePortalEffect } from './SiegePortalEffect';
-import { MagicChest } from './chest/MagicChest';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
@@ -92,8 +91,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isHeightmap && <BuilderController />}
       {/* Magic-portal VFX inside the lobby warp gate (SWW world only). */}
       {!isBlank && <SiegePortalEffect />}
-      {/* Magic Chest model + lid (SWW lobby). */}
-      {!isBlank && <MagicChest />}
+      {/* (Magic Chest model removed — the lobby already has a chest at the spot; the open/spin
+          interaction lives in MagicChestPanel and works on that existing chest.) */}
       {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
