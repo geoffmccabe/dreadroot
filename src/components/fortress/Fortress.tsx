@@ -2099,7 +2099,7 @@ export function Fortress() {
       <NpcSystem isAdmin={userRoles.includes('admin') || userRoles.includes('superadmin')} />
       <FortressProviders>
       <Canvas
-        camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 1200 }}
+        camera={{ position: [-8, 1.8, 22], fov: 70, near: 0.1, far: 6000 }}
         shadows={shadowsEnabled}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
         dpr={1}

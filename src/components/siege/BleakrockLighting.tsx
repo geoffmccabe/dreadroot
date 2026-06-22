@@ -99,6 +99,11 @@ export function BleakrockLighting() {
       horrorFog.near = THREE.MathUtils.lerp(900, 14, t);
       horrorFog.far = THREE.MathUtils.lerp(4000, 135, t);
       scene.fog = horrorFog;
+    } else if (!getSiegeFog()) {
+      // Fog explicitly OFF in the Weather panel → clear ALL fog (incl. the base DreadRoot FogExp2
+      // that would otherwise be restored) every frame so you can see to the horizon.
+      if (!owning.current) { owning.current = true; savedFog.current = scene.fog; }
+      scene.fog = null;
     } else if (owning.current) {
       owning.current = false; scene.fog = savedFog.current;
     }
