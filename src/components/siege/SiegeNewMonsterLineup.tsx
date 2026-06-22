@@ -133,13 +133,13 @@ type Spawned = { key: number; mon: Mon; pos: [number, number, number]; weapon?: 
 // the origin); scale 100 compensates the rig's 0.01 hand-bone scale → ~1 m, scaling with the
 // monster. Grip seating (pos/rotDeg) is rough for now — fine-tune once the look is approved.
 const PIG_WEAPONS: WeaponAttach[] = [
-  { url: '/siege/world/SM_Wep_Sword_01.glb', scale: 100 },
-  { url: '/siege/world/SM_Wep_Sword_02.glb', scale: 100 },
-  { url: '/siege/world/SM_Wep_Sword_03.glb', scale: 100 },
-  { url: '/siege/world/SM_Wep_Axe_01.glb',   scale: 100 },
-  { url: '/siege/world/SM_Wep_Axe_02.glb',   scale: 100 },
-  { url: '/siege/world/SM_Wep_Spear_01.glb', scale: 100 },
-  { url: '/siege/world/SM_Item_Hammer_01.glb', scale: 100 },
+  { url: '/siege/world/SM_Wep_Sword_01.glb', scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Wep_Sword_02.glb', scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Wep_Sword_03.glb', scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Wep_Axe_01.glb',   scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Wep_Axe_02.glb',   scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Wep_Spear_01.glb', scale: 100, rotDeg: [-90, 0, 0] },
+  { url: '/siege/world/SM_Item_Hammer_01.glb', scale: 100, rotDeg: [-90, 0, 0] },
 ];
 
 // @ <monster#> # <qty>  staged keyboard parser → spawn active monsters at the camera.
@@ -252,7 +252,8 @@ export function SiegeNewMonsterLineup() {
     // Clean re-baked walk; SWIPE attack (committed swing → strike, via the swing sound); enrage
     // to run + 50% speed once shot.
     const props: Partial<MonsterConfig> = {
-      clips: { attack: 'swipe' }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', enrageOnHit: true,
+      clips: { attack: 'swipe' }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3',
+      lungeOnSwing: true, enrageOnHit: true,
     };
     if (mon.glb === 'elementalgolem') {
       Object.assign(props, {
