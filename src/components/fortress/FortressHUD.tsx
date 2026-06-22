@@ -11,6 +11,7 @@ import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
+import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
@@ -907,6 +908,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <TerrainBrushPanel />
       {/* Drop-in object builder palette — same heightmap-map gating. */}
       <BuilderPalette />
+      {/* Magic Chest HUD (prompt + spin reel) — only in siege. */}
+      {isSiege && <MagicChestPanel />}
       {/* Laser inspector: live "pointing at <item>" readout + flag worklist. On ALL siege
           maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
       {isSiege && <CoordsHud />}
