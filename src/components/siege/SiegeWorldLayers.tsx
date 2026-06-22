@@ -20,6 +20,7 @@ import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
+import { useSiegeLighting } from './siegeLighting';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { MonsterEnemy } from './MonsterEnemy';
@@ -47,6 +48,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // race where the parent's reset ran AFTER the child ground's onReady and clobbered it to
   // false (which silently hid everything in this block — incl. the sci-fi showcase).
   const [readyWorld, setReadyWorld] = useState<string | null>(null);
+  const lightingMode = useSiegeLighting();   // Admin/Weather "Night Mood" preview
   const terrainReady = readyWorld === world.id;
   const signalReady = () => setReadyWorld(world.id);
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
@@ -76,8 +78,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           <hemisphereLight args={['#ffffff', '#b9c4d0', world.fill?.hemi ?? 0.6]} />
         </>
       )}
-      {/* Night maps (SciFi City): dim the shared sun/sky so emissive signs/windows glow. */}
-      {world.night && <NightDimmer />}
+      {/* Night maps (SciFi City) OR the Admin/Weather "Night Mood" preview toggle on any world:
+          dim the shared sun/sky so emissive signs/windows glow against a dark scene. */}
+      {(world.night || lightingMode === 'night') && <NightDimmer />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}

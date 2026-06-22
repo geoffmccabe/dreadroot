@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import type { WeatherControlsProps } from './adminPanel.types';
 import type { CloudLayerSettings } from '@/components/fortress/FortressTypes';
 import { useSiegeFog, setSiegeFog } from '@/components/siege/siegeFog';
+import { useSiegeLighting, setSiegeLighting } from '@/components/siege/siegeLighting';
 
 const DEFAULT_CLOUD: CloudLayerSettings = { enabled: false, opacity: 0.45, coverage: 0.5, height: 300, speed: 5, direction: 45, scale: 2.0, color: '#ffffff' };
 
@@ -105,13 +106,19 @@ export function WeatherControls({ settings, onSettingsChange }: WeatherControlsP
   const cloud1 = settings.cloudLayer1 ?? DEFAULT_CLOUD;
   const cloud2 = settings.cloudLayer2 ?? DEFAULT_CLOUD;
   const siegeFog = useSiegeFog();
+  const lightingMode = useSiegeLighting();
 
   return (
     <Card className="w-full p-6">
       {/* Siege Worlds — Bleakrock horror fog toggle (off lets you see/fly to distant objects). */}
-      <div className="flex items-center justify-between border rounded p-3 mb-4">
+      <div className="flex items-center justify-between border rounded p-3 mb-2">
         <Label className="text-sm">Bleakrock Fog (Siege)</Label>
         <Switch checked={siegeFog} onCheckedChange={(v) => setSiegeFog(v)} />
+      </div>
+      {/* Siege Worlds — Night / dark-mood lighting (CyberCity style) on ANY world, to preview it. */}
+      <div className="flex items-center justify-between border rounded p-3 mb-4">
+        <Label className="text-sm">Night / Dark Mood (Siege)</Label>
+        <Switch checked={lightingMode === 'night'} onCheckedChange={(v) => setSiegeLighting(v ? 'night' : 'default')} />
       </div>
       <h3 className="font-bold text-sm mb-4">DAY/NIGHT CYCLE</h3>
       <div className="space-y-6">
