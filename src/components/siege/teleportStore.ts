@@ -13,3 +13,12 @@ export function subscribeTeleport(l: () => void): () => void {
   listeners.add(l);
   return () => { listeners.delete(l); };
 }
+
+// Imperative teleport bridge: SiegeTeleport (in-Canvas, owns the camera) installs
+// window.__siegeJump; any out-of-Canvas UI (the Cmd-J menu, the Challenges → Worlds
+// cards) calls this to jump to a map + position.
+export function siegeJump(mapId: string, pos: [number, number, number], yaw?: number, pitch?: number): void {
+  (window as unknown as {
+    __siegeJump?: (m: string, p: [number, number, number], y?: number, pi?: number) => void;
+  }).__siegeJump?.(mapId, pos, yaw, pitch);
+}

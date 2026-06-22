@@ -40,16 +40,26 @@ export function SiegeTeleport() {
   const camera = useThree((s) => s.camera);
   useEffect(() => {
     let armed = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const overrides = loadOverrides();
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
     const r3 = (n: number) => Math.round(n * 1000) / 1000;
-    const disarm = () => { armed = false; setTeleportArmed(false); if (timer) clearTimeout(timer); };
-    const arm = () => {
-      armed = true; setTeleportArmed(true);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(disarm, 5000);
+    const disarm = () => { armed = false; setTeleportArmed(false); };
+    // No auto-dismiss timer — the menu stays open until the player picks a spot or hits Esc.
+    // Free the cursor so the menu's clickable entries work in FPS pointer-lock.
+    const arm = () => { armed = true; setTeleportArmed(true); document.exitPointerLock?.(); };
+
+    // Shared jump, used by the keys AND by out-of-Canvas UI (Cmd-J menu clicks +
+    // the Challenges → Worlds cards) via window.__siegeJump.
+    const jump = (mapId: string, pos: [number, number, number], yaw?: number, pitch?: number) => {
+      setActiveMapId(mapId);
+      camera.position.set(pos[0], pos[1], pos[2]);
+      if (yaw != null) {
+        const setView = (window as unknown as { __siegeSetView?: (y: number, p?: number) => void }).__siegeSetView;
+        if (setView) setView(yaw, pitch ?? 0);
+        else camera.quaternion.setFromEuler(euler.set(pitch ?? 0, yaw, 0, 'YXZ'));
+      }
     };
+    (window as unknown as { __siegeJump?: typeof jump }).__siegeJump = jump;
 
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {     // ARM
@@ -61,8 +71,7 @@ export function SiegeTeleport() {
       const demo = DEMO_BY_CODE[e.code];
       if (demo) {
         e.preventDefault(); e.stopPropagation();
-        setActiveMapId(demo.mapId);
-        camera.position.set(demo.pos[0], demo.pos[1], demo.pos[2]);
+        jump(demo.mapId, demo.pos);
         disarm(); return;
       }
       if (/^Digit[0-9]$/.test(e.code)) {
@@ -81,24 +90,18 @@ export function SiegeTeleport() {
         } else {                                                // TELEPORT (switch map + position + view)
           const tp = SIEGE_TELEPORTS.find((t) => t.slot === slot);
           const d = destFor(slot, overrides);
-          if (d) {
-            // The map is intrinsic to the area: switching here loads that area's map. The
-            // map swap doesn't move the player (game-entry does); this teleport sets position.
-            setActiveMapId(tp?.mapId ?? 'siege-test');
-            camera.position.set(d.pos[0], d.pos[1], d.pos[2]);
-            if (d.yaw != null) {
-              const setView = (window as unknown as { __siegeSetView?: (y: number, p?: number) => void }).__siegeSetView;
-              if (setView) setView(d.yaw, d.pitch ?? 0);
-              else camera.quaternion.setFromEuler(euler.set(d.pitch ?? 0, d.yaw, 0, 'YXZ'));   // fallback if controls not mounted
-            }
-          }
+          if (d) jump(tp?.mapId ?? 'siege-test', d.pos, d.yaw, d.pitch);
         }
         disarm();
       }
     };
 
     window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('keydown', onKey, true); if (timer) clearTimeout(timer); setTeleportArmed(false); };
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      setTeleportArmed(false);
+      delete (window as unknown as { __siegeJump?: typeof jump }).__siegeJump;
+    };
   }, [camera]);
 
   return null;

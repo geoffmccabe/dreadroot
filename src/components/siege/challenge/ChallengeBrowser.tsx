@@ -11,10 +11,44 @@ import { listGameChallenges, listLeaderboards, type ChallengeRow, type Leaderboa
 import { fireChallengeStart } from './challengeControl';
 import { useActiveGame } from '@/config/activeGame';
 import { getGameDef } from '@/config/gameRegistry';
+import { SIEGE_TELEPORTS, SIEGE_DEMOS } from '../siegeAreas';
+import { siegeJump } from '../teleportStore';
 
 const PANEL_BG = 'hsla(222, 32%, 10%, 0.97)';
 const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.85)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
 const btn = (active = false): React.CSSProperties => ({ background: active ? '#2e8b57' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
+const sectionTitle: React.CSSProperties = { fontSize: 18, fontWeight: 900, letterSpacing: 1, marginBottom: 10 };
+
+// Worlds row — clickable teleport cards. Row 1 = the 5 open-world areas (slots 1-5);
+// Row 2 = the two baked demo maps. Positions/maps come from siegeAreas.
+const tpBySlot = (s: number) => SIEGE_TELEPORTS.find((t) => t.slot === s)!;
+const demoByCode = (c: string) => SIEGE_DEMOS.find((d) => d.code === c)!;
+const WORLD_ROW1 = [
+  { label: 'LOBBY', t: tpBySlot(1) },
+  { label: 'THE BEACH', t: tpBySlot(2) },
+  { label: 'BLEAKROCK', t: tpBySlot(3) },
+  { label: 'HAROLD', t: tpBySlot(4) },
+  { label: "NERO'S ISLAND", t: tpBySlot(5) },
+];
+const WORLD_ROW2 = [
+  { label: 'CYBER CITY', d: demoByCode('KeyC') },
+  { label: 'ADVENTURE TOWN', d: demoByCode('KeyN') },
+];
+
+function WorldCard({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        ...card, cursor: 'pointer', aspectRatio: '4 / 3', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', padding: 10, textAlign: 'center', fontWeight: 800, fontSize: 14,
+        color: '#e8eefb', background: 'linear-gradient(135deg,#243049,#3a4a6b)',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 const totalMonsters = (r: ChallengeRow) =>
   (r.data?.waves ?? []).reduce((a, w) => a + (w.drops ?? []).reduce((b, d) => b + (d.count || 1), 0), 0);
@@ -46,6 +80,10 @@ export function ChallengeBrowser() {
   if (!open) return null;
 
   const play = (r: ChallengeRow) => { setBrowserOpen(false); fireChallengeStart({ ...r.data, id: r.id }); };
+  const goWorld = (mapId: string, pos: [number, number, number], yaw?: number, pitch?: number) => {
+    setBrowserOpen(false);
+    siegeJump(mapId, pos, yaw, pitch);
+  };
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 122, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
@@ -60,14 +98,32 @@ export function ChallengeBrowser() {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>Challenges</div>
+            <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>Worlds &amp; Challenges</div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#ffd27f' }}>{gameLabel}</div>
           </div>
           <button style={btn()} onClick={() => setBrowserOpen(false)}>✕ Close</button>
         </div>
 
-        {/* Card grid */}
+        {/* Sections: Worlds (teleport) + Challenges */}
         <div className="chal-scroll" style={{ flex: 1, overflowY: 'auto', padding: 18 }}>
+          {/* ── Worlds ── 5 open-world areas on top, 2 demo maps below. Click to teleport. */}
+          <div style={sectionTitle}>Worlds</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+            {WORLD_ROW1.map((w) => (
+              <WorldCard key={w.label} label={w.label}
+                onClick={() => goWorld(w.t.mapId ?? 'siege-test', w.t.pos, w.t.yaw, w.t.pitch)} />
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginTop: 12 }}>
+            {WORLD_ROW2.map((w) => (
+              <WorldCard key={w.label} label={w.label} onClick={() => goWorld(w.d.mapId, w.d.pos)} />
+            ))}
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1px solid hsla(210,30%,40%,0.4)', margin: '18px 0' }} />
+
+          {/* ── Challenges ── */}
+          <div style={sectionTitle}>Challenges</div>
           {loading ? (
             <div style={{ color: '#9fb4d0', padding: 20 }}>Loading…</div>
           ) : rows.length === 0 ? (
