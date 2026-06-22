@@ -231,22 +231,29 @@ export function SiegeNewMonsterLineup() {
   }, []);
   useSpawnCommand(add);
 
-  // Per-monster special behavior. Elemental Golem: kite at 30-50 m and lob boulders.
+  // Per-monster special behavior + clip overrides.
   const extraProps = (mon: Mon): Partial<MonsterConfig> => {
-    if (mon.glb !== 'elementalgolem') return {};
-    return {
-      clips: { attack: 'weapon_strike1' },        // throw uses Attack #1
-      kiteMin: 50, kiteMax: 100, rangedRange: 100, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
-      onRangedAttack: (ox, oy, oz) => {
-        if (Math.random() < 0.5) return;            // 50% chance per 1-3 s window
-        // Release the boulder ~50% of the way through the attack animation.
-        setTimeout(() => {
-          const p = camera.position;
-          throwBoulder(ox, oy, oz, p.x, p.y - 1.6, p.z, 30 + Math.random() * 30,
-            { dmgMin: 50, dmgMax: 200, kbMin: 5, kbMax: 20 });
-        }, 500);
-      },
-    };
+    const props: Partial<MonsterConfig> = {};
+    // The 7 non-ForestGuardian monsters shipped with a sideways STRAFE clip baked as 'walk'
+    // (legs cross). Their 'run' is a clean forward locomotion, so use it for walking too.
+    // ForestGuardian's 'walk' is correct, so leave it alone.
+    if (mon.glb !== 'forestguardian') props.clips = { walk: 'run' };
+    if (mon.glb === 'elementalgolem') {
+      props.clips = { ...props.clips, walk: 'run', attack: 'weapon_strike1' };   // throw uses Attack #1
+      Object.assign(props, {
+        kiteMin: 50, kiteMax: 100, rangedRange: 100, rangedCooldownMs: 1000, rangedCooldownMaxMs: 3000,
+        onRangedAttack: (ox: number, oy: number, oz: number) => {
+          if (Math.random() < 0.5) return;            // 50% chance per 1-3 s window
+          // Release the boulder ~50% of the way through the attack animation.
+          setTimeout(() => {
+            const p = camera.position;
+            throwBoulder(ox, oy, oz, p.x, p.y - 1.6, p.z, 30 + Math.random() * 30,
+              { dmgMin: 50, dmgMax: 200, kbMin: 5, kbMax: 20 });
+          }, 500);
+        },
+      });
+    }
+    return props;
   };
 
   // Spaced so big monsters don't overlap. Laid along the camera-right axis when summoned via
