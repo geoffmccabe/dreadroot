@@ -184,7 +184,7 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
   // Player start on Bleakrock (the Mushrooms island) — same spot the Challenge uses, so testers
   // begin where the action is. The start modal then offers Challenge vs Open World.
   // (Exactly SIEGE_SPAWN_POINT so the map-driven spawn matches the legacy hardcoded one.)
-  spawn: { position: [-1048.998, 31.12, 1062.865], yaw: 0 },
+  spawn: { position: [-91.054, 26.038, 327.384], yaw: 180 }, // lobby spawn, facing the warp gate
   // Sea level from Client.cs WATER_HEIGHT=22 (depth to ~9.8). Walk-the-bottom, no swim yet.
   water: [{ min: [-2000, 9.8, -214], max: [0, 22, 1786], surfaceY: 22, movement: 'walk-bottom' }],
   props: undefined,
