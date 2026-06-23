@@ -43,6 +43,10 @@ const BAKED: Record<string, MonsterHitbox> = {
     body: { lx: -0.0083, ly: 0.3615, lz: 0.0083, hx: 0.1204, hy: 0.4430, hz: 0.0815 },
     head: { lx: -0.0195, ly: 0.8492, lz: 0.1473, hx: 0.0649, hy: 0.0880, hz: 0.0639 },
   },
+  '/siege/monsters/darklord.glb': {  // Dark Lord (#5) — the teleporter boss
+    body: { lx: 0.0083, ly: 0.4167, lz: 0.0667, hx: 0.1783, hy: 0.3417, hz: 0.1117 },
+    head: { lx: 0, ly: 0.8917, lz: 0.0333, hx: 0.0950, hy: 0.0833, hz: 0.0867 },
+  },
 };
 
 const scaleBox = (b: HBox, k: number): HBox => ({ lx: b.lx * k, ly: b.ly * k, lz: b.lz * k, hx: b.hx * k, hy: b.hy * k, hz: b.hz * k });
