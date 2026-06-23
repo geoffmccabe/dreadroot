@@ -336,7 +336,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
     tumbleYaw: 0, bulletTumble: false, killFired: false,
     // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
-    beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0, beDone: false });
+    beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0, beDone: false,
+    // Skeleton injured-crawl + death-variant state.
+    deathVariant: '', crawlSet: false });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -580,6 +582,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   };
   useEffect(() => { if (names.length) play(clips.idle); /* eslint-disable-next-line */ }, [actions, names]);
 
+  // Skeleton-only retargeted clips (gated by availability, so it's a safe no-op on other monsters):
+  // a second death variant + an injured crawl that kicks in at low health.
+  const hasDeath2 = names.some((n) => n.toLowerCase() === 'death2');
+  const hasCrawl = names.some((n) => n.toLowerCase() === 'crawl');
+
   useFrame((_, delta) => {
     const g = group.current; if (!g) return;
     // Head hitbox FOLLOW: ride the head bone so the box tracks the skull through
@@ -763,7 +770,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (inst.dead) {
       if (s.beDone) return;   // finalized challenge corpse: frozen
       if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }  // kill the spin whir
-      play(clips.death, true);
+      // Skeletons pick one of two death clips once, 50/50: the original 'death' or the retargeted 'death2'.
+      if (!s.deathVariant) s.deathVariant = (hasDeath2 && Math.random() < 0.5) ? 'death2' : clips.death;
+      play(s.deathVariant, true);
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
       inst.kvx *= 0.82; inst.kvz *= 0.82;
       const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
@@ -785,6 +794,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
       return;
     }
+
+    // INJURED CRAWL (skeletons): at <=10% HP the monster drops to a retargeted crawl, moves at 25%
+    // speed, and the crawl plays at 2× rate. `injured` overrides the locomotion clip + speed below.
+    const injured = hasCrawl && inst.hp <= inst.maxHp * 0.10;
+    if (injured && !s.crawlSet) { const ca = clip('crawl'); if (ca) ca.timeScale = 2; s.crawlSet = true; }
+    const injMul = injured ? 0.25 : 1;
 
     // Ambient moans (SW zombie sounds): per-monster, ~every 4-8s a 50% chance, distance-scaled.
     if (c.moanSounds) {
@@ -1065,8 +1080,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
       // ENRAGE: once damaged (hp < max), an enrageOnHit monster switches walk→run and +50% speed.
       const enraged = !!c.enrageOnHit && inst.hp < inst.maxHp;
-      const chaseSpd = enraged ? SPD * 1.5 : SPD;
-      const loco = enraged ? clips.run : clips.walk;
+      const chaseSpd = (enraged ? SPD * 1.5 : SPD) * injMul;
+      const loco = injured ? 'crawl' : (enraged ? clips.run : clips.walk);
       if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
@@ -1109,7 +1124,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           }
         }
       }
-      else if (now > s.swipeUntil) play(clips.idle);
+      else if (now > s.swipeUntil) play(injured ? 'crawl' : clips.idle);
     } else {                                                // no player near -> wander + search
       if (now > s.wNext) {
         const ang = Math.random() * Math.PI * 2, r = Math.random() * c.wanderRadius;
@@ -1119,11 +1134,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const wdx = s.wx - s.x, wdz = s.wz - s.z, wd = Math.hypot(wdx, wdz) || 1;
       if (wd > 0.6) {
         g.rotation.y = Math.atan2(wdx, wdz) + c.faceOffset;
-        const step = Math.min(SPD * 0.5 * delta, wd);
+        const step = Math.min(SPD * 0.5 * injMul * delta, wd);
         mvx = wdx / wd; mvz = wdz / wd; moving = true;
         s.x += mvx * step; s.z += mvz * step;
-        play(clips.walk);
-      } else play(clips.idle);
+        play(injured ? 'crawl' : clips.walk);
+      } else play(injured ? 'crawl' : clips.idle);
     }
 
     // Separation — push out of overlapping monsters AT THE SAME LEVEL (stacked demons,
