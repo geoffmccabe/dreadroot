@@ -45,6 +45,8 @@ import { anyArmedHandGrenade } from '@/config/handGrenade';
 import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
 import { useFlameTierOverride, setFlameTierOverride } from '@/config/flameTierOverride';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
+import { DamageNumbers } from '@/components/siege/DamageNumbersLayer';
+import { spawnDamageNumber, fireDamageColor } from '@/components/siege/damageNumbers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
 import { SiegeSpawner } from '@/components/siege/SiegeSpawner';
 import { BullseyeTestTracer } from '@/components/siege/BullseyeTestTracer';
@@ -1568,6 +1570,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const _flameDirVec = useRef(new THREE.Vector3());
   const _flameEnemyDir = useRef(new THREE.Vector3());
   const _flameTmpPos = useRef(new THREE.Vector3());
+  // Floating fire-damage popups: accumulate per-enemy flame damage and emit ONE
+  // number/second above the head (the SWW DamageNumbers system) so the DPS is legible.
+  const flameNumAccumRef = useRef<Map<string, { dmg: number; x: number; y: number; z: number }>>(new Map());
+  const flameNumWindowRef = useRef(0);
   // Ref for flame config values accessible in frame loop
   const configRef_flame = useRef({
     tier: flameGloveTier,
@@ -1632,6 +1638,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     if (flameDamageTickRef.current < 0.1) return; // 100ms tick rate
     const tickDelta = flameDamageTickRef.current;
     flameDamageTickRef.current = 0;
+    flameNumWindowRef.current += tickDelta;
 
     const { tier, distance, colors, colorMode } = configRef_flame.current;
     const dps = flameDpsForTier(tier);
@@ -1732,7 +1739,22 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           burnSecondsForTier,
           ownsFire ? undefined : { engulf: false, size: meshW, height: meshH },
         );
+        // Accumulate this enemy's flame damage for the once-per-second popup.
+        const numAcc = flameNumAccumRef.current;
+        let na = numAcc.get(burnEntityId);
+        if (!na) { na = { dmg: 0, x: hb.centerX, y: hb.topY, z: hb.centerZ }; numAcc.set(burnEntityId, na); }
+        na.dmg += tickDamage;
+        na.x = hb.centerX; na.y = hb.topY; na.z = hb.centerZ;
       }
+    }
+
+    // One fire-damage number per enemy per second, floating above the head.
+    if (flameNumWindowRef.current >= 1.0) {
+      flameNumWindowRef.current = 0;
+      for (const na of flameNumAccumRef.current.values()) {
+        if (na.dmg > 0) spawnDamageNumber(na.x, na.y + 0.4, na.z, String(Math.round(na.dmg)), fireDamageColor(na.dmg));
+      }
+      flameNumAccumRef.current.clear();
     }
   });
 
@@ -1914,6 +1936,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <NebulaImpacts ref={nebulaImpactsRef} />
       <Tracers ref={tracersRef} />
       <UniversalFlameRenderer ref={universalFlameRef} />
+      {/* Floating damage popups (shared SWW system) — flame glove uses these via spawnDamageNumber.
+          Siege mode already mounts its own inside SiegeWorldLayers, so only add it for DreadRoot. */}
+      {!isSiege && <DamageNumbers />}
       {/* Universal effects module (smoke/steam/glitter). World-agnostic — works
           in both the voxel world and Siege Worlds. Phase 1: smoke off burns. */}
       <EffectsRoot ref={effectsRef} />

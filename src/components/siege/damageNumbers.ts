@@ -14,6 +14,16 @@ export const DN_RED = '#ff3838';
 export const DN_YELLOW = '#ffe23a';
 export const DN_LIFE_MS = 1000;
 
+// Fire-damage popups (flame glove): a yellow→dark-orange ramp where bigger hits read
+// hotter (deeper orange). `dmg` is mapped over 0..ref (ref ≈ the max per-second DPS).
+const DN_FIRE_LO = [0xff, 0xe2, 0x3a]; // #ffe23a bright yellow (low)
+const DN_FIRE_HI = [0xb3, 0x47, 0x00]; // #b34700 dark orange (high)
+export function fireDamageColor(dmg: number, ref = 100): string {
+  const t = Math.max(0, Math.min(1, dmg / ref));
+  const c = DN_FIRE_LO.map((lo, i) => Math.round(lo + (DN_FIRE_HI[i] - lo) * t));
+  return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
 const list: DamageNumber[] = [];
 let _id = 0;
 let version = 0;
