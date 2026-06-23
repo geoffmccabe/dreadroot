@@ -10,22 +10,26 @@ import { useThree } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
-import { APP_VERSION } from '@/version';
 import {
-  LINEUP_CHARS, useCharLineup, getCharLineupEnabled, toggleCharLineup,
-  cycleCharAnim, setCharAnimNames, setCharAnchor,
+  LINEUP_CHARS, ANIM_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
+  toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor,
 } from './charlineup/siegeCharLineupState';
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
 
-const glbUrl = (file: string) => `${file}?v=${APP_VERSION}`;
-// Preload both characters as soon as the siege scene mounts this module, so "&&&" is instant
-// instead of downloading ~13 MB + parsing 32 clips on the keypress.
-LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file)));
+// STABLE asset version (not APP_VERSION) so the browser caches the meshes + the shared animation
+// library across deploys — they only re-download when CHAR_ASSET_VERSION is bumped (i.e. when the
+// glbs are actually rebuilt). Draco-compressed, decoded via /draco/.
+const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
+useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
+LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number }) {
-  const { scene, animations } = useGLTF(glbUrl(file));
+  const { scene } = useGLTF(glbUrl(file), '/draco/');
+  // Animations come from ONE shared library (deduped across all characters); useGLTF caches it so
+  // it's fetched once and reused. Bind its clips to this character by bone name (all mixamorig).
+  const { animations } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);

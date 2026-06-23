@@ -4,10 +4,18 @@
 // animation has a 1-based number for reference.
 import { useSyncExternalStore } from 'react';
 
+// Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
+// separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
+// browser like an offline store). v2 = Draco meshes + shared animation library.
+export const CHAR_ASSET_VERSION = '2';
+// One shared, Draco/clip library holding every animation — loaded once, applied to every character
+// by bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only this.
+export const ANIM_LIBRARY = '/siege/characters/siege_anims.glb';
+
 // scale brings each model to its real height; minY (glb-space feet) lets the renderer keep the
 // scaled feet on the ground.  Ash → 2.0 m incl. hat (raw 1.783), Thorn → 1.4 m (raw 2.010).
 export interface LineupChar { name: string; file: string; scale: number; minY: number; }
-// All on the Mixamo skeleton → one animation set drives every character (the single system).
+// Character MESHES only (no embedded animations — those live in ANIM_LIBRARY).
 export const LINEUP_CHARS: LineupChar[] = [
   { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055 },
   { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455 },
