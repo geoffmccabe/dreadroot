@@ -11,6 +11,3 @@ export const MINING_STYLES: MiningStyle[] = [
   { id: 'blue',   label: 'Blue (sapphire)', file: 'mining_PP_Crystal_Cluster_01_Blue.gltf' },
   { id: 'red',    label: 'Red (ruby)',      file: 'mining_PP_Crystal_Cluster_01_Red.gltf' },
 ];
-
-export const miningStyle = (file: string): MiningStyle =>
-  MINING_STYLES.find((s) => s.file === file) ?? MINING_STYLES[0];
