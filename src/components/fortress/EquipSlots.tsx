@@ -5,7 +5,7 @@ import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { setRocketBelt } from '@/config/rocketBelt';
 import { rocketBeltTierFromItemNumber } from '@/features/rocketBelt/rocketBelt';
-import { useHandGrenades } from '@/config/handGrenade';
+import { useHandGrenades, handKind } from '@/config/handGrenade';
 import { setFlameGlove } from '@/config/flameGlove';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
@@ -55,6 +55,9 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
   // item also happens to carry item_category 'weapon' (which would otherwise early-return).
   if (def.type === 'weapon') {
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
+    // A shpider EGG is a hand THROWABLE (like a grenade): accept it into a hand slot so it can be
+    // dragged in, then Y adopts it into the hand overlay + throws it (hatches a pet).
+    if ((it.key ?? '').startsWith('shpider_egg')) return { ok: true, item, reloadKey: null, isRifle: false };
     if (it.item_number != null) {
       const { data: ws } = await (supabase as unknown as {
         from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
@@ -333,11 +336,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     const spriteOpacity = ghosted ? 0.2 : gren ? (gren.armed ? 1 : 0.5) : ((!!g || bootsDefault) ? 1 : 0.35);
     const tierBadge = gren?.tier ?? (!suppressSprite ? g?.tier : null) ?? null;
     const armed = !!gren?.armed;
+    const grenIsEgg = handKind(gren) === 'egg';
+    const grenLabel = grenIsEgg ? 'Egg' : 'Grenade';
+    const grenKey = grenIsEgg ? 'Y' : 'G';
     return (
       <div
         key={def.num}
         className={armed ? 'dr-armed-flash' : undefined}
-        title={gren ? `Grenade T${gren.tier} — ${armed ? 'armed: G throws, right-click disarms' : 'disarmed: G arms'}` : (g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
+        title={gren ? `${grenLabel} T${gren.tier} — ${armed ? `armed: ${grenKey} throws, right-click disarms` : `disarmed: ${grenKey} arms`}` : (g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
         onPointerDown={(e) => startEquipDrag(def, e)}
         onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
         onDragStart={(e) => e.preventDefault()}
