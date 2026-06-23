@@ -504,6 +504,9 @@ export function FortressHUD(props: FortressHUDProps) {
       // instead of a useless generic "equipTransfer rejected".
       await equipTransferRpc(from, to);
       if (refetchInventoryAndQs) void refetchInventoryAndQs();
+      // A vault↔equip move deletes/inserts a vault row server-side, but the vault has its own
+      // fetch — refetch it so the source tile clears (else the item looks like it's in BOTH).
+      if (from.region === 'vault' || to.region === 'vault') void vaultBridge?.refetch();
       return true;
     },
     ejectSlotToWorld: async (from) => {
@@ -1146,7 +1149,10 @@ export function FortressHUD(props: FortressHUDProps) {
 
       {/* Bottom-right: equip slots (weapon / armor / boots / potion). Replaces the
           old "R for crosshairs" instructions panel. */}
-      <EquipSlots gear={equippedGear} onMoved={refetchInventoryAndQs} />
+      {/* onMoved also refreshes the VAULT: equipping FROM the vault deletes the vault row
+          server-side, but the vault fetches separately, so without this the source tile
+          lingers and the item looks like it's in both the vault AND equip. */}
+      <EquipSlots gear={equippedGear} onMoved={() => { void refetchInventoryAndQs?.(); void vaultBridge?.refetch(); }} />
       {/* Superadmin: "#F<digit>" sets the flame-glove tier live for testing (no-op without a glove). */}
       <FlameTierCheat isSuperadmin={!!(userRoles?.includes?.('superadmin'))} />
       <AmmoCounter />
