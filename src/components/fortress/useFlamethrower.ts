@@ -156,6 +156,22 @@ export function useFlamethrower(config: FlamethrowerConfig) {
             }
           }
 
+          // Tame the SMOKE emitter's world-up force. The JSON gives it a strong
+          // ForceOverLife.y (~5.88) so it rockets straight up; combined with the
+          // tier distance/speed scaling that produced a tall smoke COLUMN detached
+          // from the forward fire jet. Gentle rise (~1.2) keeps smoke hugging the
+          // flame so the two read as one effect at every tier.
+          for (const emitter of emitters) {
+            if (!(emitter.name || '').toLowerCase().includes('smoke')) continue;
+            const ps = emitter.system as any;
+            for (const b of ps?.behaviors || []) {
+              if (b.type === 'ForceOverLife' && b.y) {
+                if (b.y.value !== undefined) b.y.value = 1.2;
+                if (b.y.a !== undefined) { b.y.a = 1.2; b.y.b = 1.2; }
+              }
+            }
+          }
+
           // Capture original alpha key values before any applyColors call
           for (const emitter of emitters) {
             const ps = emitter.system;
@@ -326,6 +342,9 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     for (const emitter of emittersRef.current) {
       const ps = emitter.system;
       if (!ps) continue;
+      // Smoke keeps its short JSON lifetime — scaling it with the fire's reach is
+      // what grew it into a tall detached column at high tiers.
+      if (isSmokeEmitter(emitter)) continue;
 
       if ((ps as any).startLife) {
         const sl = (ps as any).startLife;
@@ -337,7 +356,7 @@ export function useFlamethrower(config: FlamethrowerConfig) {
         }
       }
     }
-  }, []);
+  }, [isSmokeEmitter]);
 
   // Override particle start speed
   const applySpeed = useCallback((speed: number) => {
@@ -346,6 +365,8 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     for (const emitter of emittersRef.current) {
       const ps = emitter.system;
       if (!ps) continue;
+      // Leave smoke at its native speed so it stays a local puff, not a fast jet.
+      if (isSmokeEmitter(emitter)) continue;
 
       if ((ps as any).startSpeed) {
         const ss = (ps as any).startSpeed;
@@ -359,7 +380,7 @@ export function useFlamethrower(config: FlamethrowerConfig) {
         }
       }
     }
-  }, []);
+  }, [isSmokeEmitter]);
 
   // Scale emitter cone radius (width)
   const applyWidth = useCallback((width: number) => {

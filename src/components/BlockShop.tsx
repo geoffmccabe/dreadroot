@@ -115,6 +115,10 @@ export const BlockShop: React.FC<BlockShopProps> = ({ isOpen, onClose, onBlockPu
     if (activeTab === 'fruit') {
       // Show fruit blocks only
       filtered = blocks.filter(b => b.key === 'fruit');
+    } else if (activeTab === 'wisp') {
+      // Wisps are plain Basic/Building blocks; identify them by key prefix
+      // so the WISP tab still groups them (display-only — not shop-bought).
+      filtered = blocks.filter(b => b.key.startsWith('wisp_'));
     } else if (activeTab === 'seed') {
       // Seeds are handled separately
       return [];
