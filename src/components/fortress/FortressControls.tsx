@@ -655,6 +655,10 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyB':
+        // Plain B toggles block-building mode. SHIFT+B opens the Fortress Builder
+        // (handled in FortressBuilderPanel) — don't also flip building mode; Ctrl/Cmd+B
+        // are browser-reserved.
+        if (event.shiftKey || event.ctrlKey || event.metaKey) break;
         if (blockPlacementMode) {
           onModeChange(null);
         } else {
