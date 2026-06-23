@@ -102,7 +102,7 @@ export interface MonsterConfig {
   bodyFlames?: { radiusMul: number; heightMul: number; colorHot: string; colorCool: string }[];
   smokeTrail?: boolean;       // drop a long-lived (7s) smoke trail (Spintroll)
   spin?: SpinConfig;          // Spintroll: fast spin + erratic zoom + contact damage + player-spin
-  clips?: { idle?: string; walk?: string; attack?: string; death?: string; hit?: string };
+  clips?: { idle?: string; walk?: string; run?: string; attack?: string; death?: string; hit?: string };
   roarSound?: string;         // if set, the monster roars this (spatial) — 20% chance every 3-5s
   callSound?: string;         // ambient call (spatial) — 10% chance every 10-20s, ±15% pitch/speed
   annoyedSound?: string;      // ranged sprayer: plays after 2 vomits in a row that ALL missed
@@ -121,13 +121,13 @@ export interface MonsterConfig {
                               // 'topple' = heel-pivot backward fall, slope-aware; corpse persists in challenges.
   // A weapon glb attached to the Hand_R bone. scale is a multiplier on top of the rig (the FR
   // hand bone has a 0.01 intrinsic scale, so ~100 ≈ a 1 m weapon that scales with the monster);
-  // pos/rotDeg seat the grip in the fist. The blade collider for hits is derived from bladeLen.
-  weapon?: { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number]; bladeLen?: number };
+  // pos/rotDeg seat the grip in the fist.
+  weapon?: { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number] };
   enrageOnHit?: boolean;       // once damaged: walk→run clip + 50% faster (charges when shot)
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
-const DEFCLIPS = { idle: 'idle', walk: 'walk', attack: 'attack', death: 'death', hit: 'hit' };
+const DEFCLIPS = { idle: 'idle', walk: 'walk', run: 'run', attack: 'attack', death: 'death', hit: 'hit' };
 const DEATH_DESPAWN_MS = 2600; // play the death clip, hold the pose, then remove
 let _mid = 0;
 // Climbing physics. JUMP_VEL apex ≈ own height (1.8m) so a demon can mount one box / one
@@ -555,7 +555,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     });
   }, [cloned, J.desat]);
 
-  const clip = (key: string) => {
+  const clip = (key: string | undefined) => {
+    if (!key) return null;   // guard: a missing clips.* key must never crash the frame loop
     // EXACT (case-insensitive) match first: many Synty rigs ship several "walk" clips
     // (walk, walk_strafe, walk_crossover, …). A loose substring match grabs whichever
     // comes first — often a strafe/crossover clip → "crossed legs" walk. Prefer the clip

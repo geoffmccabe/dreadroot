@@ -245,6 +245,9 @@ export function SiegeNewMonsterLineup() {
     const weapon = mon.glb === 'pigbutcher' ? PIG_WEAPONS[(Math.random() * PIG_WEAPONS.length) | 0] : undefined;
     setSpawned((s) => [...s, { key: spawnSeq++, mon, pos, weapon }]);
   }, []);
+  // Remove a dead @-spawned monster once its death finishes, so the list + its collider
+  // don't leak (it's not a challenge, so corpses sink + despawn).
+  const removeSpawned = useMemo(() => (id: string) => setSpawned((s) => s.filter((x) => `lu${x.key}` !== id)), []);
   useSpawnCommand(add);
 
   // Per-monster special behavior + clip overrides.
@@ -294,7 +297,7 @@ export function SiegeNewMonsterLineup() {
         <ReviewMonster key={p.m.glb} mon={p.m} x={p.x} z={p.z} y={p.y} first={i === 0} />
       ))}
       {spawned.map((s) => (
-        <MonsterEnemy key={s.key} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
+        <MonsterEnemy key={s.key} id={`lu${s.key}`} onDespawn={removeSpawned} spawn={s.pos} url={`/siege/monsters/${s.mon.glb}.glb?v=${APP_VERSION}`}
           modelHeight={INTRINSIC} height={s.mon.height} speed={s.mon.speed} animSpeed={s.mon.animSpeed}
           health={healthFor(s.mon.height)} gait="climb" deathStyle="topple" attackRange={Math.max(1.6, s.mon.height * 0.5 + 0.8)} attackMs={1400}
           meleeContact={{ dmg: [s.mon.height * 3, s.mon.height * 7], kb: [2, 8], cooldownMs: 1300 }} weapon={s.weapon} {...extraProps(s.mon)} />

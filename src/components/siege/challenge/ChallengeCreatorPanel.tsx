@@ -624,7 +624,7 @@ export function ChallengeCreatorPanel() {
 
       {/* Delete-challenge confirmation. */}
       {confirmDelCh && (
-        <div onClick={() => setConfirmDelCh(false)} style={{ position: 'fixed', inset: 0, zIndex: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
+        <div onClick={() => setConfirmDelCh(false)} style={{ position: 'fixed', inset: 0, zIndex: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ ...card, padding: 20, minWidth: 320, textAlign: 'center', boxShadow: '0 14px 44px #000' }}>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 6 }}>Delete this challenge?</div>
             <div style={{ fontSize: 12, color: '#9fb4d0', marginBottom: 16 }}>"{ch.name || 'Untitled'}" will be permanently removed. This can't be undone.</div>
