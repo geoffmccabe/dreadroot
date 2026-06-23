@@ -7,6 +7,7 @@ import { setRocketBelt } from '@/config/rocketBelt';
 import { rocketBeltTierFromItemNumber } from '@/features/rocketBelt/rocketBelt';
 import { useHandGrenades, handKind } from '@/config/handGrenade';
 import { setFlameGlove } from '@/config/flameGlove';
+import { setEquippedPickaxe, isPickaxe } from '@/components/siege/mining/equippedPickaxe';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
 import { equipTransfer } from '@/services/worldStore';
 import { playSound } from '@/lib/spatialAudio';
@@ -58,6 +59,12 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
     // A shpider EGG is a hand THROWABLE (like a grenade): accept it into a hand slot so it can be
     // dragged in, then Y adopts it into the hand overlay + throws it (hatches a pet).
     if ((it.key ?? '').startsWith('shpider_egg')) return { ok: true, item, reloadKey: null, isRifle: false };
+    // A PICKAXE is a two-handed mining TOOL (not a gun): it fills BOTH hands and renders centered
+    // like a rifle (isRifle), but never fires (loadWeaponStats returns null for non-guns). Detect
+    // by name/key so it needs no weapon_stats row — the existing pickaxe items just work.
+    if (isPickaxe(it.name) || isPickaxe(it.key) || (it.item_category ?? '').toLowerCase() === 'pickaxe') {
+      return { ok: true, item, reloadKey: null, isRifle: true };
+    }
     if (it.item_number != null) {
       const { data: ws } = await (supabase as unknown as {
         from: (t: string) => { select: (c: string) => { eq: (k: string, v: number) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> } } };
@@ -188,6 +195,9 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const isGloveItem = (it: EquipItem | null) => !!it?.name && it.name.toLowerCase().includes('flame glove');
   const leftIsGlove = isGloveItem(equip[1]);
   const rightIsGlove = isGloveItem(equip[5]);
+  // A pickaxe (two-handed mining tool) in the left hand owns BOTH hands — same as a rifle —
+  // so the right hand stays empty/inactive. Detected by name (no weapon_stats row).
+  const leftIsPickaxe = isPickaxe(equip[1]?.name);
 
   // LEFT hand (slot 1) drives the primary active weapon + leftKind (rifle vs pistol).
   const weaponItemNumber = equip[1]?.itemNumber ?? null;
@@ -207,7 +217,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   // rifle (two-handed) it owns both hands → no separate right weapon.
   const rightItemNumber = equip[5]?.itemNumber ?? null;
   useEffect(() => {
-    if (rightItemNumber == null || leftKind === 'rifle' || rightIsGlove) { setRightWeapon(null); return; }
+    if (rightItemNumber == null || leftKind === 'rifle' || leftIsPickaxe || rightIsGlove) { setRightWeapon(null); return; }
     let cancelled = false;
     (async () => {
       const { stats } = await loadWeaponStats(rightItemNumber);
@@ -215,7 +225,14 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       setRightWeapon(stats);
     })();
     return () => { cancelled = true; };
-  }, [rightItemNumber, leftKind, rightIsGlove]);
+  }, [rightItemNumber, leftKind, leftIsPickaxe, rightIsGlove]);
+
+  // Pickaxe (two-handed mining tool, left hand) → publish its tier so the mining interaction
+  // knows the player can mine, and at what tier. The item's `tier` IS the pickaxe tier.
+  useEffect(() => {
+    const px = equip[1];
+    setEquippedPickaxe(leftIsPickaxe && px ? { tier: px.tier ?? 1, name: px.name } : null);
+  }, [equip, leftIsPickaxe]);
 
   // Flame glove (one-handed) — active in EITHER hand, preferring the RIGHT if a glove is
   // worn in both (only one is used). Binds the flame to that hand's mouse button downstream.
@@ -266,8 +283,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         const occ5 = (!!equip[5] || !!handGren.R) && fromEquipSlot !== 5;
         if (occ1 || occ5) { revert(def.num); toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
-      } else if (def.hand && !r.isRifle && leftKind === 'rifle' && fromEquipSlot !== 1) {
-        revert(def.num); toast({ title: 'Rifle uses both hands — unequip it first', duration: 2400 }); return;
+      } else if (def.hand && !r.isRifle && (leftKind === 'rifle' || leftIsPickaxe) && fromEquipSlot !== 1) {
+        revert(def.num); toast({ title: `${leftIsPickaxe ? 'Pickaxe' : 'Rifle'} uses both hands — unequip it first`, duration: 2400 }); return;
       }
       // Refine: replace the instant tile with the FULL item (item_number → active weapon fires),
       // moving it to the final target slot (a rifle migrates from the dropped hand to slot 1).
