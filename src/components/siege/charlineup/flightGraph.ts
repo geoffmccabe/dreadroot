@@ -9,13 +9,14 @@ import { AnimGraph } from './animFSM';
 export const FLIGHT_GRAPH: AnimGraph = {
   initial: 'launch',
   states: {
-    // spring upward into the glide pose (+3.0 m over 0.5 s)
-    launch: { clip: 'Glide', loop: true, lift: 6.0, drift: 1.0, duration: 0.5, fade: 0.15, next: 'glide' },
-    // hold the cloak-glide, drifting forward and sinking back to ~ground over 2.6 s
-    glide:  { clip: 'Glide', loop: true, lift: -1.15, drift: 1.2, duration: 2.6, fade: 0.3, next: 'land' },
+    // run off the edge + jump out (real Mixamo clip, plays once); FSM adds the up+forward arc
+    launch: { clip: 'Jump_Out_To_Glide', loop: false, lift: 4.0, drift: 2.4, fade: 0.15, next: 'glide' },
+    // crossfade (fade:0.35) smoothly interpolates every bone from the jump's end pose into the
+    // glide pose — that's the "transition" between them, no hand-posing needed. Then hold the glide.
+    glide:  { clip: 'Gliding', loop: true, lift: -0.8, drift: 2.4, duration: 3.0, fade: 0.35, next: 'land' },
     // ending A: land on flat ground (Jumping Down has a landing crouch)
-    land:   { clip: 'Jumping Down', loop: false, lift: 0, fade: 0.2 },
+    land:   { clip: 'Jumping Down', loop: false, lift: 0, fade: 0.25 },
     // ending B: no flat ground → cling to a wall
-    wall:   { clip: 'Climbing Up Wall', loop: false, lift: 0, fade: 0.2 },
+    wall:   { clip: 'Climbing Up Wall', loop: false, lift: 0, fade: 0.25 },
   },
 };
