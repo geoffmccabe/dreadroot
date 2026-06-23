@@ -21,24 +21,24 @@
 
 import { FORTRESS_DIMENSIONS } from '@/components/fortress/FortressCollision';
 
-const TRIGGER_DEPTH = 2; // 2m in front of the inside wall face
-
 export interface VaultTriggerAABB {
   minX: number; maxX: number;
   minY: number; maxY: number;
   minZ: number; maxZ: number;
 }
 
+// The whole fortress interior — from the back wall up to the front door, across
+// the full width + height. The vault prompt + V keybind now work ANYWHERE inside
+// the fortress, not only in the old 2m back-wall strip.
 export function getVaultTriggerAABB(): VaultTriggerAABB {
   const { cliffW, cliffH, frontT, courtyardDepth, frontZ } = FORTRESS_DIMENSIONS;
-  const backWallInsideZ = frontZ - courtyardDepth - frontT + 1;
   return {
     minX: -cliffW / 2,
     maxX:  cliffW / 2,
     minY: 0,
     maxY: cliffH,
-    minZ: backWallInsideZ,
-    maxZ: backWallInsideZ + TRIGGER_DEPTH,
+    minZ: frontZ - courtyardDepth - frontT, // back wall
+    maxZ: frontZ,                           // front door
   };
 }
 
