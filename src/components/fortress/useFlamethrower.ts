@@ -156,18 +156,35 @@ export function useFlamethrower(config: FlamethrowerConfig) {
             }
           }
 
-          // Tame the SMOKE emitter's world-up force. The JSON gives it a strong
-          // ForceOverLife.y (~5.88) so it rockets straight up; combined with the
-          // tier distance/speed scaling that produced a tall smoke COLUMN detached
-          // from the forward fire jet. Gentle rise (~1.2) keeps smoke hugging the
-          // flame so the two read as one effect at every tier.
+          // Tame the decorative emitters so they read as one tight effect with the
+          // forward fire jet (only the MAIN flame emitter scales its reach with tier —
+          // see applyDistance/applySpeed, which skip these by name).
           for (const emitter of emitters) {
-            if (!(emitter.name || '').toLowerCase().includes('smoke')) continue;
+            const nm = (emitter.name || '').toLowerCase();
             const ps = emitter.system as any;
-            for (const b of ps?.behaviors || []) {
-              if (b.type === 'ForceOverLife' && b.y) {
-                if (b.y.value !== undefined) b.y.value = 1.2;
-                if (b.y.a !== undefined) { b.y.a = 1.2; b.y.b = 1.2; }
+            if (!ps) continue;
+            if (nm.includes('smoke')) {
+              // SMOKE: strong JSON world-up force (~5.88) rocketed it straight up into
+              // a tall column detached from the jet. Gentle rise (~1.2) so it hugs the flame.
+              for (const b of ps.behaviors || []) {
+                if (b.type === 'ForceOverLife' && b.y) {
+                  if (b.y.value !== undefined) b.y.value = 1.2;
+                  if (b.y.a !== undefined) { b.y.a = 1.2; b.y.b = 1.2; }
+                }
+              }
+            } else if (nm.includes('ember')) {
+              // EMBERS were the "circles flying like bugs all over the screen": the
+              // Noise behavior + up-force + (now) a longer lifetime scattered them
+              // everywhere. Drop the Noise, kill the rise, and shorten life so they
+              // stay a tight spark burst along the flame's central axis.
+              ps.behaviors = (ps.behaviors || []).filter((b: any) => b.type !== 'Noise');
+              for (const b of ps.behaviors) {
+                if (b.type === 'ForceOverLife' && b.y && b.y.value !== undefined) b.y.value = 0.3;
+              }
+              const sl = ps.startLife;
+              if (sl) {
+                if (sl.value !== undefined) sl.value = 0.45;
+                else if (sl.a !== undefined) { sl.a = 0.3; sl.b = 0.6; }
               }
             }
           }
@@ -228,6 +245,13 @@ export function useFlamethrower(config: FlamethrowerConfig) {
   const isSmokeEmitter = useCallback((emitter: ParticleEmitter): boolean => {
     const name = (emitter.name || '').toLowerCase();
     return name.includes('smoke');
+  }, []);
+
+  // Decorative (non-stream) emitters — glow, smoke, embers. Only the MAIN flame
+  // stream scales its reach with tier; these keep their short native life/speed.
+  const isDecorEmitter = useCallback((emitter: ParticleEmitter): boolean => {
+    const name = (emitter.name || '').toLowerCase();
+    return name.includes('glow') || name.includes('smoke') || name.includes('ember');
   }, []);
 
   // Apply 3-color gradient to flame particles + smoke opacity
@@ -342,9 +366,11 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     for (const emitter of emittersRef.current) {
       const ps = emitter.system;
       if (!ps) continue;
-      // Smoke keeps its short JSON lifetime — scaling it with the fire's reach is
-      // what grew it into a tall detached column at high tiers.
-      if (isSmokeEmitter(emitter)) continue;
+      // Only the MAIN flame stream scales its lifetime (= reach) with tier. The
+      // decorative emitters (glow/smoke/embers) keep their short native lifetime —
+      // stretching them with reach is what made glow/embers linger and drift all
+      // over the screen as floating circles.
+      if (isDecorEmitter(emitter)) continue;
 
       if ((ps as any).startLife) {
         const sl = (ps as any).startLife;
@@ -356,7 +382,7 @@ export function useFlamethrower(config: FlamethrowerConfig) {
         }
       }
     }
-  }, [isSmokeEmitter]);
+  }, [isDecorEmitter]);
 
   // Override particle start speed
   const applySpeed = useCallback((speed: number) => {
@@ -365,8 +391,9 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     for (const emitter of emittersRef.current) {
       const ps = emitter.system;
       if (!ps) continue;
-      // Leave smoke at its native speed so it stays a local puff, not a fast jet.
-      if (isSmokeEmitter(emitter)) continue;
+      // Leave the decorative emitters at their native speed; only the main flame
+      // stream takes the tier speed.
+      if (isDecorEmitter(emitter)) continue;
 
       if ((ps as any).startSpeed) {
         const ss = (ps as any).startSpeed;
@@ -380,7 +407,7 @@ export function useFlamethrower(config: FlamethrowerConfig) {
         }
       }
     }
-  }, [isSmokeEmitter]);
+  }, [isDecorEmitter]);
 
   // Scale emitter cone radius (width)
   const applyWidth = useCallback((width: number) => {
