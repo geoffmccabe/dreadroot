@@ -68,7 +68,7 @@ export function GamePanel({
           node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
         }
       }}
-      className="hud-panel hud-draggable fixed flex flex-col overflow-hidden"
+      className="hud-panel fixed flex flex-col overflow-hidden"
       style={{
         width: size.width,
         height: size.height,

@@ -137,8 +137,6 @@ All colors MUST be HSL.
     --vip-1: #fbbf24;
     --vip-2: #4ade80;
     --vip-3: #38bdf8;
-    /* Superadmin — overrides the tier color (a role, not a purchasable tier). */
-    --vip-super: #c084fc;
 
     /* Rarity color tokens */
     --rarity-common: 0 0% 60%;
