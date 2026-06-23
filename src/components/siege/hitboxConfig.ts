@@ -30,12 +30,12 @@ const overrides: Record<string, MonsterHitbox> = (() => {
 const BAKED: Record<string, MonsterHitbox> = {
   // Exact tuned values (normalized ÷ tuned height). No extension — earlier I
   // over-extended the head by 15% of MONSTER height (huge vs a small head box).
-  '/siege/monsters/reddemon.glb': {  // tuned on the 1.8m Demon Horde (÷1.8)
-    body: { lx: 0.0278, ly: 0.4727, lz: 0.0556, hx: 0.1802, hy: 0.2782, hz: 0.1246 },
+  '/siege/monsters/reddemon.glb': {  // tuned on the 1.8m Demon Horde (÷1.8). Body extended to the
+    body: { lx: 0.0278, ly: 0.3755, lz: 0.0556, hx: 0.1802, hy: 0.3755, hz: 0.1246 },  // feet (legs shootable)
     head: { lx: 0.0278, ly: 0.7397, lz: 0.1944, hx: 0.0667, hy: 0.0945, hz: 0.0691 },
   },
-  '/siege/monsters/dfskeleton.glb': {  // Giant Skeleton (#3), tuned on the 6m instance (÷6)
-    body: { lx: -0.0083, ly: 0.4890, lz: 0.0083, hx: 0.1278, hy: 0.3973, hz: 0.1111 },
+  '/siege/monsters/dfskeleton.glb': {  // Giant Skeleton (#3), tuned on the 6m instance (÷6). Body
+    body: { lx: -0.0083, ly: 0.4430, lz: 0.0083, hx: 0.1278, hy: 0.4430, hz: 0.1111 },  // extended to the feet
     head: { lx: -0.0417, ly: 0.9085, lz: 0.1917, hx: 0.0945, hy: 0.1028, hz: 0.0861 },
   },
 };
@@ -63,17 +63,8 @@ export function defaultHitbox(radius: number, height: number, headFrac: number):
  *  normalized so they're scaled by this monster's height. */
 export function getHitboxFor(url: string, radius: number, height: number, headFrac: number): MonsterHitbox {
   const norm = overrides[url] ?? BAKED[url];
-  const hb = norm
-    ? { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) }
-    : defaultHitbox(radius, height, headFrac);
-  // Always extend the BODY box down to the feet (y=0). A torso-only box leaves the LEGS
-  // unhittable — invisible on a normal monster (you aim at center mass) but glaring on a
-  // boss-/giant-scaled monster whose legs fill your view at eye level: shots hit the broad-
-  // phase cylinder but miss the refined body box → no damage. Top is preserved; the head box
-  // (headshot/bullseye) is untouched.
-  const top = hb.body.ly + hb.body.hy;
-  if (hb.body.ly - hb.body.hy > 0.001) hb.body = { ...hb.body, ly: top / 2, hy: top / 2 };
-  return hb;
+  if (norm) return { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) };
+  return defaultHitbox(radius, height, headFrac);
 }
 
 export function hasOverride(url: string): boolean { return !!(overrides[url] || BAKED[url]); }
