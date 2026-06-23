@@ -27,7 +27,7 @@ export function SiegeCharLineupHud() {
           <span style={{ opacity: 0.7 }}>loading…</span>
         )}
       </div>
-      <div style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>M = next · N = previous · &amp;&amp;&amp; to hide</div>
+      <div style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>M = next · N = previous · F = fly (land) · G = fly (wall) · &amp;&amp;&amp; to hide</div>
     </div>
   );
 }

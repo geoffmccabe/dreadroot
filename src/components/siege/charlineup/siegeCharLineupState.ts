@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
 // browser like an offline store). v2 = Draco meshes + shared animation library.
-export const CHAR_ASSET_VERSION = '2';
+export const CHAR_ASSET_VERSION = '3';
 // One shared, Draco/clip library holding every animation — loaded once, applied to every character
 // by bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only this.
 export const ANIM_LIBRARY = '/siege/characters/siege_anims.glb';
@@ -40,6 +40,14 @@ export function cycleCharAnim(dir: number): void {
   if (!animNames.length) return;
   animIndex = (animIndex + dir + animNames.length) % animNames.length; emit();
 }
+
+// Flight demo trigger: a counter the in-canvas characters poll each frame (no React re-render).
+// F = glide then LAND, G = glide then stick to a WALL — to show the decision fork.
+let flightSeq = 0;
+let flightMode: 'land' | 'wall' = 'land';
+export const getFlightSeq = (): number => flightSeq;
+export const getFlightMode = (): 'land' | 'wall' => flightMode;
+export function triggerFlight(mode: 'land' | 'wall'): void { flightMode = mode; flightSeq++; }
 
 export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);

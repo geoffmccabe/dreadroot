@@ -6,14 +6,17 @@
 // In-canvas only (renders inside <Canvas>); the HUD readout lives in SiegeCharLineupHud (DOM).
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
-import { useThree } from '@react-three/fiber';
+import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
   LINEUP_CHARS, ANIM_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
-  toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor,
+  toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
+  getFlightSeq, getFlightMode,
 } from './charlineup/siegeCharLineupState';
+import { AnimFSM } from './charlineup/animFSM';
+import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -49,6 +52,37 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
     return () => { a?.fadeOut(0.2); };
   }, [actions, names, animIndex]);
 
+  // Flight demo: when triggered (F/G), run the data-driven FSM (launch → glide → land/wall) on this
+  // character, applying the FSM's vertical lift + forward drift to the root. Resumes the normal
+  // cycled clip when the sequence finishes. Forward axis for a yaw-rotated group is (sin, cos).
+  const fsmRef = useRef<AnimFSM | null>(null);
+  const seenSeq = useRef(getFlightSeq());
+  useFrame((_, rawDt) => {
+    const g = group.current; if (!g) return;
+    const dt = Math.min(rawDt, 0.05);
+    const seq = getFlightSeq();
+    if (seq !== seenSeq.current) {
+      seenSeq.current = seq;
+      const mode = getFlightMode();
+      actions[names[animIndex % names.length]]?.fadeOut(0.15); // drop the cycled clip
+      const fsm = new AnimFSM(actions, FLIGHT_GRAPH, (s) => (s === 'glide' ? mode : null));
+      fsm.onDone = () => {
+        fsmRef.current = null;
+        g.position.set(x, groundY, z);
+        actions[names[animIndex % names.length]]?.reset().fadeIn(0.3).play();
+      };
+      fsm.start();
+      fsmRef.current = fsm;
+    }
+    const fsm = fsmRef.current;
+    if (fsm?.active) {
+      fsm.tick(dt);
+      g.position.y = Math.max(groundY, groundY + fsm.offsetY);
+      g.position.x = x + Math.sin(yaw) * fsm.offsetZ;
+      g.position.z = z + Math.cos(yaw) * fsm.offsetZ;
+    }
+  });
+
   return (
     <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
       <primitive object={cloned} />
@@ -78,6 +112,8 @@ export function SiegeCharacterLineup() {
       if (!getCharLineupEnabled()) return;
       if (e.key === 'm' || e.key === 'M') { e.stopImmediatePropagation(); cycleCharAnim(1); }
       else if (e.key === 'n' || e.key === 'N') { e.stopImmediatePropagation(); cycleCharAnim(-1); }
+      else if (e.key === 'f' || e.key === 'F') { e.stopImmediatePropagation(); triggerFlight('land'); }
+      else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
