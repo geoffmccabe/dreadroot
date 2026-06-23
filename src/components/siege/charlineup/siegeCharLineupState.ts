@@ -4,11 +4,13 @@
 // animation has a 1-based number for reference.
 import { useSyncExternalStore } from 'react';
 
-export interface LineupChar { name: string; file: string; }
+// scale brings each model to its real height; minY (glb-space feet) lets the renderer keep the
+// scaled feet on the ground.  Ash → 2.0 m incl. hat (raw 1.783), Thorn → 1.4 m (raw 2.010).
+export interface LineupChar { name: string; file: string; scale: number; minY: number; }
 // All on the Mixamo skeleton → one animation set drives every character (the single system).
 export const LINEUP_CHARS: LineupChar[] = [
-  { name: 'Ash',   file: '/siege/characters/pilot_ash.glb' },
-  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb' },
+  { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055 },
+  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455 },
 ];
 
 export interface LineupAnchor { x: number; z: number; yaw: number; groundY: number }

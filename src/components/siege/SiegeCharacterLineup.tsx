@@ -19,8 +19,13 @@ import {
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
 
-function LineupChar({ file, x, z, yaw, fallbackY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; animIndex: number }) {
-  const { scene, animations } = useGLTF(`${file}?v=${APP_VERSION}`);
+const glbUrl = (file: string) => `${file}?v=${APP_VERSION}`;
+// Preload both characters as soon as the siege scene mounts this module, so "&&&" is instant
+// instead of downloading ~13 MB + parsing 32 clips on the keypress.
+LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file)));
+
+function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number }) {
+  const { scene, animations } = useGLTF(glbUrl(file));
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
@@ -29,7 +34,8 @@ function LineupChar({ file, x, z, yaw, fallbackY, animIndex }: { file: string; x
   useEffect(() => { if (names.length) setCharAnimNames(names); }, [names]);
 
   // Feet on the terrain; if the row's cell isn't sampled yet, fall back to the player's ground Y.
-  const groundY = useMemo(() => sampleHeight(x, z) ?? fallbackY, [x, z, fallbackY]);
+  // Offset by the scaled feet (minY) so scaling doesn't sink/float the model.
+  const groundY = useMemo(() => (sampleHeight(x, z) ?? fallbackY) - minY * scale, [x, z, fallbackY, minY, scale]);
 
   useEffect(() => {
     if (!names.length) return;
@@ -40,7 +46,7 @@ function LineupChar({ file, x, z, yaw, fallbackY, animIndex }: { file: string; x
   }, [actions, names, animIndex]);
 
   return (
-    <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]}>
+    <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
       <primitive object={cloned} />
     </group>
   );
@@ -99,7 +105,7 @@ export function SiegeCharacterLineup() {
       {LINEUP_CHARS.map((c, i) => {
         const off = (i - (n - 1) / 2) * SPACING;
         return (
-          <LineupChar key={c.name} file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} animIndex={animIndex} />
+          <LineupChar key={c.name} file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} />
         );
       })}
     </Suspense>
