@@ -12,6 +12,8 @@ import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
+import { FountainPanel } from '@/components/siege/fountain/FountainPanel';
+import { startFountainPolling } from '@/components/siege/fountain/fountainState';
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
@@ -117,6 +119,8 @@ export function FortressHUD(props: FortressHUDProps) {
   // ⌘-] toggles Siege "work mode" (dev/review overlays: monster lineup, character pair,
   // anim hint, SIEGE DEBUG panel). Off by default so they don't disrupt normal testing.
   useEffect(() => installWorkModeHotkey(), []);
+  // Poll the global Fountain double-drops state (so the 2x buff + leaderboard are live).
+  useEffect(() => { if (isSiege) startFountainPolling(); }, [isSiege]);
 
   // Quick-select slot (1-6) — state lifted to parent, use prop + callback
   const selectedSlot = selectedSlotProp;
@@ -910,6 +914,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <BuilderPalette />
       {/* Magic Chest HUD (prompt + spin reel) — only in siege. */}
       {isSiege && <MagicChestPanel superadmin={!!userRoles?.includes?.('superadmin')} />}
+      {/* The Fountain modal — only in siege. */}
+      {isSiege && <FountainPanel />}
       {/* Laser inspector: live "pointing at <item>" readout + flag worklist. On ALL siege
           maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
       {isSiege && <CoordsHud />}

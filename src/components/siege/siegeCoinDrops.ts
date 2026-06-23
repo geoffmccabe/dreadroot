@@ -9,6 +9,7 @@ import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
 import type { CoinDropInstance } from '@/features/coinDrops/types';
 import { getActiveWorldId } from '@/config/activeWorld';
 import { getChallengeState } from './challenge/challengeStore';
+import { getFountainDoubleDrops } from './fountain/fountainState';
 
 /** Fire once when a siege monster is killed. Open-world only; skips challenge kills + non-world
  *  contexts. amountHealth = the monster's initial (max) HP. */
@@ -16,7 +17,8 @@ export async function dropSiegeDivi(x: number, y: number, z: number, initialHeal
   if (getChallengeState().active) return;            // challenge mode → no DIVI drops
   const worldId = getActiveWorldId();
   if (!worldId) return;                              // no persistent world → can't credit
-  const amount = Math.round(initialHealth / 10);
+  // The Fountain's global double-drops buff (someone donated Divi) doubles every kill's drop.
+  const amount = Math.round(initialHealth / 10) * (getFountainDoubleDrops() ? 2 : 1);
   if (amount <= 0) return;
   const floatCount = Math.min(10, Math.max(1, Math.round(amount / 10)));   // 1-10 sprites
   try {
