@@ -82,7 +82,7 @@ import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { VaultPanel } from '@/features/vault';
 import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 import { getActiveWeapon } from '@/config/activeWeapon';
-import { getHandGrenades, setHandGrenade, anyArmedHandGrenade, armedHandsRightFirst, useHandGrenades, type Hand } from '@/config/handGrenade';
+import { getHandGrenades, setHandGrenade, anyArmedHandOfKind, armedHandsOfKindRightFirst, handsOfKindRightFirst, useHandGrenades, type Hand } from '@/config/handGrenade';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
@@ -510,7 +510,8 @@ export function Fortress() {
   const consumeGrenade = useCallback((): number | null => {
     // Dual-wield: an armed HAND grenade is thrown first, RIGHT hand before LEFT. The
     // grenade item lives in its QA slot (qsSlot) → consume that and clear the hand.
-    const armed = armedHandsRightFirst();
+    // GRENADE-kind only, so a grenade throw never consumes a hand egg.
+    const armed = armedHandsOfKindRightFirst('grenade');
     if (armed.length) {
       const hand = armed[0];
       const hg = getHandGrenades()[hand];
@@ -580,10 +581,11 @@ export function Fortress() {
     // inconsistent legacy state where a hand grenade outlived the rifle going on). Without
     // this, the rifle branch below would `return` and silently ignore it = "G does nothing".
     {
-      const hgNow = getHandGrenades();
-      if (hgNow.L || hgNow.R) {
-        if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
-        const reArmNow: Hand | null = (hgNow.R && !hgNow.R.armed) ? 'R' : (hgNow.L && !hgNow.L.armed) ? 'L' : null;
+      // GRENADE-kind hands only — a hand EGG must not trigger grenade throw/arm (Y handles eggs).
+      const grenadeHands = handsOfKindRightFirst('grenade');
+      if (grenadeHands.length) {
+        if (anyArmedHandOfKind('grenade')) { grenadeThrowRef.current?.(); return; }
+        const reArmNow: Hand | null = grenadeHands.find((h) => !getHandGrenades()[h]!.armed) ?? null;
         if (reArmNow) {
           const cur = getHandGrenades()[reArmNow]!;
           setHandGrenade(reArmNow, { ...cur, armed: true });
@@ -648,8 +650,8 @@ export function Fortress() {
     // throw / re-arm. (This is the "glove + grenade in hand" case — it must always respond,
     // and must NOT depend on a DB round-trip succeeding.)
     if (!leftFree && !rightFree) {
-      if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
-      const reArm: Hand | null = (hg.R && !hg.R.armed) ? 'R' : (hg.L && !hg.L.armed) ? 'L' : null;
+      if (anyArmedHandOfKind('grenade')) { grenadeThrowRef.current?.(); return; }
+      const reArm: Hand | null = handsOfKindRightFirst('grenade').find((h) => !getHandGrenades()[h]!.armed) ?? null;
       if (reArm) {
         const cur = getHandGrenades()[reArm]!;
         setHandGrenade(reArm, { ...cur, armed: true });
@@ -684,9 +686,9 @@ export function Fortress() {
       return;
     }
     // 2. THROW an armed hand grenade (right first).
-    if (anyArmedHandGrenade()) { grenadeThrowRef.current?.(); return; }
+    if (anyArmedHandOfKind('grenade')) { grenadeThrowRef.current?.(); return; }
     // 3. Re-arm a disarmed hand grenade (right first).
-    const reArm: Hand | null = (hg.R && !hg.R.armed) ? 'R' : (hg.L && !hg.L.armed) ? 'L' : null;
+    const reArm: Hand | null = handsOfKindRightFirst('grenade').find((h) => !getHandGrenades()[h]!.armed) ?? null;
     if (reArm) {
       const cur = getHandGrenades()[reArm]!;
       setHandGrenade(reArm, { ...cur, armed: true });
