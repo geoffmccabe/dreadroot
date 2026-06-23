@@ -17,7 +17,11 @@ export interface MonsterHitbox { body: HBox; head: HBox; }
 // so one box scales correctly across same-model monsters of different sizes
 // (e.g. the 1.8m Demon Horde + the 4m Red Demon share reddemon.glb). v1 stored
 // absolute metres, so the key is bumped to ignore stale v1 data.
-const LS_KEY = 'siege_hitboxes_v2';
+// v3: bumped to discard pre-feet-extension overrides. v2 boxes saved before the fix could be
+// torso-only (body box not reaching the feet), which made boss/giant-scaled monsters' legs
+// unhittable on devices that had tuned them. Bumping drops that stale per-browser data so the
+// (corrected) baked defaults apply; re-tune from there if needed.
+const LS_KEY = 'siege_hitboxes_v3';
 
 // localStorage overrides (NORMALIZED), loaded once. These win over BAKED.
 const overrides: Record<string, MonsterHitbox> = (() => {
@@ -63,8 +67,16 @@ export function defaultHitbox(radius: number, height: number, headFrac: number):
  *  normalized so they're scaled by this monster's height. */
 export function getHitboxFor(url: string, radius: number, height: number, headFrac: number): MonsterHitbox {
   const norm = overrides[url] ?? BAKED[url];
-  if (norm) return { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) };
-  return defaultHitbox(radius, height, headFrac);
+  const hb = norm
+    ? { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) }
+    : defaultHitbox(radius, height, headFrac);
+  // SAFETY NET: the body box must always reach the feet, so a (boss/giant-scaled) monster's
+  // LEGS are shootable. A torso-only box makes bullets "pass through" the legs you aim at on a
+  // giant. Only extends DOWN to y=0 (never raises) — top, width, offset and the head box stay
+  // exactly as tuned, so the in-world editor still works for everything you'd actually adjust.
+  const top = hb.body.ly + hb.body.hy;
+  if (hb.body.ly - hb.body.hy > 0.01) hb.body = { ...hb.body, ly: top / 2, hy: top / 2 };
+  return hb;
 }
 
 export function hasOverride(url: string): boolean { return !!(overrides[url] || BAKED[url]); }
