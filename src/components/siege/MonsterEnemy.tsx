@@ -338,7 +338,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
     beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0, beDone: false,
     // Skeleton injured-crawl + death-variant state.
-    deathVariant: '', crawlSet: false });
+    deathVariant: '' });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -796,9 +796,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
 
     // INJURED CRAWL (skeletons): at <=10% HP the monster drops to a retargeted crawl, moves at 25%
-    // speed, and the crawl plays at 2× rate. `injured` overrides the locomotion clip + speed below.
+    // speed. `injured` overrides the locomotion clip + speed below. The crawl's animation rate is
+    // ABSOLUTE 2× (its own natural speed ×2), decoupled from the monster's animSpeed (the giant plays
+    // everything at 6× — the crawl must NOT inherit that). Re-applied below after play() runs.
     const injured = hasCrawl && inst.hp <= inst.maxHp * 0.10;
-    if (injured && !s.crawlSet) { const ca = clip('crawl'); if (ca) ca.timeScale = 2; s.crawlSet = true; }
     const injMul = injured ? 0.25 : 1;
 
     // Ambient moans (SW zombie sounds): per-monster, ~every 4-8s a 50% chance, distance-scaled.
@@ -1140,6 +1141,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         play(injured ? 'crawl' : clips.walk);
       } else play(injured ? 'crawl' : clips.idle);
     }
+    // Force the crawl to an ABSOLUTE 2× regardless of this monster's animSpeed (mixer.timeScale). Set
+    // every frame because play()'s reset() clears per-action timeScale. CRAWL_RATE=2 → ~2.6s/loop.
+    if (injured) { const ca = clip('crawl'); if (ca) ca.timeScale = 2 / (mixer.timeScale || 1); }
 
     // Separation — push out of overlapping monsters AT THE SAME LEVEL (stacked demons,
     // |Δy|>1m, are left alone so piles don't shove apart). Count same-level crowding so a
