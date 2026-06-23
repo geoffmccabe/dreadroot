@@ -8,7 +8,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { QuarksLoader, BatchedParticleRenderer, ParticleSystem, ParticleEmitter } from 'three.quarks';
+import { QuarksLoader, BatchedParticleRenderer, ParticleEmitter } from 'three.quarks';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
@@ -17,8 +17,6 @@ import { getFlameGlove } from '@/config/flameGlove';
 // Flame Glove constants
 const MAX_USE_DURATION = 10; // seconds
 const COOLDOWN_DURATION = 3; // seconds
-const FLAME_CONE_HALF_ANGLE = Math.PI / 9; // ~20 degrees half-angle — matches visual flame spread
-const DAMAGE_TICK_INTERVAL = 0.1; // apply damage every 100ms
 
 export interface FlamethrowerConfig {
   color1: string;       // hex color: bright/inner (glow + early gradient)
@@ -34,24 +32,6 @@ export interface FlamethrowerConfig {
   transparency?: number; // particle alpha 0-1 (default 1.0)
 }
 
-export interface FlamethrowerHandle {
-  startFlame: () => void;
-  stopFlame: () => void;
-  isActive: boolean;
-  canFire: boolean;
-  cooldownRemaining: number;
-  /** Call each frame from the frame loop to get enemies in the flame cone */
-  getEnemiesInCone: (
-    origin: THREE.Vector3,
-    direction: THREE.Vector3,
-    distance: number,
-    enemies: Array<{ position: THREE.Vector3; id: string }>
-  ) => string[];
-}
-
-// Temp vectors to avoid allocations
-const _tempDir = new THREE.Vector3();
-const _tempEnemyDir = new THREE.Vector3();
 // 180° rotation around Y to flip particles from +Z (cone emitter default) to -Z (camera look direction)
 const _flipQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 // Offset so flame originates from the HAND that holds the glove. Left hand = left side
@@ -68,7 +48,6 @@ export function useFlamethrower(config: FlamethrowerConfig) {
   const canFireRef = useRef(true);
   const useTimeRef = useRef(0);
   const cooldownRemainingRef = useRef(0);
-  const lastDamageTickRef = useRef(0);
 
   // three.quarks refs
   const batchRendererRef = useRef<BatchedParticleRenderer | null>(null);
@@ -490,7 +469,6 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     isActiveRef.current = true;
     fadingOutRef.current = false; // cancel any pending fade-out
     useTimeRef.current = 0;
-    lastDamageTickRef.current = 0;
 
     // Show the flame group
     if (loadedGroupRef.current) {
@@ -600,42 +578,11 @@ export function useFlamethrower(config: FlamethrowerConfig) {
     group.scale.x = Math.abs(group.scale.x) * (isRightHand ? -1 : 1);
   });
 
-  // Cone-based enemy hit detection (call from frame loop)
-  const getEnemiesInCone = useCallback((
-    origin: THREE.Vector3,
-    direction: THREE.Vector3,
-    distance: number,
-    enemies: Array<{ position: THREE.Vector3; id: string }>
-  ): string[] => {
-    const hits: string[] = [];
-    const dirNorm = _tempDir.copy(direction).normalize();
-
-    for (const enemy of enemies) {
-      _tempEnemyDir.copy(enemy.position).sub(origin);
-      const dist = _tempEnemyDir.length();
-      if (dist > distance || dist < 0.5) continue;
-
-      _tempEnemyDir.normalize();
-      const angle = Math.acos(Math.min(1, dirNorm.dot(_tempEnemyDir)));
-      if (angle <= FLAME_CONE_HALF_ANGLE) {
-        hits.push(enemy.id);
-      }
-    }
-
-    return hits;
-  }, []);
-
+  // Only these three are consumed by the scene (FortressScene drives firing + reads
+  // isActiveRef in its frame loop). Cooldown/use-time refs stay internal.
   return {
     startFlame,
     stopFlame,
-    get isActive() { return isActiveRef.current; },
-    get canFire() { return canFireRef.current; },
-    get cooldownRemaining() { return cooldownRemainingRef.current; },
-    getEnemiesInCone,
     isActiveRef,
-    canFireRef,
-    cooldownRemainingRef,
-    useTimeRef,
-    lastDamageTickRef,
   };
 }

@@ -31,9 +31,15 @@ export function FlameTierCheat({ isSuperadmin }: { isSuperadmin: boolean }) {
       const k = e.key;
 
       if (stage.current === 'idle') {
-        // Don't consume '#' — only commit once we see the 'F' follow-up, so a lone '#'
-        // still reaches anything else that uses it.
-        if (k === '#') { stage.current = 'hash'; arm(); }
+        // Start the sequence on '#', but ONLY consume it when a flame glove is
+        // actually equipped — otherwise '#' must keep reaching the D-Flow diagnostics
+        // toggle (Fortress.tsx) and any other '#' shortcut. With a glove equipped,
+        // '#' is the start of "#F<digit>", so we swallow it to stop the diagnostics
+        // panel flickering open on every tier test.
+        if (k === '#' && getFlameGlove()) {
+          e.preventDefault(); e.stopPropagation();
+          stage.current = 'hash'; arm();
+        }
         return;
       }
       if (stage.current === 'hash') {
