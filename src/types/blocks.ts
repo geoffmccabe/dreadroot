@@ -22,7 +22,7 @@ export interface BlockType {
   cost: number;
   category: 'building' | 'decoration' | 'special';
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'divine' | 'mystic' | 'rainbow' | 'apocalyptic' | 'cosmic';
-  class: 'basic' | 'magic' | 'mystery' | 'iconic' | 'wisp';
+  class: 'basic' | 'magic' | 'mystery' | 'iconic';
   tier: number;
   texture?: {
     diffuse?: string;
