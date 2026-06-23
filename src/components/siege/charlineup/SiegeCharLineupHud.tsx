@@ -8,8 +8,6 @@ export function SiegeCharLineupHud() {
   if (!enabled) return null;
 
   const total = animNames.length;
-  const name = total ? animNames[animIndex % total] : '…';
-  const num = total ? (animIndex % total) + 1 : 0;
 
   const card: React.CSSProperties = {
     position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)', zIndex: 1100,
@@ -22,8 +20,12 @@ export function SiegeCharLineupHud() {
     <div style={card}>
       <div style={{ font: '700 14px ui-monospace, monospace', color: '#8fd6ff', letterSpacing: 1 }}>CHARACTER LINEUP</div>
       <div style={{ marginTop: 3 }}>
-        Animation <b style={{ color: '#9be8a0' }}>#{num}</b>
-        <span style={{ opacity: 0.6 }}>/{total}</span> — <b>{name}</b>
+        {total ? (
+          <>Animation <b style={{ color: '#9be8a0' }}>#{(animIndex % total) + 1}</b>
+            <span style={{ opacity: 0.6 }}>/{total}</span> — <b>{animNames[animIndex % total]}</b></>
+        ) : (
+          <span style={{ opacity: 0.7 }}>loading…</span>
+        )}
       </div>
       <div style={{ opacity: 0.6, fontSize: 11, marginTop: 2 }}>M = next · N = previous · &amp;&amp;&amp; to hide</div>
     </div>

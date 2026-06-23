@@ -6,7 +6,7 @@
 // In-canvas only (renders inside <Canvas>); the HUD readout lives in SiegeCharLineupHud (DOM).
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
-import { useThree, useFrame } from '@react-three/fiber';
+import { useThree } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
@@ -19,7 +19,7 @@ import {
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
 
-function LineupChar({ file, x, z, yaw, animIndex }: { file: string; x: number; z: number; yaw: number; animIndex: number }) {
+function LineupChar({ file, x, z, yaw, fallbackY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; animIndex: number }) {
   const { scene, animations } = useGLTF(`${file}?v=${APP_VERSION}`);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
@@ -28,7 +28,8 @@ function LineupChar({ file, x, z, yaw, animIndex }: { file: string; x: number; z
   // Publish the clip names once (identical across characters — same skeleton/clips).
   useEffect(() => { if (names.length) setCharAnimNames(names); }, [names]);
 
-  const groundY = useMemo(() => sampleHeight(x, z) ?? 0, [x, z]);
+  // Feet on the terrain; if the row's cell isn't sampled yet, fall back to the player's ground Y.
+  const groundY = useMemo(() => sampleHeight(x, z) ?? fallbackY, [x, z, fallbackY]);
 
   useEffect(() => {
     if (!names.length) return;
@@ -54,6 +55,9 @@ export function SiegeCharacterLineup() {
   useEffect(() => {
     let amp: number[] = [];
     const onKey = (e: KeyboardEvent) => {
+      // Never hijack typing in a field.
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
       if (e.key === '&') {
         const now = Date.now();
         amp = amp.filter((t) => now - t < 900);
@@ -62,8 +66,6 @@ export function SiegeCharacterLineup() {
         return;
       }
       if (!getCharLineupEnabled()) return;
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
       if (e.key === 'm' || e.key === 'M') { e.stopImmediatePropagation(); cycleCharAnim(1); }
       else if (e.key === 'n' || e.key === 'N') { e.stopImmediatePropagation(); cycleCharAnim(-1); }
     };
@@ -81,7 +83,9 @@ export function SiegeCharacterLineup() {
     const cz = p.z + f.z * AHEAD;
     // Characters' +Z faces back toward the player.
     const yaw = Math.atan2(-f.x, -f.z);
-    setCharAnchor({ x: cx, z: cz, yaw });
+    // Ground under the player is loaded now → a safe fallback height for any row cell not yet sampled.
+    const groundY = sampleHeight(p.x, p.z) ?? sampleHeight(cx, cz) ?? p.y;
+    setCharAnchor({ x: cx, z: cz, yaw, groundY });
   }, [enabled, camera]);
 
   if (!enabled || !anchor) return null;
@@ -95,7 +99,7 @@ export function SiegeCharacterLineup() {
       {LINEUP_CHARS.map((c, i) => {
         const off = (i - (n - 1) / 2) * SPACING;
         return (
-          <LineupChar key={c.name} file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} animIndex={animIndex} />
+          <LineupChar key={c.name} file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} animIndex={animIndex} />
         );
       })}
     </Suspense>
