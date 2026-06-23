@@ -1706,6 +1706,16 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           burnBlockId = undefined;
         }
         _flameTmpPos.current.set(hitX, hitY, hitZ);
+        // Render the burn as the SAME 7-fire bullet-impact effect (engulf:false),
+        // sized to the enemy's mesh so the fire matches the body instead of the old
+        // oversized engulf-plume cluster (the wrong/too-big look on small enemies
+        // like the shpider). shwarm/shnake own their own tracking fire — leave them
+        // on the default engulf path.
+        const ownsFire = adapter.type === 'shwarm' || adapter.type === 'shnake';
+        const meshH = Math.min(Math.max(0.5, hb.topY - hb.bottomY), 3.0);
+        // `size` is the fire-cluster footprint DIAMETER, so match the mesh width
+        // (2*radius), nudged in slightly (*1.8) so it's never wider than the body.
+        const meshW = Math.min(Math.max(0.3, hb.radius * 1.8), 1.5);
         burnSystem.applyBurn(
           adapter.type,
           burnEntityId,
@@ -1713,6 +1723,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           tier, colors, colorMode, tickDamage, 0,
           _flameTmpPos.current,
           burnSecondsForTier,
+          ownsFire ? undefined : { engulf: false, size: meshW, height: meshH },
         );
       }
     }
