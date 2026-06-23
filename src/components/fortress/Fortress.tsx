@@ -2481,7 +2481,6 @@ export function Fortress() {
         inventory={inventory}
         blockPlacementMode={blockPlacementMode}
         selectedBlockType={selectedBlockType}
-        onSelectBlock={setSelectedBlockType}
         handleModeChange={handleModeChange}
         currentHealth={currentHealth}
         maxHealth={maxHealth}
