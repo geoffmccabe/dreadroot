@@ -1118,10 +1118,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   
   // Wisp block system
   const { blocks: allBlocks, blocksMap } = useBlocksData();
-  // Only wisp-class blocks (the 10 tiers) can now spawn as the in-game wisp.
+  // Only the 10 wisp tiers can spawn as the in-game wisp. They're plain
+  // Basic/Building blocks, identified by their 'wisp_' key prefix (not class).
   // The hook weights selection by tier (tier 1 common ... tier 10 ultra-rare).
   const wispBlocks = useMemo(() =>
-    allBlocks.filter(block => block.class === 'wisp'),
+    allBlocks.filter(block => block.key?.startsWith('wisp_')),
     [allBlocks]
   );
   // Store blocksMap in ref to access in useFrame without stale closures

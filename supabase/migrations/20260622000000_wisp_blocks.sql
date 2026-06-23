@@ -28,7 +28,7 @@ SELECT
   'wisp_' || t,
   initcap(r) || ' Wisp',
   'Tier ' || t || ' wisp block',
-  0, t, 'special', r, 'wisp', g,
+  0, t, 'building', r, 'basic', g,
   jsonb_build_object('size', jsonb_build_array(1,1,1), 'color', c, 'emissive', t > 1, 'transparent', true)
 FROM (VALUES
   (1,  'common',      '#9C7A4F', 0.0),
