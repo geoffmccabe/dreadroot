@@ -168,6 +168,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {world.id === 'enchanted-grid' && <SetSampler set="enchanted" />}
           {world.id === 'kingdom-grid' && <SetSampler set="kingdom" />}
           {world.id === 'samurai-grid' && <SetSampler set="samurai" />}
+          {world.id === 'mining-grid' && <SetSampler set="mining" />}
           {/* Live enemies wandering the beach near the player spawn (-400,45,660),
               with wide aggro so they detect + chase the moment you arrive. Hidden during a
               challenge so only the challenge monsters remain. */}

@@ -25,6 +25,7 @@ const SETS: { id: string; label: string }[] = [
   { id: 'dungeon', label: 'Dungeon Props' }, { id: 'elven', label: 'Elven Realm' },
   { id: 'enchanted', label: 'Enchanted Forest' }, { id: 'kingdom', label: 'Fantasy Kingdom' },
   { id: 'samurai', label: 'Samurai Empire' },
+  { id: 'mining', label: 'Mining / Crystals' },
 ];
 interface CatItem { id: string; name: string; set: string; file: string; category?: string }
 const catalogCache = new Map<string, CatItem[]>();

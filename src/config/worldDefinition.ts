@@ -300,6 +300,8 @@ export const ELVEN_GRID_WORLD = samplerWorld('elven-grid', 'Elven Realm', 20);
 export const ENCHANTED_GRID_WORLD = samplerWorld('enchanted-grid', 'Enchanted Forest', 21);
 export const KINGDOM_GRID_WORLD = samplerWorld('kingdom-grid', 'Fantasy Kingdom', 22);
 export const SAMURAI_GRID_WORLD = samplerWorld('samurai-grid', 'Samurai Empire', 23);
+// PurePoly Mining Pack — crystals/ores/gems with baked emissive glow.
+export const MINING_GRID_WORLD = samplerWorld('mining-grid', 'Mining / Crystals', 24);
 
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
@@ -326,6 +328,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [ENCHANTED_GRID_WORLD.id]: ENCHANTED_GRID_WORLD,
   [KINGDOM_GRID_WORLD.id]: KINGDOM_GRID_WORLD,
   [SAMURAI_GRID_WORLD.id]: SAMURAI_GRID_WORLD,
+  [MINING_GRID_WORLD.id]: MINING_GRID_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

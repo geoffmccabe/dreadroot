@@ -78,4 +78,5 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyS', key: 'S', name: 'Enchanted Forest', mapId: 'enchanted-grid', pos: [0, 3, 0] },
   { code: 'KeyT', key: 'T', name: 'Fantasy Kingdom', mapId: 'kingdom-grid',   pos: [0, 3, 0] },
   { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
+  { code: 'KeyV', key: 'V', name: 'Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
 ];
