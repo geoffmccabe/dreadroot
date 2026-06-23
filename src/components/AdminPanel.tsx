@@ -42,6 +42,7 @@ const CREATURE_DESIGN_PANELS: Record<string, { Component: React.ComponentType; c
 import { AllItemsPanel } from './AdminPanel.AllItemsPanel';
 import { DropTablesPanel } from './AdminPanel.DropTablesPanel';
 import { ChestsPanel } from './AdminPanel.ChestsPanel';
+import { MiningPanel } from './AdminPanel.MiningPanel';
 import { PathfindingConfigPanel } from '@/features/pathfinding/components/PathfindingConfigPanel';
 import { SwEnemiesPanel } from './siege/SwEnemiesPanel';
 import { useUserData } from '@/hooks/useUserData';
@@ -387,12 +388,13 @@ export function AdminPanel({
 
           <TabsContent value="items" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={itemsSubtab} onValueChange={(v) => setItemsSubtab(v as ItemsSubtab)} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
+              <TabsList className="grid w-full grid-cols-6 flex-shrink-0 mb-4">
                 <TabsTrigger value="all-items">All Items</TabsTrigger>
                 <TabsTrigger value="weapons-items">Weapons</TabsTrigger>
                 <TabsTrigger value="bullets">Bullets</TabsTrigger>
                 <TabsTrigger value="drop-tables">Drop Tables</TabsTrigger>
                 <TabsTrigger value="chests">Chests</TabsTrigger>
+                <TabsTrigger value="mining">Mining</TabsTrigger>
               </TabsList>
 
               <TabsContent value="all-items" className="flex-1 overflow-hidden mt-0">
@@ -424,6 +426,12 @@ export function AdminPanel({
               <TabsContent value="chests" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-[calc(90vh-240px)] pr-4">
                   <ChestsPanel />
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="mining" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <MiningPanel />
                 </ScrollArea>
               </TabsContent>
             </Tabs>
