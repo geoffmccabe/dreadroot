@@ -75,12 +75,8 @@ export function getHitboxFor(url: string, radius: number, height: number, headFr
   const hb = norm
     ? { body: scaleBox(norm.body, height), head: scaleBox(norm.head, height) }
     : defaultHitbox(radius, height, headFrac);
-  // SAFETY NET: the body box must always reach the feet, so a (boss/giant-scaled) monster's
-  // LEGS are shootable. A torso-only box makes bullets "pass through" the legs you aim at on a
-  // giant. Only extends DOWN to y=0 (never raises) — top, width, offset and the head box stay
-  // exactly as tuned, so the in-world editor still works for everything you'd actually adjust.
-  const top = hb.body.ly + hb.body.hy;
-  if (hb.body.ly - hb.body.hy > 0.01) hb.body = { ...hb.body, ly: top / 2, hy: top / 2 };
+  // (No auto-extension: the tuned box is used exactly as authored — e.g. the Dark Lord's
+  // knees-to-shoulders body box. Extend a box to the feet in the editor if you want legs hit.)
   return hb;
 }
 
