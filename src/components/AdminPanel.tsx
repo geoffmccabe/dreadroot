@@ -57,6 +57,7 @@ import { LightsEffectsPanel } from './AdminPanel.LightsEffectsPanel';
 import { SolanaPanel } from './AdminPanel.SolanaPanel';
 import { PoolManager } from '@/features/wallet/PoolManager';
 import { GatesManager } from '@/features/tokenGates/GatesManager';
+import { PointsAdmin } from '@/features/points/PointsAdmin';
 import { SupportersAdmin } from '@/features/supporters/SupportersAdmin';
 import { AtlasDebugPanel } from './AdminPanel.AtlasDebugPanel';
 import { ViewSettingsPanel } from './AdminPanel.ViewSettings';
@@ -88,7 +89,7 @@ export function AdminPanel({
   const [npcSubtab, setNpcSubtab] = useState<NPCSubtab>('enemies');
   const [seedSubtab, setSeedSubtab] = useState<SeedSubtab>('ordinary');
   const [itemsSubtab, setItemsSubtab] = useState<ItemsSubtab>('all-items');
-  const [coinsSubtab, setCoinsSubtab] = useState<'pools' | 'gates' | 'divi' | 'waterfall' | 'solana'>('pools');
+  const [coinsSubtab, setCoinsSubtab] = useState<'points' | 'pools' | 'gates' | 'divi' | 'waterfall' | 'solana'>('points');
   const [usersSubtab, setUsersSubtab] = useState<'users' | 'supporters'>('users');
   const [worldsSubtab, setWorldsSubtab] = useState<WorldsSubtab>('worlds');
 
@@ -212,13 +213,20 @@ export function AdminPanel({
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={coinsSubtab} onValueChange={(v) => setCoinsSubtab(v as typeof coinsSubtab)} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-5 flex-shrink-0 mb-4">
+              <TabsList className="grid w-full grid-cols-6 flex-shrink-0 mb-4">
+                <TabsTrigger value="points">POINTS</TabsTrigger>
                 <TabsTrigger value="pools">Pools</TabsTrigger>
                 <TabsTrigger value="gates">Gates</TabsTrigger>
                 <TabsTrigger value="divi">Divi</TabsTrigger>
                 <TabsTrigger value="waterfall">Waterfall</TabsTrigger>
                 <TabsTrigger value="solana">Solana</TabsTrigger>
               </TabsList>
+
+              <TabsContent value="points" className="flex-1 overflow-hidden mt-0">
+                <ScrollArea className="h-[calc(90vh-240px)] pr-4">
+                  <PointsAdmin />
+                </ScrollArea>
+              </TabsContent>
 
               <TabsContent value="pools" className="flex-1 overflow-hidden mt-0">
                 <ScrollArea className="h-[calc(90vh-240px)] pr-4">
