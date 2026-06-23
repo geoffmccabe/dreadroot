@@ -242,6 +242,7 @@ export function FortressScene({
   onUseHotbarSlot,
   consumeGrenade,
   grenadeThrowRef,
+  eggThrowRef,
   onGrenadeTogglePress,
   grenadeReady,
   consumeEgg,
@@ -1188,6 +1189,11 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     if (grenadeThrowRef) grenadeThrowRef.current = handleThrowGrenade;
     return () => { if (grenadeThrowRef) grenadeThrowRef.current = null; };
   }, [grenadeThrowRef, handleThrowGrenade]);
+  // Same for the egg throw (Y state machine throws a hand egg via this ref).
+  useEffect(() => {
+    if (eggThrowRef) eggThrowRef.current = handleThrowEgg;
+    return () => { if (eggThrowRef) eggThrowRef.current = null; };
+  }, [eggThrowRef, handleThrowEgg]);
 
   // (Flame Glove setup is below, after getDefinition is available)
 

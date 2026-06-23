@@ -271,6 +271,8 @@ export function Fortress() {
   // (useGrenadeSystem); Scene populates this ref so the G state machine here can trigger
   // a throw without re-plumbing. `grenadeReady` (QA arm) OR any armed hand grenade = "armed".
   const grenadeThrowRef = useRef<(() => boolean) | null>(null);
+  // Same idea for shpider eggs — Scene populates it so the Y state machine can throw a hand egg.
+  const eggThrowRef = useRef<(() => boolean) | null>(null);
   const handGren = useHandGrenades();
 
   // God Map (Cmd+M). Open to everyone for viewing; only superadmins
@@ -762,57 +764,83 @@ export function Fortress() {
   // slot. Cooldowns are now tracked on the QS row (future work — for
   // now, no cooldown enforcement when consuming from QS).
   const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
-    if (eggReadySlot === null) return null;
-    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(e => e.slot === eggReadySlot);
-    if (!eq) { setEggReadySlot(null); return null; }
-    const tier = eggDefsRef.current.get(eq.itemId);
-    if (tier == null) { setEggReadySlot(null); return null; }
-    const slotToConsume = eggReadySlot;
-    setEggReadySlot(null);
-    void consumeQuickSlot(slotToConsume);
-    // eggInventoryRowId is no longer meaningful (egg is in QS, not inv).
-    // Callers that depended on it for "refund on death" need a future
-    // QS-aware refund path; for now we return a synthetic placeholder.
-    return { tier, eggInventoryRowId: eq.itemId };
-  }, [eggReadySlot, equippedItems, consumeQuickSlot]);
+    // Throw the armed EGG-kind hand (RIGHT first). The egg item lives in its backing QA slot
+    // (qsSlot) → consume that and clear the hand.
+    const armed = armedHandsOfKindRightFirst('egg');
+    if (!armed.length) return null;
+    const hand = armed[0];
+    const hg = getHandGrenades()[hand];
+    setHandGrenade(hand, null);
+    if (!hg) return null;
+    void consumeQuickSlot(hg.qsSlot);
+    return { tier: hg.tier, eggInventoryRowId: '' };
+  }, [consumeQuickSlot]);
 
-  // Y key handler — only arms if a non-cooldown egg is available.
-  const handleEggTogglePress = useCallback(() => {
-    if (eggReadySlot !== null) {
-      setEggReadySlot(null);
-      return;
-    }
+  // Y key — egg HAND flow, mirrors the grenade G flow with kind 'egg': throw an armed hand egg;
+  // arm a disarmed one; adopt an egg dragged into a hand; else fill a free hand from QA/inventory.
+  const handleEggTogglePress = useCallback(async () => {
+    if (!user?.id) return;
     const defs = eggDefsRef.current;
-    const now = Date.now();
-    const rowIsUsable = (inv: any): boolean => {
-      if (inv.quantity <= 0 || !inv.item_id) return false;
-      if (!defs.has(inv.item_id)) return false;
-      const cd = inv.cooldown_until;
-      if (cd && new Date(cd).getTime() > now) return false;
-      return true;
-    };
-    // Step 1: equipped slot already holding a usable egg? A single
-    // item_id can map to multiple inventory rows (non-stackable, one
-    // row per egg) — equip arms if ANY matching row is usable.
-    const equippedSlotWithEgg = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(eq => defs.has(eq.itemId) && inventory.some(i => i.item_id === eq.itemId && rowIsUsable(i)));
-    if (equippedSlotWithEgg) {
-      setEggReadySlot(equippedSlotWithEgg.slot);
+
+    // 1. EGG-kind hands: throw an armed one, else arm a disarmed one (right first).
+    const eggHands = handsOfKindRightFirst('egg');
+    if (eggHands.length) {
+      if (anyArmedHandOfKind('egg')) { eggThrowRef.current?.(); return; }
+      const reArm: Hand | null = eggHands.find((h) => !getHandGrenades()[h]!.armed) ?? null;
+      if (reArm) { const cur = getHandGrenades()[reArm]!; setHandGrenade(reArm, { ...cur, armed: true }); playPinPullSound(); }
       return;
     }
-    // Step 2: inventory has a usable egg + a free hotbar slot.
-    const eggInv = inventory.find(inv => rowIsUsable(inv));
-    if (!eggInv || !eggInv.item_id) return;
-    const usedSlots = new Set((equippedItems as Array<{ slot: number; itemId: string }>).map(e => e.slot));
-    let firstEmpty: number | null = null;
-    for (let i = 1; i <= 6; i++) {
-      if (!usedSlots.has(i)) { firstEmpty = i; break; }
+
+    // 2. Adopt an egg sitting as a REAL EQUIP ITEM in a hand (dragged there) → hand overlay
+    //    (armed, kind egg) + move the item to a backing QA slot. Right hand first.
+    {
+      const handSlots: Array<[Hand, number]> = [['R', 5], ['L', 1]];
+      for (const [hand, eqSlot] of handSlots) {
+        if (getHandGrenades()[hand]) continue;
+        const eqEgg = equippedGear.find((e: { slot: number; itemId: string }) => e.slot === eqSlot && defs.has(e.itemId));
+        if (!eqEgg) continue;
+        const { data: qaRows } = await supabase.from('user_slots' as any).select('slot').eq('user_id', user.id).eq('region', 'quick_select');
+        const usedQa = new Set<number>(((qaRows as any[]) ?? []).map((r) => r.slot));
+        let dst: number | null = null;
+        for (let i = 1; i <= 6; i++) { if (!usedQa.has(i)) { dst = i; break; } }
+        if (dst === null) return;
+        const tier = defs.get(eqEgg.itemId) ?? 1;
+        const sprite = await grenadeSpriteFor(eqEgg.itemId);
+        setHandGrenade(hand, { qsSlot: dst, tier, spriteUrl: sprite, armed: true, kind: 'egg' });
+        playPinPullSound();
+        try {
+          await worldStore.equipTransfer({ region: 'equip', page: 0, slot: eqSlot }, { region: 'quick_select', page: 0, slot: dst });
+          if (refetchInventoryAndQs) void refetchInventoryAndQs();
+        } catch (err) { setHandGrenade(hand, null); console.error('[egg] adopt equip→QA failed:', err); }
+        return;
+      }
     }
-    if (firstEmpty === null) return;
-    void updateEquippedSlot(firstEmpty, eggInv.item_id);
-    setEggReadySlot(firstEmpty);
-  }, [eggReadySlot, equippedItems, inventory, updateEquippedSlot]);
+
+    // 3. FILL a free hand (left first) from QA, else stage from inventory, + ARM.
+    const hg = getHandGrenades();
+    const leftFree = !equippedGear.some((e: { slot: number }) => e.slot === 1) && !hg.L;
+    const rightFree = !equippedGear.some((e: { slot: number }) => e.slot === 5) && !hg.R;
+    if (!leftFree && !rightFree) return;
+    const { data: rows } = await supabase.from('user_slots' as any).select('region, slot, item_id').eq('user_id', user.id).in('region', ['inventory', 'quick_select']);
+    const allRows = ((rows as any[]) ?? []);
+    const assignedQa = new Set<number>([hg.L?.qsSlot, hg.R?.qsSlot].filter((v): v is number => v != null));
+    const freeQaEgg = allRows.filter(r => r.region === 'quick_select' && defs.has(r.item_id) && !assignedQa.has(r.slot)).sort((a, b) => a.slot - b.slot);
+    const invEgg = allRows.find(r => r.region === 'inventory' && defs.has(r.item_id));
+    if (!freeQaEgg.length && !invEgg) return;
+    const hand: Hand = leftFree ? 'L' : 'R';
+    let qsSlot: number, itemId: string;
+    if (freeQaEgg.length) { qsSlot = freeQaEgg[0].slot; itemId = freeQaEgg[0].item_id; }
+    else {
+      const usedQs = new Set<number>(allRows.filter(r => r.region === 'quick_select').map(r => r.slot));
+      const staged = await stageGrenadeToQa(invEgg!.slot, usedQs);
+      if (staged === null) return;
+      qsSlot = staged; itemId = invEgg!.item_id;
+    }
+    const tier = defs.get(itemId) ?? 1;
+    const sprite = await grenadeSpriteFor(itemId);
+    setHandGrenade(hand, { qsSlot, tier, spriteUrl: sprite, armed: true, kind: 'egg' });
+    playPinPullSound();
+  }, [user?.id, equippedGear, stageGrenadeToQa, grenadeSpriteFor, refetchInventoryAndQs]);
 
   // Auto-disarm if armed egg slot becomes empty or non-egg.
   // QS-as-storage: the egg IS the QS slot's occupant; no inv check
@@ -2407,6 +2435,7 @@ export function Fortress() {
           onUseHotbarSlot={handleUseHotbarSlot}
           consumeGrenade={consumeGrenade}
           grenadeThrowRef={grenadeThrowRef}
+          eggThrowRef={eggThrowRef}
           onGrenadeTogglePress={handleGrenadeTogglePress}
           grenadeReady={grenadeReady}
           consumeEgg={consumeEgg}
