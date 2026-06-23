@@ -46,6 +46,7 @@ import {
   type SlotClickHandlers,
   type SlotOccupant,
 } from '@/features/inventory-system';
+import { InventoryBlocksSection } from './InventoryBlocksSection';
 import { isQASuppressed } from '@/config/qaGuard';
 
 // (The old bottom-right "R for crosshairs" InstructionsPanel was removed and
@@ -68,6 +69,7 @@ export function FortressHUD(props: FortressHUDProps) {
     inventory,
     blockPlacementMode,
     selectedBlockType,
+    onSelectBlock,
     currentHealth,
     maxHealth,
     profile,
@@ -1225,6 +1227,11 @@ export function FortressHUD(props: FortressHUDProps) {
                   ? cursor.origin.gridSlot === i
                   : false
               }
+            />
+            <InventoryBlocksSection
+              inventory={inventory}
+              selectedBlockType={selectedBlockType}
+              onSelectBlock={onSelectBlock}
             />
           </div>
         )}
