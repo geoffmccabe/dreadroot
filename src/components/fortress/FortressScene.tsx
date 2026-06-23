@@ -58,6 +58,7 @@ import { SiegeExplosion, type SiegeExplosionHandle } from '@/components/siege/Si
 import { SiegeCharacter } from '@/components/siege/SiegeCharacter';
 import { SiegeCharacterPair } from '@/components/siege/SiegeCharacterPair';
 import { SiegeNewMonsterLineup } from '@/components/siege/SiegeNewMonsterLineup';
+import { SiegeCharacterLineup } from '@/components/siege/SiegeCharacterLineup';
 import { useWorkMode } from '@/components/siege/siegeWorkMode';
 import { getWorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from '@/components/siege/terrainHeight';
@@ -1876,6 +1877,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {/* Monster spawner (@<#>#<qty> command) + combat — enabled on ALL siege maps so you can
           spawn enemies and fight them for testing/demos, not just the SWW review map. */}
       {isSiege && <SiegeNewMonsterLineup />}
+      {/* "&&&" lineup of the rigged Starblind characters — on the ground in front of you, M/N cycle anims. */}
+      {isSiege && <SiegeCharacterLineup />}
       {isSiege ? (
         <SiegeWorldLayers world={activeWorld} />
       ) : (

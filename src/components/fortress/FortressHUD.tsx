@@ -13,6 +13,7 @@ import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel'
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
 import { FountainPanel } from '@/components/siege/fountain/FountainPanel';
+import { SiegeCharLineupHud } from '@/components/siege/charlineup/SiegeCharLineupHud';
 import { startFountainPolling } from '@/components/siege/fountain/fountainState';
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
@@ -919,6 +920,8 @@ export function FortressHUD(props: FortressHUDProps) {
       {isSiege && <MagicChestPanel superadmin={!!userRoles?.includes?.('superadmin')} />}
       {/* The Fountain modal — only in siege. */}
       {isSiege && <FountainPanel />}
+      {/* Character lineup readout (animation #/name) — only when "&&&" is toggled on, siege only. */}
+      {isSiege && <SiegeCharLineupHud />}
       {/* Laser inspector: live "pointing at <item>" readout + flag worklist. On ALL siege
           maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
       {isSiege && <CoordsHud />}
