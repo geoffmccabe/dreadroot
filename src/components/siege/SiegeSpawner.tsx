@@ -72,7 +72,7 @@ export function SiegeSpawner() {
       }
       setDemons((d) => [...d, ...add]);
       lastType.current = type;
-      spamUntil.current = performance.now() + 2000;
+      spamUntil.current = performance.now() + 4000;   // press 0 again within 4s to keep adding +10 (build a horde)
       suppressQA();   // a trailing digit must not leak into the QA number keys for ~1s
       console.log(`[SiegeSpawner] +${count} type-${type}`);
     };

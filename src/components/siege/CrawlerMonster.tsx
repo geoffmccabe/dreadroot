@@ -78,8 +78,16 @@ function nearestFace(
 const _face = { d: 0, sx: 0, sy: 0, sz: 0, nx: 0, ny: 0, nz: 0 };
 const _best = { d: Infinity, sx: 0, sy: 0, sz: 0, nx: 0, ny: 1, nz: 0 };
 
-// Find the nearest grippable surface (box face, else terrain) to (px,py,pz). Returns true + writes _best.
-function findSurface(px: number, py: number, pz: number): boolean {
+// Live Crawlie body boxes (box → priority). Each Crawlie clings to the OTHERS so they crawl ON TOP
+// of each other (red-demon-horde style) instead of interpenetrating. A Crawlie only climbs onto
+// LOWER-priority ones (a total order) so two can't mutually climb each other into the air. The
+// player never reads this set, so a swarm doesn't wall the player.
+const crawlerBoxes = new Map<THREE.Box3, number>();
+let _pri = 0;
+
+// Find the nearest grippable surface (box face, other Crawlie, else ground) to (px,py,pz).
+// Returns true + writes _best. `self`/`selfPri` exclude the caller + higher-priority peers.
+function findSurface(px: number, py: number, pz: number, self?: THREE.Box3, selfPri = Infinity): boolean {
   _best.d = Infinity;
   for (const grid of [worldCollisionGrid, monsterColliderGrid]) {
     const cnt = grid.getNearby(px, pz, CLING + 0.5);
@@ -90,6 +98,14 @@ function findSurface(px: number, py: number, pz: number): boolean {
       nearestFace(px, py, pz, b, _face);
       if (_face.d < _best.d) { _best.d = _face.d; _best.sx = _face.sx; _best.sy = _face.sy; _best.sz = _face.sz; _best.nx = _face.nx; _best.ny = _face.ny; _best.nz = _face.nz; }
     }
+  }
+  // Other Crawlies → climbable surfaces (crawl on top). Only LOWER-priority peers (no mutual climb).
+  for (const [b, pri] of crawlerBoxes) {
+    if (b === self || pri >= selfPri) continue;
+    const bcx = (b.min.x + b.max.x) * 0.5, bcz = (b.min.z + b.max.z) * 0.5;
+    if (Math.abs(px - bcx) > CLING + 1.5 || Math.abs(pz - bcz) > CLING + 1.5) continue;   // cheap cull
+    nearestFace(px, py, pz, b, _face);
+    if (_face.d < _best.d) { _best.d = _face.d; _best.sx = _face.sx; _best.sy = _face.sy; _best.sz = _face.sz; _best.nx = _face.nx; _best.ny = _face.ny; _best.nz = _face.nz; }
   }
   if (_best.d <= CLING) return true;
   // BVH-mesh ground (SciFi City streets, rocks — they're triangle meshes, NOT box colliders, so the
@@ -118,9 +134,11 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const inner = useRef<THREE.Group>(null);
 
   const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.18, speed: 1 + (Math.random() * 2 - 1) * 0.18 };
+  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };  // ±15% size + speed
   const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
+  const priRef = useRef(0);
+  if (priRef.current === 0) priRef.current = ++_pri;   // climb-order priority (stable per Crawlie)
 
   // Clone the rig + self-light it (bright on dark maps), bloody-red tinted so it reads as the
   // "bloody skeleton" base.
@@ -167,11 +185,15 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
 
-  // Crawl state: body centre C + surface normal N (smoothed). Reusable temp vectors (no per-frame GC).
+  // Crawl state: body centre C + surface normal N (smoothed) + smoothed facing F (kept in the tangent
+  // plane so it turns toward the player instead of snapping). Reusable temp vectors (no per-frame GC).
   const st = useRef({
-    cx: spawn[0], cy: spawn[1], cz: spawn[2], nx: 0, ny: 1, nz: 0,
+    cx: spawn[0], cy: spawn[1], cz: spawn[2], nx: 0, ny: 1, nz: 0, fx: 0, fy: 0, fz: 1,
     nextBite: 0, deathT: 0, vy: 0,
   }).current;
+  // Body box for inter-Crawlie stacking — registered in the shared set so others can crawl on top.
+  const box = useMemo(() => new THREE.Box3(), []);
+  useEffect(() => { crawlerBoxes.set(box, priRef.current); return () => { crawlerBoxes.delete(box); }; }, [box]);
   const up = useMemo(() => new THREE.Vector3(), []);
   const fwd = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
@@ -189,9 +211,10 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     // Death: drop off the surface, fall, despawn.
     if (inst.dead) {
       if (scuttle.current) { stopLoopSound(scuttle.current); scuttle.current = null; }
+      if (crawlerBoxes.has(box)) crawlerBoxes.delete(box);   // a corpse stops blocking other Crawlies
       if (st.deathT === 0) st.deathT = now;
       st.vy -= 18 * dt; st.cy += st.vy * dt;
-      const ground = sampleHeight(st.cx, st.cz) ?? spawn[1];
+      const ground = meshGroundHeight(st.cx, st.cz, st.cy + 2.0) ?? sampleHeight(st.cx, st.cz) ?? spawn[1];
       g.position.set(st.cx, st.cy, st.cz);
       g.scale.set(scale, scale * FLAT, scale);
       if (!inst.despawned && (st.cy <= ground + HOVER || now - st.deathT > 4000)) {
@@ -202,8 +225,8 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
 
     const px = camera.position.x, py = camera.position.y - 0.4, pz = camera.position.z;
 
-    // 1) Stick to the nearest surface (object face, else terrain).
-    if (findSurface(st.cx, st.cy, st.cz)) {
+    // 1) Stick to the nearest surface (object face, other Crawlie, else terrain).
+    if (findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {
       st.nx += (_best.nx - st.nx) * Math.min(1, dt * 8);   // smooth the normal so edges don't snap
       st.ny += (_best.ny - st.ny) * Math.min(1, dt * 8);
       st.nz += (_best.nz - st.nz) * Math.min(1, dt * 8);
@@ -229,7 +252,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
       const step = spd * dt;
       st.cx += tx * step; st.cy += ty * step; st.cz += tz * step;
       // Re-cling after moving so a step off an edge immediately grabs the next face (wrap-around).
-      if (findSurface(st.cx, st.cy, st.cz)) {
+      if (findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {
         const nl2 = Math.hypot(_best.nx, _best.ny, _best.nz) || 1;
         st.cx = _best.sx + (_best.nx / nl2) * HOVER; st.cy = _best.sy + (_best.ny / nl2) * HOVER; st.cz = _best.sz + (_best.nz / nl2) * HOVER;
       }
@@ -244,18 +267,37 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
       void play3DPositionalSound(BITE, aSrc.set(st.cx, st.cy, st.cz), camera.position, camDir, { baseVolume: 0.7 });
     }
 
-    // Publish hitbox at the body centre.
-    inst.x = st.cx; inst.y = st.cy - CH * 0.25; inst.z = st.cz; inst.yaw = Math.atan2(tx, tz);
+    // 4) Smoothly TURN the facing toward the player along the surface tangent (instead of snapping).
+    //    When the tangent is tiny (player nearly overhead while attacking) we keep the stored facing,
+    //    so a swarm at the player's feet still turns to face them instead of freezing on one axis.
+    if (tl > 1e-3) {
+      const dtx = tx / tl, dty = ty / tl, dtz = tz / tl, turn = Math.min(1, dt * 5);
+      st.fx += (dtx - st.fx) * turn; st.fy += (dty - st.fy) * turn; st.fz += (dtz - st.fz) * turn;
+    }
+    // Keep the stored facing in the tangent plane (⟂ surface normal) and normalised.
+    let fdn = st.fx * st.nx + st.fy * st.ny + st.fz * st.nz;
+    st.fx -= fdn * st.nx; st.fy -= fdn * st.ny; st.fz -= fdn * st.nz;
+    let fll = Math.hypot(st.fx, st.fy, st.fz);
+    if (fll < 1e-4) {                                   // facing collapsed onto the normal → re-seed any tangent
+      st.fx = st.ny; st.fy = st.nz; st.fz = st.nx;
+      fdn = st.fx * st.nx + st.fy * st.ny + st.fz * st.nz;
+      st.fx -= fdn * st.nx; st.fy -= fdn * st.ny; st.fz -= fdn * st.nz;
+      fll = Math.hypot(st.fx, st.fy, st.fz) || 1;
+    }
+    st.fx /= fll; st.fy /= fll; st.fz /= fll;
 
-    // 4) Orient: local up = surface normal, local forward = travel tangent; lie the rig prone + squash flat.
+    // Publish hitbox at the body centre.
+    inst.x = st.cx; inst.y = st.cy - CH * 0.25; inst.z = st.cz; inst.yaw = Math.atan2(st.fx, st.fz);
+
+    // Update the body box (low, flat) so OTHER Crawlies can crawl on top of this one.
+    const br = Math.max(0.4, CH * 0.45);
+    box.min.set(st.cx - br, st.cy - 0.05, st.cz - br);
+    box.max.set(st.cx + br, st.cy + 0.3, st.cz + br);
+
+    // 5) Orient: local up = surface normal, local forward = smoothed facing.
     up.set(st.nx, st.ny, st.nz);
-    fwd.set(tx, ty, tz);
-    // Guard a degenerate tangent (player straight along the normal) → pick any vector ⟂ up so the
-    // basis never collapses to NaN (which would shrink/hide the model).
-    if (fwd.lengthSq() < 1e-6) fwd.set(up.y, up.z, up.x);
-    right.crossVectors(fwd, up);
-    if (right.lengthSq() < 1e-6) { fwd.set(up.z, up.x, up.y); right.crossVectors(fwd, up); }
-    right.normalize();
+    fwd.set(st.fx, st.fy, st.fz);
+    right.crossVectors(fwd, up).normalize();
     fwd.crossVectors(up, right).normalize();            // re-orthogonalise
     basis.makeBasis(right, up, fwd);
     g.position.set(st.cx, st.cy, st.cz);
