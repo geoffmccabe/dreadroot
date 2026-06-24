@@ -27,6 +27,7 @@ import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { sampleHeight } from './terrainHeight';
 import { meshGroundHeight, raycastMeshHit, meshHitResult } from './meshColliderSystem';
 import { startLoopSound, updateLoopSound, stopLoopSound, play3DPositionalSound, type LoopSound } from '@/lib/spatialAudio';
+import { monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
 const URL = '/siege/monsters/skeletonflesh_crawl.glb';
@@ -80,11 +81,6 @@ function rayBox(ox: number, oy: number, oz: number, dx: number, dy: number, dz: 
 }
 function castSurface(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, self?: THREE.Box3, selfPri = Infinity): boolean {
   let best = maxDist, found = false;
-  if (raycastMeshHit(ox, oy, oz, dx, dy, dz, maxDist) && meshHitResult.dist <= best) {
-    best = meshHitResult.dist; found = true;
-    _cast.px = meshHitResult.px; _cast.py = meshHitResult.py; _cast.pz = meshHitResult.pz;
-    _cast.nx = meshHitResult.nx; _cast.ny = meshHitResult.ny; _cast.nz = meshHitResult.nz; _cast.dist = best;
-  }
   const tryBox = (b: THREE.Box3) => {
     const t = rayBox(ox, oy, oz, dx, dy, dz, b, best);
     if (t >= 0 && t <= best) {
@@ -93,7 +89,21 @@ function castSurface(ox: number, oy: number, oz: number, dx: number, dy: number,
       _cast.nx = _bn.nx; _cast.ny = _bn.ny; _cast.nz = _bn.nz; _cast.dist = t;
     }
   };
-  for (const b of monsterBoxes) tryBox(b);                               // large enemies
+  const meshHit = raycastMeshHit(ox, oy, oz, dx, dy, dz, maxDist);
+  if (meshHit && meshHitResult.dist <= best) {
+    best = meshHitResult.dist; found = true;
+    _cast.px = meshHitResult.px; _cast.py = meshHitResult.py; _cast.pz = meshHitResult.pz;
+    _cast.nx = meshHitResult.nx; _cast.ny = meshHitResult.ny; _cast.nz = meshHitResult.nz; _cast.dist = best;
+  }
+  // World-object BOX colliders (rocks, mushrooms, towns) — the climbable surface where there's no BVH
+  // mesh (e.g. Bleakrock) or mesh colliders are off. Only consulted when the mesh didn't already give a
+  // surface here, so meshed worlds (SciFi City) keep their nicer mesh hits.
+  if (!meshHit) {
+    const cnt = monsterColliderGrid.getNearby(ox, oz, maxDist + 0.5);
+    const res = monsterColliderGrid.nearbyResult;
+    for (let i = 0; i < cnt; i++) { const b = res[i]; if (b && b.max) tryBox(b); }
+  }
+  for (const b of monsterBoxes) tryBox(b);                               // large enemies (always)
   for (const [b, info] of crawlerBoxes) { if (b !== self && info.pri < selfPri && info.supported) tryBox(b); }  // peers
   return found;
 }
@@ -106,12 +116,14 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const group = useRef<THREE.Group>(null);
   const inner = useRef<THREE.Group>(null);
 
-  const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };  // ±15%
+  // Per-Crawlie variety derived from a UNIQUE index (golden-ratio hash → well spread, guaranteed
+  // distinct per spawn — so no two crawl identically). size ±15%, speed ±25% (clearly visible).
+  const V = useRef<{ size: number; speed: number; idx: number } | null>(null);
+  if (!V.current) { const idx = ++_pri; V.current = { idx, size: 0.85 + ((idx * 0.7548776662) % 1) * 0.30, speed: 0.75 + ((idx * 0.6180339887) % 1) * 0.50 }; }
   const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
-  if (priRef.current === 0) priRef.current = V.current.speed * 1000 + ++_pri;
+  if (priRef.current === 0) priRef.current = V.current.speed * 1000 + V.current.idx;   // faster ⇒ higher climb priority
 
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
