@@ -2,7 +2,8 @@
 // like the terrain panel. Shows only on editable (heightmap) siege maps. Toggle build mode, pick
 // an asset set + asset to ARM, then place it in-world with the crosshair (BuilderController does
 // the placing). Save writes terrain + water + objects together via mapPersistence.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { subscribeChallenge, getChallengeState } from '../challenge/challengeStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useActiveGame } from '@/config/activeGame';
@@ -58,7 +59,9 @@ export function BuilderPalette() {
     return list.slice(0, 200);
   }, [items, q]);
 
-  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap') return null;
+  // Hide during a challenge (open-world build tool, not a gameplay panel).
+  const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
+  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || inChallenge) return null;
 
   const onSave = async () => {
     await saveMap({

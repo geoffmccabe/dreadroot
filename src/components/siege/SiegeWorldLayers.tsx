@@ -22,6 +22,7 @@ import { DemoScene } from './scifi/DemoScene';
 import { CityHolePatches } from './scifi/CityHolePatches';
 import { SiegeStarDome } from './SiegeStarDome';
 import { SciFiCityMusic } from './SciFiCityMusic';
+import { PoleDancers } from './PoleDancer';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
 import { useSiegeLighting } from './siegeLighting';
@@ -133,6 +134,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
+          {/* Pole-dance girls in the built room (main world). */}
+          {world.id === 'siege-test' && <PoleDancers />}
           {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
           {world.id === 'city-demo' && (
             <Suspense fallback={null}>

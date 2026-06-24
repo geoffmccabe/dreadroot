@@ -8,7 +8,8 @@ import { Slider } from '@/components/ui/slider';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { subscribeChallenge, getChallengeState } from '../challenge/challengeStore';
 import { useBrushState, setBrushState } from './terrainBrushState';
 import { serializeField, type BrushMode } from './heightField';
 import { BRUSH_SHAPES } from './brushShapes';
@@ -28,7 +29,9 @@ export function TerrainBrushPanel() {
   const bs = useBrushState();
   const world = getWorldDefinition(mapId);
   const [saved, setSaved] = useState(false);
-  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap') return null;
+  // Hide the editor during a challenge (it's an open-world build tool, not a gameplay panel).
+  const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
+  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || inChallenge) return null;
 
   const onSave = async () => {
     await saveMap({
