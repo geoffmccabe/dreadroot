@@ -3,12 +3,22 @@
 // model + clip for every pole; per-pole position/scale/tint give the three some variety. Static decor
 // (no AI / no combat). NOTE: a true "pole dance" clip wasn't available open-source, so this is a
 // hip-hop dance stand-in on the pole — swap the clip in hunterf_dance.glb to upgrade.
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
+import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 
 const URL = '/siege/monsters/hunterf_dance.glb';
+
+// INSTANCE-specific content. A Map (SciFi City) can have many INSTANCES — an ongoing multiplayer Open
+// World vs single-player Challenges — that differ in content. The dancers belong to the "Death Dark
+// City" CHALLENGE instance only, not the open-world city. Matched on the active challenge name; edit
+// this predicate (or add names) to place the dancers in other instances later.
+const isDancerInstance = (challengeName: string): boolean => {
+  const n = challengeName.toLowerCase();
+  return n.includes('dark') && n.includes('city');
+};
 
 export interface PoleDancerDef { pos: [number, number, number]; yaw?: number; scale?: number; tint?: string }
 
@@ -53,6 +63,12 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
 }
 
 export function PoleDancers() {
+  // Only in the matching challenge instance — not the open-world city map.
+  const challengeName = useSyncExternalStore(subscribeChallenge, () => {
+    const s = getChallengeState();
+    return s.active ? s.name : '';
+  });
+  if (!isDancerInstance(challengeName)) return null;
   return <>{DANCERS.map((d, i) => <Dancer key={i} {...d} />)}</>;
 }
 
