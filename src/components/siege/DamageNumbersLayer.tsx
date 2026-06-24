@@ -2,7 +2,7 @@
 // replicating the Unity FloatingDamageText motion: pop-in with an OutBack overshoot (0.75s), drift
 // up + sideways at the puff's speed, hold full opacity for the first half of its ~1s life then fade.
 // Mounts inside the R3F Canvas (siege scene).
-import { useRef, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Billboard, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -21,6 +21,10 @@ function DamageItem({ d }: { d: DamageNumber }) {
   const group = useRef<THREE.Group>(null);
   const txt = useRef<(THREE.Mesh & { material: THREE.Material; outlineWidth: number; sync?: () => void }) | null>(null);
   const outlineSet = useRef(false);
+  // Troika <Text> renders a WHITE placeholder quad until its glyph SDF is synced (≈1s on the first
+  // use while the font/shader load) — that's the "white screen on the first hit". Stay invisible
+  // until the first sync completes, so no placeholder is ever shown.
+  const [ready, setReady] = useState(false);
   useFrame((state) => {
     const g = group.current; if (!g) return;
     const age = performance.now() - d.born;
@@ -43,7 +47,8 @@ function DamageItem({ d }: { d: DamageNumber }) {
   });
   return (
     <Billboard ref={group} position={[d.x, d.y, d.z]}>
-      <Text ref={txt as never} font="/AVENGEANCE.ttf" fontSize={0.8} color={d.color}
+      <Text ref={txt as never} visible={ready} onSync={() => setReady(true)}
+            font="/AVENGEANCE.ttf" fontSize={0.8} color={d.color}
             anchorX="center" anchorY="middle" outlineWidth={0.06} outlineColor="#000000">
         {d.text}
       </Text>
@@ -54,5 +59,12 @@ function DamageItem({ d }: { d: DamageNumber }) {
 export function DamageNumbers() {
   useSyncExternalStore(subscribeDamageNumbers, getDNVersion, getDNVersion);
   useFrame(() => pruneDamageNumbers(performance.now()));
-  return <>{getDamageNumbers().map((d) => <DamageItem key={d.id} d={d} />)}</>;
+  return (
+    <>
+      {/* Pre-warm troika (load the font + compile the SDF shader) off-screen + fully transparent, so
+          by the first real hit there's no font-load delay and no white placeholder flash. */}
+      <Text font="/AVENGEANCE.ttf" fontSize={0.1} fillOpacity={0} outlineOpacity={0} position={[0, -9999, 0]}>0123456789</Text>
+      {getDamageNumbers().map((d) => <DamageItem key={d.id} d={d} />)}
+    </>
+  );
 }
