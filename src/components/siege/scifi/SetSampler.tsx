@@ -29,9 +29,14 @@ function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
     const id = file.replace(/\.gltf$/, '');
     // Tag every mesh with the asset id so the laser inspector reports WHICH model you flag.
     model.traverse((o) => { o.userData.fbx = id; });
+    // CRITICAL: compute world matrices before measuring. Synty roots carry a 0.01 scale + 90° rotation;
+    // on a freshly-cloned, never-rendered model the matrixWorlds are still identity, so setFromObject
+    // would measure the mesh at raw CENTIMETRE scale → a huge wrong box that flings the model far off
+    // screen (this is why the sampler grids looked empty).
+    model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const ground = sampleHeight(x, z) ?? 0;
-    model.position.y = ground - box.min.y;       // lowest point on the ground
+    model.position.y = box.isEmpty() ? ground : ground - box.min.y;       // lowest point on the ground
     const wrap = new THREE.Group();
     wrap.add(model);
     wrap.position.set(x, 0, z);
