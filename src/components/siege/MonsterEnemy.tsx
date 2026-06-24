@@ -552,8 +552,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // otherwise they go pitch black at night and look invisible.
         if ('emissive' in m) {
           if (m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; }
-          else m.emissive = (m.color ? m.color.clone() : new THREE.Color(0xffffff));
-          m.emissiveIntensity = 0.5;
+          else {
+            // No texture → glow with the material's own colour, but never with a near-black
+            // colour (that stays invisible on a dark map) — clamp up to a visible grey floor.
+            const c = m.color ? m.color.clone() : new THREE.Color(0xffffff);
+            if (c.r + c.g + c.b < 0.25) c.setRGB(0.6, 0.6, 0.6);
+            m.emissive = c;
+          }
+          m.emissiveIntensity = 0.9;
         }
         if (cfg.boss === 'teleporter') { m.transparent = true; m.depthWrite = true; bossMats.current.push(m); }
         if (cm) {
