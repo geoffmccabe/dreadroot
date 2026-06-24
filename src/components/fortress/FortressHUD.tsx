@@ -1093,16 +1093,17 @@ export function FortressHUD(props: FortressHUDProps) {
                 showJets={false}
                 className="!bg-transparent !border-0 !p-0"
               />
-              <RocketBeltHud />
             </div>
 
-            {/* Row 3: Jet boosts, left-aligned directly under the hearts */}
-            <div className="flex items-center" style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
+            {/* Row 3: Jet boosts (orange, left, under the hearts) + Rocket Belt bursts
+                (purple triangles) to their right. */}
+            <div className="flex items-center gap-2" style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
               <JetBoostIndicator
                 jetBoostAvailable={jetBoostAvailable}
                 jetBoostMax={jetBoostMax}
                 isGliding={isGliding}
               />
+              <RocketBeltHud />
             </div>
 
             {/* Oxygen/Bubbles display - only shows when underwater */}
