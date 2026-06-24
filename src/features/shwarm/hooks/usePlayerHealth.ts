@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { frameLoop } from '@/lib/frameLoop';
 import { useAuth } from '@/contexts/AuthContext';
 import { pulseHealthBar } from '@/components/hud/healthBarStore';
+import { sdbg } from '@/components/siege/siegeDebug';
 import * as THREE from 'three';
 import { 
   PLAYER_SPAWN_POINT, 
@@ -309,9 +310,16 @@ export function usePlayerHealth() {
    * This is the MAIN entry point for all damage to the player
    */
   const applyDamage = useCallback((event: DamageEvent): DamageResult => {
+    // God mode: fully invulnerable. This is the ONE entry point for all player damage
+    // (siege + Dreadroot monsters, environment, DoT) so blocking here means no health loss
+    // and no damage-knockback. Monsters still target + attack; the hits just do nothing.
+    if (sdbg.godMode) {
+      return { blocked: true, reason: 'invulnerable' };
+    }
+
     const now = Date.now();
     const current = healthRef.current;
-    
+
     // Can't damage dead players
     if (current.isDead) {
       return { blocked: true, reason: 'dead' };

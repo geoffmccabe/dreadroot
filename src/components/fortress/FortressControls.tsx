@@ -390,6 +390,9 @@ export function FirstPersonControls({
   // Apply knockback function - can be called externally via prop or internally
   // IMPORTANT: Only applies horizontal knockback (X/Z) - vertical is ignored to prevent sky launches
   const applyKnockback = useCallback((direction: THREE.Vector3, distance: number) => {
+    // God mode: no knockback from ANY source (damage hits + direct monster pushes both route
+    // through here). Monsters still see + swing at the player; the player just won't budge.
+    if (godModeRef.current) return;
     // Calculate velocity needed to travel 'distance' over ~0.2 seconds
     const secondsToApply = 0.2;
     // Only apply horizontal knockback - set Y to 0 to prevent accumulation
