@@ -13,7 +13,7 @@ import { BLEND_MODES } from './colorMods';
 import { BannerInput } from './BannerInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
-import { SIEGE_TELEPORTS } from '../siegeAreas';
+import { SIEGE_TELEPORTS, CHALLENGE_WORLDS, challengeWorldSpawn } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
 import { GAME_LIST } from '@/config/gameRegistry';
@@ -433,6 +433,14 @@ export function ChallengeCreatorPanel() {
                   {/* A challenge only runs in its game. Defaults to the game you're in; change to author for another. */}
                   <select style={inp} value={ch.game ?? getActiveGame()} onChange={(e) => patch({ game: e.target.value })}>
                     {GAME_LIST.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={lbl}>World</label>
+                  {/* Which map the challenge plays in. Open World = no map switch; the rest jump to a baked arena. */}
+                  <select style={inp} value={ch.mapId ?? ''}
+                          onChange={(e) => { const m = e.target.value; const sp = challengeWorldSpawn(m); patch({ mapId: m || undefined, spawn: sp ?? ch.spawn }); }}>
+                    {CHALLENGE_WORLDS.map((w) => <option key={w.mapId} value={w.mapId}>{w.label}</option>)}
                   </select>
                 </div>
               </div>

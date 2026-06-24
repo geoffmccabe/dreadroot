@@ -55,6 +55,8 @@ export interface Challenge {
   costDivi?: number;       // cost to play the WHOLE challenge (Divi) — challenge-level, not per-wave
   pctToPool?: number;      // % of the fee that feeds the prize pool — challenge-level
   banner?: string;         // 4x1 webp banner URL
+  mapId?: string;          // which WORLD/map the challenge plays in (CHALLENGE_WORLDS). Empty/undefined
+                           // = the open world (no map switch). Else the runner jumps to that baked map.
   region?: string;         // superadmin: if set, this is the base Open-World spawner for that region
   spawn?: [number, number, number];  // where the player is teleported when the challenge starts
   // If set, monster positions are SEEDED (deterministic, learnable) within this radius (m) of the

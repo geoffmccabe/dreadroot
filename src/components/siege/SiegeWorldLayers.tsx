@@ -19,6 +19,8 @@ import { SiegePortalEffect } from './SiegePortalEffect';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
+import { CityHolePatches } from './scifi/CityHolePatches';
+import { SiegeStarDome } from './SiegeStarDome';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
 import { useSiegeLighting } from './siegeLighting';
@@ -135,6 +137,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             <Suspense fallback={null}>
               <DemoScene file="city_demo.gltf" group="citydemo" />
               <MeshColliderPlayer />
+              <CityHolePatches />
+              <SiegeStarDome />
             </Suspense>
           )}
           {world.id === 'space-demo' && (

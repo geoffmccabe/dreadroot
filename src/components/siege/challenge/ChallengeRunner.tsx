@@ -17,6 +17,8 @@ import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getActiveGame } from '@/config/activeGame';
+import { getActiveMapId } from '@/config/activeMap';
+import { challengeWorldSpawn } from '../siegeAreas';
 import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
@@ -37,6 +39,7 @@ export function ChallengeRunner() {
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
+  const preMap = useRef<string | null>(null);          // which map, so we can jump back on finish
   const r = useRef({
     active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0,
     pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
@@ -105,13 +108,24 @@ export function ChallengeRunner() {
     setMobs([]);
     resetChallengeScore();
     prePos.current = camera.position.clone();   // remember where to put the player back
-    if (ch.spawn) camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);   // teleport to the arena
+    preMap.current = getActiveMapId();
+    const jump = (window as unknown as { __siegeJump?: (m: string, p: [number, number, number], y?: number, pi?: number) => void }).__siegeJump;
+    if (ch.mapId && ch.mapId !== preMap.current && jump) {
+      jump(ch.mapId, ch.spawn ?? challengeWorldSpawn(ch.mapId) ?? [0, 3, 0]);   // switch to the challenge's world + arrive
+    } else if (ch.spawn) {
+      camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);              // same map → just teleport to the arena
+    }
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null });
     startWave(now);
   };
 
-  const revert = () => { if (prePos.current) camera.position.copy(prePos.current); };
+  const revert = () => {
+    const p = prePos.current; if (!p) return;
+    const jump = (window as unknown as { __siegeJump?: (m: string, q: [number, number, number]) => void }).__siegeJump;
+    if (preMap.current && preMap.current !== getActiveMapId() && jump) jump(preMap.current, [p.x, p.y, p.z]);  // back to the prior map + spot
+    else camera.position.copy(p);
+  };
 
   const stop = () => {
     r.active = false;

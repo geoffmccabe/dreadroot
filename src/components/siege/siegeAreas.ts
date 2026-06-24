@@ -80,3 +80,17 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
   { code: 'KeyV', key: 'V', name: 'Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
 ];
+
+// Worlds a CHALLENGE can be set in (the Challenge Creator's World dropdown). '' = the default
+// open world (no map switch — runs wherever the player is). The rest are the baked, walkable
+// arena scenes. `pos` is the default arrival spot when a challenge doesn't set its own spawn.
+export interface ChallengeWorld { mapId: string; label: string; pos: [number, number, number] | null }
+const _demoPos = (id: string): [number, number, number] => SIEGE_DEMOS.find((d) => d.mapId === id)?.pos ?? [0, 3, 0];
+export const CHALLENGE_WORLDS: ChallengeWorld[] = [
+  { mapId: '', label: 'Open World', pos: null },
+  { mapId: 'city-demo', label: 'SciFi City', pos: _demoPos('city-demo') },
+  { mapId: 'space-demo', label: 'SciFi Space', pos: _demoPos('space-demo') },
+  { mapId: 'adventure-demo', label: 'Adventure Town', pos: _demoPos('adventure-demo') },
+];
+export const challengeWorldSpawn = (mapId: string | undefined): [number, number, number] | null =>
+  CHALLENGE_WORLDS.find((w) => w.mapId === (mapId ?? ''))?.pos ?? null;
