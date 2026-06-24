@@ -324,8 +324,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const SPD = (c.speed ?? DEF.speed) * J.speed;
   const STAND = cfg.zombie ? 0.80 : 1.0;    // standable top = 0.8H so stacked demons sit on shoulders
   const scale = H / c.modelHeight;
+  // Skeletons scale their animation speed DOWN with size so giants don't look frantic: 4× at 2 m,
+  // then ×0.8 for every metre taller (e.g. 6 m → 4·0.8⁴ ≈ 1.64×). Other monsters keep c.animSpeed.
+  const isSkeletonMon = (c.url ?? '').includes('skeleton');
+  const effAnimSpeed = isSkeletonMon ? 4 * Math.pow(0.8, H - 2) : (c.animSpeed ?? 1);
   // Animation rhythm jitter × per-monster playback-rate (e.g. slow zombie clip → 3x).
-  useEffect(() => { mixer.timeScale = J.anim * (c.animSpeed ?? 1); }, [mixer, J.anim, c.animSpeed]);
+  useEffect(() => { mixer.timeScale = J.anim * effAnimSpeed; }, [mixer, J.anim, effAnimSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
