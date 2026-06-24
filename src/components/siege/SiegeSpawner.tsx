@@ -122,11 +122,12 @@ export function SiegeSpawner() {
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k === '1') {
-          // Leading 1 is ambiguous (type 1, or a teen type 10-18). Wait briefly for a 2nd digit:
-          // a quick 0-8 makes a teen type (e.g. !18 = Crawlies); a pause commits plain type 1.
+          // Leading 1 is ambiguous (type 1, or a teen type 10-18). Wait for a 2nd digit: a 0-8
+          // makes a teen type (e.g. !18 = Crawlies); a longer pause commits plain type 1. Window
+          // is generous so deliberate key-by-key typing of "18" still registers as type 18.
           pendingType.current = 1; stage.current = 'type1';
           if (stageTimer.current) clearTimeout(stageTimer.current);
-          stageTimer.current = window.setTimeout(() => { stage.current = 'qty'; arm(); }, 450);
+          stageTimer.current = window.setTimeout(() => { stage.current = 'qty'; arm(); console.log('[SiegeSpawner] type 1 (Demon Horde) — now press a quantity'); }, 1400);
         }
         else if (k >= '2' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
         else clearStage();
@@ -135,7 +136,7 @@ export function SiegeSpawner() {
       if (stage.current === 'type1') {
         e.preventDefault(); e.stopPropagation();
         if (stageTimer.current) { clearTimeout(stageTimer.current); stageTimer.current = null; }
-        if (k >= '0' && k <= '8') { pendingType.current = (10 + parseInt(k, 10)) as MType; stage.current = 'qty'; arm(); }   // 10-18 (18 = Crawlies)
+        if (k >= '0' && k <= '8') { pendingType.current = (10 + parseInt(k, 10)) as MType; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${pendingType.current} — now press a quantity`); }   // 10-18 (18 = Crawlies)
         else if (k === '9') { spawn(9, 1 as MType); clearStage(); }   // no type 19 → treat as type 1, qty 9
         else { stage.current = 'qty'; arm(); }                        // non-digit → plain type 1, await qty
         return;
