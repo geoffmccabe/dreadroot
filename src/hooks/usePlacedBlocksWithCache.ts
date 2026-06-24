@@ -153,9 +153,10 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       
       initLogStep('usePlacedBlocksWithCache.ts', `User authenticated, world: ${worldId.slice(0, 8)}...`);
 
-      // Preload block definitions FIRST (parallel with IndexedDB init)
-      // This ensures PlacedBlocks can render immediately when chunks load
-      const blockDefsPromise = preloadBlockDefinitions();
+      // Preload block definitions FIRST (parallel with IndexedDB init) so PlacedBlocks
+      // can render immediately when chunks load. Voxel worlds only — Siege Worlds renders
+      // no blocks, so fetching the ~60 block defs there is pure wasted startup time.
+      const blockDefsPromise = needsVoxels ? preloadBlockDefinitions() : Promise.resolve();
 
       // Initialize sounds cache in parallel
       const soundsCachePromise = initializeSoundsCache();
@@ -170,7 +171,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const CACHE_VERSION_KEY = 'fortress_chunk_cache_version';
       const CURRENT_CACHE_VERSION = 10; // v10: client now reads BOTH wire formats and keys blocks by position (id-drop Phase A). Re-pull so cached chunks are re-keyed consistently. Server still sends the id; this is a no-op until the server flip (Phase B).
       const storedVersion = parseInt(localStorage.getItem(CACHE_VERSION_KEY) || '0', 10);
-      if (storedVersion < CURRENT_CACHE_VERSION) {
+      if (needsVoxels && storedVersion < CURRENT_CACHE_VERSION) {
         console.log('[CacheMigration] Clearing stale chunk cache (v' + storedVersion + ' -> v' + CURRENT_CACHE_VERSION + ')');
         await blockDB.clearAllChunkCache();
         localStorage.setItem(CACHE_VERSION_KEY, String(CURRENT_CACHE_VERSION));
@@ -196,7 +197,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const ATLAS_CACHE_VERSION_KEY = 'fortress_atlas_cache_version';
       const CURRENT_ATLAS_VERSION = 3; // v3: redraw so the new wide_tree atlas slots (970-999) appear (wide-tree client support ported from Pinkland)
       const storedAtlasVersion = parseInt(localStorage.getItem(ATLAS_CACHE_VERSION_KEY) || '0', 10);
-      if (storedAtlasVersion < CURRENT_ATLAS_VERSION) {
+      if (needsVoxels && storedAtlasVersion < CURRENT_ATLAS_VERSION) {
         console.log('[AtlasMigration] Clearing stale atlas cache (v' + storedAtlasVersion + ' -> v' + CURRENT_ATLAS_VERSION + ')');
         const { atlasManager } = await import('@/lib/atlasManager');
         await atlasManager.clear();
