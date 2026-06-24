@@ -9,7 +9,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 
-const URL = '/siege/monsters/hunterf_dance.glb';
+const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
 
 // INSTANCE-specific content. A Map (SciFi City) can have many INSTANCES — an ongoing multiplayer Open
 // World vs single-player Challenges — that differ in content. The dancers belong to the "Death Dark
@@ -23,11 +23,10 @@ const isDancerInstance = (challengeName: string): boolean => {
 export interface PoleDancerDef { pos: [number, number, number]; yaw?: number; scale?: number; tint?: string }
 
 // The three poles (world coords). Pole #1 base block was reported at (12, 4, -27); the dancer stands
-// on top of the base. Poles #2 and #3 are placeholders near it until the exact coords are confirmed.
+// ONE dancer (dfdemon, red-tinted), placed ~1m from the pole-base reading [12,4,-27], 1m toward the
+// door (−Z guess). Floor Y kept at the base's 4 — send a laser readout at the exact spot to refine.
 const DANCERS: PoleDancerDef[] = [
-  { pos: [12, 5, -27], yaw: 0, scale: 1.0, tint: '#e23b3b' },
-  { pos: [15, 5, -27], yaw: 0.4, scale: 0.92, tint: '#c41f5a' },
-  { pos: [9, 5, -27], yaw: -0.4, scale: 1.06, tint: '#ff5a3c' },
+  { pos: [12, 4, -28], yaw: 0, scale: 1.0, tint: '#e23b3b' },
 ];
 
 function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
