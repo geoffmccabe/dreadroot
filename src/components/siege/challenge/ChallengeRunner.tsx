@@ -9,6 +9,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { CatalogMonster, makeHordeMember, type MType, type Ov, type MonsterMods } from '../siegeMonsterCatalog';
 import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
+import { groundAt } from '../siegeGround';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart } from './challengeControl';
@@ -46,21 +47,28 @@ export function ChallengeRunner() {
     faintNext: false, idc: 0,
   }).current;
 
-  const buildMobs = (drop: MonsterDrop, seed: number, spread: boolean): Spawned[] => {
+  const buildMobs = (drop: MonsterDrop, _seed: number, _spread: boolean): Spawned[] => {
     const out: Spawned[] = [];
     const ch = challengeRef.current!;
-    // Seeded spawn POINT (consistent every play) within scatterRadius of the start; else the
-    // authored x,z. `spread` = a horde, so cluster within 5m of that point.
-    const [px, pz] = ch.scatterRadius && ch.spawn
-      ? seededPoint(ch.spawn[0], ch.spawn[2], ch.scatterRadius, seed)
-      : [drop.x, drop.z];
+    // Spread spawns AROUND the arena instead of dripping from one point. Centre = the arena arrival
+    // (baked world) or the authored spawn. Each monster gets its OWN random point in a wide ring
+    // (min radius keeps them off the player's lap), so they come at you from all over the map.
+    const arr = ch.mapId ? challengeWorldArrival(ch.mapId) : null;
+    const cx0 = arr?.pos[0] ?? ch.spawn?.[0] ?? drop.x;
+    const cy0 = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
+    const cz0 = arr?.pos[2] ?? ch.spawn?.[2] ?? drop.z;
+    const scatter = ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45;
+    const minR = Math.min(12, scatter * 0.4);
     const mods: MonsterMods | undefined = drop.boss
       ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100, damageMul: drop.boss.damagePct / 100 }
       : undefined;
     for (let i = 0; i < drop.count; i++) {
-      const ang = Math.random() * Math.PI * 2, d = spread ? Math.random() * 5 : 0;
-      const mx = px + Math.cos(ang) * d, mz = pz + Math.sin(ang) * d;
-      const ground = sampleHeight(mx, mz) ?? 26;
+      const ang = Math.random() * Math.PI * 2;
+      const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
+      const mx = cx0 + Math.cos(ang) * rr, mz = cz0 + Math.sin(ang) * rr;
+      // Land on the STREET (BVH mesh) near the player's level, not the terrain far below. Cast from a
+      // bit above the arena height so we hit the street, not a rooftop.
+      const ground = groundAt(mx, mz, cy0 + 4) ?? sampleHeight(mx, mz) ?? cy0;
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
         id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],

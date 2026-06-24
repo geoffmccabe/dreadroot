@@ -21,6 +21,7 @@ import { SciFiShowcase } from './scifi/SciFiShowcase';
 import { DemoScene } from './scifi/DemoScene';
 import { CityHolePatches } from './scifi/CityHolePatches';
 import { SiegeStarDome } from './SiegeStarDome';
+import { SciFiCityMusic } from './SciFiCityMusic';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
 import { useSiegeLighting } from './siegeLighting';
@@ -139,6 +140,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <MeshColliderPlayer />
               <CityHolePatches />
               <SiegeStarDome />
+              <SciFiCityMusic />
             </Suspense>
           )}
           {world.id === 'space-demo' && (

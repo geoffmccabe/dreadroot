@@ -191,15 +191,19 @@ function bullseyeQuat(out: THREE.Quaternion, yaw: number, spin: number, tip: num
 //              slope it falls onto (90° = flat; <90° lying up an incline; >90° down).
 //   slopeDeg — steepest local downslope along the fall, in degrees (0 if uphill/flat).
 //   fallOff  — open space or a near-vertical face (cliff/ledge/rooftop) → free-fall.
-function bullseyeLanding(fx: number, fz: number, dx: number, dz: number, H: number): { tip: number; slopeDeg: number; fallOff: boolean } {
-  const yF = sampleHeight(fx, fz);
+// Ground under a dying/lying body — the STREET (BVH mesh) if there is one above the terrain, else
+// terrain. Cast down from just above the body so corpses rest on the city streets instead of
+// dropping through to the flat terrain far below (which made them "disappear").
+const corpseGround = (x: number, z: number, topY: number): number | null => groundAt(x, z, topY + 1.5);
+function bullseyeLanding(fx: number, fz: number, dx: number, dz: number, H: number, topY: number): { tip: number; slopeDeg: number; fallOff: boolean } {
+  const yF = corpseGround(fx, fz, topY);
   if (yF == null) return { tip: HALF_PI, slopeDeg: 90, fallOff: true };
   const N = Math.max(3, Math.ceil(H / 0.4));
   const stepLen = H / N;
   let prevY = yF, yHead = yF, maxStepDrop = 0;
   for (let i = 1; i <= N; i++) {
     const d = stepLen * i;
-    const y = sampleHeight(fx + dx * d, fz + dz * d);
+    const y = corpseGround(fx + dx * d, fz + dz * d, topY);
     if (y == null) return { tip: HALF_PI, slopeDeg: 90, fallOff: true };   // toppled into open space
     const drop = prevY - y;                                    // + = ground falls away
     if (drop > maxStepDrop) maxStepDrop = drop;
@@ -219,11 +223,11 @@ function bullseyeSettle(s: { x: number; y: number; z: number; beSlideV: number; 
   if (s.beFell) {                                             // free-fall off an edge
     s.beFellVY -= 24 * dt;
     s.x += dx * 4 * dt; s.z += dz * 4 * dt; s.y += s.beFellVY * dt;
-    const gy = sampleHeight(s.x, s.z);
+    const gy = corpseGround(s.x, s.z, s.y);
     if (gy != null && s.y <= gy) { s.y = gy; s.beFell = false; return { tip: HALF_PI, moving: false }; }
     return { tip: HALF_PI, moving: true };
   }
-  const land = bullseyeLanding(s.x, s.z, dx, dz, H);
+  const land = bullseyeLanding(s.x, s.z, dx, dz, H, s.y);
   if (land.fallOff) { s.beFell = true; s.beFellVY = 0; return { tip: HALF_PI, moving: true }; }
   if (land.slopeDeg >= 60) s.beSliding = true;                // steep → start sliding
   if (s.beSliding && land.slopeDeg < 30) s.beSliding = false; // flattened out → stop
@@ -232,11 +236,11 @@ function bullseyeSettle(s: { x: number; y: number; z: number; beSlideV: number; 
     s.beSlideV = Math.min(s.beSlideV + 16 * Math.sin(th) * dt, 14);   // gravity-driven, friction-capped
     const horiz = s.beSlideV * Math.cos(th);
     s.x += dx * horiz * dt; s.z += dz * horiz * dt;
-    const gy = sampleHeight(s.x, s.z); if (gy != null) s.y = gy;
+    const gy = corpseGround(s.x, s.z, s.y); if (gy != null) s.y = gy;
     return { tip: land.tip, moving: true };
   }
   s.beSlideV = 0;
-  const gy = sampleHeight(s.x, s.z); if (gy != null) s.y = gy;
+  const gy = corpseGround(s.x, s.z, s.y); if (gy != null) s.y = gy;
   return { tip: land.tip, moving: false };
 }
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // random in [a,b]
@@ -722,9 +726,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           // Challenge corpse: STAYS put (piles up) with a low collider until the challenge ends
           // (ChallengeRunner clears all mobs on finish/stop/player-death).
           g.position.set(s.x, s.y, s.z);
+          // Corpse collider = a LOW flat slab (0.3 m). Below the player's 0.6 m step-up AND the
+          // monster STEP_UP (0.45), so everyone flows up-and-over a body instead of being walled by
+          // it — but it still exists, so the body rests/piles and others can stand on it.
           const cr = Math.max(0.4, H * 0.3);
           box.min.set(s.x - cr, s.y, s.z - cr);
-          box.max.set(s.x + cr, s.y + Math.max(0.5, H * 0.3), s.z + cr);
+          box.max.set(s.x + cr, s.y + 0.3, s.z + cr);
           worldCollisionGrid.update(box);
           s.beDone = true;                                       // freeze: stop per-frame terrain settle
         } else {                                                 // open world: lie, then sink → despawn
@@ -744,7 +751,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const td = now - inst.deadAt;
       const SPIN_DOWN = 2000, STAND_END = 3000, FALL = 600, FALL_END = STAND_END + FALL;  // 3600
       const LIE_END = FALL_END + 3000, SINK = 3000, SINK_END = LIE_END + SINK;            // 6600 / 9600
-      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      const dh = corpseGround(s.x, s.z, s.y); if (dh != null) s.y = dh;
       let yOff = 0;
       if (!s.deathSnd) {   // at death: play the death cry once
         s.deathSnd = true;
@@ -789,7 +796,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const td = now - inst.deadAt;
       const FALL = 600, LIE_END = FALL + 1000, DEFLATE = 1000, DEFLATE_END = LIE_END + DEFLATE;  // 600/1600/2600
       const SINK = 3000, SINK_END = DEFLATE_END + SINK;                                          // 5600
-      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      const dh = corpseGround(s.x, s.z, s.y); if (dh != null) s.y = dh;
       s.x += inst.kvx * delta; s.z += inst.kvz * delta; inst.kvx *= 0.82; inst.kvz *= 0.82;  // settle last shove
       play(clips.idle);
       g.rotation.order = 'YXZ';
@@ -820,7 +827,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       play(s.deathVariant, true);
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
       inst.kvx *= 0.82; inst.kvz *= 0.82;
-      const dh = sampleHeight(s.x, s.z); if (dh != null) s.y = dh;
+      const dh = corpseGround(s.x, s.z, s.y); if (dh != null) s.y = dh;
       g.position.set(s.x, s.y, s.z);
       inst.x = s.x; inst.y = s.y; inst.z = s.z;
       // In a challenge the corpse STAYS (with a low collider) and piles up until the challenge
