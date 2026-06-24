@@ -162,9 +162,13 @@ export function AdminPanel({
           dialogRef.current = node;
           drag.panelRef.current = node;
           if (node) {
-            node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
-            node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
-            node.style.setProperty('border-radius', '6px', 'important');
+            // Surface driven by the Admin panel-theme tokens — matches User except
+            // the bright-blue border (Admin → Worlds → Settings → CSS).
+            node.style.setProperty('background', 'var(--pt-admin-bg)', 'important');
+            node.style.setProperty('border', 'var(--pt-admin-border-w) solid var(--pt-admin-border)', 'important');
+            node.style.setProperty('border-radius', 'var(--pt-admin-radius)', 'important');
+            node.style.setProperty('backdrop-filter', 'var(--pt-admin-blur)', 'important');
+            node.style.setProperty('-webkit-backdrop-filter', 'var(--pt-admin-blur)', 'important');
           }
         }}
         className={cn(

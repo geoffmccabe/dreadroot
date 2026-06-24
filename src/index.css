@@ -674,17 +674,21 @@ All colors MUST be HSL.
     }
   }
 
-  /* Admin Panel - HUD-style scoped variable overrides (matches user panel) */
+  /* Admin Panel — IDENTICAL to the User panel internals (per spec); the only
+     intended difference is the bright-blue border, applied via the
+     --pt-admin-border token on the inline surface style. Backdrop blur is now
+     token-driven (--pt-admin-blur) on the element, so it's no longer forced
+     here. */
   .admin-panel-dialog {
     --background: var(--hud-bg);
-    --card: 211 30% 20% / 0.6;
+    --card: var(--hud-bg-dim);
     --card-foreground: var(--hud-text);
     --card-border: var(--hud-border);
-    --muted: 211 30% 25% / 0.5;
+    --muted: var(--hud-bg);
     --muted-foreground: var(--hud-text-dim);
     --border: var(--hud-border);
-    --input: 211 30% 20% / 0.5;
-    --foreground: 0 0% 95%;
+    --input: var(--hud-bg-dim);
+    --foreground: var(--hud-text);
     /* Force `variant="default"` buttons (the global Upload pattern) to
        render with a clearly-visible cyan-blue against the dark
        translucent panel — the global --primary is a dark waterfall
@@ -695,17 +699,12 @@ All colors MUST be HSL.
        translucent blue background. */
     --secondary: 211 35% 38% / 0.85;
     --secondary-foreground: 0 0% 98%;
-    --popover: 211 30% 20% / 0.85;
+    --popover: var(--hud-bg);
     --popover-foreground: var(--hud-text);
     --ring: var(--hud-border);
     --accent: 211 35% 45% / 0.6;
     --accent-foreground: 0 0% 98%;
     --shadow-sm: none;
-
-    /* Frosted-glass: blur whatever's behind the panel so its
-       semi-transparent fill stops competing with the game scene. */
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
-    backdrop-filter: blur(20px) saturate(140%);
   }
 
   /* Outline buttons + inputs: visible border on the translucent bg. */
@@ -738,14 +737,8 @@ All colors MUST be HSL.
     background-color: hsla(211, 30%, 85%, 0.35) !important;
   }
 
-  /* Headings inside admin panel: near-white */
-  .admin-panel-dialog h1,
-  .admin-panel-dialog h2,
-  .admin-panel-dialog h3,
-  .admin-panel-dialog h4,
-  .admin-panel-dialog [class*="DialogTitle"] {
-    color: hsl(0, 0%, 95%) !important;
-  }
+  /* (Admin headings inherit --foreground like the User panel — no override, so
+     the two classes render identically apart from the blue border.) */
 
   /* Active tab inside admin panel: subtle highlight, not bright white */
   .admin-panel-dialog [data-state="active"][role="tab"] {

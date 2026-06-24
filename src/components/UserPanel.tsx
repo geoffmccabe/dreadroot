@@ -387,9 +387,12 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
         ref={(node: HTMLDivElement | null) => {
           drag.panelRef.current = node;
           if (node) {
-            node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
-            node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
-            node.style.setProperty('border-radius', '6px', 'important');
+            // Surface driven by the User panel-theme tokens (Admin → Worlds → Settings → CSS).
+            node.style.setProperty('background', 'var(--pt-user-bg)', 'important');
+            node.style.setProperty('border', 'var(--pt-user-border-w) solid var(--pt-user-border)', 'important');
+            node.style.setProperty('border-radius', 'var(--pt-user-radius)', 'important');
+            node.style.setProperty('backdrop-filter', 'var(--pt-user-blur)', 'important');
+            node.style.setProperty('-webkit-backdrop-filter', 'var(--pt-user-blur)', 'important');
           }
         }}
         className="user-panel-dialog relative overflow-hidden flex flex-col"

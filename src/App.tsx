@@ -9,6 +9,7 @@ import { BlocksProvider } from "@/contexts/BlocksContext";
 import { UserPanelProvider } from "@/contexts/UserPanelContext";
 import { AdminPanelProvider } from "@/contexts/AdminPanelContext";
 import { CoinThemeProvider } from "@/contexts/CoinThemeContext";
+import { PanelThemeProvider } from "@/theme/PanelThemeProvider";
 import { AvatarProvider } from "@/contexts/AvatarContext";
 import { InitializationProvider, useInitialization } from "@/contexts/InitializationContext";
 import { BulletDefinitionsProvider } from "@/contexts/BulletDefinitionsContext";
@@ -82,6 +83,7 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <CoinThemeProvider>
+          <PanelThemeProvider />
           <InitializationProvider>
             <InitializationOverlay />
             <BulletDefinitionsProvider>
