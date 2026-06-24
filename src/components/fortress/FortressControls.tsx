@@ -511,10 +511,8 @@ export function FirstPersonControls({
           // TODO: Broadcast yodel position to other players via multiplayer system
           break;
         }
-        // Plain Y: arm a shpider egg (parent handles find/auto-equip).
-        if (event.repeat) break;
-        if (event.metaKey || event.ctrlKey || event.altKey) break;
-        if (onEggTogglePress) onEggTogglePress();
+        // Plain Y no longer arms eggs — eggs equip into a hand and throw with G (unified
+        // with grenades). Only Ctrl+Y (yodel, handled above) uses the Y key now.
         break;
       case 'KeyW':
       case 'ArrowUp':

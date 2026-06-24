@@ -57,7 +57,7 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
   if (def.type === 'weapon') {
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
     // A shpider EGG is a hand THROWABLE (like a grenade): accept it into a hand slot so it can be
-    // dragged in, then Y adopts it into the hand overlay + throws it (hatches a pet).
+    // dragged in, then G adopts it into the hand overlay + throws it (hatches a pet).
     if ((it.key ?? '').startsWith('shpider_egg')) return { ok: true, item, reloadKey: null, isRifle: false };
     // A PICKAXE is a two-handed mining TOOL (not a gun): it fills BOTH hands and renders centered
     // like a rifle (isRifle), but never fires (loadWeaponStats returns null for non-guns). Detect
@@ -355,7 +355,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     const armed = !!gren?.armed;
     const grenIsEgg = handKind(gren) === 'egg';
     const grenLabel = grenIsEgg ? 'Egg' : 'Grenade';
-    const grenKey = grenIsEgg ? 'Y' : 'G';
+    const grenKey = 'G';   // eggs + grenades both throw with G now
     return (
       <div
         key={def.num}
