@@ -78,11 +78,13 @@ function nearestFace(
 const _face = { d: 0, sx: 0, sy: 0, sz: 0, nx: 0, ny: 0, nz: 0 };
 const _best = { d: Infinity, sx: 0, sy: 0, sz: 0, nx: 0, ny: 1, nz: 0, onCrawler: false };
 
-// Live Crawlie body boxes → { priority, grounded }. Each Crawlie clings to the OTHERS so they crawl
-// ON TOP of each other (red-demon-horde style) instead of interpenetrating. A Crawlie only climbs
-// onto a peer that is LOWER priority AND itself GROUNDED (on the world, not on another Crawlie) — so
-// piles stay ~2 layers and never build into an air-tower. The player never reads this set.
-const crawlerBoxes = new Map<THREE.Box3, { pri: number; grounded: boolean }>();
+// Live Crawlie body boxes → { priority, supported }. Each Crawlie clings to the OTHERS so they crawl
+// ON TOP of each other (mushroom-grunt-horde style) instead of interpenetrating — multiple layers
+// deep. Rules that keep it stable: a Crawlie only climbs onto a peer that is (a) LOWER priority and
+// (b) itself SUPPORTED (resting on the world OR on another supported Crawlie — not mid-air). Priority
+// is speed-based, so FASTER Crawlies crawl OVER slower ones. Unsupported Crawlies fall (checked every
+// frame), so a tower collapses the instant its base moves out. The player never reads this set.
+const crawlerBoxes = new Map<THREE.Box3, { pri: number; supported: boolean }>();
 let _pri = 0;
 
 // Find the nearest grippable surface (box face, other Crawlie, else ground) to (px,py,pz).
@@ -99,9 +101,10 @@ function findSurface(px: number, py: number, pz: number, self?: THREE.Box3, self
       if (_face.d < _best.d) { _best.d = _face.d; _best.sx = _face.sx; _best.sy = _face.sy; _best.sz = _face.sz; _best.nx = _face.nx; _best.ny = _face.ny; _best.nz = _face.nz; _best.onCrawler = false; }
     }
   }
-  // Other Crawlies → climbable surfaces (crawl on top). Only LOWER-priority + GROUNDED peers.
+  // Other Crawlies → climbable surfaces (crawl on top, many layers). Only LOWER-priority + SUPPORTED
+  // peers (never climb a mid-air one), so towers only form on a real base and collapse when it leaves.
   for (const [b, info] of crawlerBoxes) {
-    if (b === self || info.pri >= selfPri || !info.grounded) continue;
+    if (b === self || info.pri >= selfPri || !info.supported) continue;
     const bcx = (b.min.x + b.max.x) * 0.5, bcz = (b.min.z + b.max.z) * 0.5;
     if (Math.abs(px - bcx) > CLING + 1.0 || Math.abs(pz - bcz) > CLING + 1.0) continue;   // cheap cull
     nearestFace(px, py, pz, b, _face);
@@ -138,7 +141,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
-  if (priRef.current === 0) priRef.current = ++_pri;   // climb-order priority (stable per Crawlie)
+  // Climb-order priority: speed-dominant (faster Crawlies crawl OVER slower ones) + a unique counter
+  // so two equal speeds still break the tie (never mutually climb).
+  if (priRef.current === 0) priRef.current = V.current.speed * 1000 + ++_pri;
 
   // Clone the rig + self-light it (bright on dark maps), bloody-red tinted so it reads as the
   // "bloody skeleton" base.
@@ -193,7 +198,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   }).current;
   // Body box for inter-Crawlie stacking — registered in the shared set so others can crawl on top.
   const box = useMemo(() => new THREE.Box3(), []);
-  const boxInfo = useRef({ pri: 0, grounded: true });
+  const boxInfo = useRef({ pri: 0, supported: false });
   boxInfo.current.pri = priRef.current;
   useEffect(() => { crawlerBoxes.set(box, boxInfo.current); return () => { crawlerBoxes.delete(box); }; }, [box]);
   const up = useMemo(() => new THREE.Vector3(), []);
@@ -227,20 +232,23 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
 
     const px = camera.position.x, py = camera.position.y - 0.4, pz = camera.position.z;
 
-    // 1) Stick to the nearest surface (object face, other Crawlie, else terrain). `grounded` = we're
-    //    on the WORLD (not on another Crawlie) → only grounded Crawlies may be climbed (caps piles).
+    // 1) Stick to the nearest surface (object face, other Crawlie, or ground — works on rock/mushroom
+    //    tops + walls + ceilings, not just terrain). `supported` = we found a surface this frame →
+    //    others may stack ON us; unsupported Crawlies fall. When the surface is another Crawlie we
+    //    SINK in (nest) so piles pack tight instead of perching one body-height apart.
     if (findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {
-      boxInfo.current.grounded = !_best.onCrawler;
+      boxInfo.current.supported = true;
       st.vy = 0;
       st.nx += (_best.nx - st.nx) * Math.min(1, dt * 8);   // smooth the normal so edges don't snap
       st.ny += (_best.ny - st.ny) * Math.min(1, dt * 8);
       st.nz += (_best.nz - st.nz) * Math.min(1, dt * 8);
       const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
-      st.cx = _best.sx + st.nx * HOVER; st.cy = _best.sy + st.ny * HOVER; st.cz = _best.sz + st.nz * HOVER;
+      const hov = _best.onCrawler ? HOVER * 0.4 : HOVER;
+      st.cx = _best.sx + st.nx * hov; st.cy = _best.sy + st.ny * hov; st.cz = _best.sz + st.nz * hov;
     } else {
-      // No surface in reach → FALL (gravity) until the downward ground search catches one. Without
-      // this a Crawlie that steps off a pile/ledge would just hang in the air.
-      boxInfo.current.grounded = false;
+      // No surface in reach → FALL (gravity) until the downward ground search catches one. This is the
+      // "bottom one must fall if nothing is under him, checked frequently" rule — runs every frame.
+      boxInfo.current.supported = false;
       st.vy -= 24 * dt; st.cy += st.vy * dt;
       st.ny += (1 - st.ny) * Math.min(1, dt * 4); st.nx -= st.nx * Math.min(1, dt * 4); st.nz -= st.nz * Math.min(1, dt * 4);
       const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
@@ -264,8 +272,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
       const step = spd * dt;
       st.cx += dirx * step; st.cy += diry * step; st.cz += dirz * step;
       if (findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {       // re-cling (wrap edges)
-        boxInfo.current.grounded = !_best.onCrawler;
-        st.cx = _best.sx + _best.nx * HOVER; st.cy = _best.sy + _best.ny * HOVER; st.cz = _best.sz + _best.nz * HOVER;
+        boxInfo.current.supported = true; st.vy = 0;
+        const hov = _best.onCrawler ? HOVER * 0.4 : HOVER;
+        st.cx = _best.sx + _best.nx * hov; st.cy = _best.sy + _best.ny * hov; st.cz = _best.sz + _best.nz * hov;
       }
     }
 
