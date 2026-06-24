@@ -33,7 +33,7 @@ type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov
 export function SiegeSpawner() {
   const camera = useThree((s) => s.camera);
   const [demons, setDemons] = useState<Demon[]>([]);
-  const stage = useRef<'idle' | 'type' | 'qty' | 'hbwait'>('idle');
+  const stage = useRef<'idle' | 'type' | 'type1' | 'qty' | 'hbwait'>('idle');
   const stageTimer = useRef<number | null>(null);
   const spamUntil = useRef(0);
   const pTaps = useRef<number[]>([]);   // recent 'P' press times for the triple-P pause gesture
@@ -121,8 +121,23 @@ export function SiegeSpawner() {
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
-        else if (k >= '1' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
+        else if (k === '1') {
+          // Leading 1 is ambiguous (type 1, or a teen type 10-18). Wait briefly for a 2nd digit:
+          // a quick 0-8 makes a teen type (e.g. !18 = Crawlies); a pause commits plain type 1.
+          pendingType.current = 1; stage.current = 'type1';
+          if (stageTimer.current) clearTimeout(stageTimer.current);
+          stageTimer.current = window.setTimeout(() => { stage.current = 'qty'; arm(); }, 450);
+        }
+        else if (k >= '2' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
         else clearStage();
+        return;
+      }
+      if (stage.current === 'type1') {
+        e.preventDefault(); e.stopPropagation();
+        if (stageTimer.current) { clearTimeout(stageTimer.current); stageTimer.current = null; }
+        if (k >= '0' && k <= '8') { pendingType.current = (10 + parseInt(k, 10)) as MType; stage.current = 'qty'; arm(); }   // 10-18 (18 = Crawlies)
+        else if (k === '9') { spawn(9, 1 as MType); clearStage(); }   // no type 19 → treat as type 1, qty 9
+        else { stage.current = 'qty'; arm(); }                        // non-digit → plain type 1, await qty
         return;
       }
       if (stage.current === 'hbwait') {

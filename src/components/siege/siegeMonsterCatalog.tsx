@@ -100,7 +100,7 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 15, name: 'Elemental Golem',         baseHeight: 8.0,  baseHealth: 400 },
   { id: 16, name: 'Mechanical Golem',        baseHeight: 10.0, baseHealth: 500 },
   { id: 17, name: 'Fort Golem',              baseHeight: 12.0, baseHealth: 600 },
-  { id: 18, name: 'Crawler (surface)',       baseHeight: 0.85, baseHealth: 40 },
+  { id: 18, name: 'Crawlies',                baseHeight: 0.85, baseHealth: 40 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
