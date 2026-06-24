@@ -23,6 +23,7 @@ import { CityHolePatches } from './scifi/CityHolePatches';
 import { SiegeStarDome } from './SiegeStarDome';
 import { SciFiCityMusic } from './SciFiCityMusic';
 import { PoleDancers } from './PoleDancer';
+import { Hoverbike } from './Hoverbike';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
 import { useSiegeLighting } from './siegeLighting';
@@ -144,6 +145,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <CityHolePatches />
               <SiegeStarDome radius={300} />
               <SciFiCityMusic />
+              <Hoverbike />
             </Suspense>
           )}
           {world.id === 'space-demo' && (

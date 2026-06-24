@@ -12,6 +12,7 @@ import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
+import { HoverbikePrompt } from '@/components/siege/HoverbikePrompt';
 import { FountainPanel } from '@/components/siege/fountain/FountainPanel';
 import { SiegeCharLineupHud } from '@/components/siege/charlineup/SiegeCharLineupHud';
 import { startFountainPolling } from '@/components/siege/fountain/fountainState';
@@ -918,6 +919,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <BuilderPalette />
       {/* Magic Chest HUD (prompt + spin reel) — only in siege. */}
       {isSiege && <MagicChestPanel superadmin={!!userRoles?.includes?.('superadmin')} />}
+      {/* Hoverbike "Requires Keycard" proximity prompt — only in siege. */}
+      {isSiege && <HoverbikePrompt />}
       {/* The Fountain modal — only in siege. */}
       {isSiege && <FountainPanel />}
       {/* Character lineup readout (animation #/name) — only when "&&&" is toggled on, siege only. */}
