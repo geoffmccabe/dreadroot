@@ -44,10 +44,13 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     return t;
   }, []);
 
+  // Night maps (SciFi City) darken the terrain 70% toward black so the green doesn't glow under the
+  // dark city; the material colour multiplies the grass map + vertex tints.
+  const night = world.id === 'city-demo';
   // ONE material shared by every cell (vertex-colored) — not one per cell.
   const cellMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, metalness: 0 }),
-    [grass],
+    () => new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, metalness: 0, color: night ? new THREE.Color(0.3, 0.3, 0.3) : new THREE.Color(1, 1, 1) }),
+    [grass, night],
   );
 
   // Cell index range allowed by world bounds (null = unbounded).
@@ -63,9 +66,10 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const scene = useThree((s) => s.scene);
   useEffect(() => {
     const prevFog = scene.fog;
-    scene.fog = new THREE.Fog(0x9fb2c4, VIEW_CELLS * CELL_M * 0.45, VIEW_CELLS * CELL_M * 0.95);
+    // Night maps fade to dark, not the daytime light grey-blue (which washed the night city grey).
+    scene.fog = new THREE.Fog(night ? 0x0a0e1a : 0x9fb2c4, VIEW_CELLS * CELL_M * 0.45, VIEW_CELLS * CELL_M * 0.95);
     return () => { scene.fog = prevFog; };
-  }, [scene]);
+  }, [scene, night]);
 
   useEffect(() => {
     let alive = true;

@@ -21,7 +21,7 @@ const COLLIDER_RATIO = 1.0;
 const PER_JOB = 40;           // meshes registered per budgeted tick
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
-export function DemoScene({ file, group, scale = 1 }: { file: string; group: string; scale?: number }) {
+export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean }) {
   // Draco-compressed (to fit Cloudflare's 25MB/file limit); decode via local /draco/.
   const { scene } = useGLTF(`/siege/scifi_demo/${file}`, '/draco/');
 
@@ -44,14 +44,27 @@ export function DemoScene({ file, group, scale = 1 }: { file: string; group: str
       if (!tmp.isEmpty()) box.union(tmp);
     });
     if (box.isEmpty()) box.setFromObject(model);   // fallback: all meshes
+    // Hide the space PLANET backdrop on night maps (it's an opaque sphere that renders OVER the star
+    // dome, which is what showed as "pure light grey" instead of the night sky).
+    if (hidePlanet) {
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        const mats = Array.isArray(m.material) ? m.material : [m.material];
+        const matName = mats.map((x) => (x as THREE.Material)?.name ?? '').join(',').toLowerCase();
+        if (/planet/.test(matName) || /planet/.test((m.name ?? '').toLowerCase())) m.visible = false;
+      });
+    }
     const ground = sampleHeight(0, 0) ?? 0;
     const c = box.getCenter(new THREE.Vector3());
     const wrap = new THREE.Group();
     wrap.add(model);
-    wrap.position.set(-c.x, ground - box.min.y, -c.z);
+    // lowerY sinks the whole scene (e.g. the city sat ~2 m above the terrain — drop it so the street
+    // is just above the terrain, no visible gap underneath).
+    wrap.position.set(-c.x, ground - box.min.y - lowerY, -c.z);
     wrap.updateMatrixWorld(true);
     return wrap;
-  }, [scene, scale]);
+  }, [scene, scale, lowerY, hidePlanet]);
 
   useEffect(() => {
     const meshes: THREE.Mesh[] = [];
