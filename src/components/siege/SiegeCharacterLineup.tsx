@@ -37,6 +37,15 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
 
+  // Procedural tail (Rajax): the shared Mixamo clips don't touch the grafted Tail_01..05 bones, so
+  // they'd sit stiff. Drive a slow travelling-wave sway each frame for a cat-like flick. Auto-gated:
+  // only Rajax has Tail bones, so this is a no-op for everyone else.
+  const tailBones = useMemo(() => {
+    const bs: THREE.Object3D[] = [];
+    cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
+    return bs.sort((a, b) => a.name.localeCompare(b.name));
+  }, [cloned]);
+
   // Publish the clip names once (identical across characters — same skeleton/clips).
   useEffect(() => { if (names.length) setCharAnimNames(names); }, [names]);
 
@@ -57,9 +66,18 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
   // cycled clip when the sequence finishes. Forward axis for a yaw-rotated group is (sin, cos).
   const fsmRef = useRef<AnimFSM | null>(null);
   const seenSeq = useRef(getFlightSeq());
-  useFrame((_, rawDt) => {
+  useFrame((state, rawDt) => {
     const g = group.current; if (!g) return;
     const dt = Math.min(rawDt, 0.05);
+    // Tail sway — slow travelling wave down the chain (side-to-side flick + a little vertical curl).
+    if (tailBones.length) {
+      const t = state.clock.elapsedTime;
+      for (let i = 0; i < tailBones.length; i++) {
+        const ph = t * 1.3 - i * 0.6;
+        tailBones[i].rotation.y = Math.sin(ph) * 0.22;
+        tailBones[i].rotation.x = Math.sin(ph * 0.6 + 0.5) * 0.07;
+      }
+    }
     const seq = getFlightSeq();
     if (seq !== seenSeq.current) {
       seenSeq.current = seq;
