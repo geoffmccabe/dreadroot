@@ -5,19 +5,21 @@ import { useMemo } from 'react';
 import { useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 
-export function SiegeStarDome({ texture = '/space_night_sky.webp', radius = 638 }: { texture?: string; radius?: number }) {
+export function SiegeStarDome({ texture = '/space_night_sky.webp', radius = 4000 }: { texture?: string; radius?: number }) {
   const camera = useThree((s) => s.camera);
   const tex = useLoader(THREE.TextureLoader, texture);
   const mesh = useMemo(() => {
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
-    const geo = new THREE.SphereGeometry(radius, 64, 32);
+    // Radius BEYOND all city geometry + depthTest ON: closer buildings/monsters write depth and
+    // OCCLUDE the dome, so the stars only show through the open sky (not over everything). depthWrite
+    // off keeps it from blocking anything itself; it's an opaque sky (no transparent-pass overlay).
+    const geo = new THREE.SphereGeometry(radius, 48, 24);
     const mat = new THREE.MeshBasicMaterial({
-      side: THREE.BackSide, map: tex, transparent: true, opacity: 1,
-      blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false,
+      side: THREE.BackSide, map: tex, depthWrite: false, depthTest: true, fog: false,
     });
     const m = new THREE.Mesh(geo, mat);
-    m.frustumCulled = false; m.renderOrder = -1000;   // draw first, behind all city geometry
+    m.frustumCulled = false; m.renderOrder = -1000;   // draw first (background)
     return m;
   }, [tex, radius]);
   // Park the dome on the camera each frame so the player stays at its centre.

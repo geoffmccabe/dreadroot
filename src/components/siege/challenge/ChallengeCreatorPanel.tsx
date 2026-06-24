@@ -13,7 +13,7 @@ import { BLEND_MODES } from './colorMods';
 import { BannerInput } from './BannerInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
-import { SIEGE_TELEPORTS, CHALLENGE_WORLDS, challengeWorldSpawn } from '../siegeAreas';
+import { SIEGE_TELEPORTS, CHALLENGE_WORLDS } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
 import { GAME_LIST } from '@/config/gameRegistry';
@@ -439,7 +439,7 @@ export function ChallengeCreatorPanel() {
                   <label style={lbl}>World</label>
                   {/* Which map the challenge plays in. Open World = no map switch; the rest jump to a baked arena. */}
                   <select style={inp} value={ch.mapId ?? ''}
-                          onChange={(e) => { const m = e.target.value; const sp = challengeWorldSpawn(m); patch({ mapId: m || undefined, spawn: sp ?? ch.spawn }); }}>
+                          onChange={(e) => patch({ mapId: e.target.value || undefined })}>
                     {CHALLENGE_WORLDS.map((w) => <option key={w.mapId} value={w.mapId}>{w.label}</option>)}
                   </select>
                 </div>

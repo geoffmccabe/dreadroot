@@ -545,7 +545,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (!m) return;
         if ('metalness' in m) m.metalness = 0;
         if ('roughness' in m) m.roughness = 0.85;
-        if ('emissive' in m && m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; m.emissiveIntensity = 0.5; }
+        // Self-light the monster so it's visible even on dark night maps (e.g. SciFi City). Textured
+        // materials glow with their texture; flat-colour ones (the skeletons) glow with their colour —
+        // otherwise they go pitch black at night and look invisible.
+        if ('emissive' in m) {
+          if (m.map) { m.emissive = new THREE.Color(0xffffff); m.emissiveMap = m.map; }
+          else m.emissive = (m.color ? m.color.clone() : new THREE.Color(0xffffff));
+          m.emissiveIntensity = 0.5;
+        }
         if (cfg.boss === 'teleporter') { m.transparent = true; m.depthWrite = true; bossMats.current.push(m); }
         if (cm) {
           // Authored Challenge colour — the SAME shader the Creator preview uses (sat/hue/tint/blend).

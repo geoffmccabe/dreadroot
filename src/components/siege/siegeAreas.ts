@@ -53,7 +53,7 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
  */
 export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; yaw?: number; pitch?: number; }
 export const SIEGE_DEMOS: SiegeDemoMap[] = [
-  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [-3.696, 5.142, 10.577], yaw: -1.531, pitch: 0.145 }, // laser readout yaw 92.2°, pitch 8.4°
+  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 4.605, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop: laser yaw 272.1°, pitch -0.7°, fwd [-0.999,-0.013,0.037]
   { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo',  pos: [0, 3, 0] },
   // Component-only sets shown as auto-arranged sampler grids.
   { code: 'KeyC', key: 'C', name: 'CyberCity',   mapId: 'cyber-demo',  pos: [0, 3, 0] },
@@ -84,13 +84,15 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
 // Worlds a CHALLENGE can be set in (the Challenge Creator's World dropdown). '' = the default
 // open world (no map switch — runs wherever the player is). The rest are the baked, walkable
 // arena scenes. `pos` is the default arrival spot when a challenge doesn't set its own spawn.
-export interface ChallengeWorld { mapId: string; label: string; pos: [number, number, number] | null }
-const _demoPos = (id: string): [number, number, number] => SIEGE_DEMOS.find((d) => d.mapId === id)?.pos ?? [0, 3, 0];
+export interface ChallengeWorld { mapId: string; label: string }
 export const CHALLENGE_WORLDS: ChallengeWorld[] = [
-  { mapId: '', label: 'Open World', pos: null },
-  { mapId: 'city-demo', label: 'SciFi City', pos: _demoPos('city-demo') },
-  { mapId: 'space-demo', label: 'SciFi Space', pos: _demoPos('space-demo') },
-  { mapId: 'adventure-demo', label: 'Adventure Town', pos: _demoPos('adventure-demo') },
+  { mapId: '', label: 'Open World' },
+  { mapId: 'city-demo', label: 'SciFi City' },
+  { mapId: 'space-demo', label: 'SciFi Space' },
+  { mapId: 'adventure-demo', label: 'Adventure Town' },
 ];
-export const challengeWorldSpawn = (mapId: string | undefined): [number, number, number] | null =>
-  CHALLENGE_WORLDS.find((w) => w.mapId === (mapId ?? ''))?.pos ?? null;
+/** Arrival pos + facing for a challenge world (from its SIEGE_DEMOS entry). null = open world. */
+export const challengeWorldArrival = (mapId: string | undefined): { pos: [number, number, number]; yaw?: number; pitch?: number } | null => {
+  const d = SIEGE_DEMOS.find((x) => x.mapId === mapId);
+  return d ? { pos: d.pos, yaw: d.yaw, pitch: d.pitch } : null;
+};

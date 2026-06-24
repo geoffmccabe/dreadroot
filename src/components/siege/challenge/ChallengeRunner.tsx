@@ -18,7 +18,7 @@ import { TEST_CHALLENGE } from './testChallenge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getActiveGame } from '@/config/activeGame';
 import { getActiveMapId } from '@/config/activeMap';
-import { challengeWorldSpawn } from '../siegeAreas';
+import { challengeWorldArrival } from '../siegeAreas';
 import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
@@ -110,10 +110,12 @@ export function ChallengeRunner() {
     prePos.current = camera.position.clone();   // remember where to put the player back
     preMap.current = getActiveMapId();
     const jump = (window as unknown as { __siegeJump?: (m: string, p: [number, number, number], y?: number, pi?: number) => void }).__siegeJump;
+    const arr = ch.mapId ? challengeWorldArrival(ch.mapId) : null;             // baked world → its fixed drop point + facing
     if (ch.mapId && ch.mapId !== preMap.current && jump) {
-      jump(ch.mapId, ch.spawn ?? challengeWorldSpawn(ch.mapId) ?? [0, 3, 0]);   // switch to the challenge's world + arrive
-    } else if (ch.spawn) {
-      camera.position.set(ch.spawn[0], ch.spawn[1], ch.spawn[2]);              // same map → just teleport to the arena
+      jump(ch.mapId, arr?.pos ?? ch.spawn ?? [0, 3, 0], arr?.yaw, arr?.pitch);  // switch world, arrive at the drop point
+    } else if (arr?.pos || ch.spawn) {
+      const p = arr?.pos ?? ch.spawn!;
+      camera.position.set(p[0], p[1], p[2]);                                    // same map → teleport to the arena
     }
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null });
