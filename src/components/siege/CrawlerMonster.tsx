@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { sampleHeight } from './terrainHeight';
+import { meshGroundHeight } from './meshColliderSystem';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
@@ -88,9 +89,17 @@ function findSurface(px: number, py: number, pz: number): boolean {
     }
   }
   if (_best.d <= CLING) return true;
-  // No object face in reach → cling to the terrain ground (flat, up normal).
+  // BVH-mesh ground (SciFi City streets, rocks — they're triangle meshes, NOT box colliders, so the
+  // grids above never see them; this is what stopped Crawlies from finding the city floor → floating).
+  // Cast down from a bit above the body so it snaps onto the street below.
+  const mg = meshGroundHeight(px, pz, py + 2.0);
+  if (mg != null && py - mg <= CLING + 2.0 && py - mg >= -0.2) {
+    _best.d = Math.abs(py - mg); _best.sx = px; _best.sy = mg; _best.sz = pz; _best.nx = 0; _best.ny = 1; _best.nz = 0;
+    return true;
+  }
+  // Terrain heightfield ground (flat, up normal).
   const g = sampleHeight(px, pz);
-  if (g != null && py - g <= CLING + 1.0) {
+  if (g != null && py - g <= CLING + 2.0) {
     _best.d = Math.abs(py - g); _best.sx = px; _best.sy = g; _best.sz = pz; _best.nx = 0; _best.ny = 1; _best.nz = 0;
     return true;
   }
