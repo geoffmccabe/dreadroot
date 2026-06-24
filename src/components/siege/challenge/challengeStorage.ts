@@ -69,7 +69,7 @@ export async function deleteChallenge(id: string): Promise<string | null> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const runsTbl = () => (supabase as any).from('challenge_runs');
 
-export interface LeaderboardEntry { player_name: string | null; score: number; completed: boolean; time_ms: number | null; }
+export interface LeaderboardEntry { player_name: string | null; score: number; completed: boolean; time_ms: number | null; wave_reached: number | null; }
 export interface Leaderboard { top: LeaderboardEntry[]; plays: number; }
 
 /** Top-5 + the player's 1-based RANK for a just-finished score (how many runs beat it, +1) + total plays.
@@ -98,7 +98,7 @@ export async function listLeaderboards(challengeIds: string[], topN = 5): Promis
   const out: Record<string, Leaderboard> = {};
   if (!challengeIds.length) return out;
   const { data } = await runsTbl()
-    .select('challenge_id,player_name,score,completed,time_ms')
+    .select('challenge_id,player_name,score,completed,time_ms,wave_reached')
     .in('challenge_id', challengeIds)
     .order('score', { ascending: false })
     .limit(2000);
@@ -106,7 +106,7 @@ export async function listLeaderboards(challengeIds: string[], topN = 5): Promis
   for (const row of (data ?? []) as any[]) {
     const lb = out[row.challenge_id] ?? (out[row.challenge_id] = { top: [], plays: 0 });
     lb.plays++;
-    if (lb.top.length < topN) lb.top.push({ player_name: row.player_name, score: row.score, completed: row.completed, time_ms: row.time_ms });
+    if (lb.top.length < topN) lb.top.push({ player_name: row.player_name, score: row.score, completed: row.completed, time_ms: row.time_ms, wave_reached: row.wave_reached });
   }
   return out;
 }

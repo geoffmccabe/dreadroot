@@ -73,9 +73,10 @@ export function ChallengeResultPanel() {
                 {board.top.map((e, i) => {
                   const me = e.score === res.score;   // highlight the just-played run
                   return (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '1px 0', color: i === 0 ? '#ffd27f' : me ? '#8fe6a0' : '#c9d6ec', fontWeight: me ? 800 : 400 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {e.player_name ?? 'anon'}{e.completed ? ' ✓' : ''}</span>
-                      <span style={{ fontWeight: 700 }}>{e.score.toLocaleString()}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '1px 0', color: i === 0 ? '#ffd27f' : me ? '#8fe6a0' : '#c9d6ec', fontWeight: me ? 800 : 400 }}>
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i + 1}. {e.player_name ?? 'anon'}{e.completed ? ' ✓' : ''}</span>
+                      <span style={{ width: 64, textAlign: 'right', color: '#9fb4d0' }}>{e.wave_reached != null ? `Lvl ${e.wave_reached}` : '—'}</span>
+                      <span style={{ width: 72, textAlign: 'right', fontWeight: 700 }}>{e.score.toLocaleString()}</span>
                     </div>
                   );
                 })}

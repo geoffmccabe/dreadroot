@@ -1902,6 +1902,10 @@ export function FirstPersonControls({
       k.shift = k.space = k.ctrl = k.q = k.z = k.e = false;
       k.previouslyCtrl = false;
       k.rightMouse = false;
+      // Release hold-to-fire too — when a menu/result panel takes pointer lock, the browser stops
+      // delivering mouseup, so an automatic weapon would keep frame-loop-firing and the gunshot sound
+      // machine-guns the same fraction forever (the "stuck sound on game end").
+      leftMouseDownRef.current = false;
     }
   }, [gl, cancelPentabulletCharge]);
   

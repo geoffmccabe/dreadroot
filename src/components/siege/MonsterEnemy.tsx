@@ -701,9 +701,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // round(initialHealth/10) at the body.
     if (inst.dead && !s.killFired) {
       s.killFired = true; s.liteActive = false; clearLightningCaster(inst.id); void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp);
-      // Remove the head hitbox from the collision grid on death — the death branches below return
-      // before it would be updated, so it'd otherwise stay FROZEN at standing-head height and wall
-      // the player walking through a field of corpses (it's only needed for headshots while alive).
+      // A dead monster must NEVER block movement. Pull BOTH its body box and head hitbox out of the
+      // collision grid the moment it dies — the death branches below return before these would be
+      // updated, so they'd otherwise stay FROZEN at full height and wall the player (the step-up then
+      // jitters the screen trying to clamber over them). The lying body still renders; a low wade zone
+      // is registered once it settles. (Removed here, not just at settle, because a corpse that keeps
+      // sliding never reaches the settle code → its box would block forever.)
+      worldCollisionGrid.remove(box); monsterBoxes.delete(box);
       if (headBox) { worldCollisionGrid.remove(headBox); headBoxes.delete(headBox); }
     }
 

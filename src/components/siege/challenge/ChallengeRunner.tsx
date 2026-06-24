@@ -40,6 +40,7 @@ export function ChallengeRunner() {
   const { user } = useAuth();
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
+  const groundSnap = useRef<{ until: number } | null>(null);   // drop the player onto the street once its BVH loads
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const preMap = useRef<string | null>(null);          // which map, so we can jump back on finish
   const r = useRef({
@@ -68,15 +69,19 @@ export function ChallengeRunner() {
       // spots inside/under a building (a roof overhead) or on a roof/in a pit (wrong level) — those
       // were trapping monsters where you could hear but never reach them. Falls back to the arena
       // centre (the known-open drop point) if no open spot is found.
-      let mx = cx0, mz = cz0, ground = cy0;
+      let mx = cx0, mz = cz0, ground = cy0, haveBest = false;
       for (let t = 0; t < 16; t++) {
         const ang = Math.random() * Math.PI * 2;
         const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
         const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
-        const g = groundAt(tx, tz, cy0 + 4);
-        if (g == null || Math.abs(g - cy0) > 2.5) continue;              // void / not street level
+        const g = groundAt(tx, tz, cy0 + 4) ?? sampleHeight(tx, tz);
+        if (g == null) continue;                                         // no ground at all → skip
+        // Best-effort: a spread-out ring point on SOME ground (used if no fully-open spot is found —
+        // better than dumping everyone on the player's lap, which happened before the city BVH loads).
+        if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; }
+        if (Math.abs(g - cy0) > 2.5) continue;                          // not street level (roof/pit)
         if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 5) != null) continue;  // a roof within 5m → enclosed
-        mx = tx; mz = tz; ground = g; break;
+        mx = tx; mz = tz; ground = g; break;                            // fully open street point
       }
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
@@ -134,6 +139,10 @@ export function ChallengeRunner() {
       const p = arr?.pos ?? ch.spawn!;
       camera.position.set(p[0], p[1], p[2]);                                    // same map → teleport to the arena
     }
+    // Baked worlds (city, etc.): the scene's BVH ground loads a moment AFTER arrival, so the player can
+    // hover in the air until it's ready (an exploit — sit up high and shoot down). Snap them down onto
+    // the street as soon as the ground exists.
+    if (arr?.pos) groundSnap.current = { until: now + 6000 };
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null });
     startWave(now);
@@ -211,6 +220,17 @@ export function ChallengeRunner() {
   useFrame(() => {
     if (!r.active) return;
     const now = performance.now();
+
+    // Drop the player onto the street once the baked world's BVH ground is available (fixes spawning
+    // 20m in the air and hovering there until you move).
+    if (groundSnap.current) {
+      const g = groundAt(camera.position.x, camera.position.z, camera.position.y + 1);
+      if (g != null) {
+        const target = g + 1.6;                                  // eye height above the street
+        if (camera.position.y > target + 0.3) camera.position.y = target;   // floating → drop onto it
+        if (Math.abs(camera.position.y - target) < 0.5 || now > groundSnap.current.until) groundSnap.current = null;
+      } else if (now > groundSnap.current.until) groundSnap.current = null;
+    }
 
     // 1. Spawn drops whose time has come.
     if (r.pending.length) {
