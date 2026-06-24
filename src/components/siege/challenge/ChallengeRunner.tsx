@@ -10,6 +10,7 @@ import { CatalogMonster, makeHordeMember, type MType, type Ov, type MonsterMods 
 import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
 import { groundAt } from '../siegeGround';
+import { raycastMesh } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart } from './challengeControl';
@@ -63,12 +64,20 @@ export function ChallengeRunner() {
       ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100, damageMul: drop.boss.damagePct / 100 }
       : undefined;
     for (let i = 0; i < drop.count; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
-      const mx = cx0 + Math.cos(ang) * rr, mz = cz0 + Math.sin(ang) * rr;
-      // Land on the STREET (BVH mesh) near the player's level, not the terrain far below. Cast from a
-      // bit above the arena height so we hit the street, not a rooftop.
-      const ground = groundAt(mx, mz, cy0 + 4) ?? sampleHeight(mx, mz) ?? cy0;
+      // Pick an OPEN spawn point: on the street near the player's level, with open sky above. Rejects
+      // spots inside/under a building (a roof overhead) or on a roof/in a pit (wrong level) — those
+      // were trapping monsters where you could hear but never reach them. Falls back to the arena
+      // centre (the known-open drop point) if no open spot is found.
+      let mx = cx0, mz = cz0, ground = cy0;
+      for (let t = 0; t < 16; t++) {
+        const ang = Math.random() * Math.PI * 2;
+        const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
+        const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
+        const g = groundAt(tx, tz, cy0 + 4);
+        if (g == null || Math.abs(g - cy0) > 2.5) continue;              // void / not street level
+        if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 5) != null) continue;  // a roof within 5m → enclosed
+        mx = tx; mz = tz; ground = g; break;
+      }
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
         id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],

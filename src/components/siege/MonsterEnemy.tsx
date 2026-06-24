@@ -699,7 +699,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (inst.dead && liteLoopRef.current) { stopLoopSound(liteLoopRef.current); liteLoopRef.current = null; }
     // Coin drop: fire ONCE on death. Open-world only (the helper skips challenge kills). DIVI =
     // round(initialHealth/10) at the body.
-    if (inst.dead && !s.killFired) { s.killFired = true; s.liteActive = false; clearLightningCaster(inst.id); void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
+    if (inst.dead && !s.killFired) {
+      s.killFired = true; s.liteActive = false; clearLightningCaster(inst.id); void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp);
+      // Remove the head hitbox from the collision grid on death — the death branches below return
+      // before it would be updated, so it'd otherwise stay FROZEN at standing-head height and wall
+      // the player walking through a field of corpses (it's only needed for headshots while alive).
+      if (headBox) { worldCollisionGrid.remove(headBox); headBoxes.delete(headBox); }
+    }
 
     // ── BULLSEYE DEATH: a bullseye that KILLS plays the same dramatic feet-pivot
     //    spin-fall as the stagger (360°+90° to flat, back/face by direction), then
