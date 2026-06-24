@@ -12,6 +12,9 @@ import { NpcSystem } from '@/features/npc/NpcSystem';
 import { FPSDisplay, DFlowOutputPanel } from '@/components/FPSCounter';
 import { PerformanceOverlay } from '@/components/PerformanceOverlay';
 import { useUserData } from '@/hooks/useUserData';
+import { useRocketBelt, setRocketBeltMax } from '@/config/rocketBelt';
+import { maxBursts } from '@/features/rocketBelt/rocketBelt';
+import { useSupporterStatus } from '@/features/supporters/useSupporterStatus';
 import { worldStore } from '@/services/worldStore';
 import { isMeleeKillInProgress } from '@/features/enemies/ai/applyAttack';
 import { spawnCoinDrops } from '@/features/coinDrops/coinDropBus';
@@ -323,6 +326,15 @@ export function Fortress() {
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Rocket Belt: compute the max burst budget from player level + equipped belt tier + VIP
+  // level, and publish it to the rocketBelt store. FortressControls runs the spend/regen and
+  // the HUD reads {available, max}. (Formula in features/rocketBelt/rocketBelt.ts.)
+  const rocketBeltEquipped = useRocketBelt();
+  const { currentLevel: vipLevel } = useSupporterStatus(user?.id ?? null);
+  useEffect(() => {
+    setRocketBeltMax(maxBursts(profile?.current_level ?? 1, rocketBeltEquipped?.tier ?? 0, vipLevel ?? 0));
+  }, [profile?.current_level, rocketBeltEquipped?.tier, vipLevel]);
 
   // In-game chat (shared module): identity from the auth user, with a stable
   // per-user colour. Scoped to the current world via the shared realtime backend.

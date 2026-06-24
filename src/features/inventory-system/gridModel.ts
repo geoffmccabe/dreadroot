@@ -137,7 +137,7 @@ export interface ItemClass {
 
 const ARMOR_CATS = ['armor'];
 const BOOTS_CATS = ['boots'];
-const SPECIAL_CATS = ['consumable', 'potion'];
+const SPECIAL_CATS = ['consumable', 'potion', 'gear'];
 
 export interface EquipDropResult {
   ok: boolean;

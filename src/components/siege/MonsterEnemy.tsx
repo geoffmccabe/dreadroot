@@ -20,7 +20,7 @@ import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { getChallengeState } from './challenge/challengeStore';
-import { tickDarkLordLightning, tryStartLightning, clearLightningCaster } from './darkLord/darkLordLightning';
+import { tickDarkLordLightning, tryStartLightning, clearLightningCaster } from './darkLord/darkLordLightningCore';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';

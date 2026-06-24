@@ -20,7 +20,8 @@ import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
 import { useActiveGame } from '@/config/activeGame';
-import { HealthBar } from '@/features/shwarm';
+import { HealthBar, JetBoostIndicator } from '@/features/shwarm';
+import { RocketBeltHud } from '@/features/rocketBelt/RocketBeltHud';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
 // equipTransfer is a STANDALONE export, NOT a method on worldStore (worldStore.equipTransfer
@@ -972,7 +973,8 @@ export function FortressHUD(props: FortressHUDProps) {
             color: 'hsl(var(--hud-text))',
             fontFamily: 'var(--hud-font)',
             padding: '8px 12px',
-            height: '60px',
+            height: '75px', // +25%: extends upward (bottom-anchored). The gear/market
+                            // buttons are flex-centered, so they auto-shift up half (~7.5px).
             boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
@@ -980,28 +982,33 @@ export function FortressHUD(props: FortressHUDProps) {
             cursor: 'pointer',
           }}
         >
-          {/* User image */}
-          {profile?.avatar_url && (
-            <img
-              src={profile.avatar_url}
-              alt="User"
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '1px solid hsla(var(--hud-border))',
-                flexShrink: 0,
-              }}
-            />
-          )}
+          {/* User image + VIP level beneath it (USER / VIP1 / VIP2 / VIP3, tier-colored) */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+            {profile?.avatar_url && (
+              <img
+                src={profile.avatar_url}
+                alt="User"
+                style={{
+                  width: '44px',
+                  height: '44px',
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '1px solid hsla(var(--hud-border))',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <span style={{ fontSize: '11px', fontWeight: 700, lineHeight: 1, color: vipColorVar(vipLevel) }}>
+              {vipLabel(vipLevel)}
+            </span>
+          </div>
 
           {/* Info columns */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {/* Row 1: Name - Level - Coins - Blocks */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-              <span style={{ fontWeight: 600, color: vipColorVar(vipLevel) }}>
-                {vipLabel(vipLevel)}: {profile?.display_name || 'Unknown'}
+              <span style={{ fontWeight: 600 }}>
+                {profile?.display_name || 'Unknown'}
               </span>
 
               <span style={{ fontWeight: 600, opacity: 0.85 }}>
@@ -1074,8 +1081,8 @@ export function FortressHUD(props: FortressHUDProps) {
               )}
             </div>
 
-            {/* Row 2: Hearts - Health - Pts - Jets (20% smaller) */}
-            <div style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
+            {/* Row 2: Hearts - Health - Pts - Rocket Belt (jets moved to row 3) */}
+            <div className="flex items-center" style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
               <HealthBar
                 currentHealth={currentHealth}
                 maxHealth={maxHealth}
@@ -1083,7 +1090,18 @@ export function FortressHUD(props: FortressHUDProps) {
                 jetBoostAvailable={jetBoostAvailable}
                 jetBoostMax={jetBoostMax}
                 isGliding={isGliding}
+                showJets={false}
                 className="!bg-transparent !border-0 !p-0"
+              />
+              <RocketBeltHud />
+            </div>
+
+            {/* Row 3: Jet boosts, left-aligned directly under the hearts */}
+            <div className="flex items-center" style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
+              <JetBoostIndicator
+                jetBoostAvailable={jetBoostAvailable}
+                jetBoostMax={jetBoostMax}
+                isGliding={isGliding}
               />
             </div>
 

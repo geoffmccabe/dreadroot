@@ -96,7 +96,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isHeightmap && <BuilderObjectsLayer />}
       {isHeightmap && <BuilderController />}
       {/* Magic-portal VFX inside the lobby warp gate (SWW world only). */}
-      {!isBlank && <SiegePortalEffect />}
+      {!isBlank && <Suspense fallback={null}><SiegePortalEffect /></Suspense>}
       {/* (Magic Chest model removed — the lobby already has a chest at the spot; the open/spin
           interaction lives in MagicChestPanel and works on that existing chest.) */}
       {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}

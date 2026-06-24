@@ -6,7 +6,7 @@ export * from './constants';
 
 // Components
 export { ShwarmDesignPanel } from './components/ShwarmDesignPanel';
-export { HealthBar, DeathOverlay } from './components/HealthBar';
+export { HealthBar, DeathOverlay, JetBoostIndicator } from './components/HealthBar';
 export { ShwarmRenderer } from './components/ShwarmRenderer';
 export type { ShwarmRendererHandle } from './components/ShwarmRenderer';
 

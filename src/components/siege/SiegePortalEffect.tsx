@@ -1,9 +1,9 @@
-// SiegePortalEffect — an animated "portal to another universe" inside the lobby warp gate:
-// swirling spirals + fractal tendrils + whirling, cycling colors with a bright pulsing core,
-// masked to an oval so it reads as a magic gateway. Pure fragment-shader VFX on one plane —
-// cheap (a single quad). Positioned to fill the meadow_SM_Bld_Warpgate_01 opening.
+// SiegePortalEffect — an animated "portal to another universe" inside the lobby warp gate.
+// A 3-layer "hamburger": two counter-rotating spiral buns (now 60% opaque so the centre shows
+// through) with a spinning rainbow-Moiré disc as the MEAT between them. The Moiré is the opaque
+// core that makes the portal's colours read against a bright sky. Pure shader VFX on a few quads.
 import { useMemo } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // Gate opening (meadow warpgate at (-91,24,301.5); opening faces +Z toward the lobby).
@@ -14,7 +14,8 @@ const PORTAL_H = 6.0 * 0.8;
 const FRAG = `
 varying vec2 vUv;
 uniform float uTime;
-uniform float uDir;   // +1 / -1 → spiral handedness + spin direction
+uniform float uDir;     // +1 / -1 → spiral handedness + spin direction
+uniform float uAlpha;   // overall layer opacity (spirals run at 60%)
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p){
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -41,19 +42,36 @@ void main(){
   // Brighten + keep a floor so it never reads as "just dark colors", and stays vivid against
   // the bright sky (normal-blended, so unlike additive it doesn't wash out over white).
   col = col * 1.7 + 0.06;
-  // Mostly-opaque disc (so you can't see sky through it) with a quick soft fade only at the rim.
+  // Soft fade only at the rim.
   float mask = smoothstep(1.0, 0.9, r);
   float alpha = max(mask * 0.92, mask * clamp(length(col) * 0.7, 0.0, 1.0));
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col, alpha * uAlpha);
 }`;
 
 const VERT = `
 varying vec2 vUv;
 void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 
-function Spiral({ z, dir, speed }: { z: number; dir: number; speed: number }) {
+// The Moiré "meat": a square texture spun around its centre and masked to a DISC so its corners
+// are cut off (never poke past the round portal) while its edges reach the portal's inner rim.
+const MOIRE_FRAG = `
+varying vec2 vUv;
+uniform float uTime;
+uniform sampler2D uTex;
+void main(){
+  vec2 c = vUv - 0.5;                                  // centred −0.5..0.5
+  float a = uTime * 0.35;                              // gentle spin
+  float s = sin(a), co = cos(a);
+  vec2 rot = vec2(c.x*co - c.y*s, c.x*s + c.y*co) + 0.5;
+  vec4 tex = texture2D(uTex, rot);
+  float r = length(c) * 2.0;                           // 0 centre → 1 at edge midpoint → 1.41 at corner
+  float mask = smoothstep(1.0, 0.92, r);               // disc: full inside, cut by the edge (kills corners)
+  gl_FragColor = vec4(tex.rgb, tex.a * mask);
+}`;
+
+function Spiral({ z, dir, speed, renderOrder }: { z: number; dir: number; speed: number; renderOrder: number }) {
   const mat = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uDir: { value: dir } },
+    uniforms: { uTime: { value: 0 }, uDir: { value: dir }, uAlpha: { value: 0.6 } },
     vertexShader: VERT,
     fragmentShader: FRAG,
     transparent: true,
@@ -62,19 +80,42 @@ function Spiral({ z, dir, speed }: { z: number; dir: number; speed: number }) {
   }), [dir]);
   useFrame((_, dt) => { mat.uniforms.uTime.value += dt * speed; });
   return (
-    <mesh position={[PORTAL_POS[0], PORTAL_POS[1], z]} material={mat}>
+    <mesh position={[PORTAL_POS[0], PORTAL_POS[1], z]} material={mat} renderOrder={renderOrder}>
       <planeGeometry args={[PORTAL_W, PORTAL_H]} />
     </mesh>
   );
 }
 
+function Moire({ z, renderOrder }: { z: number; renderOrder: number }) {
+  const tex = useLoader(THREE.TextureLoader, '/rainbow_moire_animation.webp');
+  const mat = useMemo(() => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uTex: { value: tex } },
+      vertexShader: VERT,
+      fragmentShader: MOIRE_FRAG,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+  }, [tex]);
+  useFrame((_, dt) => { mat.uniforms.uTime.value += dt; });
+  // SQUARE plane (side = portal width) so the disc mask is a true circle that touches the gate
+  // sides; centred in the opening.
+  return (
+    <mesh position={[PORTAL_POS[0], PORTAL_POS[1], z]} material={mat} renderOrder={renderOrder}>
+      <planeGeometry args={[PORTAL_W, PORTAL_W]} />
+    </mesh>
+  );
+}
+
 export function SiegePortalEffect() {
-  // Two counter-rotating layers: the base swirl, and a reverse one spinning 50% faster, set 10cm
-  // deeper into the gate (away from spawn).
+  // Hamburger, back → front (camera looks −Z, so larger z is nearer): back bun, Moiré meat, front bun.
   return (
     <>
-      <Spiral z={PORTAL_POS[2]} dir={1} speed={1} />
-      <Spiral z={PORTAL_POS[2] - 0.1} dir={-1} speed={1.5} />
+      <Spiral z={PORTAL_POS[2] - 0.1} dir={-1} speed={1.5} renderOrder={0} />
+      <Moire  z={PORTAL_POS[2] - 0.05} renderOrder={1} />
+      <Spiral z={PORTAL_POS[2]} dir={1} speed={1} renderOrder={2} />
     </>
   );
 }

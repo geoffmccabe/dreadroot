@@ -13,9 +13,48 @@ interface HealthBarProps {
   jetBoostAvailable?: number;
   jetBoostMax?: number;
   isGliding?: boolean;
+  /** When false, the jet-boost triangles are omitted (the HUD renders them on
+   *  their own row instead). Defaults true so other callers are unchanged. */
+  showJets?: boolean;
 }
 
-export function HealthBar({ currentHealth, maxHealth, totalPoints, className, jetBoostAvailable = 0, jetBoostMax = 0, isGliding = false }: HealthBarProps) {
+// Jet-boost triangles (+ glide "G"), extracted so the HUD can place them on a
+// separate row aligned under the hearts. Renders nothing when there are no jets.
+export function JetBoostIndicator({
+  jetBoostAvailable = 0, jetBoostMax = 0, isGliding = false, className,
+}: { jetBoostAvailable?: number; jetBoostMax?: number; isGliding?: boolean; className?: string }) {
+  if (!(jetBoostMax > 0 || isGliding)) return null;
+  return (
+    <div className={cn("flex items-center gap-0.5", className)}>
+      {Array.from({ length: jetBoostMax }).map((_, i) => {
+        const isAvailable = i < jetBoostAvailable;
+        return (
+          <svg
+            key={`boost-${i}`}
+            width="12"
+            height="12"
+            viewBox="0 0 10 10"
+            className={cn(
+              "drop-shadow-[0_0_2px_rgba(255,165,0,0.5)]",
+              isAvailable ? "fill-orange-500" : "fill-transparent stroke-orange-500"
+            )}
+            strokeWidth={isAvailable ? 0 : 1.5}
+          >
+            {/* Inverted triangle (pointing down) */}
+            <polygon points="5,10 0,0 10,0" />
+          </svg>
+        );
+      })}
+      {isGliding && (
+        <span className="ml-1 text-[10px] font-bold text-cyan-400 drop-shadow-[0_0_2px_rgba(0,255,255,0.5)]">
+          G
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function HealthBar({ currentHealth, maxHealth, totalPoints, className, jetBoostAvailable = 0, jetBoostMax = 0, isGliding = false, showJets = true }: HealthBarProps) {
   const [shake, setShake] = useState(false);
   const [prevHealth, setPrevHealth] = useState(currentHealth);
   
@@ -104,35 +143,14 @@ export function HealthBar({ currentHealth, maxHealth, totalPoints, className, je
         </span>
       )}
 
-      {/* Jet Boost indicators - inverted triangles + Glide indicator */}
-      {(jetBoostMax > 0 || isGliding) && (
-        <div className="ml-2 flex items-center gap-0.5">
-          {Array.from({ length: jetBoostMax }).map((_, i) => {
-            const isAvailable = i < jetBoostAvailable;
-            return (
-              <svg
-                key={`boost-${i}`}
-                width="12"
-                height="12"
-                viewBox="0 0 10 10"
-                className={cn(
-                  "drop-shadow-[0_0_2px_rgba(255,165,0,0.5)]",
-                  isAvailable ? "fill-orange-500" : "fill-transparent stroke-orange-500"
-                )}
-                strokeWidth={isAvailable ? 0 : 1.5}
-              >
-                {/* Inverted triangle (pointing down) */}
-                <polygon points="5,10 0,0 10,0" />
-              </svg>
-            );
-          })}
-          {/* Glide indicator - shows G when gliding is active */}
-          {isGliding && (
-            <span className="ml-1 text-[10px] font-bold text-cyan-400 drop-shadow-[0_0_2px_rgba(0,255,255,0.5)]">
-              G
-            </span>
-          )}
-        </div>
+      {/* Jet Boost indicators (omitted when the HUD shows them on their own row) */}
+      {showJets && (
+        <JetBoostIndicator
+          jetBoostAvailable={jetBoostAvailable}
+          jetBoostMax={jetBoostMax}
+          isGliding={isGliding}
+          className="ml-2"
+        />
       )}
     </div>
   );
