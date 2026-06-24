@@ -22,18 +22,27 @@ export const WispBlock: React.FC<WispBlockProps> = ({
   // Per-tier look (color, glow, metal, opacity + which effect to animate).
   const { style, effect } = useMemo(() => wispStyleFor(blockType.tier), [blockType.tier]);
 
-  const material = useMemo(() => {
-    return new THREE.MeshStandardMaterial({
-      color: new THREE.Color(style.color),
-      transparent: style.opacity < 1,
-      opacity: style.opacity,
-      emissive: new THREE.Color(style.emissive),
-      emissiveIntensity: style.emissiveIntensity,
-      metalness: style.metalness,
-      roughness: style.roughness,
-      side: THREE.DoubleSide,
-    });
-  }, [style]);
+  // ONE material for the wisp's whole lifetime — mutated when the tier
+  // changes (next spawn), never recreated. Recreating per spawn leaked a
+  // MeshStandardMaterial + its compiled program every tier change since this
+  // component never unmounts. Disposed once on unmount.
+  // transparent:true is fixed (every wisp tier is translucent), so swapping
+  // tiers only writes uniforms below — no shader recompile.
+  const material = useMemo(
+    () => new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, transparent: true }),
+    [],
+  );
+
+  useEffect(() => {
+    material.color.set(style.color);
+    material.emissive.set(style.emissive);
+    material.emissiveIntensity = style.emissiveIntensity;
+    material.metalness = style.metalness;
+    material.roughness = style.roughness;
+    material.opacity = style.opacity;
+  }, [material, style]);
+
+  useEffect(() => () => material.dispose(), [material]);
 
   // Scratch colors reused per-frame (no per-frame allocation).
   const baseEmissive = useMemo(() => new THREE.Color(style.emissive), [style.emissive]);

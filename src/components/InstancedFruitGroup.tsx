@@ -47,6 +47,9 @@ function ensureFruitPulse(): void {
   );
 }
 
+// Instanced-mesh capacity granularity (remount only on crossing a boundary).
+const CAP_BUCKET = 32;
+
 const SLOT_SIZE = (1.0 / ATLAS_GRID_SIZE).toFixed(6);
 const EPS_LO = (4.0 / 256).toFixed(6);
 const EPS_HI = (1 - 4.0 / 256).toFixed(6);
@@ -142,34 +145,46 @@ export function InstancedFruitGroup({ blocks, atlasTexture }: InstancedFruitGrou
     return h;
   }, [blocks, count]);
 
+  // Bucket the mesh capacity to 32 so the instancedMesh only remounts when
+  // fruit cross a 32-block boundary (not on every count change). Within a
+  // bucket we update matrices/UVs in place — no remount, no new GPU buffers.
+  const capacity = Math.max(CAP_BUCKET, Math.ceil(count / CAP_BUCKET) * CAP_BUCKET);
+
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh || count === 0) return;
 
+    // Reuse the capacity-sized UV attribute; only (re)allocate if it grew.
+    let uvAttr = mesh.geometry.getAttribute('instanceUvOffset') as THREE.InstancedBufferAttribute | undefined;
+    if (!uvAttr || (uvAttr.array as Float32Array).length < capacity * 2) {
+      uvAttr = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+      mesh.geometry.setAttribute('instanceUvOffset', uvAttr);
+    }
+    const uvArr = uvAttr.array as Float32Array;
+
     const matrix = new THREE.Matrix4();
-    const uv = new Float32Array(count * 2);
     for (let i = 0; i < count; i++) {
       const b = blocks[i];
       matrix.makeTranslation(b.position_x + 0.5, b.position_y + 0.5, b.position_z + 0.5);
       mesh.setMatrixAt(i, matrix);
       const u = getInstanceUVsForTreeBlock(b.block_type);
-      uv[i * 2] = u.uvOffsetX;
-      uv[i * 2 + 1] = u.uvOffsetY;
+      uvArr[i * 2] = u.uvOffsetX;
+      uvArr[i * 2 + 1] = u.uvOffsetY;
     }
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.geometry.setAttribute('instanceUvOffset', new THREE.InstancedBufferAttribute(uv, 2));
+    uvAttr.needsUpdate = true;
     mesh.count = count;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sig, atlasTexture]);
+  }, [sig, atlasTexture, capacity]);
 
   if (count === 0) return null;
 
   return (
     <instancedMesh
       ref={meshRef}
-      // key on count so capacity always matches; same-count changes update in place
-      key={count}
-      args={[geometry, material, count]}
+      // key on bucketed capacity → remount only when crossing a 32 boundary
+      key={capacity}
+      args={[geometry, material, capacity]}
       // fruit are few; skip frustum culling so the unit-box bounds never
       // mis-cull them (same reasoning as the atlas group's initial bounds)
       frustumCulled={false}
