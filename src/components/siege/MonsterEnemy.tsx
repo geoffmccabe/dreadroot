@@ -537,6 +537,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     cloned.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
+      // Skinned meshes compute their frustum-cull sphere at BIND POSE; scaled-up / animated monsters
+      // (e.g. giant skeletons) can fall outside it and get culled = NOT RENDERED at certain spawn
+      // angles (showed up as totally invisible monsters on the SciFi City map). Never cull them.
+      mesh.frustumCulled = false;
       let mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       if (cfg.zombie || needsColor || cm) {   // clone so per-demon uniforms are independent
         mats = mats.map((mm) => (mm as THREE.Material).clone());
