@@ -315,7 +315,10 @@ export const APOC_CITY_WORLD: WorldDefinition = {
   kind: 'siege',
   meshColliders: true,
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
-  ground: { kind: 'heightmap', surfaceY: 0 },
+  // Editable terrain sits 2 m BELOW the city's road plane (y=0) so the flat streets don't z-fight
+  // (flicker) against the coplanar terrain. The roads are the walkable ground (BVH); the terrain is
+  // a base you can raise with the brush.
+  ground: { kind: 'heightmap', surfaceY: -2 },
   fill: { ambient: 0.7, hemi: 0.55 },
   spawn: { position: [0, 12, 0], yaw: 0 },
   props: undefined,

@@ -282,7 +282,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world' }: { meshColliders?: boolean; dataDir?: string } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320 }: { meshColliders?: boolean; dataDir?: string; renderDist?: number } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -340,8 +340,8 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   });
   const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, _k: i })), [data]);
   const nearGroups = useMemo(() => {
-    const [CX, CZ] = center, R2 = 320 * 320;        // render distance (m). 500 tanked FPS (≈3.7×
-    // the instances); 320 keeps a decent view with the fog off without the load. (was 260.)
+    const [CX, CZ] = center, R2 = renderDist * renderDist;   // render distance (m), per-map (dense maps
+    // like the Apocalypse city pass a smaller value so far fewer of the 8000 objects load/render at once).
     const out: (Group & { _k: number })[] = [];
     for (const g of allGroups) {
       const near = g.matrices.filter((mx) => {
@@ -351,7 +351,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       if (near.length) out.push({ ...g, matrices: near });
     }
     return out;
-  }, [allGroups, center]);
+  }, [allGroups, center, renderDist]);
 
   if (!data) return null;
   return (
