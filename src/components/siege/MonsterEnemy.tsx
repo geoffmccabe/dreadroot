@@ -15,6 +15,7 @@ import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { raycastMesh } from './meshColliderSystem';
+import { addCorpseZone, removeCorpseZone, corpseSlow } from './siegeCorpses';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
@@ -528,7 +529,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const box = useRef(new THREE.Box3()).current;
   useEffect(() => {
     worldCollisionGrid.insert(box); monsterBoxes.add(box); monsterSupport.set(box, sup);
-    return () => { worldCollisionGrid.remove(box); monsterBoxes.delete(box); monsterSupport.delete(box); };
+    return () => { worldCollisionGrid.remove(box); monsterBoxes.delete(box); monsterSupport.delete(box); removeCorpseZone(box); };
   }, [box, sup]);
   // Zombie: a separate HEAD collider above the body, registered in the grid + head set (so it
   // gives the head a physical/headshot shape but demons don't stand on it).
@@ -731,13 +732,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           // Challenge corpse: STAYS put (piles up) with a low collider until the challenge ends
           // (ChallengeRunner clears all mobs on finish/stop/player-death).
           g.position.set(s.x, s.y, s.z);
-          // Corpse collider = a LOW flat slab (0.3 m). Below the player's 0.6 m step-up AND the
-          // monster STEP_UP (0.45), so everyone flows up-and-over a body instead of being walled by
-          // it — but it still exists, so the body rests/piles and others can stand on it.
+          // The body must NOT block movement (piles were jamming the player AND the live monsters →
+          // sitting ducks). Take the corpse collider OUT of the blocking grid and register its
+          // footprint as a WADE ZONE instead: everyone flows straight over it, at half speed.
           const cr = Math.max(0.4, H * 0.3);
           box.min.set(s.x - cr, s.y, s.z - cr);
           box.max.set(s.x + cr, s.y + 0.3, s.z + cr);
-          worldCollisionGrid.update(box);
+          worldCollisionGrid.remove(box); monsterBoxes.delete(box);
+          addCorpseZone(box);
           s.beDone = true;                                       // freeze: stop per-frame terrain settle
         } else {                                                 // open world: lie, then sink → despawn
           const yOff = held >= LIE ? -H * Math.min(1, (held - LIE) / SINK) : 0;
@@ -1186,7 +1188,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
       // ENRAGE: once damaged (hp < max), an enrageOnHit monster switches walk→run and +50% speed.
       const enraged = !!c.enrageOnHit && inst.hp < inst.maxHp;
-      const chaseSpd = (enraged ? SPD * 1.5 : SPD) * injMul;
+      const chaseSpd = (enraged ? SPD * 1.5 : SPD) * injMul * corpseSlow(s.x, s.z);   // half speed wading over bodies
       const loco = injured ? 'crawl' : (enraged ? clips.run : clips.walk);
       if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its

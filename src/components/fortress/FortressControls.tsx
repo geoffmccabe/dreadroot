@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
+import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
 import { calculatePlacementFast } from '@/lib/voxelRaycast';
@@ -2499,8 +2500,11 @@ export function FirstPersonControls({
       const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
       // Use clamped delta for movement to prevent tunneling
       const moveDt = Math.min(delta, 1/30);
-      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * moveDt);
-      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt);
+      // Siege: wading over a monster corpse halves horizontal speed (corpseSlow returns 1 when there
+      // are no corpse zones, so this is a no-op in DreadRoot).
+      const wade = corpseSlow(camera.position.x, camera.position.z);
+      deltaMovement.addScaledVector(forward, direction.current.z * runSpeed * wade * moveDt);
+      deltaMovement.addScaledVector(right, direction.current.x * runSpeed * wade * moveDt);
       
       // Apply knockback velocity (decays over time)
       if (knockbackVelRef.current.lengthSq() > 0.0001) {
