@@ -13,6 +13,8 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
+import { findPath } from './siegePathfinding';
+import { raycastMesh } from './meshColliderSystem';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
@@ -367,7 +369,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
     beFor: 0, beSlideV: 0, beSliding: false, beFell: false, beFellVY: 0, beSettledAt: 0, beDone: false,
     // Skeleton injured-crawl + death-variant state.
-    deathVariant: '' });
+    deathVariant: '',
+    // Stuck-detection + pathfinding (kicks in only when blocked from reaching the player).
+    bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0,
+    path: null as import('./siegePathfinding').PathPt[] | null });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -1117,7 +1122,32 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         }
       }
     } else if (dist < c.aggro) {                            // found a player -> pursue/attack
-      g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
+      // ── Stuck → pathfind around obstacles (player hiding in a building/garage) ──
+      // Track progress toward the player; if a melee monster can't get closer for ~1.5s while still
+      // out of reach, it's blocked — route AROUND the wall with grid A* and steer toward the next
+      // waypoint (recomputed every ~0.8s). Switches to the crawl anim where the rig has one.
+      let cdx = dx, cdz = dz, cdist = dist, pathLoco = false;
+      if (c.meleeContact && dist > c.attackRange + 0.6) {
+        if (s.progressAt === 0 || dist < s.bestDist - 0.25) { s.bestDist = dist; s.progressAt = now; }
+        if (now - s.progressAt > 1500) {                                   // not getting closer → stuck
+          if (now > s.pathAt) {
+            // Only pathfind if a real WALL is between us and the player (a chest-height ray hits mesh
+            // before reaching them) — otherwise we're just jammed in a crowd, which the crowd logic
+            // handles. Keeps A* (and its raycasts) off the hot path except at a genuine obstacle.
+            const losHit = raycastMesh(s.x, s.y + 1.1, s.z, dx / dist, 0, dz / dist, Math.min(dist, 64));
+            const walled = losHit != null && losHit < dist - 1.0;
+            s.path = walled ? findPath(s.x, s.z, camera.position.x, camera.position.z, s.y) : null;
+            s.pathIdx = 0; s.pathAt = now + 800 + Math.random() * 500;     // jitter so a horde doesn't all rebuild at once
+            s.pathing = !!s.path; s.bestDist = dist; s.progressAt = now;   // give the fresh route a moment before re-flagging
+          }
+          if (s.path && s.path.length) {
+            let wp = s.path[s.pathIdx];
+            while (wp && Math.hypot(wp.x - s.x, wp.z - s.z) < 1.3 && s.pathIdx < s.path.length - 1) wp = s.path[++s.pathIdx];
+            if (wp) { cdx = wp.x - s.x; cdz = wp.z - s.z; cdist = Math.hypot(cdx, cdz) || 1; pathLoco = true; }
+          }
+        }
+      } else { s.bestDist = dist; s.progressAt = now; s.pathing = false; s.path = null; }
+      g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
       // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
       // monster keeps WALKING toward you between spits instead of standing still and spraying.
       if (c.rangedRange && dist <= c.rangedRange && now - s.lastRanged > s.nextRangedCd) {
@@ -1162,10 +1192,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
         // holds the vomit pose during the spit (movement continues).
-        const step = Math.min(chaseSpd * delta, dist - c.attackRange);
-        mvx = dx / dist; mvz = dz / dist; moving = true;
+        const step = Math.min(chaseSpd * delta, pathLoco ? chaseSpd * delta : dist - c.attackRange);
+        mvx = cdx / cdist; mvz = cdz / cdist; moving = true;   // toward the player, or the path waypoint when stuck
         s.x += mvx * step; s.z += mvz * step;
-        if (now > s.swipeUntil) play(loco);   // walk, or RUN once enraged
+        if (now > s.swipeUntil) play(pathLoco && hasCrawl ? 'crawl' : loco);   // crawl while threading through; walk/run otherwise
       } else if (c.rangedRange && !c.kiteMin) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
@@ -1259,7 +1289,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // groundAt prefers the BVH mesh surface (city streets, SWW rocks) below the monster's
     // step reach, falling back to terrain — so monsters stand on the city instead of falling
     // through to the flat ground beneath it. Ceiling = feet + a step's worth of headroom.
-    let groundY = groundAt(s.x, s.z, feet + 3) ?? feet;
+    // While PATHFINDING through a building, hug the floor (low ceiling) so the monster passes UNDER
+    // a doorway header instead of snapping up onto its underside and floating into the opening.
+    let groundY = groundAt(s.x, s.z, s.pathing ? feet + STEP_UP : feet + 3) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
     // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-
