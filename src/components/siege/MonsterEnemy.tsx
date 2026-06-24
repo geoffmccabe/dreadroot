@@ -17,6 +17,7 @@ import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { getChallengeState } from './challenge/challengeStore';
+import { tickDarkLordLightning, tryStartLightning, clearLightningCaster } from './darkLord/darkLordLightning';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
@@ -86,6 +87,7 @@ export interface MonsterConfig {
   boss?: 'teleporter';        // 'teleporter' = Dark Lord: teleports around the player, opacity = damage
                               // resistance, aura of black/purple fire + smoke, melee strike from behind
   bossSpeedFactor?: number;   // shamble-speed multiplier while corporeal (default 0.4 = slow)
+  lightning?: boolean;        // Dark Lord: fingertip lightning stream attack (darkLordLightning)
   // Per-individual colour treatment (for varied hordes). Applied in-shader in this order:
   // hue-rotate → desaturate → red tint. Each defaults to off (or the zombie auto-desat).
   desat?: number;             // explicit desaturation 0..1 (overrides the zombie auto-desat)
@@ -286,6 +288,19 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     });
     return (spine ?? hips) as THREE.Bone | null;
   }, [cloned]);
+
+  // Dark Lord lightning origins: the two index fingertips (fall back to the hands). The beam
+  // streams from these, so it tracks the cast pose's extended fingers.
+  const liteBones = useMemo(() => {
+    if (!cfg.lightning) return null;
+    const by: Record<string, THREE.Object3D> = {};
+    cloned.traverse((o) => { by[o.name] = o; });
+    const l = by['IndexFinger_04'] ?? by['Hand_L'];
+    const r = by['IndexFinger_04.001'] ?? by['Hand_R'];
+    return l && r ? { l, r } : null;
+  }, [cloned, cfg.lightning]);
+  const _hL = useMemo(() => new THREE.Vector3(), []);
+  const _hR = useMemo(() => new THREE.Vector3(), []);
   // Head bone — the head HITBOX rides this so it tracks the skull through the
   // animation (bend-back, bob, lunge). General: any rig with a 'head' bone gets
   // it; rigs without one fall back to the static root-anchored head box.
@@ -332,6 +347,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   useEffect(() => { mixer.timeScale = J.anim * effAnimSpeed; }, [mixer, J.anim, effAnimSpeed]);
   const st = useRef({ x: spawn[0], y: spawn[1], z: spawn[2], vy: 0, cur: '', lastAttack: 0, swipeUntil: 0, wx: spawn[0], wz: spawn[2], wNext: 0, tumbling: false, spinX: 0, spinZ: 0, wasClimbing: false, lastRanged: 0, nextRangedCd: 0,
     teleAt: 0, teleArrived: 0, teleDwell: 0, behindUntil: 0, bossAttacked: false, resting: false,
+    liteActive: false, liteStart: 0, liteOnSince: 0, liteTick: 0, liteRoll: 0, rechargeUntil: 0,
     moanNext: 0, contactNext: 0, meleeNext: 0, swingResolveAt: 0, swingHit: false, attackSoundAt: 0, strikeAt: 0,
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
@@ -419,7 +435,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     kbScale: cfg.kbInverseSize ? 6 / H : undefined,   // 1-3·(6/H) velocity → ~1-3m slide ÷ size
     tumbleOnBullet: cfg.bulletTumble ?? false,        // mushroom: bullets launch + tumble it
   }).current;
-  useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
+  useEffect(() => { addDemon(inst); return () => { removeDemon(inst); clearLightningCaster(inst.id); }; }, [inst]);
   useBossAura(inst, cfg.boss === 'teleporter');
 
   // Per-monster BOX hitboxes (reactive to editor edits). MUST be after `inst`/`H`
@@ -648,7 +664,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
     // Coin drop: fire ONCE on death. Open-world only (the helper skips challenge kills). DIVI =
     // round(initialHealth/10) at the body.
-    if (inst.dead && !s.killFired) { s.killFired = true; void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
+    if (inst.dead && !s.killFired) { s.killFired = true; s.liteActive = false; clearLightningCaster(inst.id); void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
 
     // ── BULLSEYE DEATH: a bullseye that KILLS plays the same dramatic feet-pivot
     //    spin-fall as the stagger (360°+90° to flat, back/face by direction), then
@@ -936,14 +952,32 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       const dwell = s.teleDwell || 1;
       inst.opacity = Math.max(0, 1 - (now - s.teleArrived) / dwell);   // fade out before each jump
-      if (now >= s.teleAt) {
+      // ── LIGHTNING: fingertip stream takes priority while a bout is active; full power despite
+      //    transparency. A roll (40%/s) starts a bout while corporeal + settled; a >5s bout forces
+      //    a recharge teleport (30-50m, rest 10s). ──
+      let casting = false;
+      if (c.lightning && liteBones) {
+        liteBones.l.getWorldPosition(_hL); liteBones.r.getWorldPosition(_hR);
+        if (s.liteActive) {
+          const cmd = tickDarkLordLightning(inst.id, s, inst.hitAt, c.damageMul ?? 1, now,
+            camera.position.x, camera.position.y, camera.position.z, _hL, _hR);
+          casting = cmd.casting;
+          if (cmd.recharge) s.teleAt = now;       // bout maxed → teleport away to recharge next
+        } else if (!s.resting && now < s.teleAt) {
+          tryStartLightning(s, now, camera.position.x, camera.position.y, camera.position.z, _hL, _hR);
+        }
+      }
+      if (casting) {
+        play(clips.attack);                       // hold the cast; no teleport/shamble mid-bout
+      } else if (now >= s.teleAt) {
         camera.getWorldDirection(_fwd); _fwd.y = 0; _fwd.normalize();
         let nx: number, nz: number;
-        if (Math.random() < 0.10) {
-          // FAR retreat: 10-50m out, then rest (idle) 3-6s before jumping back in.
-          const ang = Math.random() * Math.PI * 2, r = 10 + Math.random() * 40;
+        const recharging = now < s.rechargeUntil;
+        if (recharging || Math.random() < 0.10) {
+          // RECHARGE (30-50m, rest the rest of the 10s) OR a normal far retreat (10-50m, 3-6s).
+          const ang = Math.random() * Math.PI * 2, r = recharging ? (30 + Math.random() * 20) : (10 + Math.random() * 40);
           nx = camera.position.x + Math.cos(ang) * r; nz = camera.position.z + Math.sin(ang) * r;
-          s.behindUntil = 0; s.teleDwell = 3000 + Math.random() * 3000; s.resting = true;
+          s.behindUntil = 0; s.teleDwell = recharging ? Math.max(1000, s.rechargeUntil - now) : (3000 + Math.random() * 3000); s.resting = true;
         } else {
           // Near: 1-in-3 lands directly behind the player for a strike, else 8-15m out.
           const behind = Math.random() < 1 / 3;

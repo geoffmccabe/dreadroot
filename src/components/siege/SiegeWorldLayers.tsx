@@ -30,6 +30,7 @@ import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
+import { DarkLordLightning } from './darkLord/DarkLordLightning';
 import { BloodRenderer } from './BloodRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
@@ -98,6 +99,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}
       <SprayAttackRenderer />
+      {/* Dark Lord fingertip lightning bolts (three.js LightningStrike). */}
+      <DarkLordLightning />
       {/* Bullseye blood spray — teardrop droplets + fading decals. */}
       <BloodRenderer />
       {/* Dark, cold horror fog + dimming scrim that fades in as you approach Bleakrock. */}

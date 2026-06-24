@@ -38,7 +38,7 @@ export const CFG: Partial<Record<MType, {
   url: string; modelHeight: number; height: number; speed: number;
   gait: 'hop' | 'climb'; sizeJitter: number; speedJitter: number; health: number; animSpeed?: number;
   rangedRange?: number; rangedCooldownMs?: number; rangedCooldownMaxMs?: number; spray?: SprayConfig;
-  boss?: 'teleporter'; noStun?: boolean; noKnockback?: boolean; bossSpeedFactor?: number;
+  boss?: 'teleporter'; noStun?: boolean; noKnockback?: boolean; bossSpeedFactor?: number; lightning?: boolean;
   bodyFlames?: BodyFlame[]; smokeTrail?: boolean; spin?: SpinConfig;
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number };
   attackRange?: number; attackMs?: number;
@@ -53,7 +53,7 @@ export const CFG: Partial<Record<MType, {
   2: { url: '/siege/monsters/mushroomgruntanim.glb', modelHeight: 2.331, height: 0.66, speed: 2.8, gait: 'hop',   sizeJitter: 0.50, speedJitter: 0.10, health: 100, attackRange: 1.8, attackMs: 1200, meleeContact: { dmg: [3, 17], kb: [1, 5], cooldownMs: 1200 }, attackStyle: 'spin-lunge', hitSound: '/little_slap.mp3', missSound: '/swoosh_miss_high.mp3', bulletTumble: true, deathStyle: 'deflate' },
   3: { url: '/siege/monsters/dfskeleton.glb',        modelHeight: 1.795, height: 6.0,  speed: 10.0, gait: 'climb', sizeJitter: 0.20, speedJitter: 0.10, health: 500, animSpeed: 6, attackRange: 4, attackMs: 2000, meleeContact: { dmg: [15, 45], kb: [2, 6], cooldownMs: 1800 }, walkSound: '/giant_skeleton_walk.mp3', hurtSound: '/skeleton_hit.mp3' },
   4: { url: '/siege/monsters/demonmale.glb',         modelHeight: 2.145, height: 4.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.10, speedJitter: 0.10, health: 200, animSpeed: 1.8, attackRange: 1.5, rangedRange: 30, rangedCooldownMs: 2000, rangedCooldownMaxMs: 4000, spray: ACID_VOMIT, callSound: '/deer_roar.mp3', annoyedSound: '/deer_grunt_annoyed.mp3' },
-  5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4,
+  5: { url: '/siege/monsters/darklord.glb',          modelHeight: 1.843, height: 6.0,  speed: 3.0, gait: 'climb', sizeJitter: 0.0,  speedJitter: 0.0,  health: 500, animSpeed: 1.0, boss: 'teleporter', noStun: true, bossSpeedFactor: 0.4, lightning: true,
        bodyFlames: [{ radiusMul: 1.05, heightMul: 2.0, colorHot: '#b85cff', colorCool: '#1a0033' }] },
   7: { url: '/siege/monsters/greentroll.glb',        modelHeight: 1.927, height: 3.0,  speed: 3.5, gait: 'hop',   sizeJitter: 0.10, speedJitter: 0.15, health: 200, animSpeed: 1.0,
        smokeTrail: true, noStun: true,
@@ -126,7 +126,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ri
       moanSounds={o ? HORDE6_MOANS : undefined}
       contactDamage={o ? 20 : undefined} kbInverseSize={!!o} stackSink={o ? 0.30 : undefined}
       rangedRange={m?.rangedRange} rangedCooldownMs={m?.rangedCooldownMs} rangedCooldownMaxMs={m?.rangedCooldownMaxMs}
-      boss={m?.boss} noStun={o ? true : m?.noStun} noKnockback={m?.noKnockback} bossSpeedFactor={m?.bossSpeedFactor}
+      boss={m?.boss} lightning={m?.lightning} noStun={o ? true : m?.noStun} noKnockback={m?.noKnockback} bossSpeedFactor={m?.bossSpeedFactor}
       bodyFlames={m?.bodyFlames} smokeTrail={m?.smokeTrail} spin={m?.spin}
       meleeContact={o ? { dmg: [4, 12], kb: [1, 2], cooldownMs: 1300 } : m?.meleeContact}
       attackRange={o ? 1.6 : m?.attackRange} attackMs={m?.attackMs}
