@@ -33,7 +33,8 @@ type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov
 export function SiegeSpawner() {
   const camera = useThree((s) => s.camera);
   const [demons, setDemons] = useState<Demon[]>([]);
-  const stage = useRef<'idle' | 'type' | 'type1' | 'qty' | 'hbwait'>('idle');
+  const stage = useRef<'idle' | 'type' | 'type2' | 'qty' | 'hbwait'>('idle');
+  const firstDigit = useRef('');
   const stageTimer = useRef<number | null>(null);
   const spamUntil = useRef(0);
   const pTaps = useRef<number[]>([]);   // recent 'P' press times for the triple-P pause gesture
@@ -121,24 +122,19 @@ export function SiegeSpawner() {
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
-        else if (k === '1') {
-          // Leading 1 is ambiguous (type 1, or a teen type 10-18). Wait for a 2nd digit: a 0-8
-          // makes a teen type (e.g. !18 = Crawlies); a longer pause commits plain type 1. Window
-          // is generous so deliberate key-by-key typing of "18" still registers as type 18.
-          pendingType.current = 1; stage.current = 'type1';
-          if (stageTimer.current) clearTimeout(stageTimer.current);
-          stageTimer.current = window.setTimeout(() => { stage.current = 'qty'; arm(); console.log('[SiegeSpawner] type 1 (Demon Horde) — now press a quantity'); }, 1400);
-        }
-        else if (k >= '2' && k <= '9') { pendingType.current = parseInt(k, 10) as MType; stage.current = 'qty'; arm(); }   // 8=Red Demon, 9=Ghost
+        else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // ALWAYS two digits: !NN
         else clearStage();
         return;
       }
-      if (stage.current === 'type1') {
+      // Type is ALWAYS two digits (e.g. !01 = Demon Horde, !08 = Red Demon, !18 = Crawlies). No timing,
+      // no ambiguity: first digit armed above, second digit here completes the type → quantity stage.
+      if (stage.current === 'type2') {
         e.preventDefault(); e.stopPropagation();
-        if (stageTimer.current) { clearTimeout(stageTimer.current); stageTimer.current = null; }
-        if (k >= '0' && k <= '8') { pendingType.current = (10 + parseInt(k, 10)) as MType; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${pendingType.current} — now press a quantity`); }   // 10-18 (18 = Crawlies)
-        else if (k === '9') { spawn(9, 1 as MType); clearStage(); }   // no type 19 → treat as type 1, qty 9
-        else { stage.current = 'qty'; arm(); }                        // non-digit → plain type 1, await qty
+        if (k >= '0' && k <= '9') {
+          const t = parseInt(firstDigit.current + k, 10);
+          if (t >= 1 && t <= 18) { pendingType.current = t as MType; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`); }
+          else clearStage();
+        } else clearStage();
         return;
       }
       if (stage.current === 'hbwait') {
