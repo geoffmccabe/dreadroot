@@ -4,11 +4,12 @@
 // fixed CFG entry — each mob is a random per-individual override (Ov) from makeHordeMember().
 import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
 import { GhostMonster } from './GhostMonster';
+import { CrawlerMonster } from './CrawlerMonster';
 import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
-export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17;
+export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 export type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
                    desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -99,6 +100,7 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 15, name: 'Elemental Golem',         baseHeight: 8.0,  baseHealth: 400 },
   { id: 16, name: 'Mechanical Golem',        baseHeight: 10.0, baseHealth: 500 },
   { id: 17, name: 'Fort Golem',              baseHeight: 12.0, baseHealth: 600 },
+  { id: 18, name: 'Crawler (surface)',       baseHeight: 0.85, baseHealth: 40 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
@@ -111,6 +113,8 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ri
 }) {
   // Type 9 = the Ghost — its own self-contained flying/upside-down/transparent component (not CFG-driven).
   if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
+  // Type 18 = the Crawler — self-contained surface-crawl locomotion (walls + undersides), not CFG-driven.
+  if (type === 18) return <CrawlerMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
   const m = CFG[type];
   const o = ov;
   if (!m && !o) return null;
