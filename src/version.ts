@@ -10,8 +10,4 @@
 //                     redesigns, paradigm changes)
 //
 // Do NOT touch this manually — the AI bumps it on every push.
-<<<<<<< HEAD
-export const APP_VERSION = '4.165.2';
-=======
-export const APP_VERSION = '4.165.2';
->>>>>>> origin/claude1-recovery
+export const APP_VERSION = '4.165.3';
