@@ -262,6 +262,52 @@ export function raycastMesh(
   return best;
 }
 
+// Result of raycastMeshHit (module scratch — no per-call allocation).
+export const meshHitResult = { dist: 0, px: 0, py: 0, pz: 0, nx: 0, ny: 1, nz: 0 };
+const _meshN = new THREE.Vector3();
+
+/** Like raycastMesh but also returns the world-space HIT POINT + SURFACE NORMAL (into meshHitResult).
+ *  Returns true on a hit within maxDist. Used by surface-crawling AI to walk on the real mesh (follow
+ *  curvature, climb walls) instead of blocky box colliders. (dx,dy,dz) must be a unit direction. */
+export function raycastMeshHit(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  maxDist: number,
+): boolean {
+  if (!enabled || groups.size === 0) return false;
+  let best = maxDist, found = false;
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) {
+      const inst = list[i];
+      _ray.origin.set(ox, oy, oz);
+      _ray.direction.set(dx, dy, dz);
+      if (!_ray.intersectsBox(inst.aabb)) continue;
+      const bvh = bvhByKey.get(inst.key);
+      if (!bvh) continue;
+      try {
+        _ray.applyMatrix4(inst.inverse);
+        _ray.direction.normalize();
+        const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
+        if (hit && hit.face) {
+          _hitPt.copy(hit.point).applyMatrix4(inst.matrix);              // local → world hit point
+          const ddx = _hitPt.x - ox, ddy = _hitPt.y - oy, ddz = _hitPt.z - oz;
+          const dist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
+          if (dist <= best) {
+            best = dist; found = true;
+            _meshN.copy(hit.face.normal).applyMatrix3(_m3.getNormalMatrix(inst.matrix)).normalize();
+            // Face the normal back toward the ray origin (DoubleSide can return either winding).
+            if (_meshN.x * dx + _meshN.y * dy + _meshN.z * dz > 0) _meshN.multiplyScalar(-1);
+            meshHitResult.dist = dist;
+            meshHitResult.px = _hitPt.x; meshHitResult.py = _hitPt.y; meshHitResult.pz = _hitPt.z;
+            meshHitResult.nx = _meshN.x; meshHitResult.ny = _meshN.y; meshHitResult.nz = _meshN.z;
+          }
+        }
+      } catch { /* a bad BVH must never crash the AI loop */ }
+    }
+  }
+  return found;
+}
+
 /** Resolve the player capsule against nearby mesh colliders (HORIZONTAL push;
  *  vertical is the ground system's job). Writes the correction into `out`. */
 export function resolvePlayerMeshCollision(

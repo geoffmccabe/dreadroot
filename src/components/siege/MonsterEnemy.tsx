@@ -251,8 +251,10 @@ const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);   // rand
 // skipped when computing a monster's standing surface, so demons stand on shoulders, not heads.
 const headBoxes = new Set<THREE.Box3>();
 // Monster BODY colliders — lets the climb gait tell a MOVING collider (another monster, climb
-// over it) from a static world wall (climb the face only, don't penetrate).
+// over it) from a static world wall (climb the face only, don't penetrate). Exported so the Crawlie
+// surface-walker can climb LARGE enemies (e.g. big skeletons) by their body box.
 const monsterBoxes = new Set<THREE.Box3>();
+export { monsterBoxes };
 // Per-monster support state, read by OTHER monsters: `g` = is it currently resting on something
 // solid (vs. airborne/climbing), `pri` = a stable priority. A monster may only stand/climb on
 // another monster that is supported AND lower-priority — so two can't climb each other into the

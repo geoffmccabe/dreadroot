@@ -1,99 +1,101 @@
-// CrawlerMonster — a small, flat "bloody skeleton" (skeletonflesh_crawl.glb) horde unit that crawls
-// along the GROUND toward the player. Self-contained like GhostMonster: registers a DemonInstance so
-// the shared combat registry (bullets/flames/scoring/death) handles it with no weapon-code changes.
+// CrawlerMonster — a small "bloody skeleton" (skeletonflesh_crawl.glb) horde unit that CRAWLS along
+// real surfaces toward the player: floors, UP vertical walls, over edges, upside-down, through holes,
+// and up LARGE enemies. Self-contained like GhostMonster (registers a DemonInstance → shared combat).
 //
-// LOCOMOTION (ground navigation, NOT surface-cling):
-//  • It always rests on a horizontal surface — the real mesh ground (streets/rocks via meshGroundHeight),
-//    terrain, or a LOW platform/peer top it can step onto (≤ STEP). It never clings to vertical faces,
-//    so it doesn't "climb objects for no reason".
-//  • It walks toward the player; a TALL obstacle (building/tree/rock) is a wall to go AROUND, not climb —
-//    it steers to the side that still heads at the player.
-//  • Stuck (no progress ~1s) → commit a perpendicular DETOUR heading for a few seconds to get around,
-//    then resume. The detour never detaches it from the ground (so it can't drop through the floor).
-//  • Crawlies pile by standing on each other's low tops (faster = higher climb-priority, so faster ones
-//    end up on top), but they never climb each other's vertical sides — on a pile they keep crawling
-//    toward the player and come down off the far edge. The player doesn't collide with the pile.
+// LOCOMOTION = a goal-directed surface walker (the standard "wall-walking spider" recipe), raycasting
+// the ACTUAL MESH (not blocky box colliders) so it looks right:
+//   1. Tangent: the direction to the player projected onto the current surface plane → it always heads
+//      at the player ALONG whatever surface it's on.
+//   2. WallCheck: a short ray FORWARD along that tangent. If it hits a surface angled away from the
+//      current one (a wall in its path), it transitions onto it = climbs. Because this only fires when
+//      a wall is between it and the player, it never climbs "for no reason" — only when that's the way.
+//   3. Move along the tangent, then a downward StickCast (-normal) re-snaps it to the surface and
+//      follows curvature. If that misses (convex edge / cresting a wall top) a wrap probe finds the
+//      surface around the corner; if nothing's there it falls (fake gravity) until it lands.
+//   4. Stuck >1s on a concave corner → a brief sideways DETOUR (heading change only, never detaches) to
+//      route around, then resumes.
+// Mesh = world (city/rocks). Box-casts add LARGE ENEMIES (climb a big skeleton's body) and PEERS
+// (pile on each other; faster = higher priority = ends up on top). The player never collides with peers.
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
+import { monsterBoxes } from './MonsterEnemy';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { sampleHeight } from './terrainHeight';
-import { meshGroundHeight } from './meshColliderSystem';
+import { meshGroundHeight, raycastMeshHit, meshHitResult } from './meshColliderSystem';
 import { startLoopSound, updateLoopSound, stopLoopSound, play3DPositionalSound, type LoopSound } from '@/lib/spatialAudio';
-import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
-const URL = '/siege/monsters/skeletonflesh_crawl.glb';  // skeletonflesh + retargeted "Running Crawl" clip ('crawl')
-const MODEL_H = 1.803;        // intrinsic skeletonflesh height
-const BASE_H = 1.4;           // crawler body length (m) — small but clearly visible
-const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if it crawls backward)
-const SCUTTLE = '/scuttle_monster.mp3';  // looped movement sound, audible only while crawling
-const BITE = '/Bite_hiss.mp3';           // one-shot bite sound on a successful hit (layers OVER the scuttle)
+const URL = '/siege/monsters/skeletonflesh_crawl.glb';
+const MODEL_H = 1.803;
+const BASE_H = 1.4;
+const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if reversed)
+const SCUTTLE = '/scuttle_monster.mp3';
+const BITE = '/Bite_hiss.mp3';
 const HP = 40;
-const SPEED = 3.4;            // crawl speed (m/s)
-const STEP = 0.5;            // max height it can step UP onto; anything taller is a wall to go around
-const GRAV = 24;             // fall acceleration when above the ground
-const BODY_R = 0.3;          // body radius for wall checks
-const ATTACK_R = 1.3;        // bite range
-const ATTACK_MS = 1100;      // bite cooldown
+const SPEED = 3.4;
+const HOVER = 0.06;           // ride height above the surface
+const BODY_R = 0.28;          // body radius (wall-check reach, hole squeeze)
+const WALL_AHEAD = BODY_R + 0.3;
+const STICK_UP = 0.25;        // stick-cast starts this far above the body
+const STICK_DOWN = 0.7;       // ...and reaches this far below (step-down tolerance)
+const CLIMB_DOT = 0.55;       // a forward hit whose normal differs from ours by > ~57° = a wall to climb
+const GRAV = 22;
+const ATTACK_R = 1.3;
+const ATTACK_MS = 1100;
 
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 let _cid = 0;
 
-// Live Crawlie body boxes → { priority, supported }. Used so Crawlies can pile on each other: a
-// Crawlie may stand on a peer that is LOWER priority (speed-based: faster ends up on top) AND itself
-// supported (not falling). The player never reads this set, so a swarm never walls the player.
+// Peer body boxes → { priority, supported } for piling (faster = higher pri = ends up on top).
 const crawlerBoxes = new Map<THREE.Box3, { pri: number; supported: boolean }>();
 let _pri = 0;
-let _onPeer = false;   // set by standableY: true if the chosen surface was another Crawlie's top
 
-const within = (v: number, lo: number, hi: number) => v >= lo && v <= hi;
-
-// Highest standable surface at (cx,cz) reachable from cy (≤ cy+STEP) — mesh/terrain ground, a low box
-// top, or a lower-priority peer top. Returns its Y, or null if nothing. Lower-than-cy results are fine
-// (the caller falls onto them). Tall walls (top > cy+STEP) are intentionally NOT standable.
-function standableY(cx: number, cz: number, cy: number, self?: THREE.Box3, selfPri = Infinity): number | null {
-  let best = -Infinity; _onPeer = false;
-  const cap = cy + STEP;
-  const mg = meshGroundHeight(cx, cz, cy + 2.0);
-  if (mg != null && mg <= cap && mg > best) best = mg;
-  const tg = sampleHeight(cx, cz);
-  if (tg != null && tg <= cap && tg > best) best = tg;
-  for (const grid of [worldCollisionGrid, monsterColliderGrid]) {
-    const cnt = grid.getNearby(cx, cz, 1.0);
-    const res = grid.nearbyResult;
-    for (let i = 0; i < cnt; i++) {
-      const b = res[i];
-      if (!b || !b.max) continue;
-      if (within(cx, b.min.x, b.max.x) && within(cz, b.min.z, b.max.z) && b.max.y <= cap && b.max.y > best) { best = b.max.y; _onPeer = false; }
-    }
+// ── Surface raycast (the heart of it) ────────────────────────────────────────
+// Cast a world-space ray and return the nearest surface hit (point + outward normal) among: the real
+// MESH (city/rocks), LARGE-enemy body boxes, and lower-priority supported PEER boxes. Writes _cast.
+const _cast = { px: 0, py: 0, pz: 0, nx: 0, ny: 1, nz: 0, dist: 0 };
+const _bn = { nx: 0, ny: 0, nz: 0 };
+// Ray vs AABB (entry). Returns entry distance t (≥0) or -1; writes the entry face normal into _bn.
+function rayBox(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, b: THREE.Box3, maxDist: number): number {
+  let tmin = 0, tmax = maxDist; let nax = 0, nsign = 0;
+  // X
+  for (let a = 0; a < 3; a++) {
+    const o = a === 0 ? ox : a === 1 ? oy : oz;
+    const d = a === 0 ? dx : a === 1 ? dy : dz;
+    const mn = a === 0 ? b.min.x : a === 1 ? b.min.y : b.min.z;
+    const mx = a === 0 ? b.max.x : a === 1 ? b.max.y : b.max.z;
+    if (Math.abs(d) < 1e-9) { if (o < mn || o > mx) return -1; continue; }
+    let t1 = (mn - o) / d, t2 = (mx - o) / d, sgn = -1;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; sgn = 1; }
+    if (t1 > tmin) { tmin = t1; nax = a; nsign = sgn; }
+    if (t2 < tmax) tmax = t2;
+    if (tmin > tmax) return -1;
   }
-  for (const [b, info] of crawlerBoxes) {
-    if (b === self || info.pri >= selfPri || !info.supported) continue;
-    if (within(cx, b.min.x, b.max.x) && within(cz, b.min.z, b.max.z) && b.max.y <= cap && b.max.y > best) { best = b.max.y; _onPeer = true; }
-  }
-  return best > -Infinity ? best : null;
+  _bn.nx = nax === 0 ? nsign : 0; _bn.ny = nax === 1 ? nsign : 0; _bn.nz = nax === 2 ? nsign : 0;
+  return tmin;
 }
-
-// Is (nx,nz) blocked by a WALL at body height cy? (a collider whose top is too tall to step onto and
-// whose body spans the crawler's level). Peer boxes are short → never walls, so Crawlies don't treat
-// each other as walls.
-function blockedByWall(nx: number, nz: number, cy: number): boolean {
-  const cap = cy + STEP, low = cy + 0.5;
-  for (const grid of [worldCollisionGrid, monsterColliderGrid]) {
-    const cnt = grid.getNearby(nx, nz, BODY_R + 0.4);
-    const res = grid.nearbyResult;
-    for (let i = 0; i < cnt; i++) {
-      const b = res[i];
-      if (!b || !b.max) continue;
-      if (b.max.y > cap && b.min.y < low &&
-          within(nx, b.min.x - BODY_R, b.max.x + BODY_R) && within(nz, b.min.z - BODY_R, b.max.z + BODY_R)) return true;
-    }
+function castSurface(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number, self?: THREE.Box3, selfPri = Infinity): boolean {
+  let best = maxDist, found = false;
+  if (raycastMeshHit(ox, oy, oz, dx, dy, dz, maxDist) && meshHitResult.dist <= best) {
+    best = meshHitResult.dist; found = true;
+    _cast.px = meshHitResult.px; _cast.py = meshHitResult.py; _cast.pz = meshHitResult.pz;
+    _cast.nx = meshHitResult.nx; _cast.ny = meshHitResult.ny; _cast.nz = meshHitResult.nz; _cast.dist = best;
   }
-  return false;
+  const tryBox = (b: THREE.Box3) => {
+    const t = rayBox(ox, oy, oz, dx, dy, dz, b, best);
+    if (t >= 0 && t <= best) {
+      best = t; found = true;
+      _cast.px = ox + dx * t; _cast.py = oy + dy * t; _cast.pz = oz + dz * t;
+      _cast.nx = _bn.nx; _cast.ny = _bn.ny; _cast.nz = _bn.nz; _cast.dist = t;
+    }
+  };
+  for (const b of monsterBoxes) tryBox(b);                               // large enemies
+  for (const [b, info] of crawlerBoxes) { if (b !== self && info.pri < selfPri && info.supported) tryBox(b); }  // peers
+  return found;
 }
 
 export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
@@ -105,13 +107,12 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const inner = useRef<THREE.Group>(null);
 
   const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };  // ±15% size + ±15% speed
+  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };  // ±15%
   const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
-  if (priRef.current === 0) priRef.current = V.current.speed * 1000 + ++_pri;   // faster ⇒ higher climb priority ⇒ ends up on top
+  if (priRef.current === 0) priRef.current = V.current.speed * 1000 + ++_pri;
 
-  // Clone the rig + self-light it (bright on dark maps), bloody-red tinted.
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
     c.traverse((o) => {
@@ -136,7 +137,6 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     return c;
   }, [scene]);
 
-  // Crawl clip — rate driven per-frame by actual speed (faster crawl = faster scrabble).
   const { actions, names } = useAnimations(animations, inner);
   const actRef = useRef<THREE.AnimationAction | null>(null);
   useEffect(() => {
@@ -155,16 +155,19 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
 
-  // Ground-nav state: position, yaw, vertical velocity, detour heading + stuck timer.
+  // Surface state: position P, up-normal N, tangent facing T, fall velocity.
   const st = useRef({
-    cx: spawn[0], cy: spawn[1], cz: spawn[2], yaw: 0, vy: 0,
-    nextBite: 0, deathT: 0,
-    lastX: spawn[0], lastZ: spawn[2], stuckT: 0, detourX: 0, detourZ: 0, detourUntil: 0,
+    cx: spawn[0], cy: spawn[1], cz: spawn[2], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1, vy: 0,
+    nextBite: 0, deathT: 0, lastX: spawn[0], lastY: spawn[1], lastZ: spawn[2], stuckT: 0, detourUntil: 0, detourSgn: 1,
   }).current;
   const box = useMemo(() => new THREE.Box3(), []);
   const boxInfo = useRef({ pri: 0, supported: false });
   boxInfo.current.pri = priRef.current;
   useEffect(() => { crawlerBoxes.set(box, boxInfo.current); return () => { crawlerBoxes.delete(box); }; }, [box]);
+  const up = useMemo(() => new THREE.Vector3(), []);
+  const fwd = useMemo(() => new THREE.Vector3(), []);
+  const right = useMemo(() => new THREE.Vector3(), []);
+  const basis = useMemo(() => new THREE.Matrix4(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
   const aSrc = useMemo(() => new THREE.Vector3(), []);
   const scuttle = useRef<LoopSound | null>(null);
@@ -175,7 +178,6 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     const now = performance.now();
     dt = Math.min(dt, 0.05);
 
-    // Death: fall, despawn.
     if (inst.dead) {
       if (scuttle.current) { stopLoopSound(scuttle.current); scuttle.current = null; }
       if (crawlerBoxes.has(box)) crawlerBoxes.delete(box);
@@ -189,91 +191,131 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     }
 
     const px = camera.position.x, py = camera.position.y - 0.4, pz = camera.position.z;
-    const pdist = Math.hypot(px - st.cx, py - st.cy, pz - st.cz);
+    const self = box, sp = priRef.current;
 
-    // Heading toward the player (horizontal).
-    let dx = px - st.cx, dz = pz - st.cz;
-    const dxz = Math.hypot(dx, dz) || 1; dx /= dxz; dz /= dxz;
+    // Goal direction (3D) + the tangent of it on the current surface.
+    let gx = px - st.cx, gy = py - st.cy, gz = pz - st.cz;
+    const pdist = Math.hypot(gx, gy, gz) || 1; gx /= pdist; gy /= pdist; gz /= pdist;
+    // Optional detour: rotate the goal dir ~70° about the surface normal to slip past a concave jam.
+    if (now < st.detourUntil) {
+      const a = 1.2 * st.detourSgn, c = Math.cos(a), s = Math.sin(a);   // rotate about N (Rodrigues, g⟂N≈ok)
+      const dotn = gx * st.nx + gy * st.ny + gz * st.nz;
+      const crx = st.ny * gz - st.nz * gy, cry = st.nz * gx - st.nx * gz, crz = st.nx * gy - st.ny * gx;
+      gx = gx * c + crx * s + st.nx * dotn * (1 - c);
+      gy = gy * c + cry * s + st.ny * dotn * (1 - c);
+      gz = gz * c + crz * s + st.nz * dotn * (1 - c);
+    }
+    const projTangent = () => {
+      const d = gx * st.nx + gy * st.ny + gz * st.nz;
+      let tx = gx - d * st.nx, ty = gy - d * st.ny, tz = gz - d * st.nz;
+      const tl = Math.hypot(tx, ty, tz);
+      if (tl > 1e-3) { st.tx = tx / tl; st.ty = ty / tl; st.tz = tz / tl; }   // else keep last tangent
+    };
+    projTangent();
 
-    // Move direction — a committed detour overrides the straight line (to get around an obstacle).
-    let mvx = dx, mvz = dz;
-    if (now < st.detourUntil) { mvx = st.detourX; mvz = st.detourZ; }
-
-    // 1) Step toward the player on the ground; a tall wall is steered AROUND (not climbed).
-    let moving = false, wantsMove = false;
+    const spd = SPEED * V.current!.speed * (mods?.speedMul ?? 1);
+    let moving = false;
     if (pdist > ATTACK_R * 0.7) {
-      wantsMove = true;
-      const step = SPEED * V.current!.speed * (mods?.speedMul ?? 1) * dt;
-      let nx = st.cx + mvx * step, nz = st.cz + mvz * step;
-      if (blockedByWall(nx, nz, st.cy)) {
-        // Try a perpendicular slide — prefer the side still pointing most at the player.
-        const lpx = -mvz, lpz = mvx, rpx = mvz, rpz = -mvx;
-        const first = (lpx * dx + lpz * dz) >= (rpx * dx + rpz * dz) ? [lpx, lpz] : [rpx, rpz];
-        const second = first[0] === lpx && first[1] === lpz ? [rpx, rpz] : [lpx, lpz];
-        if (!blockedByWall(st.cx + first[0] * step, st.cz + first[1] * step, st.cy)) { nx = st.cx + first[0] * step; nz = st.cz + first[1] * step; mvx = first[0]; mvz = first[1]; }
-        else if (!blockedByWall(st.cx + second[0] * step, st.cz + second[1] * step, st.cy)) { nx = st.cx + second[0] * step; nz = st.cz + second[1] * step; mvx = second[0]; mvz = second[1]; }
-        else { nx = st.cx; nz = st.cz; }   // boxed in → hold (stuck-detour kicks in below)
+      // WALL CHECK — climb a surface that's in the path to the player.
+      if (castSurface(st.cx, st.cy, st.cz, st.tx, st.ty, st.tz, WALL_AHEAD, self, sp)) {
+        const dotn = _cast.nx * st.nx + _cast.ny * st.ny + _cast.nz * st.nz;
+        if (dotn < CLIMB_DOT) {                                  // a real wall (angled away) → transition onto it
+          st.nx = _cast.nx; st.ny = _cast.ny; st.nz = _cast.nz;
+          st.cx = _cast.px + st.nx * HOVER; st.cy = _cast.py + st.ny * HOVER; st.cz = _cast.pz + st.nz * HOVER;
+          projTangent();
+        }
       }
-      if (nx !== st.cx || nz !== st.cz) { st.cx = nx; st.cz = nz; moving = true; }
+      // MOVE along the surface tangent.
+      const step = spd * dt;
+      st.cx += st.tx * step; st.cy += st.ty * step; st.cz += st.tz * step;
+      moving = true;
     }
 
-    // 2) Settle onto the ground / a low platform / a peer top. Step UP (≤ STEP) instantly; otherwise
-    //    fall under gravity. No vertical clinging, no detaching — so it never drops through the floor.
-    const gy = standableY(st.cx, st.cz, st.cy, box, priRef.current);
-    if (gy != null) {
-      if (st.cy <= gy + 0.02) { st.cy = gy; st.vy = 0; }
-      else { st.vy -= GRAV * dt; st.cy += st.vy * dt; if (st.cy < gy) { st.cy = gy; st.vy = 0; } }
-      boxInfo.current.supported = true;
+    // STICK — re-snap to the surface beneath us (follow curvature, step down).
+    const ox = st.cx + st.nx * STICK_UP, oy = st.cy + st.ny * STICK_UP, oz = st.cz + st.nz * STICK_UP;
+    if (castSurface(ox, oy, oz, -st.nx, -st.ny, -st.nz, STICK_UP + STICK_DOWN, self, sp)) {
+      st.nx += (_cast.nx - st.nx) * Math.min(1, dt * 12); st.ny += (_cast.ny - st.ny) * Math.min(1, dt * 12); st.nz += (_cast.nz - st.nz) * Math.min(1, dt * 12);
+      const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
+      st.cx = _cast.px + st.nx * HOVER; st.cy = _cast.py + st.ny * HOVER; st.cz = _cast.pz + st.nz * HOVER;
+      st.vy = 0; boxInfo.current.supported = true;
     } else {
-      st.vy -= GRAV * dt; st.cy += st.vy * dt; boxInfo.current.supported = false;
+      // EDGE WRAP — went past a convex edge: probe forward-and-down to grab the surface around it.
+      const wx = st.tx - st.nx, wy = st.ty - st.ny, wz = st.tz - st.nz, wl = Math.hypot(wx, wy, wz) || 1;
+      if (castSurface(st.cx, st.cy, st.cz, wx / wl, wy / wl, wz / wl, STICK_DOWN + 0.5, self, sp)) {
+        st.nx = _cast.nx; st.ny = _cast.ny; st.nz = _cast.nz;
+        st.cx = _cast.px + st.nx * HOVER; st.cy = _cast.py + st.ny * HOVER; st.cz = _cast.pz + st.nz * HOVER;
+        st.vy = 0; boxInfo.current.supported = true; projTangent();
+      } else if (castSurface(st.cx, st.cy + 0.1, st.cz, 0, -1, 0, 4.0, self, sp)) {
+        // FALL straight down toward whatever ground is below (re-grounding after a drop).
+        st.vy -= GRAV * dt; st.cy += st.vy * dt;
+        if (st.cy <= _cast.py) { st.cy = _cast.py + HOVER; st.vy = 0; st.nx = _cast.nx; st.ny = _cast.ny; st.nz = _cast.nz; }
+        boxInfo.current.supported = false;
+        // ease normal back toward up while airborne
+        st.ny += (1 - st.ny) * Math.min(1, dt * 3); st.nx -= st.nx * Math.min(1, dt * 3); st.nz -= st.nz * Math.min(1, dt * 3);
+        const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
+      } else {
+        st.vy -= GRAV * dt; st.cy += st.vy * dt; boxInfo.current.supported = false;
+      }
     }
 
-    // 3) Stuck recovery: if it wants to move but makes ~no horizontal progress for >1s, commit a
-    //    perpendicular DETOUR for 2.5s to route around the obstacle. (Just a heading change — it stays
-    //    on the ground, so no popping through terrain.)
-    if (wantsMove) {
-      const prog = Math.hypot(st.cx - st.lastX, st.cz - st.lastZ);
-      if (prog > 0.03) { st.stuckT = now; st.lastX = st.cx; st.lastZ = st.cz; }
-      else if (st.stuckT === 0) { st.stuckT = now; }
-      else if (now - st.stuckT > 1000 && now >= st.detourUntil) {
-        const sgn = ((priRef.current | 0) % 2 === 0) ? 1 : -1;   // stable per-Crawlie side choice
-        st.detourX = -dz * sgn; st.detourZ = dx * sgn; st.detourUntil = now + 2500; st.stuckT = now;
-        st.lastX = st.cx; st.lastZ = st.cz;
-      }
-    } else { st.stuckT = now; st.lastX = st.cx; st.lastZ = st.cz; }
+    // TERRAIN FLOOR — the heightfield isn't a raycast mesh, so guarantee Crawlies rest on it (flat,
+    // up-normal) and catch any fall. Skipped where it's null (e.g. the meshed SciFi City).
+    const ty = sampleHeight(st.cx, st.cz);
+    if (ty != null && st.cy <= ty + HOVER + 0.05) {
+      st.cy = ty + HOVER; st.vy = 0; boxInfo.current.supported = true;
+      st.ny += (1 - st.ny) * Math.min(1, dt * 8); st.nx -= st.nx * Math.min(1, dt * 8); st.nz -= st.nz * Math.min(1, dt * 8);
+      const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
+    }
 
-    // 4) Bite when in range — small damage (10-25); hiss layers OVER the scuttle.
+    // STUCK → DETOUR (heading change only; never detaches → can't drop through the floor).
+    if (moving) {
+      const prog = Math.hypot(st.cx - st.lastX, st.cy - st.lastY, st.cz - st.lastZ);
+      if (prog > 0.03) { st.stuckT = now; st.lastX = st.cx; st.lastY = st.cy; st.lastZ = st.cz; }
+      else if (st.stuckT === 0) st.stuckT = now;
+      else if (now - st.stuckT > 1000 && now >= st.detourUntil) {
+        st.detourSgn = ((priRef.current | 0) % 2 === 0) ? 1 : -1;
+        st.detourUntil = now + 2000; st.stuckT = now; st.lastX = st.cx; st.lastY = st.cy; st.lastZ = st.cz;
+      }
+    } else { st.stuckT = now; st.lastX = st.cx; st.lastY = st.cy; st.lastZ = st.cz; }
+
+    // Finite guard (no NaN explosions).
+    if (!Number.isFinite(st.cx + st.cy + st.cz + st.nx + st.tx)) {
+      st.cx = spawn[0]; st.cy = spawn[1]; st.cz = spawn[2]; st.nx = 0; st.ny = 1; st.nz = 0; st.tx = 0; st.ty = 0; st.tz = 1; st.vy = 0;
+    }
+
+    // BITE.
     if (pdist <= ATTACK_R && now >= st.nextBite) {
       st.nextBite = now + ATTACK_MS;
-      const inv = 1 / (pdist || 1);
-      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -dx, -(py - st.cy) * inv, -dz, rnd([1, 3]) * 4);
+      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -gx, -gy, -gz, rnd([1, 3]) * 4);
       camera.getWorldDirection(camDir);
       void play3DPositionalSound(BITE, aSrc.set(st.cx, st.cy, st.cz), camera.position, camDir, { baseVolume: 0.7 });
     }
 
-    // 5) Face the way it's heading (toward the player, or along the detour), smoothed.
-    const wantYaw = Math.atan2(mvx, mvz);
-    let dyaw = wantYaw - st.yaw; dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
-    st.yaw += dyaw * Math.min(1, dt * 8);
+    inst.x = st.cx; inst.y = st.cy - CH * 0.2; inst.z = st.cz; inst.yaw = Math.atan2(st.tx, st.tz);
 
-    inst.x = st.cx; inst.y = st.cy; inst.z = st.cz; inst.yaw = st.yaw;
-
-    // Low, flat body box so OTHER Crawlies can stand on this one (piling).
-    const br = Math.max(0.35, CH * 0.35);
+    const br = Math.max(0.32, CH * 0.32);
     box.min.set(st.cx - br, st.cy - 0.05, st.cz - br);
     box.max.set(st.cx + br, st.cy + 0.25, st.cz + br);
 
+    // Orient: right-handed basis (up = surface normal, forward = tangent).
+    up.set(st.nx, st.ny, st.nz);
+    fwd.set(st.tx, st.ty, st.tz);
+    right.crossVectors(up, fwd);
+    if (right.lengthSq() < 1e-8) { fwd.set(1, 0, 0); right.crossVectors(up, fwd); }
+    if (right.lengthSq() < 1e-8) { fwd.set(0, 0, 1); right.crossVectors(up, fwd); }
+    right.normalize();
+    fwd.crossVectors(right, up).normalize();
+    basis.makeBasis(right, up, fwd);
     g.position.set(st.cx, st.cy, st.cz);
-    g.rotation.set(0, st.yaw + HEADING, 0);
+    g.quaternion.setFromRotationMatrix(basis);
+    if (!Number.isFinite(g.quaternion.x + g.quaternion.y + g.quaternion.z + g.quaternion.w)) g.quaternion.identity();
+    if (HEADING) g.rotateY(HEADING);
     g.scale.setScalar(scale);
 
-    // Animation rate ∝ actual speed (faster Crawlie → faster scrabble; near-idle when biting).
     if (actRef.current) {
       const rate = (moving ? 1 : 0.3) * V.current!.speed * (mods?.speedMul ?? 1);
       actRef.current.timeScale = Math.max(0.3, Math.min(3, rate * 1.3));
     }
-
-    // Scuttle loop — only audible while moving.
     if (!scuttle.current) scuttle.current = startLoopSound(SCUTTLE, { x: st.cx, y: st.cy, z: st.cz, baseVolume: 0 });
     camera.getWorldDirection(camDir);
     updateLoopSound(scuttle.current, st.cx, st.cy, st.cz, camera.position, camDir, 1, moving ? 0.5 : 0);
