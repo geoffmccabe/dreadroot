@@ -36,7 +36,11 @@ function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
     model.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(model);
     const ground = sampleHeight(x, z) ?? 0;
-    model.position.y = box.isEmpty() ? ground : ground - box.min.y;       // lowest point on the ground
+    // A model with corrupt/Infinite vertex bounds yields a non-finite box → a NaN/Inf position flings
+    // its mesh to infinity = screen-filling white/grey flashing triangles. box.isEmpty() does NOT catch
+    // non-finite bounds (NaN compares false), so check finiteness explicitly and fall back to ground.
+    const okBox = !box.isEmpty() && Number.isFinite(box.min.y) && Number.isFinite(box.max.y);
+    model.position.y = okBox ? ground - box.min.y : ground;               // lowest point on the ground
     const wrap = new THREE.Group();
     wrap.add(model);
     wrap.position.set(x, 0, z);

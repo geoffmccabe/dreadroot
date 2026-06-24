@@ -31,7 +31,8 @@ const MODEL_H = 1.803;        // intrinsic skeletonflesh height
 const BASE_H = 1.4;           // crawler body length (m) — small but clearly visible
 const FLAT = 1.0;             // the crawl clip is already prone/flat — no extra squash (would distort the rig)
 const HOVER = 0.12;           // body-centre lift off the surface
-const HEADING = 3 * Math.PI / 4;   // yaw offset: rig's crawl-forward is -135° off travel → +135° aligns the head to where it crawls
+const HEADING = 0;   // yaw offset of the rig vs travel dir. With the (now correct, right-handed) basis the
+                     // +Z-facing crawl rig should point at the player at 0; flip toward ±PI if it's reversed.
 const SCUTTLE = '/scuttle_monster.mp3';  // looped movement sound, audible only while crawling
 const BITE = '/Bite_hiss.mp3';           // one-shot bite sound on a successful hit (layers OVER the scuttle)
 const HP = 40;
@@ -101,14 +102,14 @@ function findSurface(px: number, py: number, pz: number, self?: THREE.Box3, self
       if (_face.d < _best.d) { _best.d = _face.d; _best.sx = _face.sx; _best.sy = _face.sy; _best.sz = _face.sz; _best.nx = _face.nx; _best.ny = _face.ny; _best.nz = _face.nz; _best.onCrawler = false; }
     }
   }
-  // Other Crawlies → climbable surfaces (crawl on top, many layers). Only LOWER-priority + SUPPORTED
-  // peers (never climb a mid-air one), so towers only form on a real base and collapse when it leaves.
+  // Other Crawlies → climb ON TOP only (never their vertical SIDES — that made Crawlies grab each
+  // other's flanks and get stuck). A peer is a surface only when we're over its footprint, and only
+  // its TOP face counts. Lower-priority + supported peers only (towers form on a real base + collapse).
   for (const [b, info] of crawlerBoxes) {
     if (b === self || info.pri >= selfPri || !info.supported) continue;
-    const bcx = (b.min.x + b.max.x) * 0.5, bcz = (b.min.z + b.max.z) * 0.5;
-    if (Math.abs(px - bcx) > CLING + 1.0 || Math.abs(pz - bcz) > CLING + 1.0) continue;   // cheap cull
-    nearestFace(px, py, pz, b, _face);
-    if (_face.d < _best.d) { _best.d = _face.d; _best.sx = _face.sx; _best.sy = _face.sy; _best.sz = _face.sz; _best.nx = _face.nx; _best.ny = _face.ny; _best.nz = _face.nz; _best.onCrawler = true; }
+    if (px < b.min.x || px > b.max.x || pz < b.min.z || pz > b.max.z) continue;   // must be over it
+    const d = Math.abs(py - b.max.y);
+    if (d < _best.d) { _best.d = d; _best.sx = px; _best.sy = b.max.y; _best.sz = pz; _best.nx = 0; _best.ny = 1; _best.nz = 0; _best.onCrawler = true; }
   }
   if (_best.d <= CLING) return true;
   // BVH-mesh ground (SciFi City streets, rocks — they're triangle meshes, NOT box colliders, so the
@@ -137,7 +138,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const inner = useRef<THREE.Group>(null);
 
   const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.35 };  // ±15% size, ±35% speed (wide spread)
+  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };  // ±15% size + ±15% speed (per-Crawlie)
   const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
@@ -340,17 +341,21 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     box.min.set(st.cx - br, st.cy - 0.05, st.cz - br);
     box.max.set(st.cx + br, st.cy + 0.25, st.cz + br);
 
-    // 5) Orient: local up = surface normal, local forward = facing (both unit + perpendicular).
+    // 5) Orient: local up = surface normal, local forward = facing. Build a RIGHT-HANDED basis
+    //    (right = up × fwd, so X×Y = Z). The old order (fwd × up) was LEFT-handed → a reflection
+    //    matrix, which makes setFromRotationMatrix emit a garbage/NaN quaternion = the model exploding
+    //    into screen-filling white triangles AND no HEADING value could ever fix the facing.
     up.set(st.nx, st.ny, st.nz);
     fwd.set(st.fx, st.fy, st.fz);
-    right.crossVectors(fwd, up);
-    if (right.lengthSq() < 1e-8) right.set(1, 0, 0).cross(up);   // paranoia: never normalise a zero vector
-    if (right.lengthSq() < 1e-8) right.set(0, 0, 1).cross(up);
+    right.crossVectors(up, fwd);
+    if (right.lengthSq() < 1e-8) { fwd.set(1, 0, 0); right.crossVectors(up, fwd); }   // fwd∥up → reseed
+    if (right.lengthSq() < 1e-8) { fwd.set(0, 0, 1); right.crossVectors(up, fwd); }
     right.normalize();
-    fwd.crossVectors(up, right).normalize();
+    fwd.crossVectors(right, up).normalize();   // re-orthogonalise (= original fwd, right-handed)
     basis.makeBasis(right, up, fwd);
     g.position.set(st.cx, st.cy, st.cz);
     g.quaternion.setFromRotationMatrix(basis);
+    if (!Number.isFinite(g.quaternion.x + g.quaternion.y + g.quaternion.z + g.quaternion.w)) g.quaternion.identity();
     g.scale.set(scale, scale * FLAT, scale);
 
     // Scuttle sound: looped at the body, only audible while actually crawling.
