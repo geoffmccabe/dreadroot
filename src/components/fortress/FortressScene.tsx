@@ -1881,7 +1881,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           <ForceFieldMoire />
         </>
       )}
-      {isSiegeReview && <ColliderDebugView />}
+      {/* Collider debug (Cmd-\) on ALL siege maps — incl. the heightmap demo maps like the city,
+          which have real mesh colliders worth inspecting (isSiegeReview excludes them). */}
+      {isSiege && <ColliderDebugView />}
       {/* '!' monster spawner — on ALL siege maps for testing/demos, not just SWW review. */}
       {isSiege && <SiegeSpawner />}
       {isSiege && <BullseyeTestTracer />}

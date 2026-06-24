@@ -139,7 +139,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
           {world.id === 'city-demo' && (
             <Suspense fallback={null}>
-              <DemoScene file="city_demo.gltf" group="citydemo" lowerY={1.9} hidePlanet />
+              <DemoScene file="city_demo.gltf" group="citydemo" lowerY={2.8} hidePlanet />
               <MeshColliderPlayer />
               <CityHolePatches />
               <SiegeStarDome radius={300} />

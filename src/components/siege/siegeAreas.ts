@@ -53,7 +53,7 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
  */
 export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; yaw?: number; pitch?: number; }
 export const SIEGE_DEMOS: SiegeDemoMap[] = [
-  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 2.705, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −1.9 after the city was lowered): laser yaw 272.1°, pitch -0.7°
+  { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 1.805, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −2.8 after the city was lowered): laser yaw 272.1°, pitch -0.7°
 
   { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo',  pos: [0, 3, 0] },
   // Component-only sets shown as auto-arranged sampler grids.
