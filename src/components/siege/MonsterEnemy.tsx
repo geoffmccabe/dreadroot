@@ -968,7 +968,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         }
       }
       if (casting) {
-        play(clips.attack);                       // hold the cast; no teleport/shamble mid-bout
+        play('cast');                             // 2H magic-cast pose (Mixamo); no teleport mid-bout
       } else if (now >= s.teleAt) {
         camera.getWorldDirection(_fwd); _fwd.y = 0; _fwd.normalize();
         let nx: number, nz: number;
