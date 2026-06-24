@@ -8,7 +8,7 @@ import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { raycastMesh } from './meshColliderSystem';
 
 const CELL = 1.5;          // grid resolution (m) — ~a doorway wide
-const MAX_NODES = 700;     // A* expansion cap (bounds cost; null past it → caller falls back to straight)
+const MAX_NODES = 400;     // A* expansion cap (bounds cost — each node does up to 8 BVH raycasts; null past it → straight)
 const MAX_RANGE = 64;      // don't even try if the player is farther than this (m, Manhattan)
 const CHEST = 1.1;         // ray height above the floor for the wall test
 

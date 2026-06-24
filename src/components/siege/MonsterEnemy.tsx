@@ -135,6 +135,11 @@ const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, 
 const DEFCLIPS = { idle: 'idle', walk: 'walk', run: 'run', attack: 'attack', death: 'death', hit: 'hit' };
 const DEATH_DESPAWN_MS = 2600; // play the death clip, hold the pose, then remove
 let _mid = 0;
+// Global pathfinding throttle: at most one A* / LOS-probe compute per this many ms across ALL monsters,
+// so a whole horde going "stuck" at once (e.g. you fly to a roof) can't stack dozens of BVH-raycast A*
+// runs into one frame (the fly-to-rooftop stall). They round-robin instead.
+let _lastPathAt = 0;
+const PATH_GAP_MS = 30;
 // Climbing physics. JUMP_VEL apex ≈ own height (1.8m) so a demon can mount one box / one
 // demon per hop; piling several lets them clear taller walls.
 const GRAVITY = 22, JUMP_VEL = 9.5, STEP_UP = 0.45;
@@ -682,8 +687,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // space (or up on its roof) can't hit the player THROUGH the walls/ceiling. BVH (city/rocks) only;
     // open worlds have no mesh walls so this is a no-op (raycastMesh returns null). Only paid for
     // contact-damage monsters, beyond point-blank.
+    // PERF: only raycast when a hit is actually POSSIBLE this frame — within attack reach AND
+    // vertically overlapping the player. Otherwise it's a no-op (clearLOS stays true but the monster
+    // is out of range to attack anyway). This is what kills the fly-to-rooftop stall: when you're up
+    // high, no monster vertically overlaps you, so the whole horde skips the BVH raycast entirely.
     let clearLOS = true;
-    if (dist > 1.4 && (c.meleeContact || c.contactDamage || c.spin)) {
+    const vNear = s.y < camera.position.y + 1.0 && s.y + H > camera.position.y - 2.0;
+    if (dist > 1.2 && dist < (c.attackRange ?? 2) + 1.5 && vNear && (c.meleeContact || c.contactDamage || c.spin)) {
       const oy = s.y + Math.min(H, 1.7) * 0.55;                 // monster torso height
       const ddx = dx, ddy = (camera.position.y - 0.8) - oy, ddz = dz;
       const td = Math.hypot(ddx, ddy, ddz) || 1;
@@ -1159,15 +1169,25 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (c.meleeContact && dist > c.attackRange + 0.6) {
         if (s.progressAt === 0 || dist < s.bestDist - 0.25) { s.bestDist = dist; s.progressAt = now; }
         if (now - s.progressAt > 1500) {                                   // not getting closer → stuck
-          if (now > s.pathAt) {
+          // Player WAY above us (flew to a roof / hovering): there's no walkable route to a flying
+          // player — A* would just churn ~hundreds of BVH raycasts, fail, and retry every 0.8s for the
+          // whole horde = the stall. Skip the compute entirely and back off for a few seconds.
+          if (camera.position.y - s.y > 4) {
+            s.path = null; s.pathing = false; s.pathAt = now + 3000 + Math.random() * 2000;
+            s.bestDist = dist; s.progressAt = now;
+          } else if (now > s.pathAt && now - _lastPathAt > PATH_GAP_MS) {   // global throttle: ≤1 A* per frame
+            _lastPathAt = now;
             // Only pathfind if a real WALL is between us and the player (a chest-height ray hits mesh
             // before reaching them) — otherwise we're just jammed in a crowd, which the crowd logic
             // handles. Keeps A* (and its raycasts) off the hot path except at a genuine obstacle.
             const losHit = raycastMesh(s.x, s.y + 1.1, s.z, dx / dist, 0, dz / dist, Math.min(dist, 64));
             const walled = losHit != null && losHit < dist - 1.0;
             s.path = walled ? findPath(s.x, s.z, camera.position.x, camera.position.z, s.y) : null;
-            s.pathIdx = 0; s.pathAt = now + 800 + Math.random() * 500;     // jitter so a horde doesn't all rebuild at once
-            s.pathing = !!s.path; s.bestDist = dist; s.progressAt = now;   // give the fresh route a moment before re-flagging
+            s.pathIdx = 0;
+            // Success → recompute in ~0.8s. FAILURE → back off hard (3–5s) so an unreachable player
+            // doesn't make us re-run A* every 0.8s.
+            s.pathAt = now + (s.path ? 800 + Math.random() * 500 : 3000 + Math.random() * 2000);
+            s.pathing = !!s.path; s.bestDist = dist; s.progressAt = now;
           }
           if (s.path && s.path.length) {
             let wp = s.path[s.pathIdx];
