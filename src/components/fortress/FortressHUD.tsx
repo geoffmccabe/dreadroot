@@ -21,6 +21,7 @@ import { TriagePanel } from '@/components/siege/TriagePanel';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
 import { useActiveGame } from '@/config/activeGame';
 import { HealthBar } from '@/features/shwarm';
+import { RocketBeltHud } from '@/features/rocketBelt/RocketBeltHud';
 import { supabase } from '@/integrations/supabase/client';
 import { worldStore } from '@/services/worldStore';
 // equipTransfer is a STANDALONE export, NOT a method on worldStore (worldStore.equipTransfer
@@ -1074,8 +1075,8 @@ export function FortressHUD(props: FortressHUDProps) {
               )}
             </div>
 
-            {/* Row 2: Hearts - Health - Pts - Jets (20% smaller) */}
-            <div style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
+            {/* Row 2: Hearts - Health - Pts - Jets - Rocket Belt (20% smaller) */}
+            <div className="flex items-center" style={{ transform: 'scale(0.8)', transformOrigin: 'left center' }}>
               <HealthBar
                 currentHealth={currentHealth}
                 maxHealth={maxHealth}
@@ -1085,6 +1086,7 @@ export function FortressHUD(props: FortressHUDProps) {
                 isGliding={isGliding}
                 className="!bg-transparent !border-0 !p-0"
               />
+              <RocketBeltHud />
             </div>
 
             {/* Oxygen/Bubbles display - only shows when underwater */}

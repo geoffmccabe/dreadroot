@@ -1,27 +1,35 @@
 -- Seed the 10 Rocket Belt items (item_number 239–248, tiers 1–10).
 --
--- The Rocket Belt is a Special-slot item: equipped in the Special equip slot it lets a
--- NON-admin player hold Shift+E for a forward jet boost, metered by a per-minute fuel
--- budget of tier × 2 seconds (FortressControls.tsx beltFuel logic; EquipSlots publishes the
--- equipped tier via rocketBeltTierFromItemNumber → setRocketBelt). The CLIENT pipeline was
--- already complete, but these DB rows were never created, so the item couldn't be equipped
--- and the effect was unreachable. This seeds them.
+-- The Rocket Belt is a Special-slot GEAR item (NOT a consumable): while equipped it grants a
+-- recharging forward-boost ability (Shift+E) that works like the jet boots. Each "burst" =
+-- 0.25s of fast-forward; the burst budget scales with player level + belt tier + VIP level
+-- (4 bursts each) and regenerates 1 every 5s. The CLIENT pipeline (EquipSlots detection →
+-- rocketBelt store → FortressControls spend/regen → HUD gauge) is complete; these DB rows are
+-- what let the item be equipped.
 --
--- item_category='consumable' so the item is accepted into the Special slot (which accepts
--- consumable/potion). The belt is NOT consumed on use — category only governs slot fit.
--- Shared DB: this is additive (brand-new item_numbers), safe for both DreadRoot and Pinkland.
+-- item_category='gear' (the Special slot accepts consumable/potion/gear). 'gear' marks it as
+-- persistent equipment that is never consumed, unlike potions/eggs.
+-- Shared DB: additive (brand-new item_numbers), safe for both DreadRoot and Pinkland.
+--
+-- If a prior run created these as 'consumable', re-point them to 'gear':
+UPDATE public.items SET item_category = 'gear'
+ WHERE key LIKE 'rocket_belt_t%';
 
 INSERT INTO public.items (key, name, item_number, item_category, tier, rarity, class, cost, description, properties)
 SELECT
   'rocket_belt_t' || t,
   'Rocket Belt',
   238 + t,
-  'consumable',
+  'gear',
   t,
   'common',
-  'consumable',
+  'gear',
   t * 20000,
-  'Hold Shift+E for a forward jet boost. Tier ' || t || ' gives ' || (t * 2) || 's of boost per minute.',
-  jsonb_build_object('boost_seconds_per_minute', t * 2)
+  'Equip in the Special slot, then hold Shift+E to jet forward. Bursts scale with your level, the belt tier, and VIP.',
+  jsonb_build_object('bursts_per_tier', 4, 'burst_seconds', 0.25, 'regen_seconds', 5)
 FROM generate_series(1, 10) AS t
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT (key) DO UPDATE
+  SET item_category = EXCLUDED.item_category,
+      class         = EXCLUDED.class,
+      description    = EXCLUDED.description,
+      properties     = EXCLUDED.properties;

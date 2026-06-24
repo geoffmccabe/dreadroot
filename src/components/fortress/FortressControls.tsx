@@ -13,8 +13,8 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { anyArmedHandGrenade, anyHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
 import { getFlameGlove } from '@/config/flameGlove';
-import { getRocketBelt } from '@/config/rocketBelt';
-import { maxBoostSeconds, BOOST_REFILL_WINDOW_SEC } from '@/features/rocketBelt/rocketBelt';
+import { getRocketBelt, getRocketBeltMax, setRocketBeltAvailable } from '@/config/rocketBelt';
+import { BURST_SEC, BURST_REGEN_SEC } from '@/features/rocketBelt/rocketBelt';
 import { getAiming, setAiming } from '@/config/aimState';
 import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
@@ -198,8 +198,12 @@ export function FirstPersonControls({
   const jetBoostNextRefillRef = useRef(0);
   const jetBoostRequestRef = useRef(false);
   const spaceKeyEdgeRef = useRef(false); // Edge detection for space key
-  // Rocket Belt forward-boost fuel (seconds remaining in the current refill window).
-  const beltFuelRef = useRef(0);
+  // Rocket Belt forward-boost: discrete bursts (each 0.25s of fast-forward), regen 1/5s.
+  const beltBurstsRef = useRef(0);          // available bursts
+  const beltBurstRemainingRef = useRef(0);  // seconds left in the current burst
+  const beltRegenAccumRef = useRef(0);      // seconds accumulated toward the next regen
+  const beltLastMaxRef = useRef(0);         // last seen max (detect change → cap / initial grant)
+  const beltHudThrottleRef = useRef(0);     // throttle HUD store writes
   const lastJetBoostStateUpdateRef = useRef(0);
   const [crosshairsEnabled, setCrosshairsEnabled] = useState(false);
   
@@ -2477,22 +2481,52 @@ export function FirstPersonControls({
         adminEverRef.current = true;
       }
       const wantsBoost = keys.current.shift && keys.current.e;
+      const movingForInput = direction.current.lengthSq() > 0.0001; // a movement key is held
       const superSprintSpeed = baseSpeed * 10; // 10x normal speed for the Shift+E forward boost
-      // Admin super-sprint is unlimited. Normal players get the SAME forward boost via a
-      // Rocket Belt in the Special slot, metered by a per-minute fuel budget (tier × 2s).
-      const superSprintActive = adminEverRef.current && wantsBoost;
+
+      // === ROCKET BELT forward-boost (discrete 0.25s bursts; regen 1 / 5s) ===
+      // A burst is spent when boosting; max comes from the store (level + tier + VIP, computed
+      // in Fortress). Tap = one 0.25s hop; hold = back-to-back bursts until drained.
       const beltTier = getRocketBelt()?.tier ?? 0;
-      const beltMaxFuel = maxBoostSeconds(beltTier);
-      const fuelDt = Math.min(delta, 1 / 30);
-      if (beltMaxFuel > 0) {
-        // Continuous refill: full budget per refill window → exactly tier×2 seconds per minute.
-        beltFuelRef.current = Math.min(beltMaxFuel, beltFuelRef.current + (beltMaxFuel / BOOST_REFILL_WINDOW_SEC) * fuelDt);
-      } else {
-        beltFuelRef.current = 0;
+      const beltEquipped = beltTier > 0;
+      const beltMax = getRocketBeltMax();
+      const beltDt = Math.min(delta, 1 / 30);
+      // Cap available to max; grant a full charge the first time a belt qualifies.
+      if (beltMax !== beltLastMaxRef.current) {
+        if (beltBurstsRef.current === 0 && beltMax > 0) beltBurstsRef.current = beltMax;
+        beltBurstsRef.current = Math.min(beltBurstsRef.current, beltMax);
+        beltLastMaxRef.current = beltMax;
       }
-      const beltBoostActive = !superSprintActive && beltTier > 0 && wantsBoost && beltFuelRef.current > 0;
-      if (beltBoostActive) beltFuelRef.current = Math.max(0, beltFuelRef.current - fuelDt);
-      const boostActive = superSprintActive || beltBoostActive;
+      // Regenerate 1 burst every BURST_REGEN_SEC while below max.
+      if (beltEquipped && beltBurstsRef.current < beltMax) {
+        beltRegenAccumRef.current += beltDt;
+        while (beltRegenAccumRef.current >= BURST_REGEN_SEC && beltBurstsRef.current < beltMax) {
+          beltRegenAccumRef.current -= BURST_REGEN_SEC;
+          beltBurstsRef.current += 1;
+        }
+      } else {
+        beltRegenAccumRef.current = 0;
+      }
+      // Start a new burst when wanting to boost forward, none in progress, and bursts remain.
+      if (beltEquipped) {
+        if (beltBurstRemainingRef.current <= 0 && wantsBoost && movingForInput && beltBurstsRef.current > 0) {
+          beltBurstsRef.current -= 1;
+          beltBurstRemainingRef.current = BURST_SEC;
+        }
+        if (beltBurstRemainingRef.current > 0) beltBurstRemainingRef.current -= beltDt;
+      } else {
+        beltBurstRemainingRef.current = 0;
+      }
+      const beltBoostActive = beltEquipped && beltBurstRemainingRef.current > 0;
+      // Admin super-sprint stays UNLIMITED only when NO belt is equipped (dev convenience);
+      // with a belt on, even admins use the metered belt so it's testable + consistent.
+      const adminUnlimited = adminEverRef.current && wantsBoost && !beltEquipped;
+      const boostActive = adminUnlimited || beltBoostActive;
+      // Publish belt charges to the HUD store (throttled to ~10Hz).
+      if (now - beltHudThrottleRef.current > 100) {
+        beltHudThrottleRef.current = now;
+        setRocketBeltAvailable(beltEquipped ? Math.floor(beltBurstsRef.current) : 0);
+      }
       const runSpeed = godModeRef.current
         ? godSpeed
         : (boostActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));

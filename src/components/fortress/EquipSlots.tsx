@@ -31,7 +31,7 @@ const SLOTS: SlotDef[] = [
   { num: 5, type: 'weapon', label: 'R', glyph: '🔫', cats: ['weapon'], hand: 'R' },
   { num: 2, type: 'armor', label: 'Armor', glyph: '🛡️', cats: ['armor'] },
   { num: 3, type: 'boots', label: 'Boots', glyph: '🥾', cats: ['boots'] },
-  { num: 4, type: 'potion', label: 'Special', glyph: '🧪', cats: ['consumable', 'potion'] },
+  { num: 4, type: 'potion', label: 'Special', glyph: '🧪', cats: ['consumable', 'potion', 'gear'] },
 ];
 
 interface EquipItem { itemId: string; name: string; itemNumber: number | null; tier: number | null; category: string; spriteUrl: string | null; }
