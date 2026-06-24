@@ -51,8 +51,9 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
  * Only sets that ship a fully-assembled scene FBX appear here (City, Space). Component-only
  * sets (CyberCity, Mech, SciFi Worlds) have no baked scene → they belong in the builder.
  */
-export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; yaw?: number; pitch?: number; }
+export interface SiegeDemoMap { code: string; key: string; name: string; mapId: string; pos: [number, number, number]; yaw?: number; pitch?: number; adminOnly?: boolean; }
 export const SIEGE_DEMOS: SiegeDemoMap[] = [
+  { code: 'KeyW', key: 'W', name: 'Apocalypse City', mapId: 'apoc-city', pos: [0, 12, 0], adminOnly: true }, // converted Synty Apocalypse demo city (admin-only while in progress)
   { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 1.805, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −2.8 after the city was lowered): laser yaw 272.1°, pitch -0.7°
 
   { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo',  pos: [0, 3, 0] },

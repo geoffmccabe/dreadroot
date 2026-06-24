@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
 import { setTeleportArmed } from './teleportStore';
 import { setActiveMapId } from '@/config/activeMap';
+import { getSiegeAdmin } from './siegeAdmin';
 
 const DEMO_BY_CODE = Object.fromEntries(SIEGE_DEMOS.map((d) => [d.code, d]));
 
@@ -67,9 +68,10 @@ export function SiegeTeleport() {
       }
       if (!armed) return;
       if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
-      // Letter = jump to a baked asset-set demo map (each is its own map).
+      // Letter = jump to a baked asset-set demo map (each is its own map). adminOnly maps (e.g. the
+      // in-progress Apocalypse City) only jump for admins.
       const demo = DEMO_BY_CODE[e.code];
-      if (demo) {
+      if (demo && (!demo.adminOnly || getSiegeAdmin())) {
         e.preventDefault(); e.stopPropagation();
         jump(demo.mapId, demo.pos, demo.yaw, demo.pitch);
         disarm(); return;

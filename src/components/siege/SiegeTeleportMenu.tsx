@@ -5,6 +5,7 @@
 // letter shortcuts still work). It stays open until you pick a spot or press Esc.
 import { useSyncExternalStore } from 'react';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
+import { getSiegeAdmin } from './siegeAdmin';
 import { isTeleportArmed, subscribeTeleport, setTeleportArmed, siegeJump } from './teleportStore';
 import { useActiveGame } from '@/config/activeGame';
 
@@ -56,7 +57,7 @@ export function SiegeTeleportMenu() {
       </div>
       <div style={{ ...headStyle, marginTop: 10 }}>⊹ Asset Demos</div>
       <div style={grid}>
-        {SIEGE_DEMOS.map((d) => (
+        {SIEGE_DEMOS.filter((d) => !d.adminOnly || getSiegeAdmin()).map((d) => (
           <button key={d.mapId} style={cell} onClick={() => go(d.mapId, d.pos, d.yaw, d.pitch)}>
             <span style={keyBadge}>{d.key}</span><span>{d.name}</span>
           </button>

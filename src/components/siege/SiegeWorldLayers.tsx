@@ -148,6 +148,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <Hoverbike />
             </Suspense>
           )}
+          {/* Apocalypse City — converted from the Synty demo scene into individual instanced objects
+              (placements + colliders + laser-taggable), with the editable heightmap ground under it. */}
+          {world.id === 'apoc-city' && (
+            <Suspense fallback={null}>
+              <WorldObjectsLayer meshColliders dataDir="/siege/apoc" />
+              <MeshColliderPlayer />
+            </Suspense>
+          )}
           {world.id === 'space-demo' && (
             <Suspense fallback={null}>
               {/* The Space exterior scene is ~10km — shrink it so it's viewable on the ground. */}

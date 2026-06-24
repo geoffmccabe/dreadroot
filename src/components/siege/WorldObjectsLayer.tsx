@@ -282,7 +282,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: boolean } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world' }: { meshColliders?: boolean; dataDir?: string } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -294,9 +294,9 @@ export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: b
   const [cutout, setCutout] = useState<Set<string>>(new Set());
   useEffect(() => {
     let alive = true;
-    fetch('/siege/world/atlas_map.json').then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
-    fetch('/siege/world/material_map.json').then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
-    fetch('/siege/world/cutout_textures.json').then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
+    fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
+    fetch(`${dataDir}/material_map.json`).then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
+    fetch(`${dataDir}/cutout_textures.json`).then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
     // Load collider overrides BEFORE placements (so they apply as groups build their
     // colliders): Supabase shared overrides first (authoritative), then the baked
     // JSON fills any gaps, then placements. Author's localStorage edits (loaded at
@@ -304,17 +304,17 @@ export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: b
     loadColliderOverridesFromDB()
       .catch(() => {})
       .finally(() => {
-        fetch('/siege/world/collider_overrides.json')
+        fetch(`${dataDir}/collider_overrides.json`)
           .then((r) => (r.ok ? r.json() : []))
           .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
           .catch(() => {})
           .finally(() => {
-            fetch('/siege/world/placements.json').then((r) => r.json())
+            fetch(`${dataDir}/placements.json`).then((r) => r.json())
               .then((d) => alive && setData(d)).catch(() => {});
           });
       });
     return () => { alive = false; };
-  }, []);
+  }, [dataDir]);
   // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared
   // rock/grass types don't drag their far-island copies into the beach — that full-map parse was
   // the real fps killer). The load center FOLLOWS the camera, so flying to another island loads
@@ -324,6 +324,11 @@ export function WorldObjectsLayer({ meshColliders = false }: { meshColliders?: b
   const camera = useThree((s) => s.camera);
   const [center, setCenter] = useState<[number, number]>([-400, 680]);
   const lastCenter = useRef<[number, number]>([-400, 680]);
+  // Start streaming around wherever the player actually spawns (the default beach centre would leave
+  // a non-SWW world, e.g. the Apocalypse city, unrendered until you walked 150m).
+  useEffect(() => {
+    const p = camera.position; lastCenter.current = [p.x, p.z]; setCenter([p.x, p.z]);
+  }, [camera]);
   useFrame((_, dt) => {
     windTime.value += dt;                            // drives the leaf-flutter vertex sway
     const dx = camera.position.x - lastCenter.current[0];

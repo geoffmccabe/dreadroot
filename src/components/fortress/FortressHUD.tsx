@@ -13,6 +13,7 @@ import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel'
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
 import { HoverbikePrompt } from '@/components/siege/HoverbikePrompt';
+import { setSiegeAdmin } from '@/components/siege/siegeAdmin';
 import { FountainPanel } from '@/components/siege/fountain/FountainPanel';
 import { SiegeCharLineupHud } from '@/components/siege/charlineup/SiegeCharLineupHud';
 import { startFountainPolling } from '@/components/siege/fountain/fountainState';
@@ -122,6 +123,8 @@ export function FortressHUD(props: FortressHUDProps) {
   // ⌘-] toggles Siege "work mode" (dev/review overlays: monster lineup, character pair,
   // anim hint, SIEGE DEBUG panel). Off by default so they don't disrupt normal testing.
   useEffect(() => installWorkModeHotkey(), []);
+  // Bridge the admin role to in-Canvas siege code (admin-only Jump maps etc.).
+  useEffect(() => { setSiegeAdmin(!!(userRoles?.includes?.('admin') || userRoles?.includes?.('superadmin'))); }, [userRoles]);
   // Poll the global Fountain double-drops state (so the 2x buff + leaderboard are live).
   useEffect(() => { if (isSiege) startFountainPolling(); }, [isSiege]);
 

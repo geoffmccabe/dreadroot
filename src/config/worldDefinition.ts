@@ -303,8 +303,27 @@ export const SAMURAI_GRID_WORLD = samplerWorld('samurai-grid', 'Samurai Empire',
 // PurePoly Mining Pack — crystals/ores/gems with baked emissive glow.
 export const MINING_GRID_WORLD = samplerWorld('mining-grid', 'Mining / Crystals', 24);
 
+/** Apocalypse City — the converted Synty Apocalypse Demo_City_Standard scene (~8000 placed objects),
+ *  rendered as INDIVIDUAL instanced objects from /siege/apoc/placements.json (movable/deletable later).
+ *  Editable heightmap ground under it (open-world build space); BVH colliders via WorldObjectsLayer. */
+export const APOC_CITY_WORLD: WorldDefinition = {
+  id: 'apoc-city',
+  name: 'Apocalypse City',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 30,
+  kind: 'siege',
+  meshColliders: true,
+  bounds: { min: [-1500, -1500], max: [1500, 1500] },
+  ground: { kind: 'heightmap', surfaceY: 0 },
+  fill: { ambient: 0.7, hemi: 0.55 },
+  spawn: { position: [0, 12, 0], yaw: 0 },
+  props: undefined,
+};
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
+  [APOC_CITY_WORLD.id]: APOC_CITY_WORLD,
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
