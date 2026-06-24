@@ -171,6 +171,11 @@ const _bqTip = new THREE.Quaternion();
 const _bqYaw = new THREE.Quaternion();
 const _bAxis = new THREE.Vector3();
 const _bUP = new THREE.Vector3(0, 1, 0);
+// Slope alignment for the injured crawl (scratch — no per-frame allocation).
+const _slopeN = new THREE.Vector3();
+const _slopeUp = new THREE.Vector3(0, 1, 0);
+const _slopeYawQ = new THREE.Quaternion();
+const _slopeTiltQ = new THREE.Quaternion();
 const HALF_PI = Math.PI / 2;
 const TWO_PI = Math.PI * 2;
 function bullseyeQuat(out: THREE.Quaternion, yaw: number, spin: number, tip: number, bdx: number, bdz: number): void {
@@ -1206,7 +1211,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
     // Force the crawl to an ABSOLUTE 2× regardless of this monster's animSpeed (mixer.timeScale). Set
     // every frame because play()'s reset() clears per-action timeScale. CRAWL_RATE=2 → ~2.6s/loop.
-    if (injured) { const ca = clip('crawl'); if (ca) ca.timeScale = 2 / (mixer.timeScale || 1); }
+    if (injured) {
+      const ca = clip('crawl'); if (ca) ca.timeScale = 2 / (mixer.timeScale || 1);
+      // Tilt the whole skeleton to lie along the ground slope (keeps the crawl-direction yaw).
+      // Gradient from 4 height samples → terrain normal → up→normal quaternion composed after yaw.
+      // Clamped so steep terrain doesn't stand it vertical. Sign-robust (no axis guessing).
+      const sd = Math.max(0.35, H * 0.12);
+      const h0 = sampleHeight(s.x, s.z) ?? s.y;
+      const cl = (v: number) => (v > 1 ? 1 : v < -1 ? -1 : v);
+      const dhdx = cl(((sampleHeight(s.x + sd, s.z) ?? h0) - (sampleHeight(s.x - sd, s.z) ?? h0)) / (2 * sd));
+      const dhdz = cl(((sampleHeight(s.x, s.z + sd) ?? h0) - (sampleHeight(s.x, s.z - sd) ?? h0)) / (2 * sd));
+      _slopeN.set(-dhdx, 1, -dhdz).normalize();
+      _slopeYawQ.setFromAxisAngle(_slopeUp, g.rotation.y);
+      _slopeTiltQ.setFromUnitVectors(_slopeUp, _slopeN);
+      g.quaternion.copy(_slopeTiltQ).multiply(_slopeYawQ);
+    }
 
     // Separation — push out of overlapping monsters AT THE SAME LEVEL (stacked demons,
     // |Δy|>1m, are left alone so piles don't shove apart). Count same-level crowding so a
