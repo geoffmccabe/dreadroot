@@ -374,7 +374,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Skeleton injured-crawl + death-variant state.
     deathVariant: '',
     // Stuck-detection + pathfinding (kicks in only when blocked from reaching the player).
-    bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0,
+    bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0, crouching: false,
     path: null as import('./siegePathfinding').PathPt[] | null });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
@@ -677,6 +677,20 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
 
+    // ── Line-of-sight to the player (3D, torso→torso) ──
+    // A wall OR ceiling between us blocks ALL melee/contact damage, so a monster outside a hiding
+    // space (or up on its roof) can't hit the player THROUGH the walls/ceiling. BVH (city/rocks) only;
+    // open worlds have no mesh walls so this is a no-op (raycastMesh returns null). Only paid for
+    // contact-damage monsters, beyond point-blank.
+    let clearLOS = true;
+    if (dist > 1.4 && (c.meleeContact || c.contactDamage || c.spin)) {
+      const oy = s.y + Math.min(H, 1.7) * 0.55;                 // monster torso height
+      const ddx = dx, ddy = (camera.position.y - 0.8) - oy, ddz = dz;
+      const td = Math.hypot(ddx, ddy, ddz) || 1;
+      const lh = raycastMesh(s.x, oy, s.z, ddx / td, ddy / td, ddz / td, td - 0.4);
+      clearLOS = lh == null || lh >= td - 0.7;                  // a hit well short of the player = a wall between
+    }
+
     // Body flames go out on death: shrink to zero height over the first 2s (both colours).
     if (flamesRef.current && cfg.bodyFlames) {
       flamesRef.current.scale.y = inst.dead ? Math.max(0, 1 - (now - inst.deadAt) / 2000) : 1;
@@ -891,7 +905,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (c.meleeContact && !c.attackSound && c.attackStyle !== 'spin-lunge') {
       const pTop = camera.position.y, pFeet = camera.position.y - 1.6;
       // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
-      if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext) {
+      if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext && clearLOS) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
         dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound);
         s.swingHit = true;   // this swing connected → no whiff sound
@@ -904,7 +918,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (c.contactDamage) {
       const pTop = camera.position.y, pFeet = camera.position.y - 1.6;   // PLAYER_HEIGHT, camera at head
       const vertOverlap = s.y < pTop && s.y + H > pFeet;
-      if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext) {
+      if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext && clearLOS) {
         s.contactNext = now + 1000;
         if (Math.random() < 0.30) {
           dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H, c.hitSound);
@@ -930,7 +944,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const reach = H * 0.5 + 0.5;
       const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
       const swoosh = () => { if (c.missSound) emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 }); };
-      if (c.meleeContact && dist < reach && vOverlap) {
+      if (c.meleeContact && dist < reach && vOverlap && clearLOS) {
         if (Math.random() < 0.5) {
           // HIT (50%): impact sound + damage + knockback + 0-90° view-spin.
           emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
@@ -993,6 +1007,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // intended move direction (mvx,mvz) for the climb/deflect logic below.
     const preX = s.x, preZ = s.z;
     let mvx = 0, mvz = 0, moving = false;
+    s.crouching = false;   // default; the pursue branch sets it true while pathfinding into a tight space
 
     const stunned = now < inst.stunUntil;
     if (stunned) {                                          // hit-stunned -> flinch + hold
@@ -1120,7 +1135,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
       // Contact: real hitbox overlap → dmg + knockback; ×zoomHitMul + a view-spin fling mid-zoom.
       if (s.y < camera.position.y && s.y + H > camera.position.y - 1.6
-          && dist < inst.radius + 0.45 && now > s.contactNext) {
+          && dist < inst.radius + 0.45 && now > s.contactNext && clearLOS) {
         s.contactNext = now + 350;
         const mul = zooming ? c.spin.zoomHitMul : 1;
         // Spintroll's own impact sound on the working 3D path; '' skips dealPlayerDamage's own.
@@ -1161,6 +1176,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           }
         }
       } else { s.bestDist = dist; s.progressAt = now; s.pathing = false; s.path = null; }
+      // Larger enemies WITHOUT a crawl clip hunker down while threading into a hiding space (skeletons
+      // already play the real crawl clip). Applied to the render scale below.
+      s.crouching = pathLoco && !hasCrawl;
       g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
       // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
       // monster keeps WALKING toward you between spits instead of standing still and spraying.
@@ -1501,6 +1519,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       yR = s.y - (1 - t) * H;
     }
     g.position.set(s.x, yR, s.z);
+    // Crouch: squash to ~60% height while pathing into a tight space (interim "duck to crawl in" for
+    // rigs with no crawl clip; skeletons play the real crawl clip instead). x/z stay at `scale`.
+    g.scale.y = s.crouching ? scale * 0.6 : scale;
 
     // ── Spin-lunge visual (mushroom grunt): override the rendered transform for 0.5s. Full
     //    body revolution over the first 0.25s; lunge to 50% closer and back (sin ease, peak at
@@ -1518,7 +1539,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const sdx = camera.position.x - px, sdz = camera.position.z - pz;
           const sdist = Math.hypot(sdx, sdz) || 1;
           const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
-          if (sdist < (c.attackRange ?? 1.8) && vOverlap && c.meleeContact) {
+          if (sdist < (c.attackRange ?? 1.8) && vOverlap && c.meleeContact && clearLOS) {
             dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), sdx / sdist, 0, sdz / sdist,
                              rnd(c.meleeContact.kb), c.hitSound);
           } else if (c.missSound) {
