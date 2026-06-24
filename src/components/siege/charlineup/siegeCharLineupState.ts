@@ -16,9 +16,13 @@ export const ANIM_LIBRARY = '/siege/characters/siege_anims.glb';
 // scaled feet on the ground.  Ash → 2.0 m incl. hat (raw 1.783), Thorn → 1.4 m (raw 2.010).
 export interface LineupChar { name: string; file: string; scale: number; minY: number; }
 // Character MESHES only (no embedded animations — those live in ANIM_LIBRARY).
+// scale = targetHeight / rawHeight. Dago 2.4m (raw 1.695), Jankz 1.65m (raw 1.711), Rajax 1.75m (raw 1.926).
 export const LINEUP_CHARS: LineupChar[] = [
   { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055 },
   { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455 },
+  { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.416, minY: -0.0590 },
+  { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', scale: 0.965, minY: -0.0038 },
+  { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 0.909, minY: -0.0002 },
 ];
 
 export interface LineupAnchor { x: number; z: number; yaw: number; groundY: number }
