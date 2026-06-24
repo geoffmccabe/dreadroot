@@ -60,7 +60,7 @@ uniform float uTime;
 uniform sampler2D uTex;
 void main(){
   vec2 c = vUv - 0.5;                                  // centred −0.5..0.5
-  float a = uTime * 0.35;                              // gentle spin
+  float a = uTime * 18.84956;                          // 3 rotations/sec (2π·3) — webp can't be frame-sped, so spin it
   float s = sin(a), co = cos(a);
   vec2 rot = vec2(c.x*co - c.y*s, c.x*s + c.y*co) + 0.5;
   vec4 tex = texture2D(uTex, rot);
@@ -71,7 +71,7 @@ void main(){
 
 function Spiral({ z, dir, speed, renderOrder }: { z: number; dir: number; speed: number; renderOrder: number }) {
   const mat = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uDir: { value: dir }, uAlpha: { value: 0.6 } },
+    uniforms: { uTime: { value: 0 }, uDir: { value: dir }, uAlpha: { value: 0.8 } },
     vertexShader: VERT,
     fragmentShader: FRAG,
     transparent: true,
@@ -101,9 +101,10 @@ function Moire({ z, renderOrder }: { z: number; renderOrder: number }) {
   }, [tex]);
   useFrame((_, dt) => { mat.uniforms.uTime.value += dt; });
   // SQUARE plane (side = portal width) so the disc mask is a true circle that touches the gate
-  // sides; centred in the opening.
+  // sides. Nudged to look centred: down 15cm (Y) and 5cm to the LEFT as you face the gate from
+  // the stairs (facing −Z, so left = −X).
   return (
-    <mesh position={[PORTAL_POS[0], PORTAL_POS[1], z]} material={mat} renderOrder={renderOrder}>
+    <mesh position={[PORTAL_POS[0] - 0.05, PORTAL_POS[1] - 0.15, z]} material={mat} renderOrder={renderOrder}>
       <planeGeometry args={[PORTAL_W, PORTAL_W]} />
     </mesh>
   );
