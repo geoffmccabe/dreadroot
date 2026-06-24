@@ -69,13 +69,18 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
   useFrame((state, rawDt) => {
     const g = group.current; if (!g) return;
     const dt = Math.min(rawDt, 0.05);
-    // Tail sway — slow travelling wave down the chain (side-to-side flick + a little vertical curl).
+    // Tail swish — the standard procedural-tail formula: a TRAVELLING sine wave down the chain
+    // (phase lag per segment) with amplitude GROWING toward the tip, so it whips like a cat's tail.
+    // A slower, smaller wave on a second axis keeps it from being a flat 2D wag.
     if (tailBones.length) {
       const t = state.clock.elapsedTime;
-      for (let i = 0; i < tailBones.length; i++) {
-        const ph = t * 1.3 - i * 0.6;
-        tailBones[i].rotation.y = Math.sin(ph) * 0.22;
-        tailBones[i].rotation.x = Math.sin(ph * 0.6 + 0.5) * 0.07;
+      const N = tailBones.length;
+      for (let i = 0; i < N; i++) {
+        const frac = i / (N - 1);
+        const amp = 0.05 + 0.11 * frac;          // base → tip (whip)
+        const ph = t * 1.5 - i * 0.7;            // travelling wave (phase lag per bone)
+        tailBones[i].rotation.y = Math.sin(ph) * amp;                    // side-to-side swish
+        tailBones[i].rotation.x = Math.sin(ph * 0.5 + 1.2) * amp * 0.45; // gentle vertical undulation
       }
     }
     const seq = getFlightSeq();
