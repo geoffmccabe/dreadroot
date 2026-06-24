@@ -135,8 +135,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
-          {/* Pole-dance girls in the built room (main world). */}
-          {world.id === 'siege-test' && <PoleDancers />}
+          {/* Pole-dance girls in the SciFi City nightclub. */}
+          {world.id === 'city-demo' && <PoleDancers />}
           {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
           {world.id === 'city-demo' && (
             <Suspense fallback={null}>
