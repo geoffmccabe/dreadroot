@@ -12,7 +12,10 @@ import { loadImageEl, imageToGrayGrid } from './imageToGrayGrid';
 import { setBuilderBarrier } from '@/features/enemies/ai/fortressSafeZone';
 import { frameLoop } from '@/lib/frameLoop';
 
-const TIER_GREY = ['#e6e6e6', '#b0b0b0', '#808080', '#505050', '#2a2a2a'];
+// The 5 graded fortress-stone textures (tier 1 lightest … 5 darkest) — the SAME files the
+// catalog (blocks table: fortress_stone_1..5) and placed blocks use, so the preview shows
+// exactly what gets built. No runtime grey tint: the grading lives in the textures.
+const TIER_TEXTURES = [1, 2, 3, 4, 5].map((t) => `/fortress_stone_${t}.webp`);
 const BUFFER = 60000; // fixed per-tier instance buffer (avoids mesh recreation on slider drag)
 
 // Emissive FRAME texture (bright border, black centre) — used as an emissiveMap so a
@@ -35,17 +38,19 @@ function frameTexture(): THREE.CanvasTexture {
 }
 
 function TierMesh({
-  voxels, grey, tint, texture,
-}: { voxels: FortressVoxel[]; grey: string; tint: string; texture: THREE.Texture }) {
+  voxels, tint, texture,
+}: { voxels: FortressVoxel[]; tint: string; texture: THREE.Texture }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const geo = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
   const mat = useMemo(() => new THREE.MeshLambertMaterial({ map: texture }), [texture]);
   useEffect(() => () => { geo.dispose(); mat.dispose(); }, [geo, mat]);
 
+  // Grading is baked into the per-tier texture; tint is just an optional preview multiply
+  // (white default = exactly what's placed in the world).
   useEffect(() => {
-    mat.color = new THREE.Color(grey).multiply(new THREE.Color(tint));
+    mat.color = new THREE.Color(tint);
     mat.needsUpdate = true;
-  }, [mat, grey, tint]);
+  }, [mat, tint]);
 
   useEffect(() => {
     const mesh = meshRef.current;
@@ -178,16 +183,21 @@ export function FortressBuilderPreview() {
   const { camera } = useThree();
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const centerRef = useRef<THREE.Vector3 | null>(null);
-  const texRef = useRef<THREE.Texture | null>(null);
+  const texturesRef = useRef<THREE.Texture[]>([]);
   const [texReady, setTexReady] = useState(false);
 
-  // Cliff texture, loaded once.
+  // Load the 5 graded fortress-stone textures once.
   useEffect(() => {
-    const t = new THREE.TextureLoader().load('/cliff_texture_seamless.webp', () => setTexReady(true));
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    texRef.current = t;
-    return () => { t.dispose(); };
+    const loader = new THREE.TextureLoader();
+    let loaded = 0;
+    const arr = TIER_TEXTURES.map((url) => {
+      const t = loader.load(url, () => { if (++loaded === TIER_TEXTURES.length) setTexReady(true); });
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      return t;
+    });
+    texturesRef.current = arr;
+    return () => arr.forEach((t) => t.dispose());
   }, []);
 
   // (Re)load the source image when it changes.
@@ -265,15 +275,16 @@ export function FortressBuilderPreview() {
     return { tiers, lightExtrude, lightInset };
   }, [result, extrudeLightOn, insetLightOn]);
 
-  if (!isOpen || !result || !texReady || !texRef.current || !centerRef.current) return null;
+  if (!isOpen || !result || !texReady || texturesRef.current.length < 5 || !centerRef.current) return null;
   const c = centerRef.current;
+  const tex = texturesRef.current;
   return (
     <group position={[c.x, c.y, c.z]}>
       {groups.tiers.map((vox, i) => (
-        <TierMesh key={i} voxels={vox} grey={TIER_GREY[i]} tint={tintHex} texture={texRef.current!} />
+        <TierMesh key={i} voxels={vox} tint={tintHex} texture={tex[i]} />
       ))}
-      <LightMesh lid="extrude" voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} texture={texRef.current!} />
-      <LightMesh lid="inset" voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} texture={texRef.current!} />
+      <LightMesh lid="extrude" voxels={groups.lightExtrude} color={extrudeLightColor} intensity={extrudeLightIntensity} texture={tex[2]} />
+      <LightMesh lid="inset" voxels={groups.lightInset} color={insetLightColor} intensity={insetLightIntensity} texture={tex[2]} />
       {/* Real light spill onto nearby blocks/terrain (capped, constant count). */}
       {/* Extrude light sits ABOVE the protrusions (yOffset) to wash the blocks above;
           inset light stays in the niche. */}
