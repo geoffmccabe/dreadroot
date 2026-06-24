@@ -1,49 +1,61 @@
-// Renders the Dark Lord's lightning bolts (three.js LightningStrike, the open-source effect Geoff
-// picked). One pool of bolts; each active caster (from darkLordLightning's store) drives two — one
-// per hand → the LOS-clipped beam end. Mounted once in the siege scene.
+// Renders the Dark Lord's lightning (three.js LightningStrike — the open-source effect Geoff
+// picked). Per hand: a wide dim PURPLE glow bolt (halo, matches his purple fire) + three THIN
+// white-lavender arcs that jitter independently for variety; additive so they read as a white-hot
+// core in a purple glow. One pool; each active caster (from darkLordLightning's store) drives two
+// hands → the LOS-clipped beam end. Mounted once in the siege scene.
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { LightningStrike } from 'three-stdlib';
 import { getLightningCasters } from './darkLordLightning';
 
-const POOL = 8;   // up to 4 Dark Lords casting at once (2 bolts each)
+const BEAMS = 6;     // 3 Dark Lords × 2 hands
+const THIN = 3;      // thin arcs per hand
 
-// Ray params lifted from the reference demo, widened for a hand→player beam.
-const newRay = () => ({
+const ray = (r0: number, r1: number) => ({
   sourceOffset: new THREE.Vector3(), destOffset: new THREE.Vector3(),
-  radius0: 0.14, radius1: 0.05, minRadius: 0.04, maxIterations: 7,
-  isEternal: true, timeScale: 0.7,
+  radius0: r0, radius1: r1, minRadius: 0.02, maxIterations: 7,
+  isEternal: true, timeScale: 0.8,
   propagationTimeFactor: 0.05, vanishingTimeFactor: 0.95,
-  subrayPeriod: 2.5, subrayDutyCycle: 0.3, maxSubrayRecursion: 3,
-  ramification: 7, recursionProbability: 0.6, roughness: 0.85, straightness: 0.68,
+  subrayPeriod: 2.5, subrayDutyCycle: 0.4, maxSubrayRecursion: 3,
+  ramification: 7, recursionProbability: 0.6, roughness: 0.9, straightness: 0.62,
 });
+type Bolt = { ls: { rayParameters: { sourceOffset: THREE.Vector3; destOffset: THREE.Vector3 }; update: (t: number) => void }; mesh: THREE.Mesh };
+const mkBolt = (r0: number, r1: number, color: number, opacity: number): Bolt => {
+  const ls = new LightningStrike(ray(r0, r1) as unknown as ConstructorParameters<typeof LightningStrike>[0]);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+  const mesh = new THREE.Mesh(ls as unknown as THREE.BufferGeometry, mat);
+  mesh.visible = false; mesh.frustumCulled = false; mesh.renderOrder = 999;
+  return { ls: ls as unknown as Bolt['ls'], mesh };
+};
 
 export function DarkLordLightning() {
-  const bolts = useMemo(() => Array.from({ length: POOL }, () => {
-    const ls = new LightningStrike(newRay() as unknown as ConstructorParameters<typeof LightningStrike>[0]);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x9be8ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
-    const mesh = new THREE.Mesh(ls as unknown as THREE.BufferGeometry, mat);
-    mesh.visible = false; mesh.frustumCulled = false; mesh.renderOrder = 999;
-    return { ls, mesh };
-  }), []);
+  // Each beam = 1 wide purple glow + 3 thin white-lavender arcs.
+  const beams = useMemo(() => Array.from({ length: BEAMS }, () => ({
+    glow: mkBolt(0.16, 0.06, 0x7a3cff, 0.45),                                  // purple halo
+    arcs: Array.from({ length: THIN }, () => mkBolt(0.03, 0.018, 0xe6ddff, 0.95)),  // white-lavender cores
+  })), []);
+  const all = useMemo(() => beams.flatMap((b) => [b.glow.mesh, ...b.arcs.map((a) => a.mesh)]), [beams]);
   const t = useRef(0);
   useFrame((_, dt) => {
     t.current += dt;
-    let i = 0;
-    getLightningCasters().forEach((b) => {
-      const hands: [number, number, number][] = [[b.ax, b.ay, b.az], [b.bx, b.by, b.bz]];
+    let bi = 0;
+    getLightningCasters().forEach((c) => {
+      const hands: [number, number, number][] = [[c.ax, c.ay, c.az], [c.bx, c.by, c.bz]];
       for (const [sx, sy, sz] of hands) {
-        if (i >= POOL) return;
-        const { ls, mesh } = bolts[i++];
-        const rp = (ls as unknown as { rayParameters: { sourceOffset: THREE.Vector3; destOffset: THREE.Vector3 } }).rayParameters;
-        rp.sourceOffset.set(sx, sy, sz);
-        rp.destOffset.set(b.ex, b.ey, b.ez);
-        (ls as unknown as { update: (time: number) => void }).update(t.current);
-        mesh.visible = true;
+        if (bi >= BEAMS) return;
+        const beam = beams[bi++];
+        const drive = (b: Bolt, off: number) => {
+          b.ls.rayParameters.sourceOffset.set(sx, sy, sz);
+          b.ls.rayParameters.destOffset.set(c.ex, c.ey, c.ez);
+          b.ls.update(t.current + off);
+          b.mesh.visible = true;
+        };
+        drive(beam.glow, 0);
+        beam.arcs.forEach((a, i) => drive(a, 1.7 + i * 2.3));                  // offset time → each arc differs
       }
     });
-    for (; i < POOL; i++) bolts[i].mesh.visible = false;
+    for (; bi < BEAMS; bi++) { const b = beams[bi]; b.glow.mesh.visible = false; b.arcs.forEach((a) => (a.mesh.visible = false)); }
   });
-  return <group>{bolts.map((b, idx) => <primitive key={idx} object={b.mesh} />)}</group>;
+  return <group>{all.map((m, i) => <primitive key={i} object={m} />)}</group>;
 }

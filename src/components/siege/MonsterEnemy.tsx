@@ -365,9 +365,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // Looped 3D sounds (spintroll whir, walk stomps) — stopped on death/unmount.
   const spinLoopRef = useRef<LoopSound | null>(null);
   const walkLoopRef = useRef<LoopSound | null>(null);
+  const liteLoopRef = useRef<LoopSound | null>(null);   // Dark Lord electric-stream loop
   useEffect(() => () => {
     stopLoopSound(spinLoopRef.current); spinLoopRef.current = null;
     stopLoopSound(walkLoopRef.current); walkLoopRef.current = null;
+    stopLoopSound(liteLoopRef.current); liteLoopRef.current = null;
   }, []);
 
   // Occasional roar (e.g. red demon): every 3-5s roll a 20% chance to roar from the
@@ -669,6 +671,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
     // Stop the walk loop once dead (death blocks below return early).
     if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
+    if (inst.dead && liteLoopRef.current) { stopLoopSound(liteLoopRef.current); liteLoopRef.current = null; }
     // Coin drop: fire ONCE on death. Open-world only (the helper skips challenge kills). DIVI =
     // round(initialHealth/10) at the body.
     if (inst.dead && !s.killFired) { s.killFired = true; s.liteActive = false; clearLightningCaster(inst.id); void dropSiegeDivi(inst.x, inst.y + H * 0.3, inst.z, inst.maxHp); }
@@ -974,6 +977,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           tryStartLightning(s, now, camera.position.x, camera.position.y, camera.position.z, _hL, _hR);
         }
       }
+      if (casting) {
+        if (!liteLoopRef.current) liteLoopRef.current = startLoopSound('/electric_attack.mp3', { x: s.x, y: s.y + 1.5, z: s.z, baseVolume: 0 });
+        camera.getWorldDirection(_aDir);
+        updateLoopSound(liteLoopRef.current, s.x, s.y + 1.5, s.z, camera.position, _aDir, 1, 0.95);
+      } else if (liteLoopRef.current) { stopLoopSound(liteLoopRef.current); liteLoopRef.current = null; }
       if (casting) {
         play('cast');                             // 2H magic-cast pose (Mixamo); no teleport mid-bout
       } else if (now >= s.teleAt) {
