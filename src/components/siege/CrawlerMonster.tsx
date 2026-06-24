@@ -31,7 +31,7 @@ const MODEL_H = 1.803;        // intrinsic skeletonflesh height
 const BASE_H = 1.4;           // crawler body length (m) — small but clearly visible
 const FLAT = 1.0;             // the crawl clip is already prone/flat — no extra squash (would distort the rig)
 const HOVER = 0.12;           // body-centre lift off the surface
-const HEADING = -3 * Math.PI / 4;  // yaw offset: the crawl rig faces 135° off travel ("backwards + right") → correct it
+const HEADING = 3 * Math.PI / 4;   // yaw offset: rig's crawl-forward is -135° off travel → +135° aligns the head to where it crawls
 const SCUTTLE = '/scuttle_monster.mp3';  // looped movement sound, audible only while crawling
 const BITE = '/Bite_hiss.mp3';           // one-shot bite sound on a successful hit (layers OVER the scuttle)
 const HP = 40;
@@ -171,15 +171,16 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     return c;
   }, [scene]);
 
-  // Idle clip (no crawl clip on this rig yet) — see the "Fast Crawler" asset note. Play it fast so
-  // the limbs scrabble; the prone tilt + flat squash sell the crawl until the real clip is retargeted.
+  // Crawl clip — its playback rate is driven per-frame by how fast this Crawlie is actually moving
+  // (faster crawl = faster scrabble), so the ±speed spread reads visually.
   const { actions, names } = useAnimations(animations, inner);
+  const actRef = useRef<THREE.AnimationAction | null>(null);
   useEffect(() => {
     const n = names.find((x) => /crawl/i.test(x)) ?? names.find((x) => /walk|run/i.test(x)) ?? names.find((x) => /idle/i.test(x)) ?? names[0];
     const a = n ? actions[n] : null;
     a?.reset().fadeIn(0.2).play();
-    if (a) a.timeScale = 1.15;
-    return () => { a?.fadeOut(0.2); };
+    actRef.current = a ?? null;
+    return () => { a?.fadeOut(0.2); actRef.current = null; };
   }, [actions, names]);
 
   const inst = useRef<DemonInstance>({
@@ -195,6 +196,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const st = useRef({
     cx: spawn[0], cy: spawn[1], cz: spawn[2], nx: 0, ny: 1, nz: 0, fx: 0, fy: 0, fz: 1,
     nextBite: 0, deathT: 0, vy: 0,
+    lastX: spawn[0], lastY: spawn[1], lastZ: spawn[2], stuckT: 0, detachUntil: 0,   // stuck-on-a-wall unstick
   }).current;
   // Body box for inter-Crawlie stacking — registered in the shared set so others can crawl on top.
   const box = useMemo(() => new THREE.Box3(), []);
@@ -231,12 +233,13 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     }
 
     const px = camera.position.x, py = camera.position.y - 0.4, pz = camera.position.z;
+    const detached = now < st.detachUntil;   // briefly let go of the surface to un-stick from a wall
 
     // 1) Stick to the nearest surface (object face, other Crawlie, or ground — works on rock/mushroom
     //    tops + walls + ceilings, not just terrain). `supported` = we found a surface this frame →
     //    others may stack ON us; unsupported Crawlies fall. When the surface is another Crawlie we
     //    SINK in (nest) so piles pack tight instead of perching one body-height apart.
-    if (findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {
+    if (!detached && findSurface(st.cx, st.cy, st.cz, box, priRef.current)) {
       boxInfo.current.supported = true;
       st.vy = 0;
       st.nx += (_best.nx - st.nx) * Math.min(1, dt * 8);   // smooth the normal so edges don't snap
@@ -267,7 +270,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     // Step toward the player along the tangent.
     const spd = SPEED * V.current!.speed * (mods?.speedMul ?? 1);
     let moving = false;
-    if (hasDir && pdist > ATTACK_R * 0.7) {
+    if (hasDir && pdist > ATTACK_R * 0.7 && !detached) {
       moving = true;
       const step = spd * dt;
       st.cx += dirx * step; st.cy += diry * step; st.cz += dirz * step;
@@ -276,6 +279,23 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
         const hov = _best.onCrawler ? HOVER * 0.4 : HOVER;
         st.cx = _best.sx + _best.nx * hov; st.cy = _best.sy + _best.ny * hov; st.cz = _best.sz + _best.nz * hov;
       }
+    }
+
+    // Stuck-on-a-wall unstick: if it WANTS to move but has made almost no horizontal progress for a
+    // while (jammed against a vertical face/concave corner), briefly let go of the surface so gravity
+    // drops it off and it re-attaches + retries from a fresh spot.
+    if (moving) {
+      const prog = Math.hypot(st.cx - st.lastX, st.cy - st.lastY, st.cz - st.lastZ);   // 3D (climbing counts)
+      if (prog > 0.04) { st.stuckT = now; st.lastX = st.cx; st.lastY = st.cy; st.lastZ = st.cz; }
+      else if (st.stuckT === 0) st.stuckT = now;
+      else if (now - st.stuckT > 1200) { st.detachUntil = now + 350; st.stuckT = now; st.vy = -1; }
+    } else { st.stuckT = now; st.lastX = st.cx; st.lastY = st.cy; st.lastZ = st.cz; }
+
+    // Drive the crawl animation rate from the ACTUAL speed (faster Crawlie → faster scrabble; near-
+    // idle when biting), so the ±speed spread is visible in the animation too.
+    if (actRef.current) {
+      const rate = (moving ? 1 : 0.3) * (spd / SPEED);
+      actRef.current.timeScale = Math.max(0.3, Math.min(3, rate * 1.3));
     }
 
     // 3) Bite when in range — small damage (10-25); the hiss layers OVER the scuttle loop.
