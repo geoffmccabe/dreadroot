@@ -25,12 +25,12 @@ import { meshGroundHeight } from './meshColliderSystem';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
-const URL = '/siege/monsters/skeletonflesh.glb';
+const URL = '/siege/monsters/skeletonflesh_crawl.glb';  // skeletonflesh + retargeted "Running Crawl" clip ('crawl')
 const MODEL_H = 1.803;        // intrinsic skeletonflesh height
-const BASE_H = 1.4;           // crawler body length (m, head-to-toe of the source rig) — small but clearly visible
-const FLAT = 0.85;            // gentle squash along the surface normal (the real flat/prone look needs the crawl clip)
+const BASE_H = 1.4;           // crawler body length (m) — small but clearly visible
+const FLAT = 1.0;             // the crawl clip is already prone/flat — no extra squash (would distort the rig)
 const HOVER = 0.12;           // body-centre lift off the surface
-const PRONE_TILT = Math.PI / 2;  // lie the upright rig face-down, head-forward (stand-in for the Fast Crawler clip)
+const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if it crawls backward)
 const HP = 40;
 const SPEED = 3.4;            // crawl speed along the surface (m/s)
 const CLING = 0.85;           // a box face within this distance (m) is grippable
@@ -152,7 +152,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     const n = names.find((x) => /crawl/i.test(x)) ?? names.find((x) => /walk|run/i.test(x)) ?? names.find((x) => /idle/i.test(x)) ?? names[0];
     const a = n ? actions[n] : null;
     a?.reset().fadeIn(0.2).play();
-    if (a) a.timeScale = 1.6;
+    if (a) a.timeScale = 1.15;
     return () => { a?.fadeOut(0.2); };
   }, [actions, names]);
 
@@ -250,7 +250,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     g.scale.set(scale, scale * FLAT, scale);
   });
 
-  return <group ref={group}><group ref={inner} rotation={[PRONE_TILT, 0, 0]}><primitive object={cloned} /></group></group>;
+  return <group ref={group}><group ref={inner} rotation={[0, HEADING, 0]}><primitive object={cloned} /></group></group>;
 }
 
 useGLTF.preload(URL);
