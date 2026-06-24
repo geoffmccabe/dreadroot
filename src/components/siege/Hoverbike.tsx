@@ -5,19 +5,18 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { groundAt } from './siegeGround';
 import { setHoverbikeInRange } from './hoverbikeStore';
 
 const URL = '/siege/scifi/worlds_SM_Veh_Hover_Bike_02.gltf';
-const X = -31.093, Z = -44.667, Y_GUESS = 11.0;   // helipad surface ≈ here; refined by ground-snap below
+// The helipad is up in the air (not a ground collider), so use the exact spot Geoff gave — no
+// ground-snap (that found the street far below and dropped the bike).
+const X = -31.093, Y = 12.546, Z = -44.667;
 const YAW = 0;
 const RANGE = 2;   // metres (horizontal) from the bike's centre
 
 export function Hoverbike() {
   const { scene } = useGLTF(URL, '/draco/');
   const camera = useThree((s) => s.camera);
-  const groupRef = useRef<THREE.Group>(null);
-  const grounded = useRef(false);
   useEffect(() => () => setHoverbikeInRange(false), []);   // clear the prompt when leaving the map
 
   // Clone + sit the lowest point at the group origin (so positioning the group = positioning the base).
@@ -34,18 +33,11 @@ export function Hoverbike() {
   }, [scene]);
 
   useFrame(() => {
-    const g = groupRef.current; if (!g) return;
-    // Snap onto the actual helipad surface once the BVH is available (city ground loads a bit late).
-    if (!grounded.current) {
-      const surf = groundAt(X, Z, Y_GUESS + 3);
-      g.position.set(X, surf ?? Y_GUESS, Z);
-      if (surf != null) grounded.current = true;
-    }
     const dx = camera.position.x - X, dz = camera.position.z - Z;
     setHoverbikeInRange(Math.hypot(dx, dz) < RANGE);
   });
 
-  return <group ref={groupRef} position={[X, Y_GUESS, Z]} rotation={[0, YAW, 0]}><primitive object={obj} /></group>;
+  return <group position={[X, Y, Z]} rotation={[0, YAW, 0]}><primitive object={obj} /></group>;
 }
 
 useGLTF.preload(URL, '/draco/');
