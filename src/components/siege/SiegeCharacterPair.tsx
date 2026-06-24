@@ -20,7 +20,7 @@ const CLEAN_SCALE = 1.1819;
 const CLEAN_FEET_Y = -0.0327;
 
 const PAIR: { id: string; name: string }[] = [
-  { id: 'thorn', name: 'Thorn' },
+  // Thorn removed — she's now in the animated &&& lineup; the static copy here was overlapping her.
   { id: 'shiyang', name: 'Shi Yang' },
 ];
 
