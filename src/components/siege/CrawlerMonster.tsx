@@ -22,7 +22,7 @@ import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { sampleHeight } from './terrainHeight';
 import { meshGroundHeight } from './meshColliderSystem';
-import { startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
+import { startLoopSound, updateLoopSound, stopLoopSound, play3DPositionalSound, type LoopSound } from '@/lib/spatialAudio';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
@@ -31,8 +31,9 @@ const MODEL_H = 1.803;        // intrinsic skeletonflesh height
 const BASE_H = 1.4;           // crawler body length (m) — small but clearly visible
 const FLAT = 1.0;             // the crawl clip is already prone/flat — no extra squash (would distort the rig)
 const HOVER = 0.12;           // body-centre lift off the surface
-const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if it crawls backward)
+const HEADING = -3 * Math.PI / 4;  // yaw offset: the crawl rig faces 135° off travel ("backwards + right") → correct it
 const SCUTTLE = '/scuttle_monster.mp3';  // looped movement sound, audible only while crawling
+const BITE = '/Bite_hiss.mp3';           // one-shot bite sound on a successful hit (layers OVER the scuttle)
 const HP = 40;
 const SPEED = 3.4;            // crawl speed along the surface (m/s)
 const CLING = 0.85;           // a box face within this distance (m) is grippable
@@ -176,6 +177,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const right = useMemo(() => new THREE.Vector3(), []);
   const basis = useMemo(() => new THREE.Matrix4(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
+  const aSrc = useMemo(() => new THREE.Vector3(), []);
   const scuttle = useRef<LoopSound | null>(null);
   useEffect(() => () => { stopLoopSound(scuttle.current); scuttle.current = null; }, []);
 
@@ -233,10 +235,13 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
       }
     } else if (tl <= 1e-3) { tx = 1; ty = 0; tz = 0; }   // degenerate (player straight along normal) → arbitrary fwd
 
-    // 3) Bite when in range.
+    // 3) Bite when in range — small damage (10-25), but Crawlies come in hordes. Hiss layers OVER
+    //    the scuttle loop (we don't stop the scuttle).
     if (pdist <= ATTACK_R && now >= st.nextBite) {
       st.nextBite = now + ATTACK_MS;
-      dealPlayerDamage(rnd([4, 14]) * (mods?.damageMul ?? 1), -dxp, -dyp, -dzp, rnd([1, 3]) * 4);
+      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -dxp, -dyp, -dzp, rnd([1, 3]) * 4);
+      camera.getWorldDirection(camDir);
+      void play3DPositionalSound(BITE, aSrc.set(st.cx, st.cy, st.cz), camera.position, camDir, { baseVolume: 0.7 });
     }
 
     // Publish hitbox at the body centre.
