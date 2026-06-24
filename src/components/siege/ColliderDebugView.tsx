@@ -8,12 +8,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import { forEachMeshInstanceBox } from './meshColliderSystem';
+import { forEachMeshInstance } from './meshColliderSystem';
 import { colliderDebugStats } from './colliderDebugStats';
 
 const NEAR = 20, FAR = 100, MAX = 2500;
 const boxGeo = new THREE.BoxGeometry(1, 1, 1);
 const edgeGeo = new THREE.EdgesGeometry(boxGeo);
+// The ACTUAL collision-mesh wireframe per geometry is expensive to build, so cache it (shared, never
+// disposed — the underlying BVH geometry lives for the world's lifetime).
+const wireCache = new WeakMap<THREE.BufferGeometry, THREE.WireframeGeometry>();
+const _wc = new THREE.Vector3();
 
 export function ColliderDebugView() {
   const [on, setOn] = useState(false);
@@ -68,22 +72,23 @@ export function ColliderDebugView() {
         }
       }
       const greenCount = n;
-      // BLUE: mesh colliders shown the SAME reliable way as the green boxes — a
-      // box wireframe at each instance's world bounds, just blue. (The actual
-      // collider is the mesh BVH; this is its bounding box.)
-      const c2 = new THREE.Vector3(), s2 = new THREE.Vector3();
+      // BLUE: the ACTUAL collision mesh (triangle wireframe) for instances near the camera — so you
+      // can see the real cave/building walls, floors and roofs, not just bounding boxes.
       let blueCount = 0;
-      forEachMeshInstanceBox((aabb) => {
+      forEachMeshInstance((geometry, matrix) => {
         if (n >= MAX) return;
-        aabb.getCenter(c2);
-        if (cam.distanceTo(c2) > FAR) return;
-        aabb.getSize(s2);
-        const wire = new THREE.LineSegments(edgeGeo, new THREE.LineBasicMaterial({
-          color: 0x33aaff, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false,
+        if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+        _wc.copy(geometry.boundingSphere!.center).applyMatrix4(matrix);
+        const r = geometry.boundingSphere!.radius * Math.max(matrix.elements[0], matrix.elements[5], matrix.elements[10]);
+        if (cam.distanceTo(_wc) - r > FAR) return;     // cull far instances (account for size)
+        let wg = wireCache.get(geometry);
+        if (!wg) { wg = new THREE.WireframeGeometry(geometry); wireCache.set(geometry, wg); }
+        const wire = new THREE.LineSegments(wg, new THREE.LineBasicMaterial({
+          color: 0x33aaff, transparent: true, opacity: 0.55, depthTest: false, depthWrite: false,
           toneMapped: false,
         }));
-        wire.position.copy(c2); wire.scale.copy(s2); wire.renderOrder = 999;
-        wire.userData.center = c2.clone();
+        matrix.decompose(wire.position, wire.quaternion, wire.scale);
+        wire.renderOrder = 999; wire.userData.mc = true;   // mc → constant opacity in the frame loop
         g.add(wire);
         blueCount++;
         if (++n >= MAX) return;

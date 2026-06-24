@@ -60,6 +60,8 @@ const _scl = new THREE.Vector3();
 const _playerAabb = new THREE.Box3();
 const _ray = new THREE.Ray();
 const _hitPt = new THREE.Vector3();
+const _nmat = new THREE.Matrix3();
+const _nrm = new THREE.Vector3();
 
 export function setMeshCollidersEnabled(on: boolean): void { enabled = on; }
 export function meshCollidersEnabled(): boolean { return enabled; }
@@ -218,6 +220,14 @@ export function meshGroundHeight(x: number, z: number, ceilingY?: number): numbe
         _ray.applyMatrix4(inst.inverse);
         const hit = bvh.raycastFirst(_ray, THREE.DoubleSide);
         if (hit) {
+          // Floor-only: ignore downward-facing surfaces (a cave/overhang roof underside). You stand on
+          // floors, not ceilings — without this the probe returns the roof at a cave mouth as "ground"
+          // and monsters levitate up onto the roof (then hit the player through it).
+          const fn = (hit as unknown as { face?: { normal?: THREE.Vector3 } }).face?.normal;
+          if (fn) {
+            _nrm.copy(fn).applyMatrix3(_nmat.getNormalMatrix(inst.matrix)).normalize();
+            if (_nrm.y < 0.3) continue;
+          }
           _hitPt.copy(hit.point).applyMatrix4(inst.matrix);
           if (best === null || _hitPt.y > best) best = _hitPt.y;
         }

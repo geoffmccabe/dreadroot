@@ -1301,9 +1301,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // groundAt prefers the BVH mesh surface (city streets, SWW rocks) below the monster's
     // step reach, falling back to terrain — so monsters stand on the city instead of falling
     // through to the flat ground beneath it. Ceiling = feet + a step's worth of headroom.
-    // While PATHFINDING through a building, hug the floor (low ceiling) so the monster passes UNDER
-    // a doorway header instead of snapping up onto its underside and floating into the opening.
-    let groundY = groundAt(s.x, s.z, s.pathing ? feet + STEP_UP : feet + 3) ?? feet;
+    // Ground-snap reach = ONE STEP only. The old 3 m reach let a monster's "ground" jump up to a low
+    // roof/overhang at a cave mouth → it levitated onto the roof and hit the player through the ceiling.
+    // Taller things are handled as walls by the climb/hop gait, not by snapping the floor up to them.
+    let groundY = groundAt(s.x, s.z, feet + STEP_UP) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
     // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-
