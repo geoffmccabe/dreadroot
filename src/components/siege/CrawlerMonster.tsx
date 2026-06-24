@@ -22,6 +22,7 @@ import { addDemon, removeDemon, type DemonInstance } from './siegeHorde';
 import { dealPlayerDamage } from './spray/sprayAttackSystem';
 import { sampleHeight } from './terrainHeight';
 import { meshGroundHeight } from './meshColliderSystem';
+import { startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
@@ -31,6 +32,7 @@ const BASE_H = 1.4;           // crawler body length (m) — small but clearly v
 const FLAT = 1.0;             // the crawl clip is already prone/flat — no extra squash (would distort the rig)
 const HOVER = 0.12;           // body-centre lift off the surface
 const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if it crawls backward)
+const SCUTTLE = '/scuttle_monster.mp3';  // looped movement sound, audible only while crawling
 const HP = 40;
 const SPEED = 3.4;            // crawl speed along the surface (m/s)
 const CLING = 0.85;           // a box face within this distance (m) is grippable
@@ -173,6 +175,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
   const fwd = useMemo(() => new THREE.Vector3(), []);
   const right = useMemo(() => new THREE.Vector3(), []);
   const basis = useMemo(() => new THREE.Matrix4(), []);
+  const camDir = useMemo(() => new THREE.Vector3(), []);
+  const scuttle = useRef<LoopSound | null>(null);
+  useEffect(() => () => { stopLoopSound(scuttle.current); scuttle.current = null; }, []);
 
   useFrame((_, dt) => {
     const g = group.current; if (!g) return;
@@ -181,6 +186,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
 
     // Death: drop off the surface, fall, despawn.
     if (inst.dead) {
+      if (scuttle.current) { stopLoopSound(scuttle.current); scuttle.current = null; }
       if (st.deathT === 0) st.deathT = now;
       st.vy -= 18 * dt; st.cy += st.vy * dt;
       const ground = sampleHeight(st.cx, st.cz) ?? spawn[1];
@@ -214,7 +220,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     let tx = dxp - dn * st.nx, ty = dyp - dn * st.ny, tz = dzp - dn * st.nz;
     const tl = Math.hypot(tx, ty, tz);
     const spd = SPEED * V.current!.speed * (mods?.speedMul ?? 1);
+    let moving = false;
     if (tl > 1e-3 && pdist > ATTACK_R * 0.7) {
+      moving = true;
       tx /= tl; ty /= tl; tz /= tl;
       const step = spd * dt;
       st.cx += tx * step; st.cy += ty * step; st.cz += tz * step;
@@ -248,6 +256,11 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
     g.position.set(st.cx, st.cy, st.cz);
     g.quaternion.setFromRotationMatrix(basis);
     g.scale.set(scale, scale * FLAT, scale);
+
+    // Scuttle sound: looped at the body, only audible while actually crawling.
+    if (!scuttle.current) scuttle.current = startLoopSound(SCUTTLE, { x: st.cx, y: st.cy, z: st.cz, baseVolume: 0 });
+    camera.getWorldDirection(camDir);
+    updateLoopSound(scuttle.current, st.cx, st.cy, st.cz, camera.position, camDir, 1, moving ? 0.5 : 0);
   });
 
   return <group ref={group}><group ref={inner} rotation={[0, HEADING, 0]}><primitive object={cloned} /></group></group>;
