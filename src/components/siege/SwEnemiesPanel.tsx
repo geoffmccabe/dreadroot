@@ -47,6 +47,15 @@ export function SwEnemiesPanel() {
               <span className="text-muted-foreground">Spawn</span>
               <span className="font-medium text-right">{m.spawn}</span>
             </div>
+            {/* Native AI — read-only (lives in the monster's renderer, not editable here). */}
+            <div className="col-span-2 sm:col-span-3 flex justify-between gap-3">
+              <span className="text-muted-foreground shrink-0">Pathfinding</span>
+              <span className="font-medium text-right">{m.pathfinding}</span>
+            </div>
+            <div className="col-span-2 sm:col-span-3 flex justify-between gap-3">
+              <span className="text-muted-foreground shrink-0">Behavior</span>
+              <span className="font-medium text-right">{m.behavior}</span>
+            </div>
           </CardContent>
         </Card>
       ))}

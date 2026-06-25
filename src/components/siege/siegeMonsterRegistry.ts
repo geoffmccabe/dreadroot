@@ -22,7 +22,33 @@ export interface SwMonster {
   gait: string;
   special: string;            // boss / ranged / spin / attack-style / kind tags
   spawn: string;              // how to spawn it (admin)
+  pathfinding: string;        // how it moves / navigates (read-only — native AI)
+  behavior: string;           // notable AI behaviors (read-only — native AI)
 }
+
+// Native AI / pathfinding per monster (read-only — these behaviors live in each monster's
+// renderer/AI, not in editable stats; listed so admins understand how each one acts).
+const AI: Record<number, { pathfinding: string; behavior: string }> = {
+  1:  { pathfinding: 'Ground chase; A* when stuck; climbs over other demons.', behavior: 'Melee swipe; lunges on the swing.' },
+  2:  { pathfinding: 'Ground chase; hops/jumps over walls (hop gait).', behavior: '360° spin-lunge; bullets tumble it; deflates on death.' },
+  3:  { pathfinding: 'Ground A* chase; climbs large obstacles.', behavior: 'Big skeleton; animation speed scales with size.' },
+  4:  { pathfinding: 'Kites — keeps ~20–30 m away (ranged).', behavior: 'Acid-vomit spray cone; grunts annoyed after misses.' },
+  5:  { pathfinding: 'Teleporter boss — blinks behind the player.', behavior: 'Lightning beam; purple body flames; opacity = damage resist; no stun.' },
+  6:  { pathfinding: 'Tight ~5 m horde cluster; pursues when player is near (own component).', behavior: 'Every mob randomized (size/speed/HP/tint); zombie moans.' },
+  7:  { pathfinding: 'Chases while spinning.', behavior: 'Erratic zoom-dashes (contact dmg ×2); spins your view; smoke trail; flames; no stun/knockback.' },
+  8:  { pathfinding: 'Ground A* chase (climb gait).', behavior: 'Big (4 m), 1000 HP, no stun.' },
+  9:  { pathfinding: 'Flying — orbits 4–9 m and dives (own component).', behavior: 'Upside-down, 20% opacity (resistant); dive strikes; no stun/knockback; tumbles on death.' },
+  10: { pathfinding: 'Ground chase; enrages when shot (walk→run +50%).', behavior: 'Committed swipe; topple death.' },
+  11: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Committed swipe; topple death.' },
+  12: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Committed swipe; topple death.' },
+  13: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Committed swipe; topple death.' },
+  14: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (6 m); committed swipe; topple death.' },
+  15: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (8 m); committed swipe; topple death.' },
+  16: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (10 m); committed swipe; topple death.' },
+  17: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (12 m); committed swipe; topple death.' },
+  18: { pathfinding: 'Wall-crawler — walks floors, walls + ceilings; climbs over enemies (own component).', behavior: 'Bite attack; scuttles along surfaces.' },
+  19: { pathfinding: 'None — decorative.', behavior: 'Loops a dance clip in the Death Dark City challenge.' },
+};
 
 // Models + tags for the special, non-CFG catalog types (each has its own renderer).
 const SPECIAL_MODELS: Record<number, string> = {
@@ -68,10 +94,22 @@ function compute(): SwMonster[] {
       speed: m?.speed ?? null,
       gait: m?.gait ?? '—',
       special: m
-        ? [m.boss ? `boss:${m.boss}` : '', m.spray ? 'ranged' : '', m.spin ? 'spin' : '', m.attackStyle ?? '', m.enrageOnHit ? 'enrages' : '']
-            .filter(Boolean).join(' ')
+        ? [
+            m.boss ? `boss:${m.boss}` : '',
+            m.spray ? 'ranged' : '',
+            m.spin ? 'spin' : '',
+            m.attackStyle ?? '',
+            m.enrageOnHit ? 'enrages' : '',
+            m.lightning ? 'lightning' : '',
+            m.bodyFlames ? 'flames' : '',
+            m.smokeTrail ? 'smoke' : '',
+            m.noStun ? 'no-stun' : '',
+            m.noKnockback ? 'no-kb' : '',
+          ].filter(Boolean).join(' ')
         : (SPECIAL_TAGS[cat.id] ?? ''),
       spawn: spawnCmd(cat.id),
+      pathfinding: AI[cat.id]?.pathfinding ?? '—',
+      behavior: AI[cat.id]?.behavior ?? '—',
     };
   });
 
@@ -84,6 +122,7 @@ function compute(): SwMonster[] {
     health: 0, dmgMin: null, dmgMax: null, attackRange: null, attackMs: null,
     speed: null, gait: 'dance', special: 'decor',
     spawn: 'Auto — appears in the "Death Dark City" challenge (decor, not spawnable)',
+    pathfinding: AI[19].pathfinding, behavior: AI[19].behavior,
   });
 
   // Auto-sort alphabetically by name — re-sorts whenever a name changes.
