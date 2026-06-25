@@ -19,6 +19,7 @@ export interface PanelSurface {
   border: Hsl; borderOpacity: number; borderWidth: number; // px
   radius: number;   // px — corner rounding
   blur: number;     // px backdrop blur (0 = none)
+  darken: number;   // 0..1 — darken the content behind the panel (0.2 = -20%)
   glow: Hsl; glowOpacity: number; glowSize: number; // px — focus glow ring
 }
 
@@ -61,7 +62,8 @@ const USER: PanelTheme = {
     bg: { h: 211, s: 30, l: 51 }, bgOpacity: 0.35,            // --hud-bg
     border: { h: 211, s: 34, l: 73 }, borderOpacity: 0.8, borderWidth: 1, // --hud-border
     radius: 6,
-    blur: 0,
+    blur: 12,        // darkened-glass: blur the scene behind
+    darken: 0.2,     // ...and darken it 20%
     glow: { h: 210, s: 90, l: 60 }, glowOpacity: 0.6, glowSize: 22, // --panel-glow
   },
   text: {
@@ -95,6 +97,7 @@ const DEBUG: PanelTheme = {
     border: { h: 147, s: 50, l: 57 }, borderOpacity: 0.55, borderWidth: 1, // rgba(90,200,140,0.55)
     radius: 12,
     blur: 0,
+    darken: 0,
     glow: { h: 147, s: 50, l: 57 }, glowOpacity: 0.4, glowSize: 10,
   },
   text: {
@@ -128,7 +131,11 @@ export function themeToVars(themes: GamePanelThemes): Record<string, string> {
     out[`${p}-border`] = hsl(s.border, s.borderOpacity);
     out[`${p}-border-w`] = `${s.borderWidth}px`;
     out[`${p}-radius`] = `${s.radius}px`;
-    out[`${p}-blur`] = s.blur > 0 ? `blur(${s.blur}px)` : 'none';
+    // Composite backdrop-filter: blur the scene behind + darken it.
+    const filter: string[] = [];
+    if (s.blur > 0) filter.push(`blur(${s.blur}px)`);
+    if (s.darken > 0) filter.push(`brightness(${(1 - s.darken).toFixed(3)})`);
+    out[`${p}-blur`] = filter.length ? filter.join(' ') : 'none';
     out[`${p}-glow`] = hsl(s.glow, s.glowOpacity);
     out[`${p}-glow-size`] = `${s.glowSize}px`;
     for (const role of TEXT_ROLES) {
