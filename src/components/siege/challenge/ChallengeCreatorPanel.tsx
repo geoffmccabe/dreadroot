@@ -185,13 +185,15 @@ export function ChallengeCreatorPanel() {
   useEffect(() => { if (open && user?.id) fetchRoles(user.id).then(setRoles); }, [open, user?.id]);
 
   // The creator is simply whoever is signed in (player or admin) — not a chooser. Stamp it onto any
-  // NEW (unsaved) challenge as soon as the user is known, so saving records the right author (which
-  // players will later sort the Browser by). Loaded challenges keep their stored creator.
+  // NEW (unsaved) challenge — or a loaded one whose creator is just a placeholder (system/anon/blank,
+  // e.g. older saves like "Yeti Time") — so saving records the real author (which players will later
+  // sort the Browser by). A loaded challenge that already names a real creator is left untouched.
   const userName = user?.email?.split('@')[0] ?? 'anon';
   useEffect(() => {
-    if (open && user && !ch.id && ch.creator !== userName) setCh((c) => ({ ...c, creator: userName }));
+    const placeholder = !ch.creator || ch.creator === 'system' || ch.creator === 'anon';
+    if (open && user && ch.creator !== userName && (!ch.id || placeholder)) setCh((c) => ({ ...c, creator: userName }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, userName, ch.id]);
+  }, [open, userName, ch.id, ch.creator]);
 
   // ── Save / load ──────────────────────────────────────────────────────────────────────────────
   // Snapshot of the last saved/loaded state; the Save button pulses whenever `ch` differs from it.
