@@ -27,14 +27,13 @@ export interface PoleDancerDef { pos: [number, number, number]; yaw?: number; sc
 // The three poles (world coords). Pole #1 base block was reported at (12, 4, -27); the dancer stands
 // ONE dancer (dfdemon, red-tinted), placed ~1m from the pole-base reading [12,4,-27], 1m toward the
 // door (−Z guess). Floor Y kept at the base's 4 — send a laser readout at the exact spot to refine.
-// Five dancing monsters scattered around the city (ambient, with the soundtrack). All ground-snap to
-// the floor under their XZ, so only the XZ needs to land in the city.
+// Dancing monsters at Geoff-picked spots (laser readouts), 6m tall (model ≈1.9m → scale ≈3.14). Each
+// ground-snaps onto the surface under its XZ (rooftop / ledge), so they sit on the building, not float.
 const DANCERS: PoleDancerDef[] = [
-  { pos: [12, 4, -28], yaw: 0,    scale: 1.0,  tint: '#e23b3b' },
-  { pos: [38, 4, 8],   yaw: 1.2,  scale: 1.05, tint: '#e23b3b' },
-  { pos: [-8, 4, 22],  yaw: 2.4,  scale: 0.95, tint: '#e23b3b' },
-  { pos: [52, 4, -18], yaw: -1.5, scale: 1.0,  tint: '#e23b3b' },
-  { pos: [22, 4, 40],  yaw: 0.7,  scale: 1.08, tint: '#e23b3b' },
+  { pos: [-2.214, 32.008, -5.028], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
+  { pos: [38.589, 32.008, 35.227], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
+  { pos: [13.566, 10.805, 70.058], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign
+  { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
 ];
 
 function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
