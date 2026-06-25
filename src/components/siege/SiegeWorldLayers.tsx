@@ -177,7 +177,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               snowy-cabin area by WorldBoundsWall (mounted below, reads the map's wallBox). */}
           {world.id === 'yeti-time' && (
             <Suspense fallback={null}>
-              <DemoScene file="adventure_demo.gltf" group="adventuredemo" />
+              {/* Same Adventure Town geometry, tinted 80% pure white for the snowy look. */}
+              <DemoScene file="adventure_demo.gltf" group="yetitown" tintWhite={0.8} />
               <MeshColliderPlayer />
             </Suspense>
           )}

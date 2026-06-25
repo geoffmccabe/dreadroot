@@ -6,7 +6,6 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCreatorStore';
 import { fireChallengeStart } from './challengeControl';
-import { TEST_CHALLENGE } from './testChallenge';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
 import { BLEND_MODES } from './colorMods';
@@ -30,6 +29,16 @@ const reorder = <T,>(a: T[], from: number, to: number): T[] => { const r = [...a
 const cat = (type: number) => MONSTER_CATALOG.find((m) => m.id === type) ?? MONSTER_CATALOG[0];
 const fmtMS = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
 const DEFAULT_BOSS: BossMods = { sizePct: 100, speedPct: 100, healthPct: 100, damagePct: 100 };
+
+// A genuinely BLANK challenge: empty name, the signed-in author as creator, and 10 waves that each
+// just say "Wave N" with NO spawn cards — a fresh slate to build from (used for the default editor
+// state and "＋ New").
+const blankChallenge = (game: string, creator: string): Challenge => ({
+  name: '',
+  creator,
+  game,
+  waves: Array.from({ length: WAVES_PER_CHALLENGE }, (_, i) => ({ name: `Wave ${i + 1}`, timeSec: 60, drops: [] })),
+});
 
 // HUD-themed styles.
 const PANEL_BG = 'hsla(222, 32%, 10%, 0.96)';
@@ -148,7 +157,7 @@ function NumField({ value, onChange, min, allowEmpty, placeholder, style }: {
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const { user } = useAuth();
-  const [ch, setCh] = useState<Challenge>(() => ({ ...clone(TEST_CHALLENGE), game: getActiveGame() }));
+  const [ch, setCh] = useState<Challenge>(() => blankChallenge(getActiveGame(), 'anon'));
   const [roles, setRoles] = useState<string[]>([]);
   const [saveMsg, setSaveMsg] = useState('');
   const [picker, setPicker] = useState<null | { rows: ChallengeRow[]; loading: boolean }>(null);
@@ -175,19 +184,21 @@ export function ChallengeCreatorPanel() {
   // Load the signed-in user's roles when the panel opens (admins/superadmins get extra powers).
   useEffect(() => { if (open && user?.id) fetchRoles(user.id).then(setRoles); }, [open, user?.id]);
 
+  // The creator is simply whoever is signed in (player or admin) — not a chooser. Stamp it onto any
+  // NEW (unsaved) challenge as soon as the user is known, so saving records the right author (which
+  // players will later sort the Browser by). Loaded challenges keep their stored creator.
+  const userName = user?.email?.split('@')[0] ?? 'anon';
+  useEffect(() => {
+    if (open && user && !ch.id && ch.creator !== userName) setCh((c) => ({ ...c, creator: userName }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userName, ch.id]);
+
   // ── Save / load ──────────────────────────────────────────────────────────────────────────────
   // Snapshot of the last saved/loaded state; the Save button pulses whenever `ch` differs from it.
   const savedJson = useRef<string | null>(null);
   const markSaved = (c: Challenge) => { savedJson.current = JSON.stringify(c); };
   const newChallenge = () => {
-    // A genuinely BLANK challenge (not the demo gauntlet): empty name + 10 empty waves,
-    // so "＋ New" visibly clears the editor to a fresh slate.
-    const fresh: Challenge = {
-      name: '',
-      creator: user?.email?.split('@')[0] ?? 'anon',
-      game: getActiveGame(),
-      waves: Array.from({ length: WAVES_PER_CHALLENGE }, (_, i) => ({ name: `Wave ${i + 1}`, timeSec: 60, drops: [] })),
-    };
+    const fresh = blankChallenge(getActiveGame(), userName);
     setCh(fresh); markSaved(fresh); setSaveMsg('New challenge — unsaved');
   };
   const onSave = async () => {
@@ -427,7 +438,8 @@ export function ChallengeCreatorPanel() {
             <div style={{ flex: 6, minWidth: 0 }}>
               <div style={{ display: 'flex', gap: 10 }}>
                 <div style={{ flex: 2 }}><label style={lbl}>Challenge Name</label><input style={inp} value={ch.name} onChange={(e) => patch({ name: e.target.value })} /></div>
-                <div style={{ flex: 1 }}><label style={lbl}>Creator</label><input style={inp} value={ch.creator} onChange={(e) => patch({ creator: e.target.value })} /></div>
+                {/* Creator is auto-stamped to the signed-in author (read-only) — not an editable field. */}
+                <div style={{ flex: 1 }}><label style={lbl}>Creator</label><div style={{ ...inp, color: '#9fb4d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ch.creator}>{ch.creator || '—'}</div></div>
                 <div style={{ flex: 1 }}>
                   <label style={lbl}>Game</label>
                   {/* A challenge only runs in its game. Defaults to the game you're in; change to author for another. */}

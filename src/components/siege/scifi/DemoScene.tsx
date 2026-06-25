@@ -21,13 +21,40 @@ const COLLIDER_RATIO = 1.0;
 const PER_JOB = 40;           // meshes registered per budgeted tick
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
-export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean }) {
+export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false, tintWhite = 0 }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean; tintWhite?: number }) {
   // Draco-compressed (to fit Cloudflare's 25MB/file limit); decode via local /draco/.
   const { scene } = useGLTF(`/siege/scifi_demo/${file}`, '/draco/');
 
   const root = useMemo(() => {
     const model = scene.clone(true);
     if (scale !== 1) model.scale.setScalar(scale);   // huge scenes (Space ~10km) shrink to view
+    // Snowy tint (Snowy Town): blend the lit albedo toward pure white by `tintWhite` (0.8 = 80%
+    // white / 20% original). Materials are CLONED first — scene.clone(true) shares material refs
+    // with the cached glTF, so editing them in place would also recolour the normal Adventure Town.
+    if (tintWhite > 0) {
+      const t = Math.min(1, tintWhite);
+      const done = new Map<THREE.Material, THREE.Material>();
+      const tintOne = (mat: THREE.Material) => {
+        let cl = done.get(mat);
+        if (!cl) {
+          cl = mat.clone();
+          cl.onBeforeCompile = (shader) => {
+            shader.fragmentShader = shader.fragmentShader.replace(
+              '#include <map_fragment>',
+              `#include <map_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), ${t.toFixed(3)});`,
+            );
+          };
+          cl.needsUpdate = true;
+          done.set(mat, cl);
+        }
+        return cl;
+      };
+      model.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        m.material = Array.isArray(m.material) ? m.material.map(tintOne) : tintOne(m.material);
+      });
+    }
     model.updateMatrixWorld(true);
     // Ground/recenter using ONLY solid meshes — backdrop spheres (sky/planets) can be
     // tens of km across, and including them would catapult the real content into the sky
@@ -64,7 +91,7 @@ export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = fal
     wrap.position.set(-c.x, ground - box.min.y - lowerY, -c.z);
     wrap.updateMatrixWorld(true);
     return wrap;
-  }, [scene, scale, lowerY, hidePlanet]);
+  }, [scene, scale, lowerY, hidePlanet, tintWhite]);
 
   useEffect(() => {
     const meshes: THREE.Mesh[] = [];
