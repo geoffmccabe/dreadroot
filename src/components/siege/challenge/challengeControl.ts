@@ -16,3 +16,10 @@ export function fireChallengeStart(ch: Challenge) { startCh?.(ch); }   // play a
 let skip: (() => void) | null = null;
 export function setChallengeSkip(fn: (() => void) | null) { skip = fn; }
 export function fireChallengeSkip() { skip?.(); }   // START NOW — end the pre-game countdown early
+
+// Restore the player to full health (used when a challenge starts/retries — a ghost from a prior
+// death is brought back to life in place, then the runner teleports them to the arena). Registered
+// by Fortress (which owns the player-health hook).
+let revive: (() => void) | null = null;
+export function setChallengeRevive(fn: (() => void) | null) { revive = fn; }
+export function fireChallengeRevive() { revive?.(); }

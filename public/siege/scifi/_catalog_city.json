@@ -1,0 +1,5946 @@
+{
+ "set": "city",
+ "count": 594,
+ "items": [
+  {
+   "id": "city_SM_Bld_Advanced_01",
+   "name": "SM_Bld_Advanced_01",
+   "set": "city",
+   "file": "city_SM_Bld_Advanced_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 0.709
+  },
+  {
+   "id": "city_SM_Bld_Advanced_02",
+   "name": "SM_Bld_Advanced_02",
+   "set": "city",
+   "file": "city_SM_Bld_Advanced_02.gltf",
+   "category": "building",
+   "w": 10.0,
+   "h": 3.0,
+   "d": 0.709
+  },
+  {
+   "id": "city_SM_Bld_Advanced_Doorway_01",
+   "name": "SM_Bld_Advanced_Doorway_01",
+   "set": "city",
+   "file": "city_SM_Bld_Advanced_Doorway_01.gltf",
+   "category": "building",
+   "w": 10.0,
+   "h": 3.0,
+   "d": 1.644
+  },
+  {
+   "id": "city_SM_Bld_Background_Lrg_01",
+   "name": "SM_Bld_Background_Lrg_01",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Lrg_01.gltf",
+   "category": "building",
+   "w": 8.183,
+   "h": 25.475,
+   "d": 11.864
+  },
+  {
+   "id": "city_SM_Bld_Background_Lrg_02",
+   "name": "SM_Bld_Background_Lrg_02",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Lrg_02.gltf",
+   "category": "building",
+   "w": 8.035,
+   "h": 41.975,
+   "d": 7.946
+  },
+  {
+   "id": "city_SM_Bld_Background_Lrg_03",
+   "name": "SM_Bld_Background_Lrg_03",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Lrg_03.gltf",
+   "category": "building",
+   "w": 8.293,
+   "h": 42.453,
+   "d": 8.293
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_01",
+   "name": "SM_Bld_Background_Med_01",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_01.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 23.107,
+   "d": 4.375
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_02",
+   "name": "SM_Bld_Background_Med_02",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_02.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 23.107,
+   "d": 2.72
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_03",
+   "name": "SM_Bld_Background_Med_03",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_03.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 25.475,
+   "d": 6.447
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_04",
+   "name": "SM_Bld_Background_Med_04",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_04.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 25.475,
+   "d": 6.447
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_05",
+   "name": "SM_Bld_Background_Med_05",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_05.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 23.107,
+   "d": 7.134
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_06",
+   "name": "SM_Bld_Background_Med_06",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_06.gltf",
+   "category": "building",
+   "w": 4.976,
+   "h": 25.475,
+   "d": 4.976
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_07",
+   "name": "SM_Bld_Background_Med_07",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_07.gltf",
+   "category": "building",
+   "w": 5.88,
+   "h": 17.863,
+   "d": 5.092
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_08",
+   "name": "SM_Bld_Background_Med_08",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_08.gltf",
+   "category": "building",
+   "w": 5.188,
+   "h": 17.863,
+   "d": 5.455
+  },
+  {
+   "id": "city_SM_Bld_Background_Med_09",
+   "name": "SM_Bld_Background_Med_09",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Med_09.gltf",
+   "category": "building",
+   "w": 4.858,
+   "h": 30.384,
+   "d": 4.858
+  },
+  {
+   "id": "city_SM_Bld_Background_Small_01",
+   "name": "SM_Bld_Background_Small_01",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Small_01.gltf",
+   "category": "building",
+   "w": 4.898,
+   "h": 4.898,
+   "d": 4.898
+  },
+  {
+   "id": "city_SM_Bld_Background_Small_02",
+   "name": "SM_Bld_Background_Small_02",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Small_02.gltf",
+   "category": "building",
+   "w": 4.423,
+   "h": 6.169,
+   "d": 2.72
+  },
+  {
+   "id": "city_SM_Bld_Background_Small_03",
+   "name": "SM_Bld_Background_Small_03",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Small_03.gltf",
+   "category": "building",
+   "w": 1.877,
+   "h": 6.169,
+   "d": 2.72
+  },
+  {
+   "id": "city_SM_Bld_Background_Small_04",
+   "name": "SM_Bld_Background_Small_04",
+   "set": "city",
+   "file": "city_SM_Bld_Background_Small_04.gltf",
+   "category": "building",
+   "w": 1.877,
+   "h": 6.169,
+   "d": 1.536
+  },
+  {
+   "id": "city_SM_Bld_Bank_01",
+   "name": "SM_Bld_Bank_01",
+   "set": "city",
+   "file": "city_SM_Bld_Bank_01.gltf",
+   "category": "building",
+   "w": 10.669,
+   "h": 3.066,
+   "d": 15.789
+  },
+  {
+   "id": "city_SM_Bld_Chopshop_01",
+   "name": "SM_Bld_Chopshop_01",
+   "set": "city",
+   "file": "city_SM_Bld_Chopshop_01.gltf",
+   "category": "building",
+   "w": 5.214,
+   "h": 6.0,
+   "d": 10.477
+  },
+  {
+   "id": "city_SM_Bld_Chopshop_Interior_01",
+   "name": "SM_Bld_Chopshop_Interior_01",
+   "set": "city",
+   "file": "city_SM_Bld_Chopshop_Interior_01.gltf",
+   "category": "building",
+   "w": 4.794,
+   "h": 3.778,
+   "d": 9.638
+  },
+  {
+   "id": "city_SM_Bld_City_Wall_01",
+   "name": "SM_Bld_City_Wall_01",
+   "set": "city",
+   "file": "city_SM_Bld_City_Wall_01.gltf",
+   "category": "building",
+   "w": 11.151,
+   "h": 10.136,
+   "d": 2.87
+  },
+  {
+   "id": "city_SM_Bld_City_Wall_Tower_01",
+   "name": "SM_Bld_City_Wall_Tower_01",
+   "set": "city",
+   "file": "city_SM_Bld_City_Wall_Tower_01.gltf",
+   "category": "building",
+   "w": 4.174,
+   "h": 12.881,
+   "d": 4.634
+  },
+  {
+   "id": "city_SM_Bld_FoodHole_01",
+   "name": "SM_Bld_FoodHole_01",
+   "set": "city",
+   "file": "city_SM_Bld_FoodHole_01.gltf",
+   "category": "building",
+   "w": 2.61,
+   "h": 3.0,
+   "d": 3.051
+  },
+  {
+   "id": "city_SM_Bld_Industrial_01",
+   "name": "SM_Bld_Industrial_01",
+   "set": "city",
+   "file": "city_SM_Bld_Industrial_01.gltf",
+   "category": "building",
+   "w": 11.0,
+   "h": 6.0,
+   "d": 0.868
+  },
+  {
+   "id": "city_SM_Bld_Industrial_02",
+   "name": "SM_Bld_Industrial_02",
+   "set": "city",
+   "file": "city_SM_Bld_Industrial_02.gltf",
+   "category": "building",
+   "w": 10.5,
+   "h": 6.0,
+   "d": 0.868
+  },
+  {
+   "id": "city_SM_Bld_LandingPad_01",
+   "name": "SM_Bld_LandingPad_01",
+   "set": "city",
+   "file": "city_SM_Bld_LandingPad_01.gltf",
+   "category": "building",
+   "w": 7.501,
+   "h": 1.187,
+   "d": 7.885
+  },
+  {
+   "id": "city_SM_Bld_Large_01",
+   "name": "SM_Bld_Large_01",
+   "set": "city",
+   "file": "city_SM_Bld_Large_01.gltf",
+   "category": "building",
+   "w": 10.405,
+   "h": 30.569,
+   "d": 5.118
+  },
+  {
+   "id": "city_SM_Bld_Large_02",
+   "name": "SM_Bld_Large_02",
+   "set": "city",
+   "file": "city_SM_Bld_Large_02.gltf",
+   "category": "building",
+   "w": 9.661,
+   "h": 33.491,
+   "d": 8.673
+  },
+  {
+   "id": "city_SM_Bld_Large_03",
+   "name": "SM_Bld_Large_03",
+   "set": "city",
+   "file": "city_SM_Bld_Large_03.gltf",
+   "category": "building",
+   "w": 6.845,
+   "h": 25.057,
+   "d": 6.845
+  },
+  {
+   "id": "city_SM_Bld_Large_04",
+   "name": "SM_Bld_Large_04",
+   "set": "city",
+   "file": "city_SM_Bld_Large_04.gltf",
+   "category": "building",
+   "w": 12.683,
+   "h": 18.091,
+   "d": 12.683
+  },
+  {
+   "id": "city_SM_Bld_Large_05",
+   "name": "SM_Bld_Large_05",
+   "set": "city",
+   "file": "city_SM_Bld_Large_05.gltf",
+   "category": "building",
+   "w": 9.831,
+   "h": 5.869,
+   "d": 12.923
+  },
+  {
+   "id": "city_SM_Bld_Large_06",
+   "name": "SM_Bld_Large_06",
+   "set": "city",
+   "file": "city_SM_Bld_Large_06.gltf",
+   "category": "building",
+   "w": 7.707,
+   "h": 30.871,
+   "d": 7.707
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_01",
+   "name": "SM_Bld_Large_Part_01",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_01.gltf",
+   "category": "building",
+   "w": 8.007,
+   "h": 4.281,
+   "d": 8.673
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_02",
+   "name": "SM_Bld_Large_Part_02",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_02.gltf",
+   "category": "building",
+   "w": 5.726,
+   "h": 13.34,
+   "d": 2.917
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_03",
+   "name": "SM_Bld_Large_Part_03",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_03.gltf",
+   "category": "building",
+   "w": 5.988,
+   "h": 23.393,
+   "d": 2.222
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_04",
+   "name": "SM_Bld_Large_Part_04",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_04.gltf",
+   "category": "building",
+   "w": 7.413,
+   "h": 10.636,
+   "d": 4.053
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_05",
+   "name": "SM_Bld_Large_Part_05",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_05.gltf",
+   "category": "building",
+   "w": 7.413,
+   "h": 10.636,
+   "d": 9.634
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_06",
+   "name": "SM_Bld_Large_Part_06",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_06.gltf",
+   "category": "building",
+   "w": 7.413,
+   "h": 17.893,
+   "d": 9.634
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_07",
+   "name": "SM_Bld_Large_Part_07",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_07.gltf",
+   "category": "building",
+   "w": 2.659,
+   "h": 6.628,
+   "d": 3.037
+  },
+  {
+   "id": "city_SM_Bld_Large_Part_08",
+   "name": "SM_Bld_Large_Part_08",
+   "set": "city",
+   "file": "city_SM_Bld_Large_Part_08.gltf",
+   "category": "building",
+   "w": 2.671,
+   "h": 5.813,
+   "d": 0.902
+  },
+  {
+   "id": "city_SM_Bld_Power_01",
+   "name": "SM_Bld_Power_01",
+   "set": "city",
+   "file": "city_SM_Bld_Power_01.gltf",
+   "category": "building",
+   "w": 7.586,
+   "h": 5.011,
+   "d": 4.916
+  },
+  {
+   "id": "city_SM_Bld_Power_02",
+   "name": "SM_Bld_Power_02",
+   "set": "city",
+   "file": "city_SM_Bld_Power_02.gltf",
+   "category": "building",
+   "w": 7.586,
+   "h": 5.011,
+   "d": 7.471
+  },
+  {
+   "id": "city_SM_Bld_Power_03",
+   "name": "SM_Bld_Power_03",
+   "set": "city",
+   "file": "city_SM_Bld_Power_03.gltf",
+   "category": "building",
+   "w": 6.549,
+   "h": 6.786,
+   "d": 6.549
+  },
+  {
+   "id": "city_SM_Bld_Power_04",
+   "name": "SM_Bld_Power_04",
+   "set": "city",
+   "file": "city_SM_Bld_Power_04.gltf",
+   "category": "building",
+   "w": 1.543,
+   "h": 5.462,
+   "d": 1.543
+  },
+  {
+   "id": "city_SM_Bld_Raised_01",
+   "name": "SM_Bld_Raised_01",
+   "set": "city",
+   "file": "city_SM_Bld_Raised_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 6.0,
+   "d": 4.754
+  },
+  {
+   "id": "city_SM_Bld_Raised_02",
+   "name": "SM_Bld_Raised_02",
+   "set": "city",
+   "file": "city_SM_Bld_Raised_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 6.0,
+   "d": 5.166
+  },
+  {
+   "id": "city_SM_Bld_Roof_Pagoda_01",
+   "name": "SM_Bld_Roof_Pagoda_01",
+   "set": "city",
+   "file": "city_SM_Bld_Roof_Pagoda_01.gltf",
+   "category": "building",
+   "w": 6.825,
+   "h": 3.957,
+   "d": 7.094
+  },
+  {
+   "id": "city_SM_Bld_Roof_Pagoda_02",
+   "name": "SM_Bld_Roof_Pagoda_02",
+   "set": "city",
+   "file": "city_SM_Bld_Roof_Pagoda_02.gltf",
+   "category": "building",
+   "w": 4.926,
+   "h": 2.269,
+   "d": 4.006
+  },
+  {
+   "id": "city_SM_Bld_Section_Corner_01",
+   "name": "SM_Bld_Section_Corner_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Corner_01.gltf",
+   "category": "building",
+   "w": 5.137,
+   "h": 3.0,
+   "d": 5.137
+  },
+  {
+   "id": "city_SM_Bld_Section_Corner_02",
+   "name": "SM_Bld_Section_Corner_02",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Corner_02.gltf",
+   "category": "building",
+   "w": 5.185,
+   "h": 3.0,
+   "d": 5.185
+  },
+  {
+   "id": "city_SM_Bld_Section_Corner_03",
+   "name": "SM_Bld_Section_Corner_03",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Corner_03.gltf",
+   "category": "building",
+   "w": 5.156,
+   "h": 3.0,
+   "d": 5.156
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_01",
+   "name": "SM_Bld_Section_Door_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.21
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_02",
+   "name": "SM_Bld_Section_Door_02",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.525
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_03",
+   "name": "SM_Bld_Section_Door_03",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_03.gltf",
+   "category": "building",
+   "w": 5.307,
+   "h": 6.0,
+   "d": 6.129
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_04",
+   "name": "SM_Bld_Section_Door_04",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_04.gltf",
+   "category": "building",
+   "w": 5.218,
+   "h": 3.0,
+   "d": 5.513
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_05",
+   "name": "SM_Bld_Section_Door_05",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_05.gltf",
+   "category": "building",
+   "w": 5.118,
+   "h": 3.0,
+   "d": 5.118
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_06",
+   "name": "SM_Bld_Section_Door_06",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_06.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.961
+  },
+  {
+   "id": "city_SM_Bld_Section_Door_07",
+   "name": "SM_Bld_Section_Door_07",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Door_07.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.19
+  },
+  {
+   "id": "city_SM_Bld_Section_Grid_01",
+   "name": "SM_Bld_Section_Grid_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Grid_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Bld_Section_Industrial_01",
+   "name": "SM_Bld_Section_Industrial_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Industrial_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.623
+  },
+  {
+   "id": "city_SM_Bld_Section_Industrial_02",
+   "name": "SM_Bld_Section_Industrial_02",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Industrial_02.gltf",
+   "category": "building",
+   "w": 5.247,
+   "h": 3.0,
+   "d": 5.623
+  },
+  {
+   "id": "city_SM_Bld_Section_Industrial_03",
+   "name": "SM_Bld_Section_Industrial_03",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Industrial_03.gltf",
+   "category": "building",
+   "w": 5.124,
+   "h": 3.0,
+   "d": 5.623
+  },
+  {
+   "id": "city_SM_Bld_Section_Wall_01",
+   "name": "SM_Bld_Section_Wall_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Wall_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Bld_Section_Wall_02",
+   "name": "SM_Bld_Section_Wall_02",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Wall_02.gltf",
+   "category": "building",
+   "w": 5.139,
+   "h": 3.0,
+   "d": 5.237
+  },
+  {
+   "id": "city_SM_Bld_Section_Wall_03",
+   "name": "SM_Bld_Section_Wall_03",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Wall_03.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.068
+  },
+  {
+   "id": "city_SM_Bld_Section_Wall_04",
+   "name": "SM_Bld_Section_Wall_04",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Wall_04.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.071
+  },
+  {
+   "id": "city_SM_Bld_Section_Wall_05",
+   "name": "SM_Bld_Section_Wall_05",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Wall_05.gltf",
+   "category": "building",
+   "w": 5.279,
+   "h": 3.0,
+   "d": 5.445
+  },
+  {
+   "id": "city_SM_Bld_Section_Window_01",
+   "name": "SM_Bld_Section_Window_01",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Window_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.246
+  },
+  {
+   "id": "city_SM_Bld_Section_Window_02",
+   "name": "SM_Bld_Section_Window_02",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Window_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.344
+  },
+  {
+   "id": "city_SM_Bld_Section_Window_03",
+   "name": "SM_Bld_Section_Window_03",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Window_03.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Bld_Section_Window_04",
+   "name": "SM_Bld_Section_Window_04",
+   "set": "city",
+   "file": "city_SM_Bld_Section_Window_04.gltf",
+   "category": "building",
+   "w": 5.049,
+   "h": 6.0,
+   "d": 5.049
+  },
+  {
+   "id": "city_SM_Bld_Security_WatchStation_01",
+   "name": "SM_Bld_Security_WatchStation_01",
+   "set": "city",
+   "file": "city_SM_Bld_Security_WatchStation_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 6.0,
+   "d": 4.801
+  },
+  {
+   "id": "city_SM_Bld_Shop_Open_01",
+   "name": "SM_Bld_Shop_Open_01",
+   "set": "city",
+   "file": "city_SM_Bld_Shop_Open_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.973
+  },
+  {
+   "id": "city_SM_Bld_StripClub_01",
+   "name": "SM_Bld_StripClub_01",
+   "set": "city",
+   "file": "city_SM_Bld_StripClub_01.gltf",
+   "category": "building",
+   "w": 10.214,
+   "h": 6.0,
+   "d": 20.39
+  },
+  {
+   "id": "city_SM_Bld_StripClub_Interior_01",
+   "name": "SM_Bld_StripClub_Interior_01",
+   "set": "city",
+   "file": "city_SM_Bld_StripClub_Interior_01.gltf",
+   "category": "building",
+   "w": 9.59,
+   "h": 3.348,
+   "d": 19.876
+  },
+  {
+   "id": "city_SM_Bld_StripClub_Interior_02",
+   "name": "SM_Bld_StripClub_Interior_02",
+   "set": "city",
+   "file": "city_SM_Bld_StripClub_Interior_02.gltf",
+   "category": "building",
+   "w": 9.532,
+   "h": 3.203,
+   "d": 12.142
+  },
+  {
+   "id": "city_SM_Bld_StripClub_Interior_03",
+   "name": "SM_Bld_StripClub_Interior_03",
+   "set": "city",
+   "file": "city_SM_Bld_StripClub_Interior_03.gltf",
+   "category": "building",
+   "w": 9.764,
+   "h": 4.0,
+   "d": 19.59
+  },
+  {
+   "id": "city_SM_Bld_Underpass_01",
+   "name": "SM_Bld_Underpass_01",
+   "set": "city",
+   "file": "city_SM_Bld_Underpass_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Bld_Warehouse_01",
+   "name": "SM_Bld_Warehouse_01",
+   "set": "city",
+   "file": "city_SM_Bld_Warehouse_01.gltf",
+   "category": "building",
+   "w": 10.669,
+   "h": 6.07,
+   "d": 15.789
+  },
+  {
+   "id": "city_SM_Building_Shack_01",
+   "name": "SM_Building_Shack_01",
+   "set": "city",
+   "file": "city_SM_Building_Shack_01.gltf",
+   "category": "misc",
+   "w": 2.77,
+   "h": 2.768,
+   "d": 2.529
+  },
+  {
+   "id": "city_SM_Building_Shack_02",
+   "name": "SM_Building_Shack_02",
+   "set": "city",
+   "file": "city_SM_Building_Shack_02.gltf",
+   "category": "misc",
+   "w": 2.77,
+   "h": 2.32,
+   "d": 2.571
+  },
+  {
+   "id": "city_SM_Env_Ceiling_01",
+   "name": "SM_Env_Ceiling_01",
+   "set": "city",
+   "file": "city_SM_Env_Ceiling_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.024,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Cloud_01",
+   "name": "SM_Env_Cloud_01",
+   "set": "city",
+   "file": "city_SM_Env_Cloud_01.gltf",
+   "category": "environment",
+   "w": 6.678,
+   "h": 1.651,
+   "d": 1.608
+  },
+  {
+   "id": "city_SM_Env_Cloud_02",
+   "name": "SM_Env_Cloud_02",
+   "set": "city",
+   "file": "city_SM_Env_Cloud_02.gltf",
+   "category": "environment",
+   "w": 7.292,
+   "h": 1.705,
+   "d": 2.571
+  },
+  {
+   "id": "city_SM_Env_Cloud_03",
+   "name": "SM_Env_Cloud_03",
+   "set": "city",
+   "file": "city_SM_Env_Cloud_03.gltf",
+   "category": "environment",
+   "w": 7.03,
+   "h": 1.984,
+   "d": 3.887
+  },
+  {
+   "id": "city_SM_Env_Cloud_04",
+   "name": "SM_Env_Cloud_04",
+   "set": "city",
+   "file": "city_SM_Env_Cloud_04.gltf",
+   "category": "environment",
+   "w": 5.038,
+   "h": 1.437,
+   "d": 1.554
+  },
+  {
+   "id": "city_SM_Env_Cloud_05",
+   "name": "SM_Env_Cloud_05",
+   "set": "city",
+   "file": "city_SM_Env_Cloud_05.gltf",
+   "category": "environment",
+   "w": 3.176,
+   "h": 1.635,
+   "d": 1.859
+  },
+  {
+   "id": "city_SM_Env_Dirt_Mound_Small_01",
+   "name": "SM_Env_Dirt_Mound_Small_01",
+   "set": "city",
+   "file": "city_SM_Env_Dirt_Mound_Small_01.gltf",
+   "category": "environment",
+   "w": 2.214,
+   "h": 0.167,
+   "d": 2.172
+  },
+  {
+   "id": "city_SM_Env_Dirt_Mound_Small_02",
+   "name": "SM_Env_Dirt_Mound_Small_02",
+   "set": "city",
+   "file": "city_SM_Env_Dirt_Mound_Small_02.gltf",
+   "category": "environment",
+   "w": 2.403,
+   "h": 0.273,
+   "d": 2.295
+  },
+  {
+   "id": "city_SM_Env_Floor_01",
+   "name": "SM_Env_Floor_01",
+   "set": "city",
+   "file": "city_SM_Env_Floor_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Ground_01",
+   "name": "SM_Env_Graffiti_Ground_01",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Ground_01.gltf",
+   "category": "environment",
+   "w": 4.665,
+   "h": 1.953,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Ground_02",
+   "name": "SM_Env_Graffiti_Ground_02",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Ground_02.gltf",
+   "category": "environment",
+   "w": 2.177,
+   "h": 1.953,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Ground_03",
+   "name": "SM_Env_Graffiti_Ground_03",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Ground_03.gltf",
+   "category": "environment",
+   "w": 2.177,
+   "h": 1.953,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Ground_04",
+   "name": "SM_Env_Graffiti_Ground_04",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Ground_04.gltf",
+   "category": "environment",
+   "w": 4.665,
+   "h": 1.953,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Ground_05",
+   "name": "SM_Env_Graffiti_Ground_05",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Ground_05.gltf",
+   "category": "environment",
+   "w": 4.665,
+   "h": 1.953,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Wall_01",
+   "name": "SM_Env_Graffiti_Wall_01",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Wall_01.gltf",
+   "category": "environment",
+   "w": 3.955,
+   "h": 1.294,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Wall_02",
+   "name": "SM_Env_Graffiti_Wall_02",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Wall_02.gltf",
+   "category": "environment",
+   "w": 1.936,
+   "h": 1.294,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Wall_03",
+   "name": "SM_Env_Graffiti_Wall_03",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Wall_03.gltf",
+   "category": "environment",
+   "w": 1.936,
+   "h": 1.294,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Wall_04",
+   "name": "SM_Env_Graffiti_Wall_04",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Wall_04.gltf",
+   "category": "environment",
+   "w": 3.955,
+   "h": 1.294,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Env_Graffiti_Wall_05",
+   "name": "SM_Env_Graffiti_Wall_05",
+   "set": "city",
+   "file": "city_SM_Env_Graffiti_Wall_05.gltf",
+   "category": "environment",
+   "w": 3.955,
+   "h": 1.294,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Env_Grass_Patch_01",
+   "name": "SM_Env_Grass_Patch_01",
+   "set": "city",
+   "file": "city_SM_Env_Grass_Patch_01.gltf",
+   "category": "environment",
+   "w": 3.092,
+   "h": 0.726,
+   "d": 2.57
+  },
+  {
+   "id": "city_SM_Env_Grass_Patch_02",
+   "name": "SM_Env_Grass_Patch_02",
+   "set": "city",
+   "file": "city_SM_Env_Grass_Patch_02.gltf",
+   "category": "environment",
+   "w": 2.805,
+   "h": 0.92,
+   "d": 2.163
+  },
+  {
+   "id": "city_SM_Env_Grass_Patch_03",
+   "name": "SM_Env_Grass_Patch_03",
+   "set": "city",
+   "file": "city_SM_Env_Grass_Patch_03.gltf",
+   "category": "environment",
+   "w": 1.114,
+   "h": 1.159,
+   "d": 1.292
+  },
+  {
+   "id": "city_SM_Env_Greeble_Cube_01",
+   "name": "SM_Env_Greeble_Cube_01",
+   "set": "city",
+   "file": "city_SM_Env_Greeble_Cube_01.gltf",
+   "category": "environment",
+   "w": 5.049,
+   "h": 5.049,
+   "d": 5.049
+  },
+  {
+   "id": "city_SM_Env_Greeble_Cube_02",
+   "name": "SM_Env_Greeble_Cube_02",
+   "set": "city",
+   "file": "city_SM_Env_Greeble_Cube_02.gltf",
+   "category": "environment",
+   "w": 5.049,
+   "h": 5.049,
+   "d": 5.049
+  },
+  {
+   "id": "city_SM_Env_Ground_01",
+   "name": "SM_Env_Ground_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_01.gltf",
+   "category": "environment",
+   "w": 5.526,
+   "h": 0.258,
+   "d": 5.677
+  },
+  {
+   "id": "city_SM_Env_Ground_Flat_01",
+   "name": "SM_Env_Ground_Flat_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Flat_01.gltf",
+   "category": "environment",
+   "w": 20.739,
+   "h": 0.464,
+   "d": 19.226
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_01",
+   "name": "SM_Env_Ground_Tile_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.047,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_02",
+   "name": "SM_Env_Ground_Tile_02",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_02.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.047,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_03",
+   "name": "SM_Env_Ground_Tile_03",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_03.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.025,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_04",
+   "name": "SM_Env_Ground_Tile_04",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_04.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.025,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_05",
+   "name": "SM_Env_Ground_Tile_05",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_05.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.031,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_06",
+   "name": "SM_Env_Ground_Tile_06",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_06.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.053,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_07",
+   "name": "SM_Env_Ground_Tile_07",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_07.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.016,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_08",
+   "name": "SM_Env_Ground_Tile_08",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_08.gltf",
+   "category": "environment",
+   "w": 4.999,
+   "h": 0.0,
+   "d": 4.999
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_09",
+   "name": "SM_Env_Ground_Tile_09",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_09.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.033,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Base_01",
+   "name": "SM_Env_Ground_Tile_Base_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Base_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.163,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Base_02",
+   "name": "SM_Env_Ground_Tile_Base_02",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Base_02.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 1.199,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Base_03",
+   "name": "SM_Env_Ground_Tile_Base_03",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Base_03.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.751,
+   "d": 5.006
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Base_04",
+   "name": "SM_Env_Ground_Tile_Base_04",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Base_04.gltf",
+   "category": "environment",
+   "w": 5.053,
+   "h": 0.398,
+   "d": 5.053
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Floating_Platform_01",
+   "name": "SM_Env_Ground_Tile_Floating_Platform_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Floating_Platform_01.gltf",
+   "category": "environment",
+   "w": 5.85,
+   "h": 2.858,
+   "d": 5.85
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Half_01",
+   "name": "SM_Env_Ground_Tile_Half_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Half_01.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.033,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Half_02",
+   "name": "SM_Env_Ground_Tile_Half_02",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Half_02.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.032,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Half_03",
+   "name": "SM_Env_Ground_Tile_Half_03",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Half_03.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.052,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Half_04",
+   "name": "SM_Env_Ground_Tile_Half_04",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Half_04.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.032,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Half_05",
+   "name": "SM_Env_Ground_Tile_Half_05",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Half_05.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.273,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Supports_01",
+   "name": "SM_Env_Ground_Tile_Supports_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Supports_01.gltf",
+   "category": "environment",
+   "w": 4.675,
+   "h": 0.608,
+   "d": 3.388
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Supports_02",
+   "name": "SM_Env_Ground_Tile_Supports_02",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Supports_02.gltf",
+   "category": "environment",
+   "w": 4.675,
+   "h": 0.642,
+   "d": 4.675
+  },
+  {
+   "id": "city_SM_Env_Ground_Tile_Tube_01",
+   "name": "SM_Env_Ground_Tile_Tube_01",
+   "set": "city",
+   "file": "city_SM_Env_Ground_Tile_Tube_01.gltf",
+   "category": "environment",
+   "w": 3.976,
+   "h": 0.166,
+   "d": 0.456
+  },
+  {
+   "id": "city_SM_Env_Hedge_01",
+   "name": "SM_Env_Hedge_01",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_01.gltf",
+   "category": "environment",
+   "w": 3.829,
+   "h": 1.753,
+   "d": 1.009
+  },
+  {
+   "id": "city_SM_Env_Hedge_02",
+   "name": "SM_Env_Hedge_02",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_02.gltf",
+   "category": "environment",
+   "w": 1.008,
+   "h": 1.733,
+   "d": 1.009
+  },
+  {
+   "id": "city_SM_Env_Hedge_03",
+   "name": "SM_Env_Hedge_03",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_03.gltf",
+   "category": "environment",
+   "w": 1.49,
+   "h": 2.619,
+   "d": 1.506
+  },
+  {
+   "id": "city_SM_Env_Hedge_Empty_01",
+   "name": "SM_Env_Hedge_Empty_01",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_Empty_01.gltf",
+   "category": "environment",
+   "w": 3.829,
+   "h": 1.009,
+   "d": 1.009
+  },
+  {
+   "id": "city_SM_Env_Hedge_Empty_02",
+   "name": "SM_Env_Hedge_Empty_02",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_Empty_02.gltf",
+   "category": "environment",
+   "w": 1.008,
+   "h": 1.009,
+   "d": 1.009
+  },
+  {
+   "id": "city_SM_Env_Hedge_Empty_03",
+   "name": "SM_Env_Hedge_Empty_03",
+   "set": "city",
+   "file": "city_SM_Env_Hedge_Empty_03.gltf",
+   "category": "environment",
+   "w": 3.698,
+   "h": 1.009,
+   "d": 3.874
+  },
+  {
+   "id": "city_SM_Env_Living_Dome_Skybox_01",
+   "name": "SM_Env_Living_Dome_Skybox_01",
+   "set": "city",
+   "file": "city_SM_Env_Living_Dome_Skybox_01.gltf",
+   "category": "environment",
+   "w": 110.607,
+   "h": 110.262,
+   "d": 110.52
+  },
+  {
+   "id": "city_SM_Env_Ocean_Tile_Bumps_01",
+   "name": "SM_Env_Ocean_Tile_Bumps_01",
+   "set": "city",
+   "file": "city_SM_Env_Ocean_Tile_Bumps_01.gltf",
+   "category": "environment",
+   "w": 30.0,
+   "h": 0.433,
+   "d": 30.0
+  },
+  {
+   "id": "city_SM_Env_Railing_01",
+   "name": "SM_Env_Railing_01",
+   "set": "city",
+   "file": "city_SM_Env_Railing_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 1.255,
+   "d": 0.399
+  },
+  {
+   "id": "city_SM_Env_Railing_01_Pillar",
+   "name": "SM_Env_Railing_01_Pillar",
+   "set": "city",
+   "file": "city_SM_Env_Railing_01_Pillar.gltf",
+   "category": "environment",
+   "w": 0.402,
+   "h": 1.304,
+   "d": 0.401
+  },
+  {
+   "id": "city_SM_Env_Railing_02",
+   "name": "SM_Env_Railing_02",
+   "set": "city",
+   "file": "city_SM_Env_Railing_02.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 1.167,
+   "d": 0.299
+  },
+  {
+   "id": "city_SM_Env_Railing_02_Pillar",
+   "name": "SM_Env_Railing_02_Pillar",
+   "set": "city",
+   "file": "city_SM_Env_Railing_02_Pillar.gltf",
+   "category": "environment",
+   "w": 0.697,
+   "h": 1.282,
+   "d": 0.697
+  },
+  {
+   "id": "city_SM_Env_Road_Arrow_01_SF",
+   "name": "SM_Env_Road_Arrow_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Arrow_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Arrow_02_SF",
+   "name": "SM_Env_Road_Arrow_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Arrow_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Bare_Half_01_SF",
+   "name": "SM_Env_Road_Bare_Half_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Bare_Half_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Road_Crossing_01_SF",
+   "name": "SM_Env_Road_Crossing_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Crossing_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Crossing_02_SF",
+   "name": "SM_Env_Road_Crossing_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Crossing_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_01_Corner_01",
+   "name": "SM_Env_Road_Lines_01_Corner_01",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_01_Corner_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_01_Corner_02",
+   "name": "SM_Env_Road_Lines_01_Corner_02",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_01_Corner_02.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_01_SF",
+   "name": "SM_Env_Road_Lines_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_02_Corner_01",
+   "name": "SM_Env_Road_Lines_02_Corner_01",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_02_Corner_01.gltf",
+   "category": "environment",
+   "w": 5.001,
+   "h": 0.0,
+   "d": 5.002
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_02_Corner_02",
+   "name": "SM_Env_Road_Lines_02_Corner_02",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_02_Corner_02.gltf",
+   "category": "environment",
+   "w": 5.001,
+   "h": 0.0,
+   "d": 5.002
+  },
+  {
+   "id": "city_SM_Env_Road_Lines_02_SF",
+   "name": "SM_Env_Road_Lines_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Lines_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Median_01_SF",
+   "name": "SM_Env_Road_Median_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Median_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Median_02_SF",
+   "name": "SM_Env_Road_Median_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Median_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_ParkingLines_01_SF",
+   "name": "SM_Env_Road_ParkingLines_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_ParkingLines_01_SF.gltf",
+   "category": "environment",
+   "w": 10.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_Patch_01_SF",
+   "name": "SM_Env_Road_Patch_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_Patch_01_SF.gltf",
+   "category": "environment",
+   "w": 1.785,
+   "h": 0.069,
+   "d": 1.822
+  },
+  {
+   "id": "city_SM_Env_Road_YellowLines_01_SF",
+   "name": "SM_Env_Road_YellowLines_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_YellowLines_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Road_YellowLines_02_SF",
+   "name": "SM_Env_Road_YellowLines_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Road_YellowLines_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.0,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_01_SF",
+   "name": "SM_Env_Sidewalk_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.034,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_03_SF",
+   "name": "SM_Env_Sidewalk_03_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_03_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.05,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Corner_01_SF",
+   "name": "SM_Env_Sidewalk_Corner_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Corner_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.116,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Corner_02_SF",
+   "name": "SM_Env_Sidewalk_Corner_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Corner_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.101,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Corner_Half_01",
+   "name": "SM_Env_Sidewalk_Corner_Half_01",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Corner_Half_01.gltf",
+   "category": "environment",
+   "w": 2.5,
+   "h": 0.116,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Corner_Half_01_SF",
+   "name": "SM_Env_Sidewalk_Corner_Half_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Corner_Half_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Grate_02_SF",
+   "name": "SM_Env_Sidewalk_Grate_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Grate_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.106,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Merger_01_SF",
+   "name": "SM_Env_Sidewalk_Merger_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Merger_01_SF.gltf",
+   "category": "environment",
+   "w": 10.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Merger_02_SF",
+   "name": "SM_Env_Sidewalk_Merger_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Merger_02_SF.gltf",
+   "category": "environment",
+   "w": 10.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Merger_Half_01_SF",
+   "name": "SM_Env_Sidewalk_Merger_Half_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Merger_Half_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Panel_01_SF",
+   "name": "SM_Env_Sidewalk_Panel_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Panel_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.263,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Raised_01",
+   "name": "SM_Env_Sidewalk_Raised_01",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Raised_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.293,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Raised_02",
+   "name": "SM_Env_Sidewalk_Raised_02",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Raised_02.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.293,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Straight_01_SF",
+   "name": "SM_Env_Sidewalk_Straight_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Straight_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Straight_02_SF",
+   "name": "SM_Env_Sidewalk_Straight_02_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Straight_02_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Straight_03_SF",
+   "name": "SM_Env_Sidewalk_Straight_03_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Straight_03_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Straight_04_SF",
+   "name": "SM_Env_Sidewalk_Straight_04_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Straight_04_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.139,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Env_Sidewalk_Straight_Half_01_SF",
+   "name": "SM_Env_Sidewalk_Straight_Half_01_SF",
+   "set": "city",
+   "file": "city_SM_Env_Sidewalk_Straight_Half_01_SF.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 0.07,
+   "d": 2.5
+  },
+  {
+   "id": "city_SM_Env_Small_Rocks_01",
+   "name": "SM_Env_Small_Rocks_01",
+   "set": "city",
+   "file": "city_SM_Env_Small_Rocks_01.gltf",
+   "category": "environment",
+   "w": 1.306,
+   "h": 0.095,
+   "d": 1.632
+  },
+  {
+   "id": "city_SM_Env_Small_Rocks_02",
+   "name": "SM_Env_Small_Rocks_02",
+   "set": "city",
+   "file": "city_SM_Env_Small_Rocks_02.gltf",
+   "category": "environment",
+   "w": 2.041,
+   "h": 0.095,
+   "d": 1.97
+  },
+  {
+   "id": "city_SM_Env_TreeDead_01",
+   "name": "SM_Env_TreeDead_01",
+   "set": "city",
+   "file": "city_SM_Env_TreeDead_01.gltf",
+   "category": "environment",
+   "w": 2.028,
+   "h": 5.237,
+   "d": 3.002
+  },
+  {
+   "id": "city_SM_Env_Tree_01",
+   "name": "SM_Env_Tree_01",
+   "set": "city",
+   "file": "city_SM_Env_Tree_01.gltf",
+   "category": "environment",
+   "w": 2.6,
+   "h": 9.086,
+   "d": 4.643
+  },
+  {
+   "id": "city_SM_Env_Tree_02",
+   "name": "SM_Env_Tree_02",
+   "set": "city",
+   "file": "city_SM_Env_Tree_02.gltf",
+   "category": "environment",
+   "w": 0.913,
+   "h": 3.742,
+   "d": 0.947
+  },
+  {
+   "id": "city_SM_Env_Tree_03",
+   "name": "SM_Env_Tree_03",
+   "set": "city",
+   "file": "city_SM_Env_Tree_03.gltf",
+   "category": "environment",
+   "w": 0.992,
+   "h": 4.174,
+   "d": 0.911
+  },
+  {
+   "id": "city_SM_Env_Wall_03",
+   "name": "SM_Env_Wall_03",
+   "set": "city",
+   "file": "city_SM_Env_Wall_03.gltf",
+   "category": "environment",
+   "w": 0.05,
+   "h": 0.029,
+   "d": 0.003
+  },
+  {
+   "id": "city_SM_Env_Wall_Generic_01",
+   "name": "SM_Env_Wall_Generic_01",
+   "set": "city",
+   "file": "city_SM_Env_Wall_Generic_01.gltf",
+   "category": "environment",
+   "w": 5.0,
+   "h": 2.939,
+   "d": 0.265
+  },
+  {
+   "id": "city_SM_Icon_Ammo",
+   "name": "SM_Icon_Ammo",
+   "set": "city",
+   "file": "city_SM_Icon_Ammo.gltf",
+   "category": "misc",
+   "w": 0.293,
+   "h": 0.301,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Icon_Gun",
+   "name": "SM_Icon_Gun",
+   "set": "city",
+   "file": "city_SM_Icon_Gun.gltf",
+   "category": "misc",
+   "w": 0.301,
+   "h": 0.218,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Icon_Health",
+   "name": "SM_Icon_Health",
+   "set": "city",
+   "file": "city_SM_Icon_Health.gltf",
+   "category": "misc",
+   "w": 0.301,
+   "h": 0.301,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Icon_Lightning",
+   "name": "SM_Icon_Lightning",
+   "set": "city",
+   "file": "city_SM_Icon_Lightning.gltf",
+   "category": "misc",
+   "w": 0.199,
+   "h": 0.301,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Icon_Spanners",
+   "name": "SM_Icon_Spanners",
+   "set": "city",
+   "file": "city_SM_Icon_Spanners.gltf",
+   "category": "misc",
+   "w": 0.301,
+   "h": 0.301,
+   "d": 0.047
+  },
+  {
+   "id": "city_SM_LightRayCube",
+   "name": "SM_LightRayCube",
+   "set": "city",
+   "file": "city_SM_LightRayCube.gltf",
+   "category": "misc",
+   "w": 0.018,
+   "h": 0.018,
+   "d": 0.018
+  },
+  {
+   "id": "city_SM_Particle_Smoke_01",
+   "name": "SM_Particle_Smoke_01",
+   "set": "city",
+   "file": "city_SM_Particle_Smoke_01.gltf",
+   "category": "misc",
+   "w": 0.191,
+   "h": 0.152,
+   "d": 0.194
+  },
+  {
+   "id": "city_SM_Prop_Advertisement_Pillar_01",
+   "name": "SM_Prop_Advertisement_Pillar_01",
+   "set": "city",
+   "file": "city_SM_Prop_Advertisement_Pillar_01.gltf",
+   "category": "prop",
+   "w": 1.501,
+   "h": 2.569,
+   "d": 1.501
+  },
+  {
+   "id": "city_SM_Prop_AirConditioningGrid_01",
+   "name": "SM_Prop_AirConditioningGrid_01",
+   "set": "city",
+   "file": "city_SM_Prop_AirConditioningGrid_01.gltf",
+   "category": "prop",
+   "w": 4.877,
+   "h": 2.363,
+   "d": 0.724
+  },
+  {
+   "id": "city_SM_Prop_AirConditioningUnit_01",
+   "name": "SM_Prop_AirConditioningUnit_01",
+   "set": "city",
+   "file": "city_SM_Prop_AirConditioningUnit_01.gltf",
+   "category": "prop",
+   "w": 0.939,
+   "h": 0.697,
+   "d": 0.642
+  },
+  {
+   "id": "city_SM_Prop_AirConditioningUnit_02",
+   "name": "SM_Prop_AirConditioningUnit_02",
+   "set": "city",
+   "file": "city_SM_Prop_AirConditioningUnit_02.gltf",
+   "category": "prop",
+   "w": 0.927,
+   "h": 0.616,
+   "d": 0.642
+  },
+  {
+   "id": "city_SM_Prop_Antenna",
+   "name": "SM_Prop_Antenna",
+   "set": "city",
+   "file": "city_SM_Prop_Antenna.gltf",
+   "category": "prop",
+   "w": 0.506,
+   "h": 2.04,
+   "d": 0.438
+  },
+  {
+   "id": "city_SM_Prop_Atm_01",
+   "name": "SM_Prop_Atm_01",
+   "set": "city",
+   "file": "city_SM_Prop_Atm_01.gltf",
+   "category": "prop",
+   "w": 0.897,
+   "h": 2.266,
+   "d": 1.185
+  },
+  {
+   "id": "city_SM_Prop_Bank_Booth_01",
+   "name": "SM_Prop_Bank_Booth_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bank_Booth_01.gltf",
+   "category": "prop",
+   "w": 2.5,
+   "h": 3.0,
+   "d": 1.296
+  },
+  {
+   "id": "city_SM_Prop_Bank_Booth_Pillar_01",
+   "name": "SM_Prop_Bank_Booth_Pillar_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bank_Booth_Pillar_01.gltf",
+   "category": "prop",
+   "w": 0.487,
+   "h": 3.0,
+   "d": 0.951
+  },
+  {
+   "id": "city_SM_Prop_Bank_Door_01",
+   "name": "SM_Prop_Bank_Door_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bank_Door_01.gltf",
+   "category": "prop",
+   "w": 2.639,
+   "h": 3.0,
+   "d": 1.156
+  },
+  {
+   "id": "city_SM_Prop_BarChair_01",
+   "name": "SM_Prop_BarChair_01",
+   "set": "city",
+   "file": "city_SM_Prop_BarChair_01.gltf",
+   "category": "prop",
+   "w": 0.553,
+   "h": 0.947,
+   "d": 0.501
+  },
+  {
+   "id": "city_SM_Prop_Barrier_01",
+   "name": "SM_Prop_Barrier_01",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_01.gltf",
+   "category": "prop",
+   "w": 0.535,
+   "h": 0.903,
+   "d": 1.99
+  },
+  {
+   "id": "city_SM_Prop_Barrier_02",
+   "name": "SM_Prop_Barrier_02",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_02.gltf",
+   "category": "prop",
+   "w": 0.535,
+   "h": 0.903,
+   "d": 2.005
+  },
+  {
+   "id": "city_SM_Prop_Barrier_03",
+   "name": "SM_Prop_Barrier_03",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_03.gltf",
+   "category": "prop",
+   "w": 0.535,
+   "h": 0.903,
+   "d": 2.005
+  },
+  {
+   "id": "city_SM_Prop_Barrier_Plastic_01",
+   "name": "SM_Prop_Barrier_Plastic_01",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_Plastic_01.gltf",
+   "category": "prop",
+   "w": 0.654,
+   "h": 1.018,
+   "d": 2.29
+  },
+  {
+   "id": "city_SM_Prop_Barrier_Plastic_02",
+   "name": "SM_Prop_Barrier_Plastic_02",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_Plastic_02.gltf",
+   "category": "prop",
+   "w": 0.654,
+   "h": 1.018,
+   "d": 2.29
+  },
+  {
+   "id": "city_SM_Prop_Barrier_Plastic_03",
+   "name": "SM_Prop_Barrier_Plastic_03",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_Plastic_03.gltf",
+   "category": "prop",
+   "w": 0.654,
+   "h": 1.018,
+   "d": 2.29
+  },
+  {
+   "id": "city_SM_Prop_Barrier_Pole_01",
+   "name": "SM_Prop_Barrier_Pole_01",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_Pole_01.gltf",
+   "category": "prop",
+   "w": 0.108,
+   "h": 1.099,
+   "d": 0.108
+  },
+  {
+   "id": "city_SM_Prop_Barrier_line_01",
+   "name": "SM_Prop_Barrier_line_01",
+   "set": "city",
+   "file": "city_SM_Prop_Barrier_line_01.gltf",
+   "category": "prop",
+   "w": 0.481,
+   "h": 1.099,
+   "d": 0.481
+  },
+  {
+   "id": "city_SM_Prop_Beam_01",
+   "name": "SM_Prop_Beam_01",
+   "set": "city",
+   "file": "city_SM_Prop_Beam_01.gltf",
+   "category": "prop",
+   "w": 3.068,
+   "h": 4.13,
+   "d": 0.589
+  },
+  {
+   "id": "city_SM_Prop_Beam_02",
+   "name": "SM_Prop_Beam_02",
+   "set": "city",
+   "file": "city_SM_Prop_Beam_02.gltf",
+   "category": "prop",
+   "w": 2.163,
+   "h": 3.003,
+   "d": 0.281
+  },
+  {
+   "id": "city_SM_Prop_Beams_01",
+   "name": "SM_Prop_Beams_01",
+   "set": "city",
+   "file": "city_SM_Prop_Beams_01.gltf",
+   "category": "prop",
+   "w": 0.751,
+   "h": 0.751,
+   "d": 5.068
+  },
+  {
+   "id": "city_SM_Prop_BenchSeat_01",
+   "name": "SM_Prop_BenchSeat_01",
+   "set": "city",
+   "file": "city_SM_Prop_BenchSeat_01.gltf",
+   "category": "prop",
+   "w": 2.729,
+   "h": 0.682,
+   "d": 0.604
+  },
+  {
+   "id": "city_SM_Prop_Bench_01",
+   "name": "SM_Prop_Bench_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bench_01.gltf",
+   "category": "prop",
+   "w": 2.497,
+   "h": 0.459,
+   "d": 0.597
+  },
+  {
+   "id": "city_SM_Prop_Books_01",
+   "name": "SM_Prop_Books_01",
+   "set": "city",
+   "file": "city_SM_Prop_Books_01.gltf",
+   "category": "prop",
+   "w": 0.361,
+   "h": 0.106,
+   "d": 0.513
+  },
+  {
+   "id": "city_SM_Prop_Bottle_01",
+   "name": "SM_Prop_Bottle_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bottle_01.gltf",
+   "category": "prop",
+   "w": 0.118,
+   "h": 0.391,
+   "d": 0.118
+  },
+  {
+   "id": "city_SM_Prop_Bottle_02",
+   "name": "SM_Prop_Bottle_02",
+   "set": "city",
+   "file": "city_SM_Prop_Bottle_02.gltf",
+   "category": "prop",
+   "w": 0.118,
+   "h": 0.391,
+   "d": 0.118
+  },
+  {
+   "id": "city_SM_Prop_Bottle_03",
+   "name": "SM_Prop_Bottle_03",
+   "set": "city",
+   "file": "city_SM_Prop_Bottle_03.gltf",
+   "category": "prop",
+   "w": 0.118,
+   "h": 0.391,
+   "d": 0.118
+  },
+  {
+   "id": "city_SM_Prop_Box_Empty_01",
+   "name": "SM_Prop_Box_Empty_01",
+   "set": "city",
+   "file": "city_SM_Prop_Box_Empty_01.gltf",
+   "category": "prop",
+   "w": 0.801,
+   "h": 0.519,
+   "d": 0.602
+  },
+  {
+   "id": "city_SM_Prop_Box_RobotParts_01",
+   "name": "SM_Prop_Box_RobotParts_01",
+   "set": "city",
+   "file": "city_SM_Prop_Box_RobotParts_01.gltf",
+   "category": "prop",
+   "w": 0.801,
+   "h": 0.674,
+   "d": 1.168
+  },
+  {
+   "id": "city_SM_Prop_Box_Supplies_01",
+   "name": "SM_Prop_Box_Supplies_01",
+   "set": "city",
+   "file": "city_SM_Prop_Box_Supplies_01.gltf",
+   "category": "prop",
+   "w": 0.801,
+   "h": 0.775,
+   "d": 0.725
+  },
+  {
+   "id": "city_SM_Prop_Bridge_01",
+   "name": "SM_Prop_Bridge_01",
+   "set": "city",
+   "file": "city_SM_Prop_Bridge_01.gltf",
+   "category": "prop",
+   "w": 5.0,
+   "h": 0.901,
+   "d": 1.901
+  },
+  {
+   "id": "city_SM_Prop_Cable_Crossing_Machine_01",
+   "name": "SM_Prop_Cable_Crossing_Machine_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cable_Crossing_Machine_01.gltf",
+   "category": "prop",
+   "w": 0.806,
+   "h": 1.095,
+   "d": 2.672
+  },
+  {
+   "id": "city_SM_Prop_Cable_Crossing_Pillar_01",
+   "name": "SM_Prop_Cable_Crossing_Pillar_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cable_Crossing_Pillar_01.gltf",
+   "category": "prop",
+   "w": 1.141,
+   "h": 3.962,
+   "d": 0.901
+  },
+  {
+   "id": "city_SM_Prop_Cable_Crossing_Rail_01",
+   "name": "SM_Prop_Cable_Crossing_Rail_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cable_Crossing_Rail_01.gltf",
+   "category": "prop",
+   "w": 0.553,
+   "h": 0.798,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Prop_Cables_01",
+   "name": "SM_Prop_Cables_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cables_01.gltf",
+   "category": "prop",
+   "w": 73.131,
+   "h": 11.115,
+   "d": 0.348
+  },
+  {
+   "id": "city_SM_Prop_Cables_02",
+   "name": "SM_Prop_Cables_02",
+   "set": "city",
+   "file": "city_SM_Prop_Cables_02.gltf",
+   "category": "prop",
+   "w": 73.127,
+   "h": 3.956,
+   "d": 0.348
+  },
+  {
+   "id": "city_SM_Prop_Cables_03",
+   "name": "SM_Prop_Cables_03",
+   "set": "city",
+   "file": "city_SM_Prop_Cables_03.gltf",
+   "category": "prop",
+   "w": 73.098,
+   "h": 7.7,
+   "d": 0.348
+  },
+  {
+   "id": "city_SM_Prop_Cables_Ceiling_01",
+   "name": "SM_Prop_Cables_Ceiling_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cables_Ceiling_01.gltf",
+   "category": "prop",
+   "w": 4.754,
+   "h": 1.277,
+   "d": 1.664
+  },
+  {
+   "id": "city_SM_Prop_Cage_01",
+   "name": "SM_Prop_Cage_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cage_01.gltf",
+   "category": "prop",
+   "w": 0.688,
+   "h": 0.545,
+   "d": 0.671
+  },
+  {
+   "id": "city_SM_Prop_Cage_02",
+   "name": "SM_Prop_Cage_02",
+   "set": "city",
+   "file": "city_SM_Prop_Cage_02.gltf",
+   "category": "prop",
+   "w": 0.688,
+   "h": 0.876,
+   "d": 0.671
+  },
+  {
+   "id": "city_SM_Prop_Cage_03",
+   "name": "SM_Prop_Cage_03",
+   "set": "city",
+   "file": "city_SM_Prop_Cage_03.gltf",
+   "category": "prop",
+   "w": 0.688,
+   "h": 0.876,
+   "d": 0.671
+  },
+  {
+   "id": "city_SM_Prop_Carpet_Mat_01",
+   "name": "SM_Prop_Carpet_Mat_01",
+   "set": "city",
+   "file": "city_SM_Prop_Carpet_Mat_01.gltf",
+   "category": "prop",
+   "w": 2.537,
+   "h": 0.097,
+   "d": 3.801
+  },
+  {
+   "id": "city_SM_Prop_Chain_01",
+   "name": "SM_Prop_Chain_01",
+   "set": "city",
+   "file": "city_SM_Prop_Chain_01.gltf",
+   "category": "prop",
+   "w": 0.087,
+   "h": 2.583,
+   "d": 0.088
+  },
+  {
+   "id": "city_SM_Prop_Chain_02",
+   "name": "SM_Prop_Chain_02",
+   "set": "city",
+   "file": "city_SM_Prop_Chain_02.gltf",
+   "category": "prop",
+   "w": 1.721,
+   "h": 0.864,
+   "d": 0.088
+  },
+  {
+   "id": "city_SM_Prop_Chain_03",
+   "name": "SM_Prop_Chain_03",
+   "set": "city",
+   "file": "city_SM_Prop_Chain_03.gltf",
+   "category": "prop",
+   "w": 2.199,
+   "h": 0.681,
+   "d": 0.088
+  },
+  {
+   "id": "city_SM_Prop_ChargingStation_01",
+   "name": "SM_Prop_ChargingStation_01",
+   "set": "city",
+   "file": "city_SM_Prop_ChargingStation_01.gltf",
+   "category": "prop",
+   "w": 0.47,
+   "h": 2.266,
+   "d": 1.212
+  },
+  {
+   "id": "city_SM_Prop_Cog_01",
+   "name": "SM_Prop_Cog_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cog_01.gltf",
+   "category": "prop",
+   "w": 0.376,
+   "h": 0.041,
+   "d": 0.376
+  },
+  {
+   "id": "city_SM_Prop_Cog_02",
+   "name": "SM_Prop_Cog_02",
+   "set": "city",
+   "file": "city_SM_Prop_Cog_02.gltf",
+   "category": "prop",
+   "w": 0.24,
+   "h": 0.041,
+   "d": 0.24
+  },
+  {
+   "id": "city_SM_Prop_ControlPanel_01",
+   "name": "SM_Prop_ControlPanel_01",
+   "set": "city",
+   "file": "city_SM_Prop_ControlPanel_01.gltf",
+   "category": "prop",
+   "w": 0.376,
+   "h": 1.095,
+   "d": 0.689
+  },
+  {
+   "id": "city_SM_Prop_ControlPanel_02",
+   "name": "SM_Prop_ControlPanel_02",
+   "set": "city",
+   "file": "city_SM_Prop_ControlPanel_02.gltf",
+   "category": "prop",
+   "w": 0.376,
+   "h": 0.858,
+   "d": 0.573
+  },
+  {
+   "id": "city_SM_Prop_Couch_01",
+   "name": "SM_Prop_Couch_01",
+   "set": "city",
+   "file": "city_SM_Prop_Couch_01.gltf",
+   "category": "prop",
+   "w": 2.42,
+   "h": 1.047,
+   "d": 0.896
+  },
+  {
+   "id": "city_SM_Prop_Crate_01",
+   "name": "SM_Prop_Crate_01",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_01.gltf",
+   "category": "prop",
+   "w": 0.85,
+   "h": 0.728,
+   "d": 0.85
+  },
+  {
+   "id": "city_SM_Prop_Crate_02",
+   "name": "SM_Prop_Crate_02",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_02.gltf",
+   "category": "prop",
+   "w": 0.85,
+   "h": 0.728,
+   "d": 0.85
+  },
+  {
+   "id": "city_SM_Prop_Crate_03",
+   "name": "SM_Prop_Crate_03",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_03.gltf",
+   "category": "prop",
+   "w": 1.458,
+   "h": 1.458,
+   "d": 1.458
+  },
+  {
+   "id": "city_SM_Prop_Crate_04",
+   "name": "SM_Prop_Crate_04",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_04.gltf",
+   "category": "prop",
+   "w": 2.35,
+   "h": 1.145,
+   "d": 1.145
+  },
+  {
+   "id": "city_SM_Prop_Crate_Large_01",
+   "name": "SM_Prop_Crate_Large_01",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_Large_01.gltf",
+   "category": "prop",
+   "w": 1.585,
+   "h": 0.55,
+   "d": 0.637
+  },
+  {
+   "id": "city_SM_Prop_Crate_Military_01",
+   "name": "SM_Prop_Crate_Military_01",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_Military_01.gltf",
+   "category": "prop",
+   "w": 1.08,
+   "h": 0.396,
+   "d": 0.718
+  },
+  {
+   "id": "city_SM_Prop_Crate_Military_02",
+   "name": "SM_Prop_Crate_Military_02",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_Military_02.gltf",
+   "category": "prop",
+   "w": 1.08,
+   "h": 0.396,
+   "d": 0.718
+  },
+  {
+   "id": "city_SM_Prop_Crate_Military_03",
+   "name": "SM_Prop_Crate_Military_03",
+   "set": "city",
+   "file": "city_SM_Prop_Crate_Military_03.gltf",
+   "category": "prop",
+   "w": 0.846,
+   "h": 0.344,
+   "d": 0.541
+  },
+  {
+   "id": "city_SM_Prop_Cylinder_01",
+   "name": "SM_Prop_Cylinder_01",
+   "set": "city",
+   "file": "city_SM_Prop_Cylinder_01.gltf",
+   "category": "prop",
+   "w": 0.44,
+   "h": 0.799,
+   "d": 0.484
+  },
+  {
+   "id": "city_SM_Prop_Cylinder_02",
+   "name": "SM_Prop_Cylinder_02",
+   "set": "city",
+   "file": "city_SM_Prop_Cylinder_02.gltf",
+   "category": "prop",
+   "w": 0.44,
+   "h": 0.823,
+   "d": 0.484
+  },
+  {
+   "id": "city_SM_Prop_DeadZub_01",
+   "name": "SM_Prop_DeadZub_01",
+   "set": "city",
+   "file": "city_SM_Prop_DeadZub_01.gltf",
+   "category": "prop",
+   "w": 0.568,
+   "h": 0.299,
+   "d": 1.161
+  },
+  {
+   "id": "city_SM_Prop_DeadZub_02",
+   "name": "SM_Prop_DeadZub_02",
+   "set": "city",
+   "file": "city_SM_Prop_DeadZub_02.gltf",
+   "category": "prop",
+   "w": 0.647,
+   "h": 0.295,
+   "d": 0.985
+  },
+  {
+   "id": "city_SM_Prop_DeadZub_03",
+   "name": "SM_Prop_DeadZub_03",
+   "set": "city",
+   "file": "city_SM_Prop_DeadZub_03.gltf",
+   "category": "prop",
+   "w": 0.568,
+   "h": 0.433,
+   "d": 0.582
+  },
+  {
+   "id": "city_SM_Prop_DeadZub_04",
+   "name": "SM_Prop_DeadZub_04",
+   "set": "city",
+   "file": "city_SM_Prop_DeadZub_04.gltf",
+   "category": "prop",
+   "w": 0.277,
+   "h": 0.232,
+   "d": 0.325
+  },
+  {
+   "id": "city_SM_Prop_DeadZub_05",
+   "name": "SM_Prop_DeadZub_05",
+   "set": "city",
+   "file": "city_SM_Prop_DeadZub_05.gltf",
+   "category": "prop",
+   "w": 0.179,
+   "h": 0.258,
+   "d": 0.185
+  },
+  {
+   "id": "city_SM_Prop_Detail_01",
+   "name": "SM_Prop_Detail_01",
+   "set": "city",
+   "file": "city_SM_Prop_Detail_01.gltf",
+   "category": "prop",
+   "w": 1.451,
+   "h": 0.224,
+   "d": 1.451
+  },
+  {
+   "id": "city_SM_Prop_Disc_01",
+   "name": "SM_Prop_Disc_01",
+   "set": "city",
+   "file": "city_SM_Prop_Disc_01.gltf",
+   "category": "prop",
+   "w": 0.954,
+   "h": 0.214,
+   "d": 0.954
+  },
+  {
+   "id": "city_SM_Prop_Door_01",
+   "name": "SM_Prop_Door_01",
+   "set": "city",
+   "file": "city_SM_Prop_Door_01.gltf",
+   "category": "prop",
+   "w": 1.862,
+   "h": 2.361,
+   "d": 0.638
+  },
+  {
+   "id": "city_SM_Prop_Door_02",
+   "name": "SM_Prop_Door_02",
+   "set": "city",
+   "file": "city_SM_Prop_Door_02.gltf",
+   "category": "prop",
+   "w": 1.918,
+   "h": 2.361,
+   "d": 0.994
+  },
+  {
+   "id": "city_SM_Prop_Door_03",
+   "name": "SM_Prop_Door_03",
+   "set": "city",
+   "file": "city_SM_Prop_Door_03.gltf",
+   "category": "prop",
+   "w": 1.156,
+   "h": 2.589,
+   "d": 0.167
+  },
+  {
+   "id": "city_SM_Prop_Door_04",
+   "name": "SM_Prop_Door_04",
+   "set": "city",
+   "file": "city_SM_Prop_Door_04.gltf",
+   "category": "prop",
+   "w": 1.449,
+   "h": 2.42,
+   "d": 0.217
+  },
+  {
+   "id": "city_SM_Prop_Door_05",
+   "name": "SM_Prop_Door_05",
+   "set": "city",
+   "file": "city_SM_Prop_Door_05.gltf",
+   "category": "prop",
+   "w": 1.555,
+   "h": 2.523,
+   "d": 0.627
+  },
+  {
+   "id": "city_SM_Prop_Door_Chopshop_01",
+   "name": "SM_Prop_Door_Chopshop_01",
+   "set": "city",
+   "file": "city_SM_Prop_Door_Chopshop_01.gltf",
+   "category": "prop",
+   "w": 1.083,
+   "h": 2.249,
+   "d": 0.071
+  },
+  {
+   "id": "city_SM_Prop_Drone_01",
+   "name": "SM_Prop_Drone_01",
+   "set": "city",
+   "file": "city_SM_Prop_Drone_01.gltf",
+   "category": "prop",
+   "w": 1.592,
+   "h": 2.545,
+   "d": 1.264
+  },
+  {
+   "id": "city_SM_Prop_Drone_02",
+   "name": "SM_Prop_Drone_02",
+   "set": "city",
+   "file": "city_SM_Prop_Drone_02.gltf",
+   "category": "prop",
+   "w": 1.592,
+   "h": 2.179,
+   "d": 1.264
+  },
+  {
+   "id": "city_SM_Prop_Drone_Ball_01",
+   "name": "SM_Prop_Drone_Ball_01",
+   "set": "city",
+   "file": "city_SM_Prop_Drone_Ball_01.gltf",
+   "category": "prop",
+   "w": 0.696,
+   "h": 0.552,
+   "d": 0.605
+  },
+  {
+   "id": "city_SM_Prop_Drone_Insect_01",
+   "name": "SM_Prop_Drone_Insect_01",
+   "set": "city",
+   "file": "city_SM_Prop_Drone_Insect_01.gltf",
+   "category": "prop",
+   "w": 1.527,
+   "h": 1.075,
+   "d": 0.99
+  },
+  {
+   "id": "city_SM_Prop_Drone_Quad_01",
+   "name": "SM_Prop_Drone_Quad_01",
+   "set": "city",
+   "file": "city_SM_Prop_Drone_Quad_01.gltf",
+   "category": "prop",
+   "w": 1.246,
+   "h": 0.457,
+   "d": 1.166
+  },
+  {
+   "id": "city_SM_Prop_Dumpster_01",
+   "name": "SM_Prop_Dumpster_01",
+   "set": "city",
+   "file": "city_SM_Prop_Dumpster_01.gltf",
+   "category": "prop",
+   "w": 2.482,
+   "h": 1.478,
+   "d": 1.545
+  },
+  {
+   "id": "city_SM_Prop_Fence_01",
+   "name": "SM_Prop_Fence_01",
+   "set": "city",
+   "file": "city_SM_Prop_Fence_01.gltf",
+   "category": "prop",
+   "w": 1.033,
+   "h": 2.822,
+   "d": 2.124
+  },
+  {
+   "id": "city_SM_Prop_Flags_01",
+   "name": "SM_Prop_Flags_01",
+   "set": "city",
+   "file": "city_SM_Prop_Flags_01.gltf",
+   "category": "prop",
+   "w": 1.687,
+   "h": 0.44,
+   "d": 0.047
+  },
+  {
+   "id": "city_SM_Prop_FoodTray_01",
+   "name": "SM_Prop_FoodTray_01",
+   "set": "city",
+   "file": "city_SM_Prop_FoodTray_01.gltf",
+   "category": "prop",
+   "w": 0.728,
+   "h": 0.264,
+   "d": 0.512
+  },
+  {
+   "id": "city_SM_Prop_FoodTray_02",
+   "name": "SM_Prop_FoodTray_02",
+   "set": "city",
+   "file": "city_SM_Prop_FoodTray_02.gltf",
+   "category": "prop",
+   "w": 0.489,
+   "h": 0.333,
+   "d": 0.746
+  },
+  {
+   "id": "city_SM_Prop_FoodTray_03",
+   "name": "SM_Prop_FoodTray_03",
+   "set": "city",
+   "file": "city_SM_Prop_FoodTray_03.gltf",
+   "category": "prop",
+   "w": 0.489,
+   "h": 0.333,
+   "d": 0.75
+  },
+  {
+   "id": "city_SM_Prop_FoodTray_04",
+   "name": "SM_Prop_FoodTray_04",
+   "set": "city",
+   "file": "city_SM_Prop_FoodTray_04.gltf",
+   "category": "prop",
+   "w": 0.488,
+   "h": 0.251,
+   "d": 0.728
+  },
+  {
+   "id": "city_SM_Prop_Food_01",
+   "name": "SM_Prop_Food_01",
+   "set": "city",
+   "file": "city_SM_Prop_Food_01.gltf",
+   "category": "prop",
+   "w": 0.47,
+   "h": 0.281,
+   "d": 0.64
+  },
+  {
+   "id": "city_SM_Prop_Glass_01",
+   "name": "SM_Prop_Glass_01",
+   "set": "city",
+   "file": "city_SM_Prop_Glass_01.gltf",
+   "category": "prop",
+   "w": 0.104,
+   "h": 0.104,
+   "d": 0.104
+  },
+  {
+   "id": "city_SM_Prop_Glass_02",
+   "name": "SM_Prop_Glass_02",
+   "set": "city",
+   "file": "city_SM_Prop_Glass_02.gltf",
+   "category": "prop",
+   "w": 0.161,
+   "h": 0.171,
+   "d": 0.161
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Bottle_01",
+   "name": "SM_Prop_Hologram_Bottle_01",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Bottle_01.gltf",
+   "category": "prop",
+   "w": 1.71,
+   "h": 5.154,
+   "d": 1.71
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Bottle_02",
+   "name": "SM_Prop_Hologram_Bottle_02",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Bottle_02.gltf",
+   "category": "prop",
+   "w": 1.71,
+   "h": 5.154,
+   "d": 1.71
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Bottle_03",
+   "name": "SM_Prop_Hologram_Bottle_03",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Bottle_03.gltf",
+   "category": "prop",
+   "w": 1.71,
+   "h": 5.154,
+   "d": 1.71
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Burger_03",
+   "name": "SM_Prop_Hologram_Burger_03",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Burger_03.gltf",
+   "category": "prop",
+   "w": 3.861,
+   "h": 2.401,
+   "d": 3.859
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Noodles_01",
+   "name": "SM_Prop_Hologram_Noodles_01",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Noodles_01.gltf",
+   "category": "prop",
+   "w": 3.17,
+   "h": 3.806,
+   "d": 2.7
+  },
+  {
+   "id": "city_SM_Prop_Hologram_Pizza_01",
+   "name": "SM_Prop_Hologram_Pizza_01",
+   "set": "city",
+   "file": "city_SM_Prop_Hologram_Pizza_01.gltf",
+   "category": "prop",
+   "w": 3.604,
+   "h": 0.787,
+   "d": 3.168
+  },
+  {
+   "id": "city_SM_Prop_JarLiquid_01",
+   "name": "SM_Prop_JarLiquid_01",
+   "set": "city",
+   "file": "city_SM_Prop_JarLiquid_01.gltf",
+   "category": "prop",
+   "w": 0.186,
+   "h": 0.061,
+   "d": 0.186
+  },
+  {
+   "id": "city_SM_Prop_JarLiquid_02",
+   "name": "SM_Prop_JarLiquid_02",
+   "set": "city",
+   "file": "city_SM_Prop_JarLiquid_02.gltf",
+   "category": "prop",
+   "w": 0.194,
+   "h": 0.195,
+   "d": 0.194
+  },
+  {
+   "id": "city_SM_Prop_Jar_01",
+   "name": "SM_Prop_Jar_01",
+   "set": "city",
+   "file": "city_SM_Prop_Jar_01.gltf",
+   "category": "prop",
+   "w": 0.211,
+   "h": 0.325,
+   "d": 0.211
+  },
+  {
+   "id": "city_SM_Prop_Jar_02",
+   "name": "SM_Prop_Jar_02",
+   "set": "city",
+   "file": "city_SM_Prop_Jar_02.gltf",
+   "category": "prop",
+   "w": 0.172,
+   "h": 0.313,
+   "d": 0.172
+  },
+  {
+   "id": "city_SM_Prop_Jar_03",
+   "name": "SM_Prop_Jar_03",
+   "set": "city",
+   "file": "city_SM_Prop_Jar_03.gltf",
+   "category": "prop",
+   "w": 0.211,
+   "h": 0.42,
+   "d": 0.211
+  },
+  {
+   "id": "city_SM_Prop_Jar_04",
+   "name": "SM_Prop_Jar_04",
+   "set": "city",
+   "file": "city_SM_Prop_Jar_04.gltf",
+   "category": "prop",
+   "w": 0.172,
+   "h": 0.407,
+   "d": 0.172
+  },
+  {
+   "id": "city_SM_Prop_Jar_Hanging_01",
+   "name": "SM_Prop_Jar_Hanging_01",
+   "set": "city",
+   "file": "city_SM_Prop_Jar_Hanging_01.gltf",
+   "category": "prop",
+   "w": 0.51,
+   "h": 1.316,
+   "d": 0.569
+  },
+  {
+   "id": "city_SM_Prop_LightBar_01",
+   "name": "SM_Prop_LightBar_01",
+   "set": "city",
+   "file": "city_SM_Prop_LightBar_01.gltf",
+   "category": "prop",
+   "w": 1.0,
+   "h": 0.199,
+   "d": 5.0
+  },
+  {
+   "id": "city_SM_Prop_MarketCovcer_02",
+   "name": "SM_Prop_MarketCovcer_02",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCovcer_02.gltf",
+   "category": "prop",
+   "w": 3.332,
+   "h": 1.578,
+   "d": 1.704
+  },
+  {
+   "id": "city_SM_Prop_MarketCover_01",
+   "name": "SM_Prop_MarketCover_01",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCover_01.gltf",
+   "category": "prop",
+   "w": 3.817,
+   "h": 2.765,
+   "d": 2.432
+  },
+  {
+   "id": "city_SM_Prop_MarketCover_02",
+   "name": "SM_Prop_MarketCover_02",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCover_02.gltf",
+   "category": "prop",
+   "w": 2.59,
+   "h": 2.146,
+   "d": 1.199
+  },
+  {
+   "id": "city_SM_Prop_MarketCover_03",
+   "name": "SM_Prop_MarketCover_03",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCover_03.gltf",
+   "category": "prop",
+   "w": 2.757,
+   "h": 2.243,
+   "d": 1.227
+  },
+  {
+   "id": "city_SM_Prop_MarketCover_04",
+   "name": "SM_Prop_MarketCover_04",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCover_04.gltf",
+   "category": "prop",
+   "w": 3.804,
+   "h": 2.282,
+   "d": 0.908
+  },
+  {
+   "id": "city_SM_Prop_MarketCover_05",
+   "name": "SM_Prop_MarketCover_05",
+   "set": "city",
+   "file": "city_SM_Prop_MarketCover_05.gltf",
+   "category": "prop",
+   "w": 3.804,
+   "h": 2.282,
+   "d": 0.908
+  },
+  {
+   "id": "city_SM_Prop_MarketLights_01",
+   "name": "SM_Prop_MarketLights_01",
+   "set": "city",
+   "file": "city_SM_Prop_MarketLights_01.gltf",
+   "category": "prop",
+   "w": 2.582,
+   "h": 1.693,
+   "d": 0.421
+  },
+  {
+   "id": "city_SM_Prop_MarketLights_02",
+   "name": "SM_Prop_MarketLights_02",
+   "set": "city",
+   "file": "city_SM_Prop_MarketLights_02.gltf",
+   "category": "prop",
+   "w": 1.802,
+   "h": 1.327,
+   "d": 0.85
+  },
+  {
+   "id": "city_SM_Prop_MarketTable_01",
+   "name": "SM_Prop_MarketTable_01",
+   "set": "city",
+   "file": "city_SM_Prop_MarketTable_01.gltf",
+   "category": "prop",
+   "w": 2.608,
+   "h": 0.829,
+   "d": 0.997
+  },
+  {
+   "id": "city_SM_Prop_MarketTable_02",
+   "name": "SM_Prop_MarketTable_02",
+   "set": "city",
+   "file": "city_SM_Prop_MarketTable_02.gltf",
+   "category": "prop",
+   "w": 2.497,
+   "h": 0.755,
+   "d": 0.938
+  },
+  {
+   "id": "city_SM_Prop_MarketTable_03",
+   "name": "SM_Prop_MarketTable_03",
+   "set": "city",
+   "file": "city_SM_Prop_MarketTable_03.gltf",
+   "category": "prop",
+   "w": 2.307,
+   "h": 0.113,
+   "d": 0.873
+  },
+  {
+   "id": "city_SM_Prop_MarketTable_04",
+   "name": "SM_Prop_MarketTable_04",
+   "set": "city",
+   "file": "city_SM_Prop_MarketTable_04.gltf",
+   "category": "prop",
+   "w": 2.474,
+   "h": 1.094,
+   "d": 1.04
+  },
+  {
+   "id": "city_SM_Prop_MarketTable_05",
+   "name": "SM_Prop_MarketTable_05",
+   "set": "city",
+   "file": "city_SM_Prop_MarketTable_05.gltf",
+   "category": "prop",
+   "w": 2.497,
+   "h": 1.169,
+   "d": 1.04
+  },
+  {
+   "id": "city_SM_Prop_Meat_01",
+   "name": "SM_Prop_Meat_01",
+   "set": "city",
+   "file": "city_SM_Prop_Meat_01.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 1.084,
+   "d": 0.286
+  },
+  {
+   "id": "city_SM_Prop_Meat_02",
+   "name": "SM_Prop_Meat_02",
+   "set": "city",
+   "file": "city_SM_Prop_Meat_02.gltf",
+   "category": "prop",
+   "w": 0.307,
+   "h": 1.141,
+   "d": 0.299
+  },
+  {
+   "id": "city_SM_Prop_Meat_03",
+   "name": "SM_Prop_Meat_03",
+   "set": "city",
+   "file": "city_SM_Prop_Meat_03.gltf",
+   "category": "prop",
+   "w": 0.268,
+   "h": 0.937,
+   "d": 0.246
+  },
+  {
+   "id": "city_SM_Prop_Medical_Chair_01",
+   "name": "SM_Prop_Medical_Chair_01",
+   "set": "city",
+   "file": "city_SM_Prop_Medical_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.857,
+   "h": 1.422,
+   "d": 1.908
+  },
+  {
+   "id": "city_SM_Prop_Medical_Machine_01",
+   "name": "SM_Prop_Medical_Machine_01",
+   "set": "city",
+   "file": "city_SM_Prop_Medical_Machine_01.gltf",
+   "category": "prop",
+   "w": 1.677,
+   "h": 2.964,
+   "d": 2.7
+  },
+  {
+   "id": "city_SM_Prop_Medical_Stool_01",
+   "name": "SM_Prop_Medical_Stool_01",
+   "set": "city",
+   "file": "city_SM_Prop_Medical_Stool_01.gltf",
+   "category": "prop",
+   "w": 0.628,
+   "h": 0.909,
+   "d": 0.886
+  },
+  {
+   "id": "city_SM_Prop_Medical_Table_01",
+   "name": "SM_Prop_Medical_Table_01",
+   "set": "city",
+   "file": "city_SM_Prop_Medical_Table_01.gltf",
+   "category": "prop",
+   "w": 0.863,
+   "h": 1.147,
+   "d": 0.699
+  },
+  {
+   "id": "city_SM_Prop_Meter_01",
+   "name": "SM_Prop_Meter_01",
+   "set": "city",
+   "file": "city_SM_Prop_Meter_01.gltf",
+   "category": "prop",
+   "w": 0.249,
+   "h": 1.758,
+   "d": 0.311
+  },
+  {
+   "id": "city_SM_Prop_Monitor_01",
+   "name": "SM_Prop_Monitor_01",
+   "set": "city",
+   "file": "city_SM_Prop_Monitor_01.gltf",
+   "category": "prop",
+   "w": 1.446,
+   "h": 1.91,
+   "d": 0.384
+  },
+  {
+   "id": "city_SM_Prop_Monitor_02",
+   "name": "SM_Prop_Monitor_02",
+   "set": "city",
+   "file": "city_SM_Prop_Monitor_02.gltf",
+   "category": "prop",
+   "w": 1.446,
+   "h": 1.764,
+   "d": 0.734
+  },
+  {
+   "id": "city_SM_Prop_Monitor_03",
+   "name": "SM_Prop_Monitor_03",
+   "set": "city",
+   "file": "city_SM_Prop_Monitor_03.gltf",
+   "category": "prop",
+   "w": 1.446,
+   "h": 1.862,
+   "d": 0.856
+  },
+  {
+   "id": "city_SM_Prop_Noodles_01",
+   "name": "SM_Prop_Noodles_01",
+   "set": "city",
+   "file": "city_SM_Prop_Noodles_01.gltf",
+   "category": "prop",
+   "w": 0.193,
+   "h": 0.226,
+   "d": 0.165
+  },
+  {
+   "id": "city_SM_Prop_Office_Chair_01",
+   "name": "SM_Prop_Office_Chair_01",
+   "set": "city",
+   "file": "city_SM_Prop_Office_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.704,
+   "h": 1.046,
+   "d": 0.704
+  },
+  {
+   "id": "city_SM_Prop_Overhang_01",
+   "name": "SM_Prop_Overhang_01",
+   "set": "city",
+   "file": "city_SM_Prop_Overhang_01.gltf",
+   "category": "prop",
+   "w": 3.503,
+   "h": 1.332,
+   "d": 1.442
+  },
+  {
+   "id": "city_SM_Prop_Overhang_02",
+   "name": "SM_Prop_Overhang_02",
+   "set": "city",
+   "file": "city_SM_Prop_Overhang_02.gltf",
+   "category": "prop",
+   "w": 4.815,
+   "h": 0.888,
+   "d": 0.525
+  },
+  {
+   "id": "city_SM_Prop_Pad_01",
+   "name": "SM_Prop_Pad_01",
+   "set": "city",
+   "file": "city_SM_Prop_Pad_01.gltf",
+   "category": "prop",
+   "w": 0.151,
+   "h": 0.208,
+   "d": 0.011
+  },
+  {
+   "id": "city_SM_Prop_Paper_Banner_01",
+   "name": "SM_Prop_Paper_Banner_01",
+   "set": "city",
+   "file": "city_SM_Prop_Paper_Banner_01.gltf",
+   "category": "prop",
+   "w": 0.691,
+   "h": 2.097,
+   "d": 0.175
+  },
+  {
+   "id": "city_SM_Prop_Paper_Lantern_01",
+   "name": "SM_Prop_Paper_Lantern_01",
+   "set": "city",
+   "file": "city_SM_Prop_Paper_Lantern_01.gltf",
+   "category": "prop",
+   "w": 0.383,
+   "h": 1.022,
+   "d": 0.383
+  },
+  {
+   "id": "city_SM_Prop_Paper_Lantern_02",
+   "name": "SM_Prop_Paper_Lantern_02",
+   "set": "city",
+   "file": "city_SM_Prop_Paper_Lantern_02.gltf",
+   "category": "prop",
+   "w": 0.383,
+   "h": 1.022,
+   "d": 0.383
+  },
+  {
+   "id": "city_SM_Prop_Pillar_01",
+   "name": "SM_Prop_Pillar_01",
+   "set": "city",
+   "file": "city_SM_Prop_Pillar_01.gltf",
+   "category": "prop",
+   "w": 1.388,
+   "h": 10.739,
+   "d": 1.607
+  },
+  {
+   "id": "city_SM_Prop_Pillar_02",
+   "name": "SM_Prop_Pillar_02",
+   "set": "city",
+   "file": "city_SM_Prop_Pillar_02.gltf",
+   "category": "prop",
+   "w": 1.462,
+   "h": 7.568,
+   "d": 1.174
+  },
+  {
+   "id": "city_SM_Prop_Pillar_03",
+   "name": "SM_Prop_Pillar_03",
+   "set": "city",
+   "file": "city_SM_Prop_Pillar_03.gltf",
+   "category": "prop",
+   "w": 1.462,
+   "h": 7.568,
+   "d": 1.254
+  },
+  {
+   "id": "city_SM_Prop_Pillar_04",
+   "name": "SM_Prop_Pillar_04",
+   "set": "city",
+   "file": "city_SM_Prop_Pillar_04.gltf",
+   "category": "prop",
+   "w": 0.543,
+   "h": 2.762,
+   "d": 0.795
+  },
+  {
+   "id": "city_SM_Prop_Pipes_01",
+   "name": "SM_Prop_Pipes_01",
+   "set": "city",
+   "file": "city_SM_Prop_Pipes_01.gltf",
+   "category": "prop",
+   "w": 2.5,
+   "h": 0.239,
+   "d": 0.497
+  },
+  {
+   "id": "city_SM_Prop_Pipes_02",
+   "name": "SM_Prop_Pipes_02",
+   "set": "city",
+   "file": "city_SM_Prop_Pipes_02.gltf",
+   "category": "prop",
+   "w": 1.218,
+   "h": 0.168,
+   "d": 1.218
+  },
+  {
+   "id": "city_SM_Prop_Pipes_03",
+   "name": "SM_Prop_Pipes_03",
+   "set": "city",
+   "file": "city_SM_Prop_Pipes_03.gltf",
+   "category": "prop",
+   "w": 0.545,
+   "h": 0.633,
+   "d": 0.436
+  },
+  {
+   "id": "city_SM_Prop_Plant_Vase_01",
+   "name": "SM_Prop_Plant_Vase_01",
+   "set": "city",
+   "file": "city_SM_Prop_Plant_Vase_01.gltf",
+   "category": "prop",
+   "w": 0.923,
+   "h": 1.079,
+   "d": 0.9
+  },
+  {
+   "id": "city_SM_Prop_Plant_Vase_02",
+   "name": "SM_Prop_Plant_Vase_02",
+   "set": "city",
+   "file": "city_SM_Prop_Plant_Vase_02.gltf",
+   "category": "prop",
+   "w": 0.924,
+   "h": 1.277,
+   "d": 1.038
+  },
+  {
+   "id": "city_SM_Prop_Posters_01",
+   "name": "SM_Prop_Posters_01",
+   "set": "city",
+   "file": "city_SM_Prop_Posters_01.gltf",
+   "category": "prop",
+   "w": 10.261,
+   "h": 0.574,
+   "d": 17.286
+  },
+  {
+   "id": "city_SM_Prop_Posters_02",
+   "name": "SM_Prop_Posters_02",
+   "set": "city",
+   "file": "city_SM_Prop_Posters_02.gltf",
+   "category": "prop",
+   "w": 9.291,
+   "h": 0.165,
+   "d": 11.163
+  },
+  {
+   "id": "city_SM_Prop_Posters_03",
+   "name": "SM_Prop_Posters_03",
+   "set": "city",
+   "file": "city_SM_Prop_Posters_03.gltf",
+   "category": "prop",
+   "w": 6.054,
+   "h": 0.165,
+   "d": 6.699
+  },
+  {
+   "id": "city_SM_Prop_Powerpoll_01",
+   "name": "SM_Prop_Powerpoll_01",
+   "set": "city",
+   "file": "city_SM_Prop_Powerpoll_01.gltf",
+   "category": "prop",
+   "w": 1.768,
+   "h": 5.073,
+   "d": 1.163
+  },
+  {
+   "id": "city_SM_Prop_Powerpoll_02",
+   "name": "SM_Prop_Powerpoll_02",
+   "set": "city",
+   "file": "city_SM_Prop_Powerpoll_02.gltf",
+   "category": "prop",
+   "w": 1.545,
+   "h": 5.073,
+   "d": 1.163
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_01",
+   "name": "SM_Prop_Robotic_Part_01",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_01.gltf",
+   "category": "prop",
+   "w": 0.472,
+   "h": 0.288,
+   "d": 0.374
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_010",
+   "name": "SM_Prop_Robotic_Part_010",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_010.gltf",
+   "category": "prop",
+   "w": 0.58,
+   "h": 0.114,
+   "d": 0.28
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_011",
+   "name": "SM_Prop_Robotic_Part_011",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_011.gltf",
+   "category": "prop",
+   "w": 0.385,
+   "h": 0.165,
+   "d": 0.094
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_02",
+   "name": "SM_Prop_Robotic_Part_02",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_02.gltf",
+   "category": "prop",
+   "w": 0.804,
+   "h": 0.196,
+   "d": 0.381
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_03",
+   "name": "SM_Prop_Robotic_Part_03",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_03.gltf",
+   "category": "prop",
+   "w": 0.172,
+   "h": 0.515,
+   "d": 0.679
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_04",
+   "name": "SM_Prop_Robotic_Part_04",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_04.gltf",
+   "category": "prop",
+   "w": 0.762,
+   "h": 0.458,
+   "d": 0.451
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_05",
+   "name": "SM_Prop_Robotic_Part_05",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_05.gltf",
+   "category": "prop",
+   "w": 0.886,
+   "h": 0.15,
+   "d": 0.397
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_06",
+   "name": "SM_Prop_Robotic_Part_06",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_06.gltf",
+   "category": "prop",
+   "w": 0.171,
+   "h": 0.416,
+   "d": 0.293
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_07",
+   "name": "SM_Prop_Robotic_Part_07",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_07.gltf",
+   "category": "prop",
+   "w": 0.159,
+   "h": 0.515,
+   "d": 0.679
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_08",
+   "name": "SM_Prop_Robotic_Part_08",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_08.gltf",
+   "category": "prop",
+   "w": 0.351,
+   "h": 0.536,
+   "d": 0.346
+  },
+  {
+   "id": "city_SM_Prop_Robotic_Part_09",
+   "name": "SM_Prop_Robotic_Part_09",
+   "set": "city",
+   "file": "city_SM_Prop_Robotic_Part_09.gltf",
+   "category": "prop",
+   "w": 0.151,
+   "h": 0.437,
+   "d": 0.171
+  },
+  {
+   "id": "city_SM_Prop_RubbishPile_01",
+   "name": "SM_Prop_RubbishPile_01",
+   "set": "city",
+   "file": "city_SM_Prop_RubbishPile_01.gltf",
+   "category": "prop",
+   "w": 2.722,
+   "h": 0.978,
+   "d": 1.765
+  },
+  {
+   "id": "city_SM_Prop_RubbishPile_02",
+   "name": "SM_Prop_RubbishPile_02",
+   "set": "city",
+   "file": "city_SM_Prop_RubbishPile_02.gltf",
+   "category": "prop",
+   "w": 1.992,
+   "h": 0.254,
+   "d": 1.394
+  },
+  {
+   "id": "city_SM_Prop_RubbishPile_03",
+   "name": "SM_Prop_RubbishPile_03",
+   "set": "city",
+   "file": "city_SM_Prop_RubbishPile_03.gltf",
+   "category": "prop",
+   "w": 1.81,
+   "h": 0.235,
+   "d": 1.011
+  },
+  {
+   "id": "city_SM_Prop_Rubbish_Bin_01",
+   "name": "SM_Prop_Rubbish_Bin_01",
+   "set": "city",
+   "file": "city_SM_Prop_Rubbish_Bin_01.gltf",
+   "category": "prop",
+   "w": 0.576,
+   "h": 0.948,
+   "d": 0.576
+  },
+  {
+   "id": "city_SM_Prop_Rubbish_Paper_01",
+   "name": "SM_Prop_Rubbish_Paper_01",
+   "set": "city",
+   "file": "city_SM_Prop_Rubbish_Paper_01.gltf",
+   "category": "prop",
+   "w": 0.239,
+   "h": 0.0,
+   "d": 0.323
+  },
+  {
+   "id": "city_SM_Prop_Rubbish_Paper_02",
+   "name": "SM_Prop_Rubbish_Paper_02",
+   "set": "city",
+   "file": "city_SM_Prop_Rubbish_Paper_02.gltf",
+   "category": "prop",
+   "w": 0.239,
+   "h": 0.0,
+   "d": 0.323
+  },
+  {
+   "id": "city_SM_Prop_Rubbish_Paper_03",
+   "name": "SM_Prop_Rubbish_Paper_03",
+   "set": "city",
+   "file": "city_SM_Prop_Rubbish_Paper_03.gltf",
+   "category": "prop",
+   "w": 0.239,
+   "h": 0.024,
+   "d": 0.323
+  },
+  {
+   "id": "city_SM_Prop_Rubbish_Paper_04",
+   "name": "SM_Prop_Rubbish_Paper_04",
+   "set": "city",
+   "file": "city_SM_Prop_Rubbish_Paper_04.gltf",
+   "category": "prop",
+   "w": 0.239,
+   "h": 0.019,
+   "d": 0.318
+  },
+  {
+   "id": "city_SM_Prop_SatDish_01",
+   "name": "SM_Prop_SatDish_01",
+   "set": "city",
+   "file": "city_SM_Prop_SatDish_01.gltf",
+   "category": "prop",
+   "w": 1.84,
+   "h": 0.984,
+   "d": 1.944
+  },
+  {
+   "id": "city_SM_Prop_SatDish_02",
+   "name": "SM_Prop_SatDish_02",
+   "set": "city",
+   "file": "city_SM_Prop_SatDish_02.gltf",
+   "category": "prop",
+   "w": 1.485,
+   "h": 1.013,
+   "d": 1.485
+  },
+  {
+   "id": "city_SM_Prop_SatDish_03",
+   "name": "SM_Prop_SatDish_03",
+   "set": "city",
+   "file": "city_SM_Prop_SatDish_03.gltf",
+   "category": "prop",
+   "w": 0.99,
+   "h": 1.38,
+   "d": 1.009
+  },
+  {
+   "id": "city_SM_Prop_SatDish_Base_01",
+   "name": "SM_Prop_SatDish_Base_01",
+   "set": "city",
+   "file": "city_SM_Prop_SatDish_Base_01.gltf",
+   "category": "prop",
+   "w": 1.276,
+   "h": 1.926,
+   "d": 1.287
+  },
+  {
+   "id": "city_SM_Prop_Scanner_01",
+   "name": "SM_Prop_Scanner_01",
+   "set": "city",
+   "file": "city_SM_Prop_Scanner_01.gltf",
+   "category": "prop",
+   "w": 0.132,
+   "h": 0.169,
+   "d": 0.044
+  },
+  {
+   "id": "city_SM_Prop_SciFi_Pad_01",
+   "name": "SM_Prop_SciFi_Pad_01",
+   "set": "city",
+   "file": "city_SM_Prop_SciFi_Pad_01.gltf",
+   "category": "prop",
+   "w": 2.282,
+   "h": 0.12,
+   "d": 1.503
+  },
+  {
+   "id": "city_SM_Prop_Security_Camera_01",
+   "name": "SM_Prop_Security_Camera_01",
+   "set": "city",
+   "file": "city_SM_Prop_Security_Camera_01.gltf",
+   "category": "prop",
+   "w": 0.362,
+   "h": 1.161,
+   "d": 1.144
+  },
+  {
+   "id": "city_SM_Prop_Security_Camera_02",
+   "name": "SM_Prop_Security_Camera_02",
+   "set": "city",
+   "file": "city_SM_Prop_Security_Camera_02.gltf",
+   "category": "prop",
+   "w": 0.363,
+   "h": 1.068,
+   "d": 1.08
+  },
+  {
+   "id": "city_SM_Prop_Security_Monitor_01",
+   "name": "SM_Prop_Security_Monitor_01",
+   "set": "city",
+   "file": "city_SM_Prop_Security_Monitor_01.gltf",
+   "category": "prop",
+   "w": 0.764,
+   "h": 1.501,
+   "d": 0.959
+  },
+  {
+   "id": "city_SM_Prop_Security_Scanner_01",
+   "name": "SM_Prop_Security_Scanner_01",
+   "set": "city",
+   "file": "city_SM_Prop_Security_Scanner_01.gltf",
+   "category": "prop",
+   "w": 2.002,
+   "h": 2.764,
+   "d": 0.678
+  },
+  {
+   "id": "city_SM_Prop_Shelf_01",
+   "name": "SM_Prop_Shelf_01",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_01.gltf",
+   "category": "prop",
+   "w": 3.275,
+   "h": 2.217,
+   "d": 0.746
+  },
+  {
+   "id": "city_SM_Prop_Shelf_Preset_01",
+   "name": "SM_Prop_Shelf_Preset_01",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_Preset_01.gltf",
+   "category": "prop",
+   "w": 3.275,
+   "h": 2.304,
+   "d": 0.871
+  },
+  {
+   "id": "city_SM_Prop_Shelf_Wall_01",
+   "name": "SM_Prop_Shelf_Wall_01",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_Wall_01.gltf",
+   "category": "prop",
+   "w": 2.027,
+   "h": 1.176,
+   "d": 0.573
+  },
+  {
+   "id": "city_SM_Prop_Shelf_Wall_Preset_01",
+   "name": "SM_Prop_Shelf_Wall_Preset_01",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_Wall_Preset_01.gltf",
+   "category": "prop",
+   "w": 2.027,
+   "h": 1.362,
+   "d": 0.822
+  },
+  {
+   "id": "city_SM_Prop_Shelf_Wall_Preset_02",
+   "name": "SM_Prop_Shelf_Wall_Preset_02",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_Wall_Preset_02.gltf",
+   "category": "prop",
+   "w": 2.027,
+   "h": 1.193,
+   "d": 0.573
+  },
+  {
+   "id": "city_SM_Prop_Shelf_Wall_Preset_03",
+   "name": "SM_Prop_Shelf_Wall_Preset_03",
+   "set": "city",
+   "file": "city_SM_Prop_Shelf_Wall_Preset_03.gltf",
+   "category": "prop",
+   "w": 2.027,
+   "h": 1.193,
+   "d": 0.578
+  },
+  {
+   "id": "city_SM_Prop_Shield_Bubble_01",
+   "name": "SM_Prop_Shield_Bubble_01",
+   "set": "city",
+   "file": "city_SM_Prop_Shield_Bubble_01.gltf",
+   "category": "prop",
+   "w": 6.099,
+   "h": 6.08,
+   "d": 6.094
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Barrier_01",
+   "name": "SM_Prop_Sidewalk_Barrier_01",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Barrier_01.gltf",
+   "category": "prop",
+   "w": 0.313,
+   "h": 1.205,
+   "d": 0.313
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_01",
+   "name": "SM_Prop_Sidewalk_Panel_01",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_01.gltf",
+   "category": "prop",
+   "w": 0.745,
+   "h": 0.058,
+   "d": 0.745
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_02",
+   "name": "SM_Prop_Sidewalk_Panel_02",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_02.gltf",
+   "category": "prop",
+   "w": 0.745,
+   "h": 0.058,
+   "d": 0.745
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_03",
+   "name": "SM_Prop_Sidewalk_Panel_03",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_03.gltf",
+   "category": "prop",
+   "w": 0.721,
+   "h": 0.144,
+   "d": 0.721
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_04",
+   "name": "SM_Prop_Sidewalk_Panel_04",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_04.gltf",
+   "category": "prop",
+   "w": 0.961,
+   "h": 0.105,
+   "d": 0.994
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_05",
+   "name": "SM_Prop_Sidewalk_Panel_05",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_05.gltf",
+   "category": "prop",
+   "w": 0.696,
+   "h": 0.105,
+   "d": 0.696
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Panel_06",
+   "name": "SM_Prop_Sidewalk_Panel_06",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Panel_06.gltf",
+   "category": "prop",
+   "w": 0.697,
+   "h": 0.085,
+   "d": 0.697
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Pipe_01",
+   "name": "SM_Prop_Sidewalk_Pipe_01",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Pipe_01.gltf",
+   "category": "prop",
+   "w": 0.594,
+   "h": 0.897,
+   "d": 0.835
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Pipe_02",
+   "name": "SM_Prop_Sidewalk_Pipe_02",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Pipe_02.gltf",
+   "category": "prop",
+   "w": 0.51,
+   "h": 2.833,
+   "d": 0.782
+  },
+  {
+   "id": "city_SM_Prop_Sidewalk_Rubble_01",
+   "name": "SM_Prop_Sidewalk_Rubble_01",
+   "set": "city",
+   "file": "city_SM_Prop_Sidewalk_Rubble_01.gltf",
+   "category": "prop",
+   "w": 0.825,
+   "h": 0.11,
+   "d": 0.516
+  },
+  {
+   "id": "city_SM_Prop_Spanner_01",
+   "name": "SM_Prop_Spanner_01",
+   "set": "city",
+   "file": "city_SM_Prop_Spanner_01.gltf",
+   "category": "prop",
+   "w": 0.142,
+   "h": 0.045,
+   "d": 0.656
+  },
+  {
+   "id": "city_SM_Prop_Stool_01",
+   "name": "SM_Prop_Stool_01",
+   "set": "city",
+   "file": "city_SM_Prop_Stool_01.gltf",
+   "category": "prop",
+   "w": 0.438,
+   "h": 0.777,
+   "d": 0.434
+  },
+  {
+   "id": "city_SM_Prop_Streetlight_01",
+   "name": "SM_Prop_Streetlight_01",
+   "set": "city",
+   "file": "city_SM_Prop_Streetlight_01.gltf",
+   "category": "prop",
+   "w": 0.623,
+   "h": 5.4,
+   "d": 2.639
+  },
+  {
+   "id": "city_SM_Prop_StripClub_Chair_01",
+   "name": "SM_Prop_StripClub_Chair_01",
+   "set": "city",
+   "file": "city_SM_Prop_StripClub_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.673,
+   "h": 1.193,
+   "d": 0.625
+  },
+  {
+   "id": "city_SM_Prop_StripClub_Pole_01",
+   "name": "SM_Prop_StripClub_Pole_01",
+   "set": "city",
+   "file": "city_SM_Prop_StripClub_Pole_01.gltf",
+   "category": "prop",
+   "w": 0.08,
+   "h": 2.288,
+   "d": 0.069
+  },
+  {
+   "id": "city_SM_Prop_StripClub_Sofa_01",
+   "name": "SM_Prop_StripClub_Sofa_01",
+   "set": "city",
+   "file": "city_SM_Prop_StripClub_Sofa_01.gltf",
+   "category": "prop",
+   "w": 3.053,
+   "h": 0.957,
+   "d": 1.46
+  },
+  {
+   "id": "city_SM_Prop_StripClub_Steps_01",
+   "name": "SM_Prop_StripClub_Steps_01",
+   "set": "city",
+   "file": "city_SM_Prop_StripClub_Steps_01.gltf",
+   "category": "prop",
+   "w": 1.235,
+   "h": 0.791,
+   "d": 1.217
+  },
+  {
+   "id": "city_SM_Prop_Supplies_01",
+   "name": "SM_Prop_Supplies_01",
+   "set": "city",
+   "file": "city_SM_Prop_Supplies_01.gltf",
+   "category": "prop",
+   "w": 0.566,
+   "h": 0.275,
+   "d": 0.546
+  },
+  {
+   "id": "city_SM_Prop_Table_Small_01",
+   "name": "SM_Prop_Table_Small_01",
+   "set": "city",
+   "file": "city_SM_Prop_Table_Small_01.gltf",
+   "category": "prop",
+   "w": 0.844,
+   "h": 0.543,
+   "d": 1.6
+  },
+  {
+   "id": "city_SM_Prop_TrashBag_01",
+   "name": "SM_Prop_TrashBag_01",
+   "set": "city",
+   "file": "city_SM_Prop_TrashBag_01.gltf",
+   "category": "prop",
+   "w": 0.612,
+   "h": 0.905,
+   "d": 0.829
+  },
+  {
+   "id": "city_SM_Prop_TrashBag_02",
+   "name": "SM_Prop_TrashBag_02",
+   "set": "city",
+   "file": "city_SM_Prop_TrashBag_02.gltf",
+   "category": "prop",
+   "w": 0.793,
+   "h": 0.98,
+   "d": 0.808
+  },
+  {
+   "id": "city_SM_Prop_TrashBag_03",
+   "name": "SM_Prop_TrashBag_03",
+   "set": "city",
+   "file": "city_SM_Prop_TrashBag_03.gltf",
+   "category": "prop",
+   "w": 0.709,
+   "h": 0.766,
+   "d": 0.851
+  },
+  {
+   "id": "city_SM_Prop_TrashCan_01",
+   "name": "SM_Prop_TrashCan_01",
+   "set": "city",
+   "file": "city_SM_Prop_TrashCan_01.gltf",
+   "category": "prop",
+   "w": 0.875,
+   "h": 1.037,
+   "d": 0.7
+  },
+  {
+   "id": "city_SM_Prop_VRBooth_01",
+   "name": "SM_Prop_VRBooth_01",
+   "set": "city",
+   "file": "city_SM_Prop_VRBooth_01.gltf",
+   "category": "prop",
+   "w": 1.628,
+   "h": 2.774,
+   "d": 1.689
+  },
+  {
+   "id": "city_SM_Prop_VRHeadset_01",
+   "name": "SM_Prop_VRHeadset_01",
+   "set": "city",
+   "file": "city_SM_Prop_VRHeadset_01.gltf",
+   "category": "prop",
+   "w": 0.316,
+   "h": 0.175,
+   "d": 0.287
+  },
+  {
+   "id": "city_SM_Prop_VendingMachine_01",
+   "name": "SM_Prop_VendingMachine_01",
+   "set": "city",
+   "file": "city_SM_Prop_VendingMachine_01.gltf",
+   "category": "prop",
+   "w": 0.757,
+   "h": 1.619,
+   "d": 0.64
+  },
+  {
+   "id": "city_SM_Prop_VendingMachine_Soda_01",
+   "name": "SM_Prop_VendingMachine_Soda_01",
+   "set": "city",
+   "file": "city_SM_Prop_VendingMachine_Soda_01.gltf",
+   "category": "prop",
+   "w": 1.91,
+   "h": 4.001,
+   "d": 1.686
+  },
+  {
+   "id": "city_SM_Prop_Vent_01",
+   "name": "SM_Prop_Vent_01",
+   "set": "city",
+   "file": "city_SM_Prop_Vent_01.gltf",
+   "category": "prop",
+   "w": 2.163,
+   "h": 2.098,
+   "d": 0.621
+  },
+  {
+   "id": "city_SM_Prop_Vent_02",
+   "name": "SM_Prop_Vent_02",
+   "set": "city",
+   "file": "city_SM_Prop_Vent_02.gltf",
+   "category": "prop",
+   "w": 1.091,
+   "h": 1.994,
+   "d": 1.876
+  },
+  {
+   "id": "city_SM_Prop_Vent_03",
+   "name": "SM_Prop_Vent_03",
+   "set": "city",
+   "file": "city_SM_Prop_Vent_03.gltf",
+   "category": "prop",
+   "w": 1.082,
+   "h": 1.824,
+   "d": 1.082
+  },
+  {
+   "id": "city_SM_Prop_Vent_04",
+   "name": "SM_Prop_Vent_04",
+   "set": "city",
+   "file": "city_SM_Prop_Vent_04.gltf",
+   "category": "prop",
+   "w": 1.679,
+   "h": 1.017,
+   "d": 1.679
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_01",
+   "name": "SM_Prop_WallAttach_Electronics_01",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_01.gltf",
+   "category": "prop",
+   "w": 1.028,
+   "h": 1.879,
+   "d": 0.45
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_02",
+   "name": "SM_Prop_WallAttach_Electronics_02",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_02.gltf",
+   "category": "prop",
+   "w": 0.817,
+   "h": 0.739,
+   "d": 0.505
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_03",
+   "name": "SM_Prop_WallAttach_Electronics_03",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_03.gltf",
+   "category": "prop",
+   "w": 0.592,
+   "h": 0.703,
+   "d": 0.344
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_04",
+   "name": "SM_Prop_WallAttach_Electronics_04",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_04.gltf",
+   "category": "prop",
+   "w": 0.818,
+   "h": 0.921,
+   "d": 0.34
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_05",
+   "name": "SM_Prop_WallAttach_Electronics_05",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_05.gltf",
+   "category": "prop",
+   "w": 1.361,
+   "h": 2.752,
+   "d": 0.422
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Electronics_06",
+   "name": "SM_Prop_WallAttach_Electronics_06",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Electronics_06.gltf",
+   "category": "prop",
+   "w": 0.419,
+   "h": 1.167,
+   "d": 0.26
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Vent_01",
+   "name": "SM_Prop_WallAttach_Vent_01",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Vent_01.gltf",
+   "category": "prop",
+   "w": 0.777,
+   "h": 2.215,
+   "d": 0.529
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Vent_02",
+   "name": "SM_Prop_WallAttach_Vent_02",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Vent_02.gltf",
+   "category": "prop",
+   "w": 0.884,
+   "h": 2.999,
+   "d": 0.529
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Vent_03",
+   "name": "SM_Prop_WallAttach_Vent_03",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Vent_03.gltf",
+   "category": "prop",
+   "w": 0.777,
+   "h": 2.998,
+   "d": 0.529
+  },
+  {
+   "id": "city_SM_Prop_WallAttach_Vent_04",
+   "name": "SM_Prop_WallAttach_Vent_04",
+   "set": "city",
+   "file": "city_SM_Prop_WallAttach_Vent_04.gltf",
+   "category": "prop",
+   "w": 0.822,
+   "h": 2.8,
+   "d": 0.304
+  },
+  {
+   "id": "city_SM_Prop_Wall_Prop_01",
+   "name": "SM_Prop_Wall_Prop_01",
+   "set": "city",
+   "file": "city_SM_Prop_Wall_Prop_01.gltf",
+   "category": "prop",
+   "w": 0.666,
+   "h": 0.285,
+   "d": 0.179
+  },
+  {
+   "id": "city_SM_Prop_Wall_Table_01",
+   "name": "SM_Prop_Wall_Table_01",
+   "set": "city",
+   "file": "city_SM_Prop_Wall_Table_01.gltf",
+   "category": "prop",
+   "w": 2.284,
+   "h": 1.226,
+   "d": 1.181
+  },
+  {
+   "id": "city_SM_Prop_Watercooler_01",
+   "name": "SM_Prop_Watercooler_01",
+   "set": "city",
+   "file": "city_SM_Prop_Watercooler_01.gltf",
+   "category": "prop",
+   "w": 0.402,
+   "h": 2.208,
+   "d": 0.424
+  },
+  {
+   "id": "city_SM_Prop_Window_01",
+   "name": "SM_Prop_Window_01",
+   "set": "city",
+   "file": "city_SM_Prop_Window_01.gltf",
+   "category": "prop",
+   "w": 1.101,
+   "h": 1.101,
+   "d": 0.243
+  },
+  {
+   "id": "city_SM_Prop_Window_02",
+   "name": "SM_Prop_Window_02",
+   "set": "city",
+   "file": "city_SM_Prop_Window_02.gltf",
+   "category": "prop",
+   "w": 2.149,
+   "h": 1.476,
+   "d": 0.243
+  },
+  {
+   "id": "city_SM_Prop_Window_03",
+   "name": "SM_Prop_Window_03",
+   "set": "city",
+   "file": "city_SM_Prop_Window_03.gltf",
+   "category": "prop",
+   "w": 1.532,
+   "h": 1.248,
+   "d": 0.26
+  },
+  {
+   "id": "city_SM_Prop_Window_Bolts_01",
+   "name": "SM_Prop_Window_Bolts_01",
+   "set": "city",
+   "file": "city_SM_Prop_Window_Bolts_01.gltf",
+   "category": "prop",
+   "w": 0.937,
+   "h": 1.535,
+   "d": 0.17
+  },
+  {
+   "id": "city_SM_Prop_Window_Shutter_01",
+   "name": "SM_Prop_Window_Shutter_01",
+   "set": "city",
+   "file": "city_SM_Prop_Window_Shutter_01.gltf",
+   "category": "prop",
+   "w": 2.782,
+   "h": 1.307,
+   "d": 0.049
+  },
+  {
+   "id": "city_SM_Prop_WoodenPath_01",
+   "name": "SM_Prop_WoodenPath_01",
+   "set": "city",
+   "file": "city_SM_Prop_WoodenPath_01.gltf",
+   "category": "prop",
+   "w": 0.901,
+   "h": 0.089,
+   "d": 0.906
+  },
+  {
+   "id": "city_SM_Prop_table_01",
+   "name": "SM_Prop_table_01",
+   "set": "city",
+   "file": "city_SM_Prop_table_01.gltf",
+   "category": "prop",
+   "w": 2.789,
+   "h": 0.943,
+   "d": 2.205
+  },
+  {
+   "id": "city_SM_Props_Bottles_01",
+   "name": "SM_Props_Bottles_01",
+   "set": "city",
+   "file": "city_SM_Props_Bottles_01.gltf",
+   "category": "prop",
+   "w": 2.657,
+   "h": 1.493,
+   "d": 0.178
+  },
+  {
+   "id": "city_SM_Props_Shelves_01",
+   "name": "SM_Props_Shelves_01",
+   "set": "city",
+   "file": "city_SM_Props_Shelves_01.gltf",
+   "category": "prop",
+   "w": 3.693,
+   "h": 1.771,
+   "d": 0.444
+  },
+  {
+   "id": "city_SM_Props_StripClub_Curtain_01",
+   "name": "SM_Props_StripClub_Curtain_01",
+   "set": "city",
+   "file": "city_SM_Props_StripClub_Curtain_01.gltf",
+   "category": "prop",
+   "w": 2.055,
+   "h": 2.619,
+   "d": 0.107
+  },
+  {
+   "id": "city_SM_Props_StripClub_Stage_01",
+   "name": "SM_Props_StripClub_Stage_01",
+   "set": "city",
+   "file": "city_SM_Props_StripClub_Stage_01.gltf",
+   "category": "prop",
+   "w": 1.593,
+   "h": 0.925,
+   "d": 8.455
+  },
+  {
+   "id": "city_SM_Props_StripClub_Stage_02",
+   "name": "SM_Props_StripClub_Stage_02",
+   "set": "city",
+   "file": "city_SM_Props_StripClub_Stage_02.gltf",
+   "category": "prop",
+   "w": 2.248,
+   "h": 0.791,
+   "d": 2.257
+  },
+  {
+   "id": "city_SM_Props_StripClub_Table_01",
+   "name": "SM_Props_StripClub_Table_01",
+   "set": "city",
+   "file": "city_SM_Props_StripClub_Table_01.gltf",
+   "category": "prop",
+   "w": 1.223,
+   "h": 0.981,
+   "d": 1.223
+  },
+  {
+   "id": "city_SM_Sign_01",
+   "name": "SM_Sign_01",
+   "set": "city",
+   "file": "city_SM_Sign_01.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.458,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_011",
+   "name": "SM_Sign_011",
+   "set": "city",
+   "file": "city_SM_Sign_011.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.458,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_02",
+   "name": "SM_Sign_02",
+   "set": "city",
+   "file": "city_SM_Sign_02.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.286,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_03",
+   "name": "SM_Sign_03",
+   "set": "city",
+   "file": "city_SM_Sign_03.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.358,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_04",
+   "name": "SM_Sign_04",
+   "set": "city",
+   "file": "city_SM_Sign_04.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.434,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_05",
+   "name": "SM_Sign_05",
+   "set": "city",
+   "file": "city_SM_Sign_05.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.377,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_06",
+   "name": "SM_Sign_06",
+   "set": "city",
+   "file": "city_SM_Sign_06.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.27,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_07",
+   "name": "SM_Sign_07",
+   "set": "city",
+   "file": "city_SM_Sign_07.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.418,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_08",
+   "name": "SM_Sign_08",
+   "set": "city",
+   "file": "city_SM_Sign_08.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.297,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_09",
+   "name": "SM_Sign_09",
+   "set": "city",
+   "file": "city_SM_Sign_09.gltf",
+   "category": "sign",
+   "w": 1.604,
+   "h": 0.242,
+   "d": 0.048
+  },
+  {
+   "id": "city_SM_Sign_Ad_01",
+   "name": "SM_Sign_Ad_01",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_01.gltf",
+   "category": "sign",
+   "w": 0.613,
+   "h": 1.956,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_02",
+   "name": "SM_Sign_Ad_02",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_02.gltf",
+   "category": "sign",
+   "w": 0.613,
+   "h": 1.956,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_03",
+   "name": "SM_Sign_Ad_03",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_03.gltf",
+   "category": "sign",
+   "w": 0.599,
+   "h": 1.966,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_04",
+   "name": "SM_Sign_Ad_04",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_04.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_05",
+   "name": "SM_Sign_Ad_05",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_05.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_06",
+   "name": "SM_Sign_Ad_06",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_06.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_07",
+   "name": "SM_Sign_Ad_07",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_07.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_08",
+   "name": "SM_Sign_Ad_08",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_08.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_09",
+   "name": "SM_Sign_Ad_09",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_09.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_10",
+   "name": "SM_Sign_Ad_10",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_10.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_11",
+   "name": "SM_Sign_Ad_11",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_11.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_12",
+   "name": "SM_Sign_Ad_12",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_12.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_13",
+   "name": "SM_Sign_Ad_13",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_13.gltf",
+   "category": "sign",
+   "w": 0.97,
+   "h": 0.635,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_14",
+   "name": "SM_Sign_Ad_14",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_14.gltf",
+   "category": "sign",
+   "w": 0.958,
+   "h": 0.618,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_15",
+   "name": "SM_Sign_Ad_15",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_15.gltf",
+   "category": "sign",
+   "w": 0.976,
+   "h": 0.622,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_16",
+   "name": "SM_Sign_Ad_16",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_16.gltf",
+   "category": "sign",
+   "w": 0.958,
+   "h": 0.618,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_17",
+   "name": "SM_Sign_Ad_17",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_17.gltf",
+   "category": "sign",
+   "w": 0.976,
+   "h": 0.636,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_18",
+   "name": "SM_Sign_Ad_18",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_18.gltf",
+   "category": "sign",
+   "w": 1.0,
+   "h": 0.623,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_19",
+   "name": "SM_Sign_Ad_19",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_19.gltf",
+   "category": "sign",
+   "w": 0.976,
+   "h": 0.631,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_20",
+   "name": "SM_Sign_Ad_20",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_20.gltf",
+   "category": "sign",
+   "w": 0.976,
+   "h": 0.622,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_21",
+   "name": "SM_Sign_Ad_21",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_21.gltf",
+   "category": "sign",
+   "w": 0.958,
+   "h": 0.618,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_22",
+   "name": "SM_Sign_Ad_22",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_22.gltf",
+   "category": "sign",
+   "w": 0.958,
+   "h": 0.618,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_23",
+   "name": "SM_Sign_Ad_23",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_23.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.482,
+   "d": 0.021
+  },
+  {
+   "id": "city_SM_Sign_Ad_24",
+   "name": "SM_Sign_Ad_24",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_24.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.482,
+   "d": 0.021
+  },
+  {
+   "id": "city_SM_Sign_Ad_25",
+   "name": "SM_Sign_Ad_25",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_25.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.482,
+   "d": 0.021
+  },
+  {
+   "id": "city_SM_Sign_Ad_26",
+   "name": "SM_Sign_Ad_26",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_26.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.765,
+   "d": 0.021
+  },
+  {
+   "id": "city_SM_Sign_Ad_27",
+   "name": "SM_Sign_Ad_27",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_27.gltf",
+   "category": "sign",
+   "w": 1.47,
+   "h": 0.2,
+   "d": 0.021
+  },
+  {
+   "id": "city_SM_Sign_Ad_28",
+   "name": "SM_Sign_Ad_28",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_28.gltf",
+   "category": "sign",
+   "w": 2.065,
+   "h": 0.407,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Sign_Ad_29",
+   "name": "SM_Sign_Ad_29",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_29.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.765,
+   "d": 0.037
+  },
+  {
+   "id": "city_SM_Sign_Ad_30",
+   "name": "SM_Sign_Ad_30",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_30.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.765,
+   "d": 0.037
+  },
+  {
+   "id": "city_SM_Sign_Ad_31",
+   "name": "SM_Sign_Ad_31",
+   "set": "city",
+   "file": "city_SM_Sign_Ad_31.gltf",
+   "category": "sign",
+   "w": 0.2,
+   "h": 0.765,
+   "d": 0.037
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Attachmentl_01",
+   "name": "SM_Sign_Billboard_Attachmentl_01",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Attachmentl_01.gltf",
+   "category": "sign",
+   "w": 0.314,
+   "h": 0.104,
+   "d": 0.093
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_01",
+   "name": "SM_Sign_Billboard_Border_01",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_01.gltf",
+   "category": "sign",
+   "w": 1.255,
+   "h": 0.755,
+   "d": 0.102
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_02",
+   "name": "SM_Sign_Billboard_Border_02",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_02.gltf",
+   "category": "sign",
+   "w": 1.304,
+   "h": 0.896,
+   "d": 0.164
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_03",
+   "name": "SM_Sign_Billboard_Border_03",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_03.gltf",
+   "category": "sign",
+   "w": 1.118,
+   "h": 0.824,
+   "d": 0.151
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_04",
+   "name": "SM_Sign_Billboard_Border_04",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_04.gltf",
+   "category": "sign",
+   "w": 1.078,
+   "h": 0.672,
+   "d": 0.124
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_Tall_01",
+   "name": "SM_Sign_Billboard_Border_Tall_01",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_Tall_01.gltf",
+   "category": "sign",
+   "w": 0.901,
+   "h": 2.078,
+   "d": 0.102
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_Tall_02",
+   "name": "SM_Sign_Billboard_Border_Tall_02",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_Tall_02.gltf",
+   "category": "sign",
+   "w": 0.96,
+   "h": 2.214,
+   "d": 0.164
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_Tall_03",
+   "name": "SM_Sign_Billboard_Border_Tall_03",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_Tall_03.gltf",
+   "category": "sign",
+   "w": 0.824,
+   "h": 2.118,
+   "d": 0.151
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Border_Tall_04",
+   "name": "SM_Sign_Billboard_Border_Tall_04",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Border_Tall_04.gltf",
+   "category": "sign",
+   "w": 0.733,
+   "h": 2.072,
+   "d": 0.124
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Large_01",
+   "name": "SM_Sign_Billboard_Large_01",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Large_01.gltf",
+   "category": "sign",
+   "w": 32.809,
+   "h": 48.548,
+   "d": 0.704
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Large_02",
+   "name": "SM_Sign_Billboard_Large_02",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Large_02.gltf",
+   "category": "sign",
+   "w": 32.809,
+   "h": 48.548,
+   "d": 0.704
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Large_03",
+   "name": "SM_Sign_Billboard_Large_03",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Large_03.gltf",
+   "category": "sign",
+   "w": 32.809,
+   "h": 48.548,
+   "d": 0.704
+  },
+  {
+   "id": "city_SM_Sign_Billboard_Large_04",
+   "name": "SM_Sign_Billboard_Large_04",
+   "set": "city",
+   "file": "city_SM_Sign_Billboard_Large_04.gltf",
+   "category": "sign",
+   "w": 48.548,
+   "h": 32.809,
+   "d": 0.704
+  },
+  {
+   "id": "city_SM_Sign_Neon_01",
+   "name": "SM_Sign_Neon_01",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_01.gltf",
+   "category": "sign",
+   "w": 0.843,
+   "h": 0.434,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_02",
+   "name": "SM_Sign_Neon_02",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_02.gltf",
+   "category": "sign",
+   "w": 1.233,
+   "h": 1.229,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_03",
+   "name": "SM_Sign_Neon_03",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_03.gltf",
+   "category": "sign",
+   "w": 1.401,
+   "h": 1.233,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_04",
+   "name": "SM_Sign_Neon_04",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_04.gltf",
+   "category": "sign",
+   "w": 0.839,
+   "h": 1.319,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_05",
+   "name": "SM_Sign_Neon_05",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_05.gltf",
+   "category": "sign",
+   "w": 0.934,
+   "h": 1.616,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_06",
+   "name": "SM_Sign_Neon_06",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_06.gltf",
+   "category": "sign",
+   "w": 1.121,
+   "h": 1.262,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_07",
+   "name": "SM_Sign_Neon_07",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_07.gltf",
+   "category": "sign",
+   "w": 1.441,
+   "h": 2.114,
+   "d": 0.033
+  },
+  {
+   "id": "city_SM_Sign_Neon_08",
+   "name": "SM_Sign_Neon_08",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_08.gltf",
+   "category": "sign",
+   "w": 2.633,
+   "h": 2.225,
+   "d": 0.032
+  },
+  {
+   "id": "city_SM_Sign_Neon_09",
+   "name": "SM_Sign_Neon_09",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_09.gltf",
+   "category": "sign",
+   "w": 7.501,
+   "h": 4.385,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_01",
+   "name": "SM_Sign_Neon_Bulb_01",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_01.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_02",
+   "name": "SM_Sign_Neon_Bulb_02",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_02.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_03",
+   "name": "SM_Sign_Neon_Bulb_03",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_03.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_04",
+   "name": "SM_Sign_Neon_Bulb_04",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_04.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_05",
+   "name": "SM_Sign_Neon_Bulb_05",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_05.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_06",
+   "name": "SM_Sign_Neon_Bulb_06",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_06.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Bulb_07",
+   "name": "SM_Sign_Neon_Bulb_07",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Bulb_07.gltf",
+   "category": "sign",
+   "w": 0.068,
+   "h": 0.068,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_01",
+   "name": "SM_Sign_Neon_Flat_01",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_01.gltf",
+   "category": "sign",
+   "w": 0.843,
+   "h": 0.434,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_02",
+   "name": "SM_Sign_Neon_Flat_02",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_02.gltf",
+   "category": "sign",
+   "w": 1.233,
+   "h": 1.229,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_03",
+   "name": "SM_Sign_Neon_Flat_03",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_03.gltf",
+   "category": "sign",
+   "w": 1.401,
+   "h": 1.233,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_04",
+   "name": "SM_Sign_Neon_Flat_04",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_04.gltf",
+   "category": "sign",
+   "w": 0.839,
+   "h": 1.319,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_05",
+   "name": "SM_Sign_Neon_Flat_05",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_05.gltf",
+   "category": "sign",
+   "w": 0.934,
+   "h": 1.616,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_06",
+   "name": "SM_Sign_Neon_Flat_06",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_06.gltf",
+   "category": "sign",
+   "w": 1.121,
+   "h": 1.262,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_07",
+   "name": "SM_Sign_Neon_Flat_07",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_07.gltf",
+   "category": "sign",
+   "w": 1.441,
+   "h": 2.114,
+   "d": 0.003
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_08",
+   "name": "SM_Sign_Neon_Flat_08",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_08.gltf",
+   "category": "sign",
+   "w": 2.633,
+   "h": 2.225,
+   "d": 0.002
+  },
+  {
+   "id": "city_SM_Sign_Neon_Flat_09",
+   "name": "SM_Sign_Neon_Flat_09",
+   "set": "city",
+   "file": "city_SM_Sign_Neon_Flat_09.gltf",
+   "category": "sign",
+   "w": 7.501,
+   "h": 4.385,
+   "d": 0.0
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_01",
+   "name": "SM_Veh_Armored_Truck_01",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_01.gltf",
+   "category": "vehicle",
+   "w": 2.879,
+   "h": 2.66,
+   "d": 7.051
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_01_Hover",
+   "name": "SM_Veh_Armored_Truck_01_Hover",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_01_Hover.gltf",
+   "category": "vehicle",
+   "w": 3.268,
+   "h": 2.47,
+   "d": 7.051
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_02",
+   "name": "SM_Veh_Armored_Truck_02",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_02.gltf",
+   "category": "vehicle",
+   "w": 2.879,
+   "h": 2.66,
+   "d": 7.051
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_02_Hover",
+   "name": "SM_Veh_Armored_Truck_02_Hover",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_02_Hover.gltf",
+   "category": "vehicle",
+   "w": 3.268,
+   "h": 2.47,
+   "d": 7.051
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_Cannon_01",
+   "name": "SM_Veh_Armored_Truck_Cannon_01",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_Cannon_01.gltf",
+   "category": "vehicle",
+   "w": 1.145,
+   "h": 0.882,
+   "d": 2.268
+  },
+  {
+   "id": "city_SM_Veh_Armored_Truck_Lights_01",
+   "name": "SM_Veh_Armored_Truck_Lights_01",
+   "set": "city",
+   "file": "city_SM_Veh_Armored_Truck_Lights_01.gltf",
+   "category": "vehicle",
+   "w": 1.431,
+   "h": 0.555,
+   "d": 0.325
+  },
+  {
+   "id": "city_SM_Veh_Classic_01",
+   "name": "SM_Veh_Classic_01",
+   "set": "city",
+   "file": "city_SM_Veh_Classic_01.gltf",
+   "category": "vehicle",
+   "w": 2.487,
+   "h": 1.804,
+   "d": 5.967
+  },
+  {
+   "id": "city_SM_Veh_Classic_01_Hover",
+   "name": "SM_Veh_Classic_01_Hover",
+   "set": "city",
+   "file": "city_SM_Veh_Classic_01_Hover.gltf",
+   "category": "vehicle",
+   "w": 2.834,
+   "h": 1.849,
+   "d": 5.967
+  },
+  {
+   "id": "city_SM_Veh_Future_01",
+   "name": "SM_Veh_Future_01",
+   "set": "city",
+   "file": "city_SM_Veh_Future_01.gltf",
+   "category": "vehicle",
+   "w": 2.736,
+   "h": 1.594,
+   "d": 5.236
+  },
+  {
+   "id": "city_SM_Veh_Future_Cop_01",
+   "name": "SM_Veh_Future_Cop_01",
+   "set": "city",
+   "file": "city_SM_Veh_Future_Cop_01.gltf",
+   "category": "vehicle",
+   "w": 2.739,
+   "h": 2.246,
+   "d": 5.236
+  },
+  {
+   "id": "city_SM_Veh_Future_Taxi_01",
+   "name": "SM_Veh_Future_Taxi_01",
+   "set": "city",
+   "file": "city_SM_Veh_Future_Taxi_01.gltf",
+   "category": "vehicle",
+   "w": 2.736,
+   "h": 1.785,
+   "d": 5.236
+  },
+  {
+   "id": "city_SM_Veh_Garbage_01",
+   "name": "SM_Veh_Garbage_01",
+   "set": "city",
+   "file": "city_SM_Veh_Garbage_01.gltf",
+   "category": "vehicle",
+   "w": 2.913,
+   "h": 2.852,
+   "d": 6.225
+  },
+  {
+   "id": "city_SM_Veh_Garbage_01_Hover",
+   "name": "SM_Veh_Garbage_01_Hover",
+   "set": "city",
+   "file": "city_SM_Veh_Garbage_01_Hover.gltf",
+   "category": "vehicle",
+   "w": 3.372,
+   "h": 2.976,
+   "d": 6.225
+  },
+  {
+   "id": "city_SM_Veh_Hover_Bike_01",
+   "name": "SM_Veh_Hover_Bike_01",
+   "set": "city",
+   "file": "city_SM_Veh_Hover_Bike_01.gltf",
+   "category": "vehicle",
+   "w": 1.018,
+   "h": 1.294,
+   "d": 2.283
+  },
+  {
+   "id": "city_SM_Veh_Hoverboard_01",
+   "name": "SM_Veh_Hoverboard_01",
+   "set": "city",
+   "file": "city_SM_Veh_Hoverboard_01.gltf",
+   "category": "vehicle",
+   "w": 0.352,
+   "h": 0.201,
+   "d": 1.627
+  },
+  {
+   "id": "city_SM_Veh_Hoverboard_02",
+   "name": "SM_Veh_Hoverboard_02",
+   "set": "city",
+   "file": "city_SM_Veh_Hoverboard_02.gltf",
+   "category": "vehicle",
+   "w": 0.794,
+   "h": 0.191,
+   "d": 0.794
+  },
+  {
+   "id": "city_SM_Veh_Retro_01",
+   "name": "SM_Veh_Retro_01",
+   "set": "city",
+   "file": "city_SM_Veh_Retro_01.gltf",
+   "category": "vehicle",
+   "w": 2.635,
+   "h": 1.649,
+   "d": 5.672
+  },
+  {
+   "id": "city_SM_Veh_Retro_01_Hover",
+   "name": "SM_Veh_Retro_01_Hover",
+   "set": "city",
+   "file": "city_SM_Veh_Retro_01_Hover.gltf",
+   "category": "vehicle",
+   "w": 4.13,
+   "h": 2.198,
+   "d": 5.698
+  },
+  {
+   "id": "city_SM_Veh_Sweepo_01",
+   "name": "SM_Veh_Sweepo_01",
+   "set": "city",
+   "file": "city_SM_Veh_Sweepo_01.gltf",
+   "category": "vehicle",
+   "w": 2.147,
+   "h": 2.356,
+   "d": 3.85
+  },
+  {
+   "id": "city_SM_Wep_Ammo_Battery_01",
+   "name": "SM_Wep_Ammo_Battery_01",
+   "set": "city",
+   "file": "city_SM_Wep_Ammo_Battery_01.gltf",
+   "category": "weapon",
+   "w": 0.022,
+   "h": 0.079,
+   "d": 0.043
+  },
+  {
+   "id": "city_SM_Wep_Ammo_Pistol_01",
+   "name": "SM_Wep_Ammo_Pistol_01",
+   "set": "city",
+   "file": "city_SM_Wep_Ammo_Pistol_01.gltf",
+   "category": "weapon",
+   "w": 0.019,
+   "h": 0.041,
+   "d": 0.016
+  },
+  {
+   "id": "city_SM_Wep_Ammo_Rifle_01",
+   "name": "SM_Wep_Ammo_Rifle_01",
+   "set": "city",
+   "file": "city_SM_Wep_Ammo_Rifle_01.gltf",
+   "category": "weapon",
+   "w": 0.021,
+   "h": 0.074,
+   "d": 0.018
+  },
+  {
+   "id": "city_SM_Wep_Ammo_Shotgun_01",
+   "name": "SM_Wep_Ammo_Shotgun_01",
+   "set": "city",
+   "file": "city_SM_Wep_Ammo_Shotgun_01.gltf",
+   "category": "weapon",
+   "w": 0.026,
+   "h": 0.074,
+   "d": 0.026
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Bipod_01",
+   "name": "SM_Wep_Attachment_Bipod_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Bipod_01.gltf",
+   "category": "weapon",
+   "w": 0.188,
+   "h": 0.051,
+   "d": 0.314
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Foregrip_01",
+   "name": "SM_Wep_Attachment_Foregrip_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Foregrip_01.gltf",
+   "category": "weapon",
+   "w": 0.052,
+   "h": 0.155,
+   "d": 0.299
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Foregrip_02",
+   "name": "SM_Wep_Attachment_Foregrip_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Foregrip_02.gltf",
+   "category": "weapon",
+   "w": 0.042,
+   "h": 0.16,
+   "d": 0.076
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Handle_01",
+   "name": "SM_Wep_Attachment_Handle_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Handle_01.gltf",
+   "category": "weapon",
+   "w": 0.046,
+   "h": 0.097,
+   "d": 0.297
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Handle_Scope_01",
+   "name": "SM_Wep_Attachment_Handle_Scope_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Handle_Scope_01.gltf",
+   "category": "weapon",
+   "w": 0.046,
+   "h": 0.101,
+   "d": 0.297
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Handle_Scope_02",
+   "name": "SM_Wep_Attachment_Handle_Scope_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Handle_Scope_02.gltf",
+   "category": "weapon",
+   "w": 0.046,
+   "h": 0.101,
+   "d": 0.216
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Handle_Scope_03",
+   "name": "SM_Wep_Attachment_Handle_Scope_03",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Handle_Scope_03.gltf",
+   "category": "weapon",
+   "w": 0.046,
+   "h": 0.101,
+   "d": 0.461
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Ironsight_01",
+   "name": "SM_Wep_Attachment_Ironsight_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Ironsight_01.gltf",
+   "category": "weapon",
+   "w": 0.036,
+   "h": 0.047,
+   "d": 0.053
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Ironsight_02",
+   "name": "SM_Wep_Attachment_Ironsight_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Ironsight_02.gltf",
+   "category": "weapon",
+   "w": 0.036,
+   "h": 0.05,
+   "d": 0.053
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Ironsight_03",
+   "name": "SM_Wep_Attachment_Ironsight_03",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Ironsight_03.gltf",
+   "category": "weapon",
+   "w": 0.02,
+   "h": 0.047,
+   "d": 0.131
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Laser_01",
+   "name": "SM_Wep_Attachment_Laser_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Laser_01.gltf",
+   "category": "weapon",
+   "w": 0.035,
+   "h": 0.078,
+   "d": 0.102
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Rack_01",
+   "name": "SM_Wep_Attachment_Rack_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Rack_01.gltf",
+   "category": "weapon",
+   "w": 0.022,
+   "h": 0.014,
+   "d": 0.084
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Rack_02",
+   "name": "SM_Wep_Attachment_Rack_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Rack_02.gltf",
+   "category": "weapon",
+   "w": 0.022,
+   "h": 0.014,
+   "d": 0.131
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Rack_03",
+   "name": "SM_Wep_Attachment_Rack_03",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Rack_03.gltf",
+   "category": "weapon",
+   "w": 0.022,
+   "h": 0.014,
+   "d": 0.224
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Rack_04",
+   "name": "SM_Wep_Attachment_Rack_04",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Rack_04.gltf",
+   "category": "weapon",
+   "w": 0.022,
+   "h": 0.014,
+   "d": 0.292
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Redot_01",
+   "name": "SM_Wep_Attachment_Redot_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Redot_01.gltf",
+   "category": "weapon",
+   "w": 0.067,
+   "h": 0.078,
+   "d": 0.144
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Redot_02",
+   "name": "SM_Wep_Attachment_Redot_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Redot_02.gltf",
+   "category": "weapon",
+   "w": 0.052,
+   "h": 0.079,
+   "d": 0.126
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Redot_03",
+   "name": "SM_Wep_Attachment_Redot_03",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Redot_03.gltf",
+   "category": "weapon",
+   "w": 0.055,
+   "h": 0.092,
+   "d": 0.03
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Scope_01",
+   "name": "SM_Wep_Attachment_Scope_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Scope_01.gltf",
+   "category": "weapon",
+   "w": 0.09,
+   "h": 0.106,
+   "d": 0.195
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Scope_02",
+   "name": "SM_Wep_Attachment_Scope_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Scope_02.gltf",
+   "category": "weapon",
+   "w": 0.093,
+   "h": 0.1,
+   "d": 0.346
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Silencer_01",
+   "name": "SM_Wep_Attachment_Silencer_01",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Silencer_01.gltf",
+   "category": "weapon",
+   "w": 0.049,
+   "h": 0.062,
+   "d": 0.231
+  },
+  {
+   "id": "city_SM_Wep_Attachment_Silencer_02",
+   "name": "SM_Wep_Attachment_Silencer_02",
+   "set": "city",
+   "file": "city_SM_Wep_Attachment_Silencer_02.gltf",
+   "category": "weapon",
+   "w": 0.054,
+   "h": 0.054,
+   "d": 0.229
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_01",
+   "name": "SM_Wep_Crosshair_01",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_01.gltf",
+   "category": "weapon",
+   "w": 0.002,
+   "h": 0.002,
+   "d": 0.001
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_02",
+   "name": "SM_Wep_Crosshair_02",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_02.gltf",
+   "category": "weapon",
+   "w": 0.01,
+   "h": 0.012,
+   "d": 0.001
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_03",
+   "name": "SM_Wep_Crosshair_03",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_03.gltf",
+   "category": "weapon",
+   "w": 0.01,
+   "h": 0.006,
+   "d": 0.001
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_04",
+   "name": "SM_Wep_Crosshair_04",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_04.gltf",
+   "category": "weapon",
+   "w": 0.014,
+   "h": 0.013,
+   "d": 0.001
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_05",
+   "name": "SM_Wep_Crosshair_05",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_05.gltf",
+   "category": "weapon",
+   "w": 0.01,
+   "h": 0.012,
+   "d": 0.001
+  },
+  {
+   "id": "city_SM_Wep_Crosshair_Sniper_01",
+   "name": "SM_Wep_Crosshair_Sniper_01",
+   "set": "city",
+   "file": "city_SM_Wep_Crosshair_Sniper_01.gltf",
+   "category": "weapon",
+   "w": 0.052,
+   "h": 0.052,
+   "d": 0.002
+  },
+  {
+   "id": "city_SM_Wep_DrumMag_01",
+   "name": "SM_Wep_DrumMag_01",
+   "set": "city",
+   "file": "city_SM_Wep_DrumMag_01.gltf",
+   "category": "weapon",
+   "w": 0.159,
+   "h": 0.199,
+   "d": 0.13
+  },
+  {
+   "id": "city_SM_Wep_Grenade_Ball_01",
+   "name": "SM_Wep_Grenade_Ball_01",
+   "set": "city",
+   "file": "city_SM_Wep_Grenade_Ball_01.gltf",
+   "category": "weapon",
+   "w": 0.115,
+   "h": 0.107,
+   "d": 0.115
+  },
+  {
+   "id": "city_SM_Wep_Grenade_HE_01",
+   "name": "SM_Wep_Grenade_HE_01",
+   "set": "city",
+   "file": "city_SM_Wep_Grenade_HE_01.gltf",
+   "category": "weapon",
+   "w": 0.102,
+   "h": 0.197,
+   "d": 0.113
+  },
+  {
+   "id": "city_SM_Wep_Grenade_Stun_01",
+   "name": "SM_Wep_Grenade_Stun_01",
+   "set": "city",
+   "file": "city_SM_Wep_Grenade_Stun_01.gltf",
+   "category": "weapon",
+   "w": 0.047,
+   "h": 0.153,
+   "d": 0.067
+  },
+  {
+   "id": "city_SM_Wep_Knife_01",
+   "name": "SM_Wep_Knife_01",
+   "set": "city",
+   "file": "city_SM_Wep_Knife_01.gltf",
+   "category": "weapon",
+   "w": 0.033,
+   "h": 0.478,
+   "d": 0.081
+  },
+  {
+   "id": "city_SM_Wep_MachinePistol_Gen1_01",
+   "name": "SM_Wep_MachinePistol_Gen1_01",
+   "set": "city",
+   "file": "city_SM_Wep_MachinePistol_Gen1_01.gltf",
+   "category": "weapon",
+   "w": 0.097,
+   "h": 0.269,
+   "d": 0.397
+  },
+  {
+   "id": "city_SM_Wep_MachinePistol_Gen2_01",
+   "name": "SM_Wep_MachinePistol_Gen2_01",
+   "set": "city",
+   "file": "city_SM_Wep_MachinePistol_Gen2_01.gltf",
+   "category": "weapon",
+   "w": 0.097,
+   "h": 0.349,
+   "d": 0.748
+  },
+  {
+   "id": "city_SM_Wep_Mag_01",
+   "name": "SM_Wep_Mag_01",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_01.gltf",
+   "category": "weapon",
+   "w": 0.036,
+   "h": 0.199,
+   "d": 0.12
+  },
+  {
+   "id": "city_SM_Wep_Mag_Plasma_01",
+   "name": "SM_Wep_Mag_Plasma_01",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_Plasma_01.gltf",
+   "category": "weapon",
+   "w": 0.049,
+   "h": 0.096,
+   "d": 0.116
+  },
+  {
+   "id": "city_SM_Wep_Mag_Plasma_02",
+   "name": "SM_Wep_Mag_Plasma_02",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_Plasma_02.gltf",
+   "category": "weapon",
+   "w": 0.049,
+   "h": 0.129,
+   "d": 0.116
+  },
+  {
+   "id": "city_SM_Wep_Mag_Plasma_03",
+   "name": "SM_Wep_Mag_Plasma_03",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_Plasma_03.gltf",
+   "category": "weapon",
+   "w": 0.128,
+   "h": 0.134,
+   "d": 0.12
+  },
+  {
+   "id": "city_SM_Wep_Mag_Round_01",
+   "name": "SM_Wep_Mag_Round_01",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_Round_01.gltf",
+   "category": "weapon",
+   "w": 0.072,
+   "h": 0.152,
+   "d": 0.072
+  },
+  {
+   "id": "city_SM_Wep_Mag_Round_02",
+   "name": "SM_Wep_Mag_Round_02",
+   "set": "city",
+   "file": "city_SM_Wep_Mag_Round_02.gltf",
+   "category": "weapon",
+   "w": 0.088,
+   "h": 0.176,
+   "d": 0.088
+  },
+  {
+   "id": "city_SM_Wep_Pistol_01",
+   "name": "SM_Wep_Pistol_01",
+   "set": "city",
+   "file": "city_SM_Wep_Pistol_01.gltf",
+   "category": "weapon",
+   "w": 0.062,
+   "h": 0.281,
+   "d": 0.378
+  },
+  {
+   "id": "city_SM_Wep_Revolver_01",
+   "name": "SM_Wep_Revolver_01",
+   "set": "city",
+   "file": "city_SM_Wep_Revolver_01.gltf",
+   "category": "weapon",
+   "w": 0.076,
+   "h": 0.271,
+   "d": 0.627
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Base_01",
+   "name": "SM_Wep_Rifle_Base_01",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Base_01.gltf",
+   "category": "weapon",
+   "w": 0.159,
+   "h": 0.323,
+   "d": 1.196
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Laser_01",
+   "name": "SM_Wep_Rifle_Laser_01",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Laser_01.gltf",
+   "category": "weapon",
+   "w": 0.097,
+   "h": 0.335,
+   "d": 1.057
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Plasma_01",
+   "name": "SM_Wep_Rifle_Plasma_01",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Plasma_01.gltf",
+   "category": "weapon",
+   "w": 0.086,
+   "h": 0.306,
+   "d": 1.18
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Plasma_02",
+   "name": "SM_Wep_Rifle_Plasma_02",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Plasma_02.gltf",
+   "category": "weapon",
+   "w": 0.086,
+   "h": 0.306,
+   "d": 0.866
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Plasma_03",
+   "name": "SM_Wep_Rifle_Plasma_03",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Plasma_03.gltf",
+   "category": "weapon",
+   "w": 0.066,
+   "h": 0.318,
+   "d": 0.943
+  },
+  {
+   "id": "city_SM_Wep_Rifle_Small_01",
+   "name": "SM_Wep_Rifle_Small_01",
+   "set": "city",
+   "file": "city_SM_Wep_Rifle_Small_01.gltf",
+   "category": "weapon",
+   "w": 0.1,
+   "h": 0.313,
+   "d": 0.85
+  },
+  {
+   "id": "city_SM_Wep_SMG_01",
+   "name": "SM_Wep_SMG_01",
+   "set": "city",
+   "file": "city_SM_Wep_SMG_01.gltf",
+   "category": "weapon",
+   "w": 0.057,
+   "h": 0.492,
+   "d": 0.436
+  },
+  {
+   "id": "city_SM_Wep_Shiv_01",
+   "name": "SM_Wep_Shiv_01",
+   "set": "city",
+   "file": "city_SM_Wep_Shiv_01.gltf",
+   "category": "weapon",
+   "w": 0.036,
+   "h": 0.323,
+   "d": 0.075
+  },
+  {
+   "id": "city_SM_Wep_Shotgun_Plasma_01",
+   "name": "SM_Wep_Shotgun_Plasma_01",
+   "set": "city",
+   "file": "city_SM_Wep_Shotgun_Plasma_01.gltf",
+   "category": "weapon",
+   "w": 0.074,
+   "h": 0.307,
+   "d": 1.052
+  },
+  {
+   "id": "city_SM_Wep_Sniper_01",
+   "name": "SM_Wep_Sniper_01",
+   "set": "city",
+   "file": "city_SM_Wep_Sniper_01.gltf",
+   "category": "weapon",
+   "w": 0.11,
+   "h": 0.342,
+   "d": 1.539
+  },
+  {
+   "id": "city_SM_Wep_Sniper_Plasma_02",
+   "name": "SM_Wep_Sniper_Plasma_02",
+   "set": "city",
+   "file": "city_SM_Wep_Sniper_Plasma_02.gltf",
+   "category": "weapon",
+   "w": 0.086,
+   "h": 0.306,
+   "d": 1.323
+  },
+  {
+   "id": "city_SM_Wep_Sniper_Scope_03",
+   "name": "SM_Wep_Sniper_Scope_03",
+   "set": "city",
+   "file": "city_SM_Wep_Sniper_Scope_03.gltf",
+   "category": "weapon",
+   "w": 0.106,
+   "h": 0.083,
+   "d": 0.266
+  },
+  {
+   "id": "city_SM_Wep_Sword_01",
+   "name": "SM_Wep_Sword_01",
+   "set": "city",
+   "file": "city_SM_Wep_Sword_01.gltf",
+   "category": "weapon",
+   "w": 0.079,
+   "h": 1.222,
+   "d": 0.263
+  },
+  {
+   "id": "city_SM_Wep_Syringe_Gun_01",
+   "name": "SM_Wep_Syringe_Gun_01",
+   "set": "city",
+   "file": "city_SM_Wep_Syringe_Gun_01.gltf",
+   "category": "weapon",
+   "w": 0.178,
+   "h": 0.261,
+   "d": 0.454
+  }
+ ]
+}

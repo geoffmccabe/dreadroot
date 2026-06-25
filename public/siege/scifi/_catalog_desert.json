@@ -1,0 +1,1436 @@
+{
+ "set": "desert",
+ "count": 143,
+ "items": [
+  {
+   "id": "desert_SM_Env_Cloud_Ring_01",
+   "name": "SM_Env_Cloud_Ring_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Cloud_Ring_01.gltf",
+   "category": "environment",
+   "w": 277.462,
+   "h": 26.062,
+   "d": 259.424
+  },
+  {
+   "id": "desert_SM_Env_Cloud_Ring_02",
+   "name": "SM_Env_Cloud_Ring_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Cloud_Ring_02.gltf",
+   "category": "environment",
+   "w": 310.268,
+   "h": 54.419,
+   "d": 295.389
+  },
+  {
+   "id": "desert_SM_Env_Fog_Ring_01",
+   "name": "SM_Env_Fog_Ring_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Fog_Ring_01.gltf",
+   "category": "environment",
+   "w": 70.171,
+   "h": 3.94,
+   "d": 70.171
+  },
+  {
+   "id": "desert_SM_Env_Grass_01",
+   "name": "SM_Env_Grass_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Grass_01.gltf",
+   "category": "environment",
+   "w": 1.893,
+   "h": 1.028,
+   "d": 1.9
+  },
+  {
+   "id": "desert_SM_Env_Skydome_01",
+   "name": "SM_Env_Skydome_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Skydome_01.gltf",
+   "category": "environment",
+   "w": 65.88,
+   "h": 26.128,
+   "d": 65.88
+  },
+  {
+   "id": "desert_SM_Env_Water_Plane_01",
+   "name": "SM_Env_Water_Plane_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Water_Plane_01.gltf",
+   "category": "environment",
+   "w": 50.0,
+   "h": 0.0,
+   "d": 50.0
+  },
+  {
+   "id": "desert_SM_Env_Backrgound_Hill_01",
+   "name": "SM_Env_Backrgound_Hill_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Backrgound_Hill_01.gltf",
+   "category": "environment",
+   "w": 26.49,
+   "h": 3.413,
+   "d": 27.117
+  },
+  {
+   "id": "desert_SM_Env_Backrgound_Hill_02",
+   "name": "SM_Env_Backrgound_Hill_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Backrgound_Hill_02.gltf",
+   "category": "environment",
+   "w": 22.267,
+   "h": 2.888,
+   "d": 23.531
+  },
+  {
+   "id": "desert_SM_Env_Backrgound_Hill_03",
+   "name": "SM_Env_Backrgound_Hill_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Backrgound_Hill_03.gltf",
+   "category": "environment",
+   "w": 17.29,
+   "h": 2.574,
+   "d": 18.443
+  },
+  {
+   "id": "desert_SM_Env_Bush_Bramble_01",
+   "name": "SM_Env_Bush_Bramble_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Bush_Bramble_01.gltf",
+   "category": "environment",
+   "w": 2.843,
+   "h": 1.649,
+   "d": 2.651
+  },
+  {
+   "id": "desert_SM_Env_Bush_Bramble_02",
+   "name": "SM_Env_Bush_Bramble_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Bush_Bramble_02.gltf",
+   "category": "environment",
+   "w": 3.43,
+   "h": 1.598,
+   "d": 2.917
+  },
+  {
+   "id": "desert_SM_Env_Cactus_01",
+   "name": "SM_Env_Cactus_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Cactus_01.gltf",
+   "category": "environment",
+   "w": 1.385,
+   "h": 1.085,
+   "d": 1.323
+  },
+  {
+   "id": "desert_SM_Env_Cactus_02",
+   "name": "SM_Env_Cactus_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Cactus_02.gltf",
+   "category": "environment",
+   "w": 2.101,
+   "h": 0.996,
+   "d": 1.923
+  },
+  {
+   "id": "desert_SM_Env_Cactus_03",
+   "name": "SM_Env_Cactus_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Cactus_03.gltf",
+   "category": "environment",
+   "w": 2.75,
+   "h": 3.679,
+   "d": 2.537
+  },
+  {
+   "id": "desert_SM_Env_Crater_01",
+   "name": "SM_Env_Crater_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Crater_01.gltf",
+   "category": "environment",
+   "w": 6.959,
+   "h": 1.371,
+   "d": 6.87
+  },
+  {
+   "id": "desert_SM_Env_Crater_02",
+   "name": "SM_Env_Crater_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Crater_02.gltf",
+   "category": "environment",
+   "w": 6.711,
+   "h": 2.5,
+   "d": 6.747
+  },
+  {
+   "id": "desert_SM_Env_Crater_03",
+   "name": "SM_Env_Crater_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Crater_03.gltf",
+   "category": "environment",
+   "w": 7.192,
+   "h": 2.982,
+   "d": 7.103
+  },
+  {
+   "id": "desert_SM_Env_DirtRoad_Corner_01",
+   "name": "SM_Env_DirtRoad_Corner_01",
+   "set": "desert",
+   "file": "desert_SM_Env_DirtRoad_Corner_01.gltf",
+   "category": "environment",
+   "w": 5.263,
+   "h": 0.311,
+   "d": 7.217
+  },
+  {
+   "id": "desert_SM_Env_DirtRoad_End_01",
+   "name": "SM_Env_DirtRoad_End_01",
+   "set": "desert",
+   "file": "desert_SM_Env_DirtRoad_End_01.gltf",
+   "category": "environment",
+   "w": 7.843,
+   "h": 0.383,
+   "d": 10.945
+  },
+  {
+   "id": "desert_SM_Env_DirtRoad_Slope_Down_01",
+   "name": "SM_Env_DirtRoad_Slope_Down_01",
+   "set": "desert",
+   "file": "desert_SM_Env_DirtRoad_Slope_Down_01.gltf",
+   "category": "environment",
+   "w": 2.678,
+   "h": 1.115,
+   "d": 8.312
+  },
+  {
+   "id": "desert_SM_Env_DirtRoad_Slope_Up_01",
+   "name": "SM_Env_DirtRoad_Slope_Up_01",
+   "set": "desert",
+   "file": "desert_SM_Env_DirtRoad_Slope_Up_01.gltf",
+   "category": "environment",
+   "w": 2.678,
+   "h": 0.982,
+   "d": 8.377
+  },
+  {
+   "id": "desert_SM_Env_DirtRoad_Straight_01",
+   "name": "SM_Env_DirtRoad_Straight_01",
+   "set": "desert",
+   "file": "desert_SM_Env_DirtRoad_Straight_01.gltf",
+   "category": "environment",
+   "w": 2.678,
+   "h": 0.313,
+   "d": 8.433
+  },
+  {
+   "id": "desert_SM_Env_GroundCover_01",
+   "name": "SM_Env_GroundCover_01",
+   "set": "desert",
+   "file": "desert_SM_Env_GroundCover_01.gltf",
+   "category": "environment",
+   "w": 1.893,
+   "h": 0.568,
+   "d": 1.559
+  },
+  {
+   "id": "desert_SM_Env_GroundCover_02",
+   "name": "SM_Env_GroundCover_02",
+   "set": "desert",
+   "file": "desert_SM_Env_GroundCover_02.gltf",
+   "category": "environment",
+   "w": 2.401,
+   "h": 0.945,
+   "d": 2.077
+  },
+  {
+   "id": "desert_SM_Env_GroundCover_03",
+   "name": "SM_Env_GroundCover_03",
+   "set": "desert",
+   "file": "desert_SM_Env_GroundCover_03.gltf",
+   "category": "environment",
+   "w": 3.647,
+   "h": 1.083,
+   "d": 3.089
+  },
+  {
+   "id": "desert_SM_Env_Ground_Mound_Large_01",
+   "name": "SM_Env_Ground_Mound_Large_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Ground_Mound_Large_01.gltf",
+   "category": "environment",
+   "w": 14.73,
+   "h": 1.289,
+   "d": 14.993
+  },
+  {
+   "id": "desert_SM_Env_Ground_Mound_Small_01",
+   "name": "SM_Env_Ground_Mound_Small_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Ground_Mound_Small_01.gltf",
+   "category": "environment",
+   "w": 1.696,
+   "h": 0.193,
+   "d": 1.703
+  },
+  {
+   "id": "desert_SM_Env_Lava_Pool_01",
+   "name": "SM_Env_Lava_Pool_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_Pool_01.gltf",
+   "category": "environment",
+   "w": 5.864,
+   "h": 0.97,
+   "d": 6.056
+  },
+  {
+   "id": "desert_SM_Env_Lava_River_01",
+   "name": "SM_Env_Lava_River_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_River_01.gltf",
+   "category": "environment",
+   "w": 5.911,
+   "h": 12.42,
+   "d": 32.626
+  },
+  {
+   "id": "desert_SM_Env_Lava_River_02",
+   "name": "SM_Env_Lava_River_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_River_02.gltf",
+   "category": "environment",
+   "w": 10.878,
+   "h": 1.708,
+   "d": 36.773
+  },
+  {
+   "id": "desert_SM_Env_Lava_River_03",
+   "name": "SM_Env_Lava_River_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_River_03.gltf",
+   "category": "environment",
+   "w": 5.642,
+   "h": 1.708,
+   "d": 36.773
+  },
+  {
+   "id": "desert_SM_Env_Lava_River_04",
+   "name": "SM_Env_Lava_River_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_River_04.gltf",
+   "category": "environment",
+   "w": 8.604,
+   "h": 12.414,
+   "d": 32.572
+  },
+  {
+   "id": "desert_SM_Env_Lava_River_05",
+   "name": "SM_Env_Lava_River_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_River_05.gltf",
+   "category": "environment",
+   "w": 5.886,
+   "h": 7.335,
+   "d": 33.819
+  },
+  {
+   "id": "desert_SM_Env_Lava_Spread_01",
+   "name": "SM_Env_Lava_Spread_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_Spread_01.gltf",
+   "category": "environment",
+   "w": 11.088,
+   "h": 0.852,
+   "d": 6.444
+  },
+  {
+   "id": "desert_SM_Env_Lava_Spread_02",
+   "name": "SM_Env_Lava_Spread_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_Spread_02.gltf",
+   "category": "environment",
+   "w": 10.987,
+   "h": 0.737,
+   "d": 6.315
+  },
+  {
+   "id": "desert_SM_Env_Lava_Spread_03",
+   "name": "SM_Env_Lava_Spread_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Lava_Spread_03.gltf",
+   "category": "environment",
+   "w": 11.088,
+   "h": 0.737,
+   "d": 6.239
+  },
+  {
+   "id": "desert_SM_Env_Pool_Water_01",
+   "name": "SM_Env_Pool_Water_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Pool_Water_01.gltf",
+   "category": "environment",
+   "w": 3.249,
+   "h": 0.0,
+   "d": 3.249
+  },
+  {
+   "id": "desert_SM_Env_Rock_01",
+   "name": "SM_Env_Rock_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_01.gltf",
+   "category": "environment",
+   "w": 6.207,
+   "h": 2.329,
+   "d": 2.83
+  },
+  {
+   "id": "desert_SM_Env_Rock_02",
+   "name": "SM_Env_Rock_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_02.gltf",
+   "category": "environment",
+   "w": 3.776,
+   "h": 1.176,
+   "d": 1.439
+  },
+  {
+   "id": "desert_SM_Env_Rock_03",
+   "name": "SM_Env_Rock_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_03.gltf",
+   "category": "environment",
+   "w": 4.381,
+   "h": 2.461,
+   "d": 2.429
+  },
+  {
+   "id": "desert_SM_Env_Rock_04",
+   "name": "SM_Env_Rock_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_04.gltf",
+   "category": "environment",
+   "w": 2.601,
+   "h": 1.825,
+   "d": 1.702
+  },
+  {
+   "id": "desert_SM_Env_Rock_05",
+   "name": "SM_Env_Rock_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_05.gltf",
+   "category": "environment",
+   "w": 3.581,
+   "h": 1.475,
+   "d": 2.394
+  },
+  {
+   "id": "desert_SM_Env_Rock_06",
+   "name": "SM_Env_Rock_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_06.gltf",
+   "category": "environment",
+   "w": 4.258,
+   "h": 2.045,
+   "d": 2.545
+  },
+  {
+   "id": "desert_SM_Env_Rock_07",
+   "name": "SM_Env_Rock_07",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_07.gltf",
+   "category": "environment",
+   "w": 6.594,
+   "h": 8.563,
+   "d": 4.216
+  },
+  {
+   "id": "desert_SM_Env_Rock_08",
+   "name": "SM_Env_Rock_08",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_08.gltf",
+   "category": "environment",
+   "w": 4.29,
+   "h": 7.726,
+   "d": 4.668
+  },
+  {
+   "id": "desert_SM_Env_Rock_09",
+   "name": "SM_Env_Rock_09",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_09.gltf",
+   "category": "environment",
+   "w": 3.751,
+   "h": 6.165,
+   "d": 3.558
+  },
+  {
+   "id": "desert_SM_Env_Rock_10",
+   "name": "SM_Env_Rock_10",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_10.gltf",
+   "category": "environment",
+   "w": 2.346,
+   "h": 4.176,
+   "d": 2.303
+  },
+  {
+   "id": "desert_SM_Env_Rock_11",
+   "name": "SM_Env_Rock_11",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_11.gltf",
+   "category": "environment",
+   "w": 2.718,
+   "h": 4.564,
+   "d": 2.328
+  },
+  {
+   "id": "desert_SM_Env_Rock_12",
+   "name": "SM_Env_Rock_12",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_12.gltf",
+   "category": "environment",
+   "w": 2.26,
+   "h": 4.118,
+   "d": 2.561
+  },
+  {
+   "id": "desert_SM_Env_Rock_13",
+   "name": "SM_Env_Rock_13",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_13.gltf",
+   "category": "environment",
+   "w": 2.11,
+   "h": 3.453,
+   "d": 2.399
+  },
+  {
+   "id": "desert_SM_Env_Rock_14",
+   "name": "SM_Env_Rock_14",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_14.gltf",
+   "category": "environment",
+   "w": 1.447,
+   "h": 3.238,
+   "d": 1.384
+  },
+  {
+   "id": "desert_SM_Env_Rock_Arch_01",
+   "name": "SM_Env_Rock_Arch_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Arch_01.gltf",
+   "category": "environment",
+   "w": 22.682,
+   "h": 8.968,
+   "d": 9.29
+  },
+  {
+   "id": "desert_SM_Env_Rock_Arch_Half_01",
+   "name": "SM_Env_Rock_Arch_Half_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Arch_Half_01.gltf",
+   "category": "environment",
+   "w": 9.649,
+   "h": 9.074,
+   "d": 7.499
+  },
+  {
+   "id": "desert_SM_Env_Rock_Arch_Half_02",
+   "name": "SM_Env_Rock_Arch_Half_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Arch_Half_02.gltf",
+   "category": "environment",
+   "w": 10.646,
+   "h": 8.934,
+   "d": 8.313
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_01",
+   "name": "SM_Env_Rock_Cliff_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_01.gltf",
+   "category": "environment",
+   "w": 11.923,
+   "h": 9.707,
+   "d": 8.969
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_02",
+   "name": "SM_Env_Rock_Cliff_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_02.gltf",
+   "category": "environment",
+   "w": 13.466,
+   "h": 10.181,
+   "d": 8.923
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_03",
+   "name": "SM_Env_Rock_Cliff_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_03.gltf",
+   "category": "environment",
+   "w": 22.653,
+   "h": 10.257,
+   "d": 9.275
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_04",
+   "name": "SM_Env_Rock_Cliff_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_04.gltf",
+   "category": "environment",
+   "w": 24.492,
+   "h": 10.358,
+   "d": 12.058
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_05",
+   "name": "SM_Env_Rock_Cliff_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_05.gltf",
+   "category": "environment",
+   "w": 12.145,
+   "h": 10.78,
+   "d": 8.927
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_06",
+   "name": "SM_Env_Rock_Cliff_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_06.gltf",
+   "category": "environment",
+   "w": 13.999,
+   "h": 10.912,
+   "d": 9.998
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_07",
+   "name": "SM_Env_Rock_Cliff_07",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_07.gltf",
+   "category": "environment",
+   "w": 12.347,
+   "h": 6.5,
+   "d": 19.403
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_08",
+   "name": "SM_Env_Rock_Cliff_08",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_08.gltf",
+   "category": "environment",
+   "w": 10.697,
+   "h": 8.487,
+   "d": 10.272
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_09",
+   "name": "SM_Env_Rock_Cliff_09",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_09.gltf",
+   "category": "environment",
+   "w": 11.074,
+   "h": 9.466,
+   "d": 13.862
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_10",
+   "name": "SM_Env_Rock_Cliff_10",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_10.gltf",
+   "category": "environment",
+   "w": 11.466,
+   "h": 8.94,
+   "d": 13.22
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_11",
+   "name": "SM_Env_Rock_Cliff_11",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_11.gltf",
+   "category": "environment",
+   "w": 5.628,
+   "h": 12.865,
+   "d": 6.567
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_12",
+   "name": "SM_Env_Rock_Cliff_12",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_12.gltf",
+   "category": "environment",
+   "w": 11.825,
+   "h": 13.405,
+   "d": 13.454
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_13",
+   "name": "SM_Env_Rock_Cliff_13",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_13.gltf",
+   "category": "environment",
+   "w": 16.083,
+   "h": 7.419,
+   "d": 13.132
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_14",
+   "name": "SM_Env_Rock_Cliff_14",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_14.gltf",
+   "category": "environment",
+   "w": 15.082,
+   "h": 8.493,
+   "d": 10.34
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_15",
+   "name": "SM_Env_Rock_Cliff_15",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_15.gltf",
+   "category": "environment",
+   "w": 9.481,
+   "h": 12.31,
+   "d": 18.39
+  },
+  {
+   "id": "desert_SM_Env_Rock_Cliff_16",
+   "name": "SM_Env_Rock_Cliff_16",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Cliff_16.gltf",
+   "category": "environment",
+   "w": 28.776,
+   "h": 10.218,
+   "d": 13.857
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_01",
+   "name": "SM_Env_Rock_Pebbles_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_01.gltf",
+   "category": "environment",
+   "w": 0.441,
+   "h": 0.047,
+   "d": 0.341
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_02",
+   "name": "SM_Env_Rock_Pebbles_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_02.gltf",
+   "category": "environment",
+   "w": 0.697,
+   "h": 0.05,
+   "d": 0.495
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_03",
+   "name": "SM_Env_Rock_Pebbles_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_03.gltf",
+   "category": "environment",
+   "w": 0.765,
+   "h": 0.061,
+   "d": 0.617
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_04",
+   "name": "SM_Env_Rock_Pebbles_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_04.gltf",
+   "category": "environment",
+   "w": 0.393,
+   "h": 0.094,
+   "d": 0.326
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_05",
+   "name": "SM_Env_Rock_Pebbles_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_05.gltf",
+   "category": "environment",
+   "w": 0.395,
+   "h": 0.134,
+   "d": 0.421
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_06",
+   "name": "SM_Env_Rock_Pebbles_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_06.gltf",
+   "category": "environment",
+   "w": 0.903,
+   "h": 0.215,
+   "d": 0.794
+  },
+  {
+   "id": "desert_SM_Env_Rock_Pebbles_07",
+   "name": "SM_Env_Rock_Pebbles_07",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Pebbles_07.gltf",
+   "category": "environment",
+   "w": 1.083,
+   "h": 0.291,
+   "d": 0.669
+  },
+  {
+   "id": "desert_SM_Env_Rock_Rough_01",
+   "name": "SM_Env_Rock_Rough_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Rough_01.gltf",
+   "category": "environment",
+   "w": 8.578,
+   "h": 3.139,
+   "d": 8.228
+  },
+  {
+   "id": "desert_SM_Env_Rock_Rough_02",
+   "name": "SM_Env_Rock_Rough_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Rough_02.gltf",
+   "category": "environment",
+   "w": 6.187,
+   "h": 2.162,
+   "d": 3.228
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_01",
+   "name": "SM_Env_Rock_Small_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_01.gltf",
+   "category": "environment",
+   "w": 1.046,
+   "h": 1.758,
+   "d": 1.221
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_02",
+   "name": "SM_Env_Rock_Small_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_02.gltf",
+   "category": "environment",
+   "w": 0.852,
+   "h": 0.722,
+   "d": 0.812
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_03",
+   "name": "SM_Env_Rock_Small_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_03.gltf",
+   "category": "environment",
+   "w": 1.424,
+   "h": 2.617,
+   "d": 1.159
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_04",
+   "name": "SM_Env_Rock_Small_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_04.gltf",
+   "category": "environment",
+   "w": 1.648,
+   "h": 0.683,
+   "d": 1.309
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_05",
+   "name": "SM_Env_Rock_Small_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_05.gltf",
+   "category": "environment",
+   "w": 1.231,
+   "h": 1.902,
+   "d": 1.196
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_06",
+   "name": "SM_Env_Rock_Small_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_06.gltf",
+   "category": "environment",
+   "w": 1.972,
+   "h": 0.54,
+   "d": 0.893
+  },
+  {
+   "id": "desert_SM_Env_Rock_Small_07",
+   "name": "SM_Env_Rock_Small_07",
+   "set": "desert",
+   "file": "desert_SM_Env_Rock_Small_07.gltf",
+   "category": "environment",
+   "w": 0.884,
+   "h": 0.605,
+   "d": 0.765
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikes_Large_01",
+   "name": "SM_Env_Rocks_Spikes_Large_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikes_Large_01.gltf",
+   "category": "environment",
+   "w": 12.824,
+   "h": 10.303,
+   "d": 6.879
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikes_Large_02",
+   "name": "SM_Env_Rocks_Spikes_Large_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikes_Large_02.gltf",
+   "category": "environment",
+   "w": 8.921,
+   "h": 8.71,
+   "d": 5.821
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikes_Large_03",
+   "name": "SM_Env_Rocks_Spikes_Large_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikes_Large_03.gltf",
+   "category": "environment",
+   "w": 8.872,
+   "h": 8.114,
+   "d": 4.663
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_01",
+   "name": "SM_Env_Rocks_Spikey_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_01.gltf",
+   "category": "environment",
+   "w": 3.573,
+   "h": 3.196,
+   "d": 2.506
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_02",
+   "name": "SM_Env_Rocks_Spikey_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_02.gltf",
+   "category": "environment",
+   "w": 2.444,
+   "h": 2.824,
+   "d": 2.566
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_03",
+   "name": "SM_Env_Rocks_Spikey_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_03.gltf",
+   "category": "environment",
+   "w": 2.479,
+   "h": 2.166,
+   "d": 1.846
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_04",
+   "name": "SM_Env_Rocks_Spikey_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_04.gltf",
+   "category": "environment",
+   "w": 0.92,
+   "h": 2.617,
+   "d": 0.733
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_05",
+   "name": "SM_Env_Rocks_Spikey_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_05.gltf",
+   "category": "environment",
+   "w": 0.856,
+   "h": 1.902,
+   "d": 0.75
+  },
+  {
+   "id": "desert_SM_Env_Rocks_Spikey_06",
+   "name": "SM_Env_Rocks_Spikey_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Rocks_Spikey_06.gltf",
+   "category": "environment",
+   "w": 0.611,
+   "h": 1.411,
+   "d": 0.553
+  },
+  {
+   "id": "desert_SM_Env_Succulent_01",
+   "name": "SM_Env_Succulent_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_01.gltf",
+   "category": "environment",
+   "w": 2.327,
+   "h": 0.537,
+   "d": 1.037
+  },
+  {
+   "id": "desert_SM_Env_Succulent_01_Alt_01",
+   "name": "SM_Env_Succulent_01_Alt_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_01_Alt_01.gltf",
+   "category": "environment",
+   "w": 1.407,
+   "h": 0.871,
+   "d": 0.947
+  },
+  {
+   "id": "desert_SM_Env_Succulent_01_Single_01",
+   "name": "SM_Env_Succulent_01_Single_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_01_Single_01.gltf",
+   "category": "environment",
+   "w": 0.577,
+   "h": 0.278,
+   "d": 0.577
+  },
+  {
+   "id": "desert_SM_Env_Succulent_02",
+   "name": "SM_Env_Succulent_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_02.gltf",
+   "category": "environment",
+   "w": 2.679,
+   "h": 0.677,
+   "d": 2.307
+  },
+  {
+   "id": "desert_SM_Env_Succulent_03",
+   "name": "SM_Env_Succulent_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_03.gltf",
+   "category": "environment",
+   "w": 1.674,
+   "h": 1.301,
+   "d": 1.443
+  },
+  {
+   "id": "desert_SM_Env_Succulent_04",
+   "name": "SM_Env_Succulent_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_04.gltf",
+   "category": "environment",
+   "w": 1.349,
+   "h": 3.0,
+   "d": 1.441
+  },
+  {
+   "id": "desert_SM_Env_Succulent_05",
+   "name": "SM_Env_Succulent_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_05.gltf",
+   "category": "environment",
+   "w": 3.911,
+   "h": 2.884,
+   "d": 3.897
+  },
+  {
+   "id": "desert_SM_Env_Succulent_05_Single_01",
+   "name": "SM_Env_Succulent_05_Single_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_05_Single_01.gltf",
+   "category": "environment",
+   "w": 1.645,
+   "h": 1.351,
+   "d": 1.662
+  },
+  {
+   "id": "desert_SM_Env_Succulent_06",
+   "name": "SM_Env_Succulent_06",
+   "set": "desert",
+   "file": "desert_SM_Env_Succulent_06.gltf",
+   "category": "environment",
+   "w": 3.431,
+   "h": 5.491,
+   "d": 2.923
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Blob_01",
+   "name": "SM_Env_Sulphur_Blob_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Blob_01.gltf",
+   "category": "environment",
+   "w": 3.573,
+   "h": 2.916,
+   "d": 2.416
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Blob_02",
+   "name": "SM_Env_Sulphur_Blob_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Blob_02.gltf",
+   "category": "environment",
+   "w": 2.479,
+   "h": 1.291,
+   "d": 1.746
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Blob_03",
+   "name": "SM_Env_Sulphur_Blob_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Blob_03.gltf",
+   "category": "environment",
+   "w": 0.571,
+   "h": 1.058,
+   "d": 0.514
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Ground_01",
+   "name": "SM_Env_Sulphur_Ground_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Ground_01.gltf",
+   "category": "environment",
+   "w": 9.368,
+   "h": 1.898,
+   "d": 8.871
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Pool_01",
+   "name": "SM_Env_Sulphur_Pool_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Pool_01.gltf",
+   "category": "environment",
+   "w": 5.016,
+   "h": 1.371,
+   "d": 4.832
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Pool_02",
+   "name": "SM_Env_Sulphur_Pool_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Pool_02.gltf",
+   "category": "environment",
+   "w": 8.554,
+   "h": 1.825,
+   "d": 7.091
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Pool_03",
+   "name": "SM_Env_Sulphur_Pool_03",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Pool_03.gltf",
+   "category": "environment",
+   "w": 6.652,
+   "h": 1.782,
+   "d": 6.838
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Pool_04",
+   "name": "SM_Env_Sulphur_Pool_04",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Pool_04.gltf",
+   "category": "environment",
+   "w": 7.624,
+   "h": 1.317,
+   "d": 7.552
+  },
+  {
+   "id": "desert_SM_Env_Sulphur_Pool_05",
+   "name": "SM_Env_Sulphur_Pool_05",
+   "set": "desert",
+   "file": "desert_SM_Env_Sulphur_Pool_05.gltf",
+   "category": "environment",
+   "w": 7.959,
+   "h": 1.342,
+   "d": 8.301
+  },
+  {
+   "id": "desert_SM_Env_Tree_Dead_01",
+   "name": "SM_Env_Tree_Dead_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Tree_Dead_01.gltf",
+   "category": "environment",
+   "w": 5.9,
+   "h": 5.703,
+   "d": 5.633
+  },
+  {
+   "id": "desert_SM_Env_Tree_Dead_02",
+   "name": "SM_Env_Tree_Dead_02",
+   "set": "desert",
+   "file": "desert_SM_Env_Tree_Dead_02.gltf",
+   "category": "environment",
+   "w": 1.934,
+   "h": 4.228,
+   "d": 1.543
+  },
+  {
+   "id": "desert_SM_Env_Water_Plane_01",
+   "name": "SM_Env_Water_Plane_01",
+   "set": "desert",
+   "file": "desert_SM_Env_Water_Plane_01.gltf",
+   "category": "environment",
+   "w": 10.0,
+   "h": 0.0,
+   "d": 10.0
+  },
+  {
+   "id": "desert_SM_Particle_Smoke_01",
+   "name": "SM_Particle_Smoke_01",
+   "set": "desert",
+   "file": "desert_SM_Particle_Smoke_01.gltf",
+   "category": "misc",
+   "w": 0.191,
+   "h": 0.152,
+   "d": 0.194
+  },
+  {
+   "id": "desert_SM_Prop_Artefact_01",
+   "name": "SM_Prop_Artefact_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Artefact_01.gltf",
+   "category": "prop",
+   "w": 1.88,
+   "h": 10.62,
+   "d": 1.173
+  },
+  {
+   "id": "desert_SM_Prop_Bones_01",
+   "name": "SM_Prop_Bones_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_01.gltf",
+   "category": "prop",
+   "w": 0.897,
+   "h": 1.1,
+   "d": 2.75
+  },
+  {
+   "id": "desert_SM_Prop_Bones_02",
+   "name": "SM_Prop_Bones_02",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_02.gltf",
+   "category": "prop",
+   "w": 0.313,
+   "h": 0.527,
+   "d": 0.752
+  },
+  {
+   "id": "desert_SM_Prop_Bones_03",
+   "name": "SM_Prop_Bones_03",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_03.gltf",
+   "category": "prop",
+   "w": 1.464,
+   "h": 1.415,
+   "d": 3.746
+  },
+  {
+   "id": "desert_SM_Prop_Bones_04",
+   "name": "SM_Prop_Bones_04",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_04.gltf",
+   "category": "prop",
+   "w": 1.069,
+   "h": 1.064,
+   "d": 1.713
+  },
+  {
+   "id": "desert_SM_Prop_Bones_05",
+   "name": "SM_Prop_Bones_05",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_05.gltf",
+   "category": "prop",
+   "w": 1.631,
+   "h": 0.225,
+   "d": 0.39
+  },
+  {
+   "id": "desert_SM_Prop_Bones_06",
+   "name": "SM_Prop_Bones_06",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_06.gltf",
+   "category": "prop",
+   "w": 1.478,
+   "h": 0.172,
+   "d": 1.399
+  },
+  {
+   "id": "desert_SM_Prop_Bones_07",
+   "name": "SM_Prop_Bones_07",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_07.gltf",
+   "category": "prop",
+   "w": 1.798,
+   "h": 0.352,
+   "d": 1.648
+  },
+  {
+   "id": "desert_SM_Prop_Bones_08",
+   "name": "SM_Prop_Bones_08",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_08.gltf",
+   "category": "prop",
+   "w": 1.394,
+   "h": 0.131,
+   "d": 0.377
+  },
+  {
+   "id": "desert_SM_Prop_Bones_09",
+   "name": "SM_Prop_Bones_09",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bones_09.gltf",
+   "category": "prop",
+   "w": 1.109,
+   "h": 0.159,
+   "d": 0.334
+  },
+  {
+   "id": "desert_SM_Prop_Bridge_Large_01",
+   "name": "SM_Prop_Bridge_Large_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bridge_Large_01.gltf",
+   "category": "prop",
+   "w": 1.287,
+   "h": 1.919,
+   "d": 15.071
+  },
+  {
+   "id": "desert_SM_Prop_Bridge_Small_01",
+   "name": "SM_Prop_Bridge_Small_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Bridge_Small_01.gltf",
+   "category": "prop",
+   "w": 1.287,
+   "h": 1.919,
+   "d": 10.071
+  },
+  {
+   "id": "desert_SM_Prop_Hose_01",
+   "name": "SM_Prop_Hose_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Hose_01.gltf",
+   "category": "prop",
+   "w": 1.141,
+   "h": 0.212,
+   "d": 4.477
+  },
+  {
+   "id": "desert_SM_Prop_Hose_02",
+   "name": "SM_Prop_Hose_02",
+   "set": "desert",
+   "file": "desert_SM_Prop_Hose_02.gltf",
+   "category": "prop",
+   "w": 1.181,
+   "h": 0.273,
+   "d": 2.584
+  },
+  {
+   "id": "desert_SM_Prop_Hose_03",
+   "name": "SM_Prop_Hose_03",
+   "set": "desert",
+   "file": "desert_SM_Prop_Hose_03.gltf",
+   "category": "prop",
+   "w": 2.366,
+   "h": 0.285,
+   "d": 1.646
+  },
+  {
+   "id": "desert_SM_Prop_Marker_Beacon_01",
+   "name": "SM_Prop_Marker_Beacon_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Marker_Beacon_01.gltf",
+   "category": "prop",
+   "w": 0.122,
+   "h": 1.273,
+   "d": 0.122
+  },
+  {
+   "id": "desert_SM_Prop_Pipe_01",
+   "name": "SM_Prop_Pipe_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Pipe_01.gltf",
+   "category": "prop",
+   "w": 1.122,
+   "h": 1.76,
+   "d": 4.021
+  },
+  {
+   "id": "desert_SM_Prop_Satellite_01",
+   "name": "SM_Prop_Satellite_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Satellite_01.gltf",
+   "category": "prop",
+   "w": 1.268,
+   "h": 2.117,
+   "d": 1.689
+  },
+  {
+   "id": "desert_SM_Prop_Sign_01",
+   "name": "SM_Prop_Sign_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Sign_01.gltf",
+   "category": "prop",
+   "w": 0.649,
+   "h": 1.076,
+   "d": 0.12
+  },
+  {
+   "id": "desert_SM_Prop_Sign_02",
+   "name": "SM_Prop_Sign_02",
+   "set": "desert",
+   "file": "desert_SM_Prop_Sign_02.gltf",
+   "category": "prop",
+   "w": 0.322,
+   "h": 0.941,
+   "d": 0.107
+  },
+  {
+   "id": "desert_SM_Prop_Solar_Panels_01",
+   "name": "SM_Prop_Solar_Panels_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Solar_Panels_01.gltf",
+   "category": "prop",
+   "w": 2.513,
+   "h": 3.485,
+   "d": 0.77
+  },
+  {
+   "id": "desert_SM_Prop_Survey_Level_01",
+   "name": "SM_Prop_Survey_Level_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Survey_Level_01.gltf",
+   "category": "prop",
+   "w": 1.2,
+   "h": 1.625,
+   "d": 1.048
+  },
+  {
+   "id": "desert_SM_Prop_Tent_01",
+   "name": "SM_Prop_Tent_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Tent_01.gltf",
+   "category": "prop",
+   "w": 4.623,
+   "h": 3.054,
+   "d": 4.623
+  },
+  {
+   "id": "desert_SM_Prop_Tumbleweed_01",
+   "name": "SM_Prop_Tumbleweed_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Tumbleweed_01.gltf",
+   "category": "prop",
+   "w": 0.755,
+   "h": 0.755,
+   "d": 0.755
+  },
+  {
+   "id": "desert_SM_Prop_Wind_Turbine_01",
+   "name": "SM_Prop_Wind_Turbine_01",
+   "set": "desert",
+   "file": "desert_SM_Prop_Wind_Turbine_01.gltf",
+   "category": "prop",
+   "w": 4.342,
+   "h": 13.983,
+   "d": 4.342
+  },
+  {
+   "id": "desert_SM_Prop_Wind_Turbine_02",
+   "name": "SM_Prop_Wind_Turbine_02",
+   "set": "desert",
+   "file": "desert_SM_Prop_Wind_Turbine_02.gltf",
+   "category": "prop",
+   "w": 1.597,
+   "h": 2.607,
+   "d": 1.477
+  }
+ ]
+}

@@ -13,7 +13,8 @@ import { groundAt } from '../siegeGround';
 import { raycastMesh } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
-import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip } from './challengeControl';
+import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, fireChallengeRevive } from './challengeControl';
+import { setSiegePlayerDead } from '../siegePlayerState';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
@@ -143,6 +144,8 @@ export function ChallengeRunner() {
     const now = performance.now();
     challengeRef.current = ch;
     setMobs([]);
+    setSiegePlayerDead(false);   // a ghost from a prior death comes back to life for the new run
+    fireChallengeRevive();       // restore full health (no-op if already alive)
     resetChallengeScore();
     prePos.current = camera.position.clone();   // remember where to put the player back
     preMap.current = getActiveMapId();
@@ -174,6 +177,7 @@ export function ChallengeRunner() {
 
   const stop = () => {
     r.active = false; r.countdownUntil = 0;
+    setSiegePlayerDead(false);
     setMobs([]);
     revert();
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
@@ -200,15 +204,16 @@ export function ChallengeRunner() {
     } });
   };
 
-  // Player died mid-challenge → YOU LOSE!, end it, and put the world back the way it was.
+  // Player died mid-challenge → YOU LOSE!, end the run. The player is NOT teleported out — they stay
+  // where they fell as a ghost, and the monsters (kept alive, not cleared) lose their target and
+  // wander off (MonsterEnemy reads the siege-player-dead flag). They come back to life on the next run.
   const lose = () => {
     if (!r.active) return;
     const now = performance.now();
     record(false, now);
     showResult('lose', now);
     r.active = false;
-    setMobs([]);
-    revert();
+    setSiegePlayerDead(true);   // monsters stop hunting + wander off; player frozen as a ghost
     setChallengeState({
       active: false, completed: false, waveEndsAt: 0,
       announce: { title: 'YOU LOSE!', subtitle: `Reached Wave ${r.waveIdx + 1}/${challengeRef.current!.waves.length}`, text: `Points: ${Math.round(getChallengeScore())}`, faint: false, until: now + 6000 },

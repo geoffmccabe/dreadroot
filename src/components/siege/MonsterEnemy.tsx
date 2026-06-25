@@ -26,6 +26,7 @@ import { tickDarkLordLightning, tryStartLightning, clearLightningCaster } from '
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
 import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
+import { isSiegePlayerDead } from './siegePlayerState';
 import { getHitboxFor, subscribeHitboxes, type MonsterHitbox } from './hitboxConfig';
 import { bullseyePct, useBullseyeFactor, effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
 import { registerEditable, getEditUrl, getSelectedBox, subscribeEditor } from './hitboxEditor';
@@ -683,6 +684,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const now = performance.now();
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
+    // Player died mid-challenge → they're a ghost; every monster loses its target and wanders off
+    // (the engagement branches below are gated on this, so they all fall through to wander/search).
+    const playerDead = isSiegePlayerDead();
     const nav = getNavProfile(getActiveMapId());   // per-MAP pursuit traits (climb-to-roof, A*, crawl)
 
     // ── Line-of-sight to the player (3D, torso→torso) ──
@@ -726,6 +730,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Stop the walk loop once dead (death blocks below return early).
     if (inst.dead && walkLoopRef.current) { stopLoopSound(walkLoopRef.current); walkLoopRef.current = null; }
     if (inst.dead && liteLoopRef.current) { stopLoopSound(liteLoopRef.current); liteLoopRef.current = null; }
+    // Player is a ghost → this monster is about to wander instead of attack. Silence any combat loops
+    // (spin whir, Dark Lord electric stream) and drop its lightning so the renderer stops drawing it.
+    if (playerDead) {
+      if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }
+      if (liteLoopRef.current) { stopLoopSound(liteLoopRef.current); liteLoopRef.current = null; }
+      if (s.liteActive) { s.liteActive = false; clearLightningCaster(inst.id); }
+      s.spiraling = false;
+    }
     // Coin drop: fire ONCE on death. Open-world only (the helper skips challenge kills). DIVI =
     // round(initialHealth/10) at the body.
     if (inst.dead && !s.killFired) {
@@ -1027,7 +1039,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       if (inst.hitAt && now - inst.hitAt < 450) play(clips.hit, true);
       else play(clips.idle);
-    } else if (c.boss === 'teleporter') {                   // ── TELEPORTING DARK LORD ──
+    } else if (c.boss === 'teleporter' && !playerDead) {    // ── TELEPORTING DARK LORD ──
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
       const dwell = s.teleDwell || 1;
       inst.opacity = Math.max(0, 1 - (now - s.teleArrived) / dwell);   // fade out before each jump
@@ -1091,7 +1103,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         mvx = dx / dist; mvz = dz / dist; moving = true;
         s.x += mvx * step; s.z += mvz * step; play(clips.walk);
       } else if (now > s.swipeUntil) play(clips.idle);
-    } else if (c.spin) {                                    // ── SPINTROLL ──
+    } else if (c.spin && !playerDead) {                     // ── SPINTROLL ──
       if (!s.spinVel) {                                     // init once: spin rate + direction + first zoom
         s.spinVel = rnd(c.spin.revPerSec) * Math.PI * 2 * (Math.random() < 0.5 ? 1 : -1);
         s.zoomNext = now + rnd(c.spin.zoomEveryMs);
@@ -1163,7 +1175,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             rnd(c.spin.playerSpinRev), s.spinVel > 0 ? -1 : 1);   // player spins OPPOSITE the troll
         }
       }
-    } else if (dist < c.aggro) {                            // found a player -> pursue/attack
+    } else if (!playerDead && dist < c.aggro) {             // found a player -> pursue/attack
       // ── Stuck → pathfind around obstacles (player hiding in a building/garage) ──
       // Track progress toward the player; if a melee monster can't get closer for ~1.5s while still
       // out of reach, it's blocked — route AROUND the wall with grid A* and steer toward the next

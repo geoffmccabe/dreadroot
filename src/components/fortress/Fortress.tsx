@@ -29,6 +29,8 @@ import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCre
 import { ChallengeBrowser } from '@/components/siege/challenge/ChallengeBrowser';
 import { ChallengeResultPanel } from '@/components/siege/challenge/ChallengeResultPanel';
 import { setChallengeState } from '@/components/siege/challenge/challengeStore';
+import { setChallengeRevive } from '@/components/siege/challenge/challengeControl';
+import { isSiegePlayerDead } from '@/components/siege/siegePlayerState';
 import { useBlocks } from '@/contexts/BlocksContext';
 import { useBulletDefinitions } from '@/contexts/BulletDefinitionsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1285,22 +1287,31 @@ export function Fortress() {
     };
   }, []);
 
-  // Death respawn timer
+  // Let a challenge restart bring the player back to full health (a ghost from a prior death is
+  // revived in place, then the runner teleports them to the arena).
   useEffect(() => {
-    if (isDead && respawnTimer === 0) {
+    setChallengeRevive(() => respawn());
+    return () => setChallengeRevive(null);
+  }, [respawn]);
+
+  // Death respawn timer. SKIPPED when the player died mid-challenge — there they stay where they fell
+  // as a ghost (no "Respawning…", no teleport to spawn); ChallengeRunner shows YOU LOSE and the
+  // monsters wander off, and the player only revives when they start/replay a challenge.
+  useEffect(() => {
+    if (isDead && respawnTimer === 0 && !isSiegePlayerDead()) {
       setRespawnTimer(3);
       // Big centered death message — same overlay/style as the wave announcements.
       setChallengeState({ announce: { title: 'YOU DIED', subtitle: 'Respawning…', faint: false, until: performance.now() + 3000 } });
     }
   }, [isDead]);
-  
+
   useEffect(() => {
     if (respawnTimer > 0) {
       const timer = setTimeout(() => {
         setRespawnTimer(prev => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
-    } else if (respawnTimer === 0 && isDead) {
+    } else if (respawnTimer === 0 && isDead && !isSiegePlayerDead()) {
       respawn();   // restore health
       // Siege Worlds: respawn back at the Bleakrock start point (not where you died).
       if (getActiveGame() === 'siege-worlds') {

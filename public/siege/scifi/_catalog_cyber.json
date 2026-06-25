@@ -1,0 +1,6586 @@
+{
+ "set": "cyber",
+ "count": 658,
+ "items": [
+  {
+   "id": "cyber_SM_Bld_Base_45_Floor_01",
+   "name": "SM_Bld_Base_45_Floor_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_45_Floor_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.0,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_45_Floor_Combined_01",
+   "name": "SM_Bld_Base_45_Floor_Combined_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_45_Floor_Combined_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.101,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_45_Wall_01",
+   "name": "SM_Bld_Base_45_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_45_Wall_01.gltf",
+   "category": "building",
+   "w": 2.725,
+   "h": 3.006,
+   "d": 2.725
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Ceiling_01",
+   "name": "SM_Bld_Base_Ceiling_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Ceiling_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.0,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Door_01",
+   "name": "SM_Bld_Base_Door_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Door_01.gltf",
+   "category": "building",
+   "w": 1.003,
+   "h": 1.967,
+   "d": 0.247
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Door_Large_01",
+   "name": "SM_Bld_Base_Door_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Door_Large_01.gltf",
+   "category": "building",
+   "w": 1.125,
+   "h": 2.467,
+   "d": 0.247
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Floor_01",
+   "name": "SM_Bld_Base_Floor_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Floor_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.0,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Floor_Combined_01",
+   "name": "SM_Bld_Base_Floor_Combined_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Floor_Combined_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.101,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_01",
+   "name": "SM_Bld_Base_Pillar_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_01.gltf",
+   "category": "building",
+   "w": 0.429,
+   "h": 3.012,
+   "d": 0.429
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_02",
+   "name": "SM_Bld_Base_Pillar_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_02.gltf",
+   "category": "building",
+   "w": 0.428,
+   "h": 3.018,
+   "d": 0.428
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_03",
+   "name": "SM_Bld_Base_Pillar_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_03.gltf",
+   "category": "building",
+   "w": 0.428,
+   "h": 3.011,
+   "d": 0.214
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_04",
+   "name": "SM_Bld_Base_Pillar_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_04.gltf",
+   "category": "building",
+   "w": 0.214,
+   "h": 3.018,
+   "d": 0.214
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_05",
+   "name": "SM_Bld_Base_Pillar_05",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_05.gltf",
+   "category": "building",
+   "w": 0.112,
+   "h": 3.011,
+   "d": 0.113
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_Half_01",
+   "name": "SM_Bld_Base_Pillar_Half_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_Half_01.gltf",
+   "category": "building",
+   "w": 0.391,
+   "h": 1.507,
+   "d": 0.391
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_Half_02",
+   "name": "SM_Bld_Base_Pillar_Half_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_Half_02.gltf",
+   "category": "building",
+   "w": 0.391,
+   "h": 1.507,
+   "d": 0.391
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_Half_03",
+   "name": "SM_Bld_Base_Pillar_Half_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_Half_03.gltf",
+   "category": "building",
+   "w": 0.391,
+   "h": 1.507,
+   "d": 0.196
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_Half_04",
+   "name": "SM_Bld_Base_Pillar_Half_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_Half_04.gltf",
+   "category": "building",
+   "w": 0.196,
+   "h": 1.507,
+   "d": 0.196
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Pillar_Half_05",
+   "name": "SM_Bld_Base_Pillar_Half_05",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Pillar_Half_05.gltf",
+   "category": "building",
+   "w": 0.112,
+   "h": 1.5,
+   "d": 0.113
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Stairs_01",
+   "name": "SM_Bld_Base_Stairs_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Stairs_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.827,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Stairs_02",
+   "name": "SM_Bld_Base_Stairs_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Stairs_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.327,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Stairwell_Wall_01",
+   "name": "SM_Bld_Base_Stairwell_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Stairwell_Wall_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_01",
+   "name": "SM_Bld_Base_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Door_01",
+   "name": "SM_Bld_Base_Wall_Door_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Door_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Door_Double_01",
+   "name": "SM_Bld_Base_Wall_Door_Double_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Door_Double_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Door_Double_Large_01",
+   "name": "SM_Bld_Base_Wall_Door_Double_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Door_Double_Large_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Door_Large_01",
+   "name": "SM_Bld_Base_Wall_Door_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Door_Large_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Half_01",
+   "name": "SM_Bld_Base_Wall_Half_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Half_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.506,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Half_02",
+   "name": "SM_Bld_Base_Wall_Half_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Half_02.gltf",
+   "category": "building",
+   "w": 1.25,
+   "h": 3.006,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Quarter_01",
+   "name": "SM_Bld_Base_Wall_Quarter_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Quarter_01.gltf",
+   "category": "building",
+   "w": 1.25,
+   "h": 1.506,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Window_01",
+   "name": "SM_Bld_Base_Wall_Window_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Window_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.256
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Window_Double_01",
+   "name": "SM_Bld_Base_Wall_Window_Double_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Window_Double_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.256
+  },
+  {
+   "id": "cyber_SM_Bld_Base_Wall_Window_Half_01",
+   "name": "SM_Bld_Base_Wall_Window_Half_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Base_Wall_Window_Half_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.506,
+   "d": 0.256
+  },
+  {
+   "id": "cyber_SM_Bld_Background_Building_01",
+   "name": "SM_Bld_Background_Building_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Background_Building_01.gltf",
+   "category": "building",
+   "w": 15.348,
+   "h": 62.262,
+   "d": 32.122
+  },
+  {
+   "id": "cyber_SM_Bld_Background_Building_02",
+   "name": "SM_Bld_Background_Building_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Background_Building_02.gltf",
+   "category": "building",
+   "w": 24.257,
+   "h": 55.772,
+   "d": 29.154
+  },
+  {
+   "id": "cyber_SM_Bld_Background_Building_03",
+   "name": "SM_Bld_Background_Building_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Background_Building_03.gltf",
+   "category": "building",
+   "w": 13.098,
+   "h": 70.647,
+   "d": 40.129
+  },
+  {
+   "id": "cyber_SM_Bld_Background_Building_04",
+   "name": "SM_Bld_Background_Building_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Background_Building_04.gltf",
+   "category": "building",
+   "w": 19.391,
+   "h": 67.21,
+   "d": 16.374
+  },
+  {
+   "id": "cyber_SM_Bld_Block_12x2x2_01",
+   "name": "SM_Bld_Block_12x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_12x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 180.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_12x4x4_01",
+   "name": "SM_Bld_Block_12x4x4_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_12x4x4_01.gltf",
+   "category": "building",
+   "w": 60.0,
+   "h": 180.0,
+   "d": 60.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_18x2x2_01",
+   "name": "SM_Bld_Block_18x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_18x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 270.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_1x1x1_01",
+   "name": "SM_Bld_Block_1x1x1_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_1x1x1_01.gltf",
+   "category": "building",
+   "w": 15.0,
+   "h": 15.0,
+   "d": 15.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_1x2x2_01",
+   "name": "SM_Bld_Block_1x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_1x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 15.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_2x1x1_01",
+   "name": "SM_Bld_Block_2x1x1_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_2x1x1_01.gltf",
+   "category": "building",
+   "w": 15.0,
+   "h": 30.0,
+   "d": 15.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_2x1x2_01",
+   "name": "SM_Bld_Block_2x1x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_2x1x2_01.gltf",
+   "category": "building",
+   "w": 15.0,
+   "h": 30.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_2x2x2_01",
+   "name": "SM_Bld_Block_2x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_2x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 30.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_2x4x2_01",
+   "name": "SM_Bld_Block_2x4x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_2x4x2_01.gltf",
+   "category": "building",
+   "w": 60.0,
+   "h": 30.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_2x4x4_01",
+   "name": "SM_Bld_Block_2x4x4_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_2x4x4_01.gltf",
+   "category": "building",
+   "w": 60.0,
+   "h": 30.0,
+   "d": 60.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_4x2x2_01",
+   "name": "SM_Bld_Block_4x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_4x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 60.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_6x2x2_01",
+   "name": "SM_Bld_Block_6x2x2_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_6x2x2_01.gltf",
+   "category": "building",
+   "w": 30.0,
+   "h": 90.0,
+   "d": 30.0
+  },
+  {
+   "id": "cyber_SM_Bld_Block_6x4x4_01",
+   "name": "SM_Bld_Block_6x4x4_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Block_6x4x4_01.gltf",
+   "category": "building",
+   "w": 60.0,
+   "h": 90.0,
+   "d": 60.0
+  },
+  {
+   "id": "cyber_SM_Bld_Ceiling_Trim_01",
+   "name": "SM_Bld_Ceiling_Trim_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Ceiling_Trim_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.394,
+   "d": 0.279
+  },
+  {
+   "id": "cyber_SM_Bld_Ceiling_Trim_02",
+   "name": "SM_Bld_Ceiling_Trim_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Ceiling_Trim_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.314,
+   "d": 0.148
+  },
+  {
+   "id": "cyber_SM_Bld_Corner_Trim_01",
+   "name": "SM_Bld_Corner_Trim_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Corner_Trim_01.gltf",
+   "category": "building",
+   "w": 0.633,
+   "h": 3.0,
+   "d": 0.633
+  },
+  {
+   "id": "cyber_SM_Bld_Corner_Trim_02",
+   "name": "SM_Bld_Corner_Trim_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Corner_Trim_02.gltf",
+   "category": "building",
+   "w": 0.761,
+   "h": 3.0,
+   "d": 0.761
+  },
+  {
+   "id": "cyber_SM_Bld_Corner_Trim_03",
+   "name": "SM_Bld_Corner_Trim_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Corner_Trim_03.gltf",
+   "category": "building",
+   "w": 1.127,
+   "h": 3.0,
+   "d": 1.127
+  },
+  {
+   "id": "cyber_SM_Bld_Door_Double_01",
+   "name": "SM_Bld_Door_Double_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_Double_01.gltf",
+   "category": "building",
+   "w": 2.413,
+   "h": 2.171,
+   "d": 0.588
+  },
+  {
+   "id": "cyber_SM_Bld_Door_Double_Large_01",
+   "name": "SM_Bld_Door_Double_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_Double_Large_01.gltf",
+   "category": "building",
+   "w": 2.549,
+   "h": 2.677,
+   "d": 0.652
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_01",
+   "name": "SM_Bld_Door_NoFrame_Single_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_01.gltf",
+   "category": "building",
+   "w": 1.003,
+   "h": 1.967,
+   "d": 0.154
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_02",
+   "name": "SM_Bld_Door_NoFrame_Single_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_02.gltf",
+   "category": "building",
+   "w": 1.006,
+   "h": 1.967,
+   "d": 0.162
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_03",
+   "name": "SM_Bld_Door_NoFrame_Single_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_03.gltf",
+   "category": "building",
+   "w": 1.001,
+   "h": 1.966,
+   "d": 0.129
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_Large_01",
+   "name": "SM_Bld_Door_NoFrame_Single_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_Large_01.gltf",
+   "category": "building",
+   "w": 1.121,
+   "h": 2.467,
+   "d": 0.172
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_Large_02",
+   "name": "SM_Bld_Door_NoFrame_Single_Large_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_Large_02.gltf",
+   "category": "building",
+   "w": 1.121,
+   "h": 2.466,
+   "d": 0.162
+  },
+  {
+   "id": "cyber_SM_Bld_Door_NoFrame_Single_Large_03",
+   "name": "SM_Bld_Door_NoFrame_Single_Large_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_NoFrame_Single_Large_03.gltf",
+   "category": "building",
+   "w": 1.121,
+   "h": 2.466,
+   "d": 0.129
+  },
+  {
+   "id": "cyber_SM_Bld_Door_Single_01",
+   "name": "SM_Bld_Door_Single_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_Single_01.gltf",
+   "category": "building",
+   "w": 1.361,
+   "h": 2.198,
+   "d": 0.535
+  },
+  {
+   "id": "cyber_SM_Bld_Door_Single_Large_01",
+   "name": "SM_Bld_Door_Single_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Door_Single_Large_01.gltf",
+   "category": "building",
+   "w": 1.499,
+   "h": 2.743,
+   "d": 0.435
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_End_Corner_01",
+   "name": "SM_Bld_Floor_End_Corner_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_End_Corner_01.gltf",
+   "category": "building",
+   "w": 0.625,
+   "h": 0.101,
+   "d": 0.625
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Grating_01",
+   "name": "SM_Bld_Floor_Grating_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Grating_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.304,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Quarter_01",
+   "name": "SM_Bld_Floor_Quarter_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Quarter_01.gltf",
+   "category": "building",
+   "w": 0.625,
+   "h": 0.101,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Quater_01",
+   "name": "SM_Bld_Floor_Quater_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Quater_01.gltf",
+   "category": "building",
+   "w": 0.625,
+   "h": 0.101,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Small_01",
+   "name": "SM_Bld_Floor_Small_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Small_01.gltf",
+   "category": "building",
+   "w": 1.25,
+   "h": 0.101,
+   "d": 1.25
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Small_02",
+   "name": "SM_Bld_Floor_Small_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Small_02.gltf",
+   "category": "building",
+   "w": 1.25,
+   "h": 0.174,
+   "d": 1.25
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Trim_01",
+   "name": "SM_Bld_Floor_Trim_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Trim_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.394,
+   "d": 0.279
+  },
+  {
+   "id": "cyber_SM_Bld_Floor_Trim_02",
+   "name": "SM_Bld_Floor_Trim_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Floor_Trim_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.314,
+   "d": 0.148
+  },
+  {
+   "id": "cyber_SM_Bld_Metal_Pipe_Frame_01",
+   "name": "SM_Bld_Metal_Pipe_Frame_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Metal_Pipe_Frame_01.gltf",
+   "category": "building",
+   "w": 3.318,
+   "h": 3.292,
+   "d": 1.616
+  },
+  {
+   "id": "cyber_SM_Bld_Metal_Pipe_Frame_02",
+   "name": "SM_Bld_Metal_Pipe_Frame_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Metal_Pipe_Frame_02.gltf",
+   "category": "building",
+   "w": 1.602,
+   "h": 5.001,
+   "d": 1.636
+  },
+  {
+   "id": "cyber_SM_Bld_Parallax_Insert_01",
+   "name": "SM_Bld_Parallax_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Parallax_Insert_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.0,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Connector_01",
+   "name": "SM_Bld_Pipe_Connector_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Connector_01.gltf",
+   "category": "building",
+   "w": 1.234,
+   "h": 2.644,
+   "d": 1.234
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Connector_02",
+   "name": "SM_Bld_Pipe_Connector_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Connector_02.gltf",
+   "category": "building",
+   "w": 1.234,
+   "h": 1.234,
+   "d": 1.234
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Bend_01",
+   "name": "SM_Bld_Pipe_Large_Bend_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Bend_01.gltf",
+   "category": "building",
+   "w": 3.087,
+   "h": 1.122,
+   "d": 3.087
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Bend_02",
+   "name": "SM_Bld_Pipe_Large_Bend_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Bend_02.gltf",
+   "category": "building",
+   "w": 3.174,
+   "h": 1.367,
+   "d": 3.174
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Circular_01",
+   "name": "SM_Bld_Pipe_Large_Circular_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Circular_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.122,
+   "d": 1.175
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Circular_02",
+   "name": "SM_Bld_Pipe_Large_Circular_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Circular_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.46,
+   "d": 1.425
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Circular_03",
+   "name": "SM_Bld_Pipe_Large_Circular_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Circular_03.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.246,
+   "d": 1.305
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Circular_04",
+   "name": "SM_Bld_Pipe_Large_Circular_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Circular_04.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.367,
+   "d": 1.303
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_End_01",
+   "name": "SM_Bld_Pipe_Large_End_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_End_01.gltf",
+   "category": "building",
+   "w": 1.056,
+   "h": 1.122,
+   "d": 1.175
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_End_02",
+   "name": "SM_Bld_Pipe_Large_End_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_End_02.gltf",
+   "category": "building",
+   "w": 0.998,
+   "h": 1.416,
+   "d": 1.416
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Group_01",
+   "name": "SM_Bld_Pipe_Large_Group_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Group_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.05,
+   "d": 1.117
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Group_Turn_01",
+   "name": "SM_Bld_Pipe_Large_Group_Turn_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Group_Turn_01.gltf",
+   "category": "building",
+   "w": 3.064,
+   "h": 1.03,
+   "d": 3.064
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Group_Turn_02",
+   "name": "SM_Bld_Pipe_Large_Group_Turn_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Group_Turn_02.gltf",
+   "category": "building",
+   "w": 3.045,
+   "h": 1.03,
+   "d": 3.045
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Hatch_01",
+   "name": "SM_Bld_Pipe_Large_Hatch_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Hatch_01.gltf",
+   "category": "building",
+   "w": 0.364,
+   "h": 1.032,
+   "d": 1.111
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Hatch_02",
+   "name": "SM_Bld_Pipe_Large_Hatch_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Hatch_02.gltf",
+   "category": "building",
+   "w": 0.217,
+   "h": 1.293,
+   "d": 1.346
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Octo_01",
+   "name": "SM_Bld_Pipe_Large_Octo_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Octo_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.235,
+   "d": 1.348
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Octo_02",
+   "name": "SM_Bld_Pipe_Large_Octo_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Octo_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.216,
+   "d": 1.224
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Octo_03",
+   "name": "SM_Bld_Pipe_Large_Octo_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Octo_03.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.347,
+   "d": 1.347
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Large_Octo_04",
+   "name": "SM_Bld_Pipe_Large_Octo_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Large_Octo_04.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 1.235,
+   "d": 1.348
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_01",
+   "name": "SM_Bld_Pipe_Small_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.465,
+   "d": 0.465
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_02",
+   "name": "SM_Bld_Pipe_Small_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.513,
+   "d": 0.514
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_03",
+   "name": "SM_Bld_Pipe_Small_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_03.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.465,
+   "d": 0.465
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_Bend_01",
+   "name": "SM_Bld_Pipe_Small_Bend_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_Bend_01.gltf",
+   "category": "building",
+   "w": 1.733,
+   "h": 0.466,
+   "d": 1.74
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_Cap_01",
+   "name": "SM_Bld_Pipe_Small_Cap_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_Cap_01.gltf",
+   "category": "building",
+   "w": 0.138,
+   "h": 0.648,
+   "d": 0.682
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_End_01",
+   "name": "SM_Bld_Pipe_Small_End_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_End_01.gltf",
+   "category": "building",
+   "w": 1.799,
+   "h": 0.685,
+   "d": 1.45
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_End_02",
+   "name": "SM_Bld_Pipe_Small_End_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_End_02.gltf",
+   "category": "building",
+   "w": 0.593,
+   "h": 0.497,
+   "d": 0.497
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Small_TJunction_01",
+   "name": "SM_Bld_Pipe_Small_TJunction_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Small_TJunction_01.gltf",
+   "category": "building",
+   "w": 1.733,
+   "h": 0.469,
+   "d": 2.0
+  },
+  {
+   "id": "cyber_SM_Bld_Pipe_Strut",
+   "name": "SM_Bld_Pipe_Strut",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Pipe_Strut.gltf",
+   "category": "building",
+   "w": 0.303,
+   "h": 1.983,
+   "d": 1.294
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_45_01",
+   "name": "SM_Bld_Railing_45_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_45_01.gltf",
+   "category": "building",
+   "w": 2.854,
+   "h": 0.656,
+   "d": 2.854
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_45_02",
+   "name": "SM_Bld_Railing_45_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_45_02.gltf",
+   "category": "building",
+   "w": 2.854,
+   "h": 0.656,
+   "d": 2.854
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_45_03",
+   "name": "SM_Bld_Railing_45_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_45_03.gltf",
+   "category": "building",
+   "w": 2.854,
+   "h": 0.712,
+   "d": 2.854
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Pillar_45_Corner_Inner_01",
+   "name": "SM_Bld_Railing_Pillar_45_Corner_Inner_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Pillar_45_Corner_Inner_01.gltf",
+   "category": "building",
+   "w": 0.646,
+   "h": 1.579,
+   "d": 0.659
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Pillar_45_Corner_Outer_01",
+   "name": "SM_Bld_Railing_Pillar_45_Corner_Outer_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Pillar_45_Corner_Outer_01.gltf",
+   "category": "building",
+   "w": 0.627,
+   "h": 1.579,
+   "d": 0.649
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Pillar_Corner_Inner_01",
+   "name": "SM_Bld_Railing_Pillar_Corner_Inner_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Pillar_Corner_Inner_01.gltf",
+   "category": "building",
+   "w": 0.555,
+   "h": 1.594,
+   "d": 0.555
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Pillar_Corner_Outer_01",
+   "name": "SM_Bld_Railing_Pillar_Corner_Outer_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Pillar_Corner_Outer_01.gltf",
+   "category": "building",
+   "w": 0.543,
+   "h": 1.582,
+   "d": 0.543
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Pillar_Straight_01",
+   "name": "SM_Bld_Railing_Pillar_Straight_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Pillar_Straight_01.gltf",
+   "category": "building",
+   "w": 0.357,
+   "h": 1.579,
+   "d": 0.553
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_45_01",
+   "name": "SM_Bld_Railing_Rail_45_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_45_01.gltf",
+   "category": "building",
+   "w": 2.577,
+   "h": 0.325,
+   "d": 2.577
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_45_02",
+   "name": "SM_Bld_Railing_Rail_45_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_45_02.gltf",
+   "category": "building",
+   "w": 2.577,
+   "h": 1.111,
+   "d": 2.577
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_Stairs_01",
+   "name": "SM_Bld_Railing_Rail_Stairs_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_Stairs_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.825,
+   "d": 0.086
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_Stairs_02",
+   "name": "SM_Bld_Railing_Rail_Stairs_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_Stairs_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 2.251,
+   "d": 0.178
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_Straight_01",
+   "name": "SM_Bld_Railing_Rail_Straight_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_Straight_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.325,
+   "d": 0.086
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Rail_Straight_02",
+   "name": "SM_Bld_Railing_Rail_Straight_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Rail_Straight_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.104,
+   "d": 0.125
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Stairs_01",
+   "name": "SM_Bld_Railing_Stairs_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Stairs_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 2.156,
+   "d": 0.503
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Stairs_02",
+   "name": "SM_Bld_Railing_Stairs_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Stairs_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 2.156,
+   "d": 0.542
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Straight_01",
+   "name": "SM_Bld_Railing_Straight_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Straight_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.656,
+   "d": 0.5
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Straight_02",
+   "name": "SM_Bld_Railing_Straight_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Straight_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.656,
+   "d": 0.505
+  },
+  {
+   "id": "cyber_SM_Bld_Railing_Straight_03",
+   "name": "SM_Bld_Railing_Straight_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Railing_Straight_03.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.729,
+   "d": 0.578
+  },
+  {
+   "id": "cyber_SM_Bld_Stairs_01",
+   "name": "SM_Bld_Stairs_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairs_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.827,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Stairs_02",
+   "name": "SM_Bld_Stairs_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairs_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.827,
+   "d": 2.75
+  },
+  {
+   "id": "cyber_SM_Bld_Stairs_03",
+   "name": "SM_Bld_Stairs_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairs_03.gltf",
+   "category": "building",
+   "w": 2.515,
+   "h": 1.895,
+   "d": 2.514
+  },
+  {
+   "id": "cyber_SM_Bld_Stairs_04",
+   "name": "SM_Bld_Stairs_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairs_04.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.327,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Stairs_05",
+   "name": "SM_Bld_Stairs_05",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairs_05.gltf",
+   "category": "building",
+   "w": 2.671,
+   "h": 3.312,
+   "d": 2.617
+  },
+  {
+   "id": "cyber_SM_Bld_Stairwell_Wall_01",
+   "name": "SM_Bld_Stairwell_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairwell_Wall_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.771,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Stairwell_Wall_02",
+   "name": "SM_Bld_Stairwell_Wall_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Stairwell_Wall_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.777,
+   "d": 0.232
+  },
+  {
+   "id": "cyber_SM_Bld_Train_Rail_Connector_01",
+   "name": "SM_Bld_Train_Rail_Connector_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Train_Rail_Connector_01.gltf",
+   "category": "building",
+   "w": 1.403,
+   "h": 0.914,
+   "d": 1.551
+  },
+  {
+   "id": "cyber_SM_Bld_Train_Rail_Curve_Long_02",
+   "name": "SM_Bld_Train_Rail_Curve_Long_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Train_Rail_Curve_Long_02.gltf",
+   "category": "building",
+   "w": 50.809,
+   "h": 0.761,
+   "d": 50.809
+  },
+  {
+   "id": "cyber_SM_Bld_Train_Rail_Curve_Short_01",
+   "name": "SM_Bld_Train_Rail_Curve_Short_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Train_Rail_Curve_Short_01.gltf",
+   "category": "building",
+   "w": 25.809,
+   "h": 0.761,
+   "d": 25.809
+  },
+  {
+   "id": "cyber_SM_Bld_Train_Rail_Straight_01",
+   "name": "SM_Bld_Train_Rail_Straight_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Train_Rail_Straight_01.gltf",
+   "category": "building",
+   "w": 25.0,
+   "h": 0.761,
+   "d": 1.618
+  },
+  {
+   "id": "cyber_SM_Bld_Train_Rail_Strut_01",
+   "name": "SM_Bld_Train_Rail_Strut_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Train_Rail_Strut_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 0.315,
+   "d": 1.095
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_45_01",
+   "name": "SM_Bld_Walkway_45_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_45_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Bridge_01",
+   "name": "SM_Bld_Walkway_Bridge_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Bridge_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Connection_01",
+   "name": "SM_Bld_Walkway_Connection_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Connection_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Corner_01",
+   "name": "SM_Bld_Walkway_Corner_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Corner_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Corner_02",
+   "name": "SM_Bld_Walkway_Corner_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Corner_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Solo_01",
+   "name": "SM_Bld_Walkway_Solo_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Solo_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Walkway_Straight_01",
+   "name": "SM_Bld_Walkway_Straight_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Walkway_Straight_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Door_Double_Large_02",
+   "name": "SM_Bld_Wall_Door_Double_Large_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Door_Double_Large_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.652
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Half_01",
+   "name": "SM_Bld_Wall_Half_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Half_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.5,
+   "d": 0.226
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Half_02",
+   "name": "SM_Bld_Wall_Half_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Half_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 1.5,
+   "d": 0.226
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Laser_01",
+   "name": "SM_Bld_Wall_Laser_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Laser_01.gltf",
+   "category": "building",
+   "w": 2.025,
+   "h": 3.0,
+   "d": 0.07
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Quarter_01",
+   "name": "SM_Bld_Wall_Quarter_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Quarter_01.gltf",
+   "category": "building",
+   "w": 0.625,
+   "h": 3.006,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Quater_01",
+   "name": "SM_Bld_Wall_Quater_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Quater_01.gltf",
+   "category": "building",
+   "w": 0.625,
+   "h": 3.006,
+   "d": 0.225
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Shop_01",
+   "name": "SM_Bld_Wall_Shop_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Shop_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.369
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Shop_02",
+   "name": "SM_Bld_Wall_Shop_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Shop_02.gltf",
+   "category": "building",
+   "w": 5.112,
+   "h": 3.049,
+   "d": 0.832
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Shop_03",
+   "name": "SM_Bld_Wall_Shop_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Shop_03.gltf",
+   "category": "building",
+   "w": 5.112,
+   "h": 3.033,
+   "d": 1.015
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Shop_04",
+   "name": "SM_Bld_Wall_Shop_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Shop_04.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.018,
+   "d": 1.038
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Trim_01",
+   "name": "SM_Bld_Wall_Trim_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Trim_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.864,
+   "d": 0.18
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Trim_02",
+   "name": "SM_Bld_Wall_Trim_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Trim_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.0,
+   "d": 0.198
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Trim_03",
+   "name": "SM_Bld_Wall_Trim_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Trim_03.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.601,
+   "d": 0.137
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Trim_04",
+   "name": "SM_Bld_Wall_Trim_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Trim_04.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 0.332,
+   "d": 0.147
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_01",
+   "name": "SM_Bld_Wall_Window_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.387
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_02",
+   "name": "SM_Bld_Wall_Window_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_02.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.39
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_03",
+   "name": "SM_Bld_Wall_Window_03",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_03.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.418
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_04",
+   "name": "SM_Bld_Wall_Window_04",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_04.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.523
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_05",
+   "name": "SM_Bld_Wall_Window_05",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_05.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.43
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_06",
+   "name": "SM_Bld_Wall_Window_06",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_06.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.368
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_07",
+   "name": "SM_Bld_Wall_Window_07",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_07.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.347
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_08",
+   "name": "SM_Bld_Wall_Window_08",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_08.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.327
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_Old_01",
+   "name": "SM_Bld_Wall_Window_Old_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_Old_01.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.542
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_Old_02",
+   "name": "SM_Bld_Wall_Window_Old_02",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_Old_02.gltf",
+   "category": "building",
+   "w": 5.0,
+   "h": 3.006,
+   "d": 0.446
+  },
+  {
+   "id": "cyber_SM_Bld_Wall_Window_Old_Single_01",
+   "name": "SM_Bld_Wall_Window_Old_Single_01",
+   "set": "cyber",
+   "file": "cyber_SM_Bld_Wall_Window_Old_Single_01.gltf",
+   "category": "building",
+   "w": 2.5,
+   "h": 3.006,
+   "d": 0.446
+  },
+  {
+   "id": "cyber_SM_Env_Hologram_Cherry_Tree_01",
+   "name": "SM_Env_Hologram_Cherry_Tree_01",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Hologram_Cherry_Tree_01.gltf",
+   "category": "environment",
+   "w": 6.196,
+   "h": 5.577,
+   "d": 3.378
+  },
+  {
+   "id": "cyber_SM_Env_Hologram_Cherry_Tree_02",
+   "name": "SM_Env_Hologram_Cherry_Tree_02",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Hologram_Cherry_Tree_02.gltf",
+   "category": "environment",
+   "w": 8.97,
+   "h": 6.601,
+   "d": 5.382
+  },
+  {
+   "id": "cyber_SM_Env_Hologram_Tree_01",
+   "name": "SM_Env_Hologram_Tree_01",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Hologram_Tree_01.gltf",
+   "category": "environment",
+   "w": 2.68,
+   "h": 5.368,
+   "d": 2.388
+  },
+  {
+   "id": "cyber_SM_Env_Hologram_Tree_02",
+   "name": "SM_Env_Hologram_Tree_02",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Hologram_Tree_02.gltf",
+   "category": "environment",
+   "w": 3.311,
+   "h": 5.654,
+   "d": 2.487
+  },
+  {
+   "id": "cyber_SM_Env_Hologram_Tree_03",
+   "name": "SM_Env_Hologram_Tree_03",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Hologram_Tree_03.gltf",
+   "category": "environment",
+   "w": 2.402,
+   "h": 5.94,
+   "d": 2.457
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Background_01",
+   "name": "SM_Env_Junk_Background_01",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Background_01.gltf",
+   "category": "environment",
+   "w": 6.025,
+   "h": 1.971,
+   "d": 24.277
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_01",
+   "name": "SM_Env_Junk_Pile_01",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_01.gltf",
+   "category": "environment",
+   "w": 3.663,
+   "h": 0.386,
+   "d": 4.272
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_02",
+   "name": "SM_Env_Junk_Pile_02",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_02.gltf",
+   "category": "environment",
+   "w": 2.552,
+   "h": 0.386,
+   "d": 2.608
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_03",
+   "name": "SM_Env_Junk_Pile_03",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_03.gltf",
+   "category": "environment",
+   "w": 2.612,
+   "h": 0.365,
+   "d": 2.585
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_04",
+   "name": "SM_Env_Junk_Pile_04",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_04.gltf",
+   "category": "environment",
+   "w": 3.202,
+   "h": 0.714,
+   "d": 1.949
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_05",
+   "name": "SM_Env_Junk_Pile_05",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_05.gltf",
+   "category": "environment",
+   "w": 2.079,
+   "h": 0.714,
+   "d": 2.246
+  },
+  {
+   "id": "cyber_SM_Env_Junk_Pile_Insert_01",
+   "name": "SM_Env_Junk_Pile_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Env_Junk_Pile_Insert_01.gltf",
+   "category": "environment",
+   "w": 2.317,
+   "h": 0.308,
+   "d": 1.662
+  },
+  {
+   "id": "cyber_SM_FX_Bullet_Mesh_01",
+   "name": "SM_FX_Bullet_Mesh_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Bullet_Mesh_01.gltf",
+   "category": "misc",
+   "w": 0.128,
+   "h": 0.134,
+   "d": 2.852
+  },
+  {
+   "id": "cyber_SM_FX_Cylinder_01",
+   "name": "SM_FX_Cylinder_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Cylinder_01.gltf",
+   "category": "misc",
+   "w": 2.643,
+   "h": 0.939,
+   "d": 2.643
+  },
+  {
+   "id": "cyber_SM_FX_Cylinder_02 1",
+   "name": "SM_FX_Cylinder_02 1",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Cylinder_02 1.gltf",
+   "category": "misc",
+   "w": 0.145,
+   "h": 0.148,
+   "d": 0.182
+  },
+  {
+   "id": "cyber_SM_FX_Leaf_01",
+   "name": "SM_FX_Leaf_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Leaf_01.gltf",
+   "category": "misc",
+   "w": 0.395,
+   "h": 0.068,
+   "d": 0.395
+  },
+  {
+   "id": "cyber_SM_FX_Paper_Mesh_01",
+   "name": "SM_FX_Paper_Mesh_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Paper_Mesh_01.gltf",
+   "category": "misc",
+   "w": 0.507,
+   "h": 0.033,
+   "d": 0.422
+  },
+  {
+   "id": "cyber_SM_FX_Paper_Mesh_02",
+   "name": "SM_FX_Paper_Mesh_02",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Paper_Mesh_02.gltf",
+   "category": "misc",
+   "w": 0.617,
+   "h": 0.09,
+   "d": 0.695
+  },
+  {
+   "id": "cyber_SM_FX_Paper_Mesh_03",
+   "name": "SM_FX_Paper_Mesh_03",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Paper_Mesh_03.gltf",
+   "category": "misc",
+   "w": 0.394,
+   "h": 0.068,
+   "d": 0.378
+  },
+  {
+   "id": "cyber_SM_FX_Paper_Mesh_04",
+   "name": "SM_FX_Paper_Mesh_04",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Paper_Mesh_04.gltf",
+   "category": "misc",
+   "w": 0.568,
+   "h": 0.081,
+   "d": 0.431
+  },
+  {
+   "id": "cyber_SM_FX_Plane_Square_01",
+   "name": "SM_FX_Plane_Square_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Plane_Square_01.gltf",
+   "category": "misc",
+   "w": 2.5,
+   "h": 2.5,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_FX_Plane_Tall_01",
+   "name": "SM_FX_Plane_Tall_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Plane_Tall_01.gltf",
+   "category": "misc",
+   "w": 1.25,
+   "h": 3.0,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_FX_Plane_Wall_01",
+   "name": "SM_FX_Plane_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Plane_Wall_01.gltf",
+   "category": "misc",
+   "w": 2.5,
+   "h": 3.0,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_FX_Scrap_01",
+   "name": "SM_FX_Scrap_01",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Scrap_01.gltf",
+   "category": "misc",
+   "w": 1.64,
+   "h": 1.64,
+   "d": 1.64
+  },
+  {
+   "id": "cyber_SM_FX_Scrap_02",
+   "name": "SM_FX_Scrap_02",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Scrap_02.gltf",
+   "category": "misc",
+   "w": 4.897,
+   "h": 0.817,
+   "d": 1.729
+  },
+  {
+   "id": "cyber_SM_FX_Scrap_03",
+   "name": "SM_FX_Scrap_03",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Scrap_03.gltf",
+   "category": "misc",
+   "w": 2.231,
+   "h": 0.436,
+   "d": 1.689
+  },
+  {
+   "id": "cyber_SM_FX_Scrap_04",
+   "name": "SM_FX_Scrap_04",
+   "set": "cyber",
+   "file": "cyber_SM_FX_Scrap_04.gltf",
+   "category": "misc",
+   "w": 5.432,
+   "h": 1.923,
+   "d": 1.747
+  },
+  {
+   "id": "cyber_SM_FX_SunShafts 1",
+   "name": "SM_FX_SunShafts 1",
+   "set": "cyber",
+   "file": "cyber_SM_FX_SunShafts 1.gltf",
+   "category": "misc",
+   "w": 0.01,
+   "h": 0.036,
+   "d": 0.01
+  },
+  {
+   "id": "cyber_SM_Flame_FX 1",
+   "name": "SM_Flame_FX 1",
+   "set": "cyber",
+   "file": "cyber_SM_Flame_FX 1.gltf",
+   "category": "misc",
+   "w": 0.116,
+   "h": 0.208,
+   "d": 0.101
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_01",
+   "name": "SM_Prop_Antenna_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_01.gltf",
+   "category": "prop",
+   "w": 0.627,
+   "h": 4.516,
+   "d": 0.255
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_02",
+   "name": "SM_Prop_Antenna_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_02.gltf",
+   "category": "prop",
+   "w": 0.67,
+   "h": 5.728,
+   "d": 0.878
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_03",
+   "name": "SM_Prop_Antenna_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_03.gltf",
+   "category": "prop",
+   "w": 2.065,
+   "h": 17.636,
+   "d": 2.063
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_04",
+   "name": "SM_Prop_Antenna_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_04.gltf",
+   "category": "prop",
+   "w": 0.529,
+   "h": 1.837,
+   "d": 1.426
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_05",
+   "name": "SM_Prop_Antenna_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_05.gltf",
+   "category": "prop",
+   "w": 1.525,
+   "h": 3.108,
+   "d": 1.557
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_06",
+   "name": "SM_Prop_Antenna_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_06.gltf",
+   "category": "prop",
+   "w": 1.953,
+   "h": 1.428,
+   "d": 1.749
+  },
+  {
+   "id": "cyber_SM_Prop_Antenna_07",
+   "name": "SM_Prop_Antenna_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Antenna_07.gltf",
+   "category": "prop",
+   "w": 0.177,
+   "h": 0.882,
+   "d": 0.091
+  },
+  {
+   "id": "cyber_SM_Prop_Assembly_Machine_01",
+   "name": "SM_Prop_Assembly_Machine_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Assembly_Machine_01.gltf",
+   "category": "prop",
+   "w": 1.377,
+   "h": 3.063,
+   "d": 1.312
+  },
+  {
+   "id": "cyber_SM_Prop_Barricade_Military_01",
+   "name": "SM_Prop_Barricade_Military_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Barricade_Military_01.gltf",
+   "category": "prop",
+   "w": 0.831,
+   "h": 1.037,
+   "d": 2.406
+  },
+  {
+   "id": "cyber_SM_Prop_Bench_Seat_01",
+   "name": "SM_Prop_Bench_Seat_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Bench_Seat_01.gltf",
+   "category": "prop",
+   "w": 2.445,
+   "h": 0.989,
+   "d": 0.849
+  },
+  {
+   "id": "cyber_SM_Prop_Bench_Seat_02",
+   "name": "SM_Prop_Bench_Seat_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Bench_Seat_02.gltf",
+   "category": "prop",
+   "w": 2.356,
+   "h": 0.913,
+   "d": 0.731
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_01",
+   "name": "SM_Prop_Billboard_Backing_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_01.gltf",
+   "category": "prop",
+   "w": 13.622,
+   "h": 4.849,
+   "d": 0.352
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_02",
+   "name": "SM_Prop_Billboard_Backing_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_02.gltf",
+   "category": "prop",
+   "w": 13.362,
+   "h": 4.625,
+   "d": 0.28
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_Small_01",
+   "name": "SM_Prop_Billboard_Backing_Small_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_Small_01.gltf",
+   "category": "prop",
+   "w": 8.323,
+   "h": 4.849,
+   "d": 0.352
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_Small_02",
+   "name": "SM_Prop_Billboard_Backing_Small_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_Small_02.gltf",
+   "category": "prop",
+   "w": 8.062,
+   "h": 4.625,
+   "d": 0.28
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_Verticle_01",
+   "name": "SM_Prop_Billboard_Backing_Verticle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_Verticle_01.gltf",
+   "category": "prop",
+   "w": 3.795,
+   "h": 8.72,
+   "d": 0.352
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Backing_Verticle_02",
+   "name": "SM_Prop_Billboard_Backing_Verticle_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Backing_Verticle_02.gltf",
+   "category": "prop",
+   "w": 3.571,
+   "h": 8.459,
+   "d": 0.28
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Clean_Sign_01",
+   "name": "SM_Prop_Billboard_Clean_Sign_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Clean_Sign_01.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Clean_Sign_02",
+   "name": "SM_Prop_Billboard_Clean_Sign_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Clean_Sign_02.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Clean_Sign_03",
+   "name": "SM_Prop_Billboard_Clean_Sign_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Clean_Sign_03.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Damaged_Sign_01",
+   "name": "SM_Prop_Billboard_Damaged_Sign_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Damaged_Sign_01.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.467,
+   "d": 0.073
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Damaged_Sign_02",
+   "name": "SM_Prop_Billboard_Damaged_Sign_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Damaged_Sign_02.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.467,
+   "d": 0.073
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Damaged_Sign_03",
+   "name": "SM_Prop_Billboard_Damaged_Sign_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Damaged_Sign_03.gltf",
+   "category": "prop",
+   "w": 13.129,
+   "h": 4.467,
+   "d": 0.073
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Frame_01",
+   "name": "SM_Prop_Billboard_Frame_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Frame_01.gltf",
+   "category": "prop",
+   "w": 1.704,
+   "h": 6.496,
+   "d": 1.217
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Sign_Small_01",
+   "name": "SM_Prop_Billboard_Sign_Small_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Sign_Small_01.gltf",
+   "category": "prop",
+   "w": 7.83,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Sign_Small_02",
+   "name": "SM_Prop_Billboard_Sign_Small_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Sign_Small_02.gltf",
+   "category": "prop",
+   "w": 7.83,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Sign_Small_03",
+   "name": "SM_Prop_Billboard_Sign_Small_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Sign_Small_03.gltf",
+   "category": "prop",
+   "w": 7.83,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Sign_Small_Syntanium_01",
+   "name": "SM_Prop_Billboard_Sign_Small_Syntanium_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Sign_Small_Syntanium_01.gltf",
+   "category": "prop",
+   "w": 7.83,
+   "h": 4.376,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Billboard_Sign_Verticle_01",
+   "name": "SM_Prop_Billboard_Sign_Verticle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Billboard_Sign_Verticle_01.gltf",
+   "category": "prop",
+   "w": 3.324,
+   "h": 8.227,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Bin_Small_01",
+   "name": "SM_Prop_Bin_Small_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Bin_Small_01.gltf",
+   "category": "prop",
+   "w": 0.448,
+   "h": 0.448,
+   "d": 0.448
+  },
+  {
+   "id": "cyber_SM_Prop_Bunk_Bed_01",
+   "name": "SM_Prop_Bunk_Bed_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Bunk_Bed_01.gltf",
+   "category": "prop",
+   "w": 1.723,
+   "h": 1.82,
+   "d": 3.266
+  },
+  {
+   "id": "cyber_SM_Prop_Camera_01",
+   "name": "SM_Prop_Camera_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Camera_01.gltf",
+   "category": "prop",
+   "w": 0.302,
+   "h": 0.505,
+   "d": 1.019
+  },
+  {
+   "id": "cyber_SM_Prop_Camera_Drone_01",
+   "name": "SM_Prop_Camera_Drone_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Camera_Drone_01.gltf",
+   "category": "prop",
+   "w": 0.536,
+   "h": 0.436,
+   "d": 0.598
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_01",
+   "name": "SM_Prop_Canopy_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_01.gltf",
+   "category": "prop",
+   "w": 13.764,
+   "h": 0.976,
+   "d": 5.471
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_02",
+   "name": "SM_Prop_Canopy_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_02.gltf",
+   "category": "prop",
+   "w": 7.678,
+   "h": 1.202,
+   "d": 5.504
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_03",
+   "name": "SM_Prop_Canopy_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_03.gltf",
+   "category": "prop",
+   "w": 15.807,
+   "h": 1.536,
+   "d": 5.539
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_04",
+   "name": "SM_Prop_Canopy_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_04.gltf",
+   "category": "prop",
+   "w": 7.203,
+   "h": 1.556,
+   "d": 7.565
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_05",
+   "name": "SM_Prop_Canopy_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_05.gltf",
+   "category": "prop",
+   "w": 8.261,
+   "h": 1.367,
+   "d": 5.511
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_06",
+   "name": "SM_Prop_Canopy_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_06.gltf",
+   "category": "prop",
+   "w": 8.261,
+   "h": 1.752,
+   "d": 5.511
+  },
+  {
+   "id": "cyber_SM_Prop_Canopy_Pole_01",
+   "name": "SM_Prop_Canopy_Pole_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Canopy_Pole_01.gltf",
+   "category": "prop",
+   "w": 0.368,
+   "h": 7.052,
+   "d": 0.319
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_01",
+   "name": "SM_Prop_Cardboard_Box_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_01.gltf",
+   "category": "prop",
+   "w": 0.466,
+   "h": 0.324,
+   "d": 0.723
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_02",
+   "name": "SM_Prop_Cardboard_Box_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_02.gltf",
+   "category": "prop",
+   "w": 0.848,
+   "h": 0.625,
+   "d": 0.886
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_03",
+   "name": "SM_Prop_Cardboard_Box_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_03.gltf",
+   "category": "prop",
+   "w": 0.801,
+   "h": 0.519,
+   "d": 0.602
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_04",
+   "name": "SM_Prop_Cardboard_Box_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_04.gltf",
+   "category": "prop",
+   "w": 1.124,
+   "h": 1.065,
+   "d": 0.952
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_05",
+   "name": "SM_Prop_Cardboard_Box_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_05.gltf",
+   "category": "prop",
+   "w": 1.044,
+   "h": 0.692,
+   "d": 1.013
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Box_06",
+   "name": "SM_Prop_Cardboard_Box_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Box_06.gltf",
+   "category": "prop",
+   "w": 0.848,
+   "h": 0.625,
+   "d": 0.886
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Junk_01",
+   "name": "SM_Prop_Cardboard_Junk_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Junk_01.gltf",
+   "category": "prop",
+   "w": 3.241,
+   "h": 0.077,
+   "d": 2.619
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Junk_02",
+   "name": "SM_Prop_Cardboard_Junk_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Junk_02.gltf",
+   "category": "prop",
+   "w": 2.735,
+   "h": 0.145,
+   "d": 2.819
+  },
+  {
+   "id": "cyber_SM_Prop_Cardboard_Junk_03",
+   "name": "SM_Prop_Cardboard_Junk_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cardboard_Junk_03.gltf",
+   "category": "prop",
+   "w": 2.241,
+   "h": 0.11,
+   "d": 1.767
+  },
+  {
+   "id": "cyber_SM_Prop_Cellphone_01",
+   "name": "SM_Prop_Cellphone_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cellphone_01.gltf",
+   "category": "prop",
+   "w": 0.127,
+   "h": 0.263,
+   "d": 0.02
+  },
+  {
+   "id": "cyber_SM_Prop_Cellphone_02",
+   "name": "SM_Prop_Cellphone_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cellphone_02.gltf",
+   "category": "prop",
+   "w": 0.127,
+   "h": 0.263,
+   "d": 0.026
+  },
+  {
+   "id": "cyber_SM_Prop_Charge_Station_01",
+   "name": "SM_Prop_Charge_Station_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Charge_Station_01.gltf",
+   "category": "prop",
+   "w": 1.309,
+   "h": 4.41,
+   "d": 0.9
+  },
+  {
+   "id": "cyber_SM_Prop_Claw_Machine_01",
+   "name": "SM_Prop_Claw_Machine_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Claw_Machine_01.gltf",
+   "category": "prop",
+   "w": 1.41,
+   "h": 2.714,
+   "d": 1.713
+  },
+  {
+   "id": "cyber_SM_Prop_Claw_Machine_01_Insert_01",
+   "name": "SM_Prop_Claw_Machine_01_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Claw_Machine_01_Insert_01.gltf",
+   "category": "prop",
+   "w": 1.188,
+   "h": 0.713,
+   "d": 1.184
+  },
+  {
+   "id": "cyber_SM_Prop_Computer_Chair_01",
+   "name": "SM_Prop_Computer_Chair_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Computer_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.878,
+   "h": 1.475,
+   "d": 1.361
+  },
+  {
+   "id": "cyber_SM_Prop_Computer_Mouse_01",
+   "name": "SM_Prop_Computer_Mouse_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Computer_Mouse_01.gltf",
+   "category": "prop",
+   "w": 0.108,
+   "h": 0.039,
+   "d": 0.164
+  },
+  {
+   "id": "cyber_SM_Prop_Computer_Mousepad_01",
+   "name": "SM_Prop_Computer_Mousepad_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Computer_Mousepad_01.gltf",
+   "category": "prop",
+   "w": 0.441,
+   "h": 0.008,
+   "d": 0.334
+  },
+  {
+   "id": "cyber_SM_Prop_Computer_Mousepad_02",
+   "name": "SM_Prop_Computer_Mousepad_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Computer_Mousepad_02.gltf",
+   "category": "prop",
+   "w": 1.141,
+   "h": 0.014,
+   "d": 0.334
+  },
+  {
+   "id": "cyber_SM_Prop_Console_01",
+   "name": "SM_Prop_Console_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Console_01.gltf",
+   "category": "prop",
+   "w": 0.718,
+   "h": 1.034,
+   "d": 0.535
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_01",
+   "name": "SM_Prop_Crate_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_01.gltf",
+   "category": "prop",
+   "w": 0.974,
+   "h": 0.94,
+   "d": 0.974
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_02",
+   "name": "SM_Prop_Crate_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_02.gltf",
+   "category": "prop",
+   "w": 0.982,
+   "h": 0.946,
+   "d": 0.982
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_03",
+   "name": "SM_Prop_Crate_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_03.gltf",
+   "category": "prop",
+   "w": 0.97,
+   "h": 0.95,
+   "d": 0.97
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_04",
+   "name": "SM_Prop_Crate_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_04.gltf",
+   "category": "prop",
+   "w": 0.838,
+   "h": 0.752,
+   "d": 0.805
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_05",
+   "name": "SM_Prop_Crate_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_05.gltf",
+   "category": "prop",
+   "w": 0.753,
+   "h": 1.253,
+   "d": 0.753
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_06",
+   "name": "SM_Prop_Crate_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_06.gltf",
+   "category": "prop",
+   "w": 1.122,
+   "h": 0.684,
+   "d": 0.601
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_07",
+   "name": "SM_Prop_Crate_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_07.gltf",
+   "category": "prop",
+   "w": 0.86,
+   "h": 0.542,
+   "d": 0.749
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_08",
+   "name": "SM_Prop_Crate_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_08.gltf",
+   "category": "prop",
+   "w": 0.831,
+   "h": 1.178,
+   "d": 0.777
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_09",
+   "name": "SM_Prop_Crate_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_09.gltf",
+   "category": "prop",
+   "w": 0.63,
+   "h": 0.909,
+   "d": 0.574
+  },
+  {
+   "id": "cyber_SM_Prop_Crate_10",
+   "name": "SM_Prop_Crate_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Crate_10.gltf",
+   "category": "prop",
+   "w": 0.661,
+   "h": 1.122,
+   "d": 0.601
+  },
+  {
+   "id": "cyber_SM_Prop_Cuff_01",
+   "name": "SM_Prop_Cuff_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Cuff_01.gltf",
+   "category": "prop",
+   "w": 0.116,
+   "h": 0.115,
+   "d": 0.073
+  },
+  {
+   "id": "cyber_SM_Prop_Desk_01",
+   "name": "SM_Prop_Desk_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Desk_01.gltf",
+   "category": "prop",
+   "w": 1.949,
+   "h": 0.741,
+   "d": 0.615
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_01",
+   "name": "SM_Prop_Drink_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_01.gltf",
+   "category": "prop",
+   "w": 0.09,
+   "h": 0.277,
+   "d": 0.112
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_02",
+   "name": "SM_Prop_Drink_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_02.gltf",
+   "category": "prop",
+   "w": 0.078,
+   "h": 0.221,
+   "d": 0.09
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_03",
+   "name": "SM_Prop_Drink_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_03.gltf",
+   "category": "prop",
+   "w": 0.104,
+   "h": 0.282,
+   "d": 0.09
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_04",
+   "name": "SM_Prop_Drink_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_04.gltf",
+   "category": "prop",
+   "w": 0.12,
+   "h": 0.299,
+   "d": 0.104
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_05",
+   "name": "SM_Prop_Drink_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_05.gltf",
+   "category": "prop",
+   "w": 0.098,
+   "h": 0.263,
+   "d": 0.085
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_06",
+   "name": "SM_Prop_Drink_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_06.gltf",
+   "category": "prop",
+   "w": 0.098,
+   "h": 0.263,
+   "d": 0.085
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_07",
+   "name": "SM_Prop_Drink_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_07.gltf",
+   "category": "prop",
+   "w": 0.093,
+   "h": 0.222,
+   "d": 0.086
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_08",
+   "name": "SM_Prop_Drink_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_08.gltf",
+   "category": "prop",
+   "w": 0.1,
+   "h": 0.247,
+   "d": 0.115
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_09",
+   "name": "SM_Prop_Drink_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_09.gltf",
+   "category": "prop",
+   "w": 0.119,
+   "h": 0.241,
+   "d": 0.119
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_Boba_01",
+   "name": "SM_Prop_Drink_Boba_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_Boba_01.gltf",
+   "category": "prop",
+   "w": 0.214,
+   "h": 0.434,
+   "d": 0.202
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_Syncola_01",
+   "name": "SM_Prop_Drink_Syncola_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_Syncola_01.gltf",
+   "category": "prop",
+   "w": 0.123,
+   "h": 0.413,
+   "d": 0.123
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_Syncola_02",
+   "name": "SM_Prop_Drink_Syncola_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_Syncola_02.gltf",
+   "category": "prop",
+   "w": 0.123,
+   "h": 0.413,
+   "d": 0.123
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_Syncola_03",
+   "name": "SM_Prop_Drink_Syncola_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_Syncola_03.gltf",
+   "category": "prop",
+   "w": 0.13,
+   "h": 0.121,
+   "d": 0.362
+  },
+  {
+   "id": "cyber_SM_Prop_Drink_Syncola_04",
+   "name": "SM_Prop_Drink_Syncola_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drink_Syncola_04.gltf",
+   "category": "prop",
+   "w": 0.165,
+   "h": 0.121,
+   "d": 0.379
+  },
+  {
+   "id": "cyber_SM_Prop_Drone_01",
+   "name": "SM_Prop_Drone_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drone_01.gltf",
+   "category": "prop",
+   "w": 0.954,
+   "h": 0.627,
+   "d": 1.165
+  },
+  {
+   "id": "cyber_SM_Prop_Drone_02",
+   "name": "SM_Prop_Drone_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drone_02.gltf",
+   "category": "prop",
+   "w": 4.546,
+   "h": 1.153,
+   "d": 2.846
+  },
+  {
+   "id": "cyber_SM_Prop_Drone_03",
+   "name": "SM_Prop_Drone_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drone_03.gltf",
+   "category": "prop",
+   "w": 4.214,
+   "h": 1.558,
+   "d": 2.812
+  },
+  {
+   "id": "cyber_SM_Prop_Drone_04",
+   "name": "SM_Prop_Drone_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drone_04.gltf",
+   "category": "prop",
+   "w": 1.237,
+   "h": 0.888,
+   "d": 1.93
+  },
+  {
+   "id": "cyber_SM_Prop_Drone_04_Stand_01",
+   "name": "SM_Prop_Drone_04_Stand_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drone_04_Stand_01.gltf",
+   "category": "prop",
+   "w": 0.744,
+   "h": 0.837,
+   "d": 0.721
+  },
+  {
+   "id": "cyber_SM_Prop_Drug_Chair_01",
+   "name": "SM_Prop_Drug_Chair_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Drug_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.779,
+   "h": 1.55,
+   "d": 2.203
+  },
+  {
+   "id": "cyber_SM_Prop_Electrical_Box_01",
+   "name": "SM_Prop_Electrical_Box_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Electrical_Box_01.gltf",
+   "category": "prop",
+   "w": 1.251,
+   "h": 1.247,
+   "d": 0.771
+  },
+  {
+   "id": "cyber_SM_Prop_Electrical_Box_01Shape",
+   "name": "SM_Prop_Electrical_Box_01Shape",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Electrical_Box_01Shape.gltf",
+   "category": "prop",
+   "w": 1.251,
+   "h": 1.247,
+   "d": 0.763
+  },
+  {
+   "id": "cyber_SM_Prop_Electrical_Box_01_Door_01",
+   "name": "SM_Prop_Electrical_Box_01_Door_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Electrical_Box_01_Door_01.gltf",
+   "category": "prop",
+   "w": 1.251,
+   "h": 1.247,
+   "d": 0.771
+  },
+  {
+   "id": "cyber_SM_Prop_Fire_Hydrant_01",
+   "name": "SM_Prop_Fire_Hydrant_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Fire_Hydrant_01.gltf",
+   "category": "prop",
+   "w": 0.616,
+   "h": 1.028,
+   "d": 0.55
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Burger_01",
+   "name": "SM_Prop_Food_Burger_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Burger_01.gltf",
+   "category": "prop",
+   "w": 0.336,
+   "h": 0.177,
+   "d": 0.296
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Plates_01",
+   "name": "SM_Prop_Food_Plates_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Plates_01.gltf",
+   "category": "prop",
+   "w": 0.287,
+   "h": 0.18,
+   "d": 0.439
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Plates_02",
+   "name": "SM_Prop_Food_Plates_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Plates_02.gltf",
+   "category": "prop",
+   "w": 0.357,
+   "h": 0.344,
+   "d": 0.349
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Plates_03",
+   "name": "SM_Prop_Food_Plates_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Plates_03.gltf",
+   "category": "prop",
+   "w": 0.442,
+   "h": 0.177,
+   "d": 0.442
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_01",
+   "name": "SM_Prop_Food_Shelf_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_01.gltf",
+   "category": "prop",
+   "w": 1.887,
+   "h": 2.522,
+   "d": 0.72
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_01_Insert_01",
+   "name": "SM_Prop_Food_Shelf_01_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_01_Insert_01.gltf",
+   "category": "prop",
+   "w": 1.636,
+   "h": 1.733,
+   "d": 0.482
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_02",
+   "name": "SM_Prop_Food_Shelf_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_02.gltf",
+   "category": "prop",
+   "w": 1.282,
+   "h": 2.522,
+   "d": 0.72
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_02_Insert_01",
+   "name": "SM_Prop_Food_Shelf_02_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_02_Insert_01.gltf",
+   "category": "prop",
+   "w": 0.962,
+   "h": 1.754,
+   "d": 0.42
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_03",
+   "name": "SM_Prop_Food_Shelf_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_03.gltf",
+   "category": "prop",
+   "w": 2.286,
+   "h": 1.329,
+   "d": 0.72
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Shelf_03_Insert_01",
+   "name": "SM_Prop_Food_Shelf_03_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Shelf_03_Insert_01.gltf",
+   "category": "prop",
+   "w": 1.963,
+   "h": 0.704,
+   "d": 0.472
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_01",
+   "name": "SM_Prop_Food_Sticks_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_01.gltf",
+   "category": "prop",
+   "w": 0.081,
+   "h": 0.06,
+   "d": 0.572
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_02",
+   "name": "SM_Prop_Food_Sticks_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_02.gltf",
+   "category": "prop",
+   "w": 0.092,
+   "h": 0.085,
+   "d": 0.572
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_03",
+   "name": "SM_Prop_Food_Sticks_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_03.gltf",
+   "category": "prop",
+   "w": 0.18,
+   "h": 0.071,
+   "d": 0.572
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_04",
+   "name": "SM_Prop_Food_Sticks_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_04.gltf",
+   "category": "prop",
+   "w": 0.16,
+   "h": 0.038,
+   "d": 0.572
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_05",
+   "name": "SM_Prop_Food_Sticks_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_05.gltf",
+   "category": "prop",
+   "w": 0.093,
+   "h": 0.093,
+   "d": 0.579
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Sticks_Holder_01",
+   "name": "SM_Prop_Food_Sticks_Holder_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Sticks_Holder_01.gltf",
+   "category": "prop",
+   "w": 0.349,
+   "h": 0.843,
+   "d": 0.369
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Trailer_PowerPole_01",
+   "name": "SM_Prop_Food_Trailer_PowerPole_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Trailer_PowerPole_01.gltf",
+   "category": "prop",
+   "w": 1.671,
+   "h": 6.409,
+   "d": 3.309
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Tray_01",
+   "name": "SM_Prop_Food_Tray_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Tray_01.gltf",
+   "category": "prop",
+   "w": 0.459,
+   "h": 0.08,
+   "d": 0.347
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Tray_02",
+   "name": "SM_Prop_Food_Tray_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Tray_02.gltf",
+   "category": "prop",
+   "w": 0.758,
+   "h": 0.236,
+   "d": 0.57
+  },
+  {
+   "id": "cyber_SM_Prop_Food_Tray_03",
+   "name": "SM_Prop_Food_Tray_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Food_Tray_03.gltf",
+   "category": "prop",
+   "w": 0.587,
+   "h": 0.109,
+   "d": 0.442
+  },
+  {
+   "id": "cyber_SM_Prop_Fridge_01",
+   "name": "SM_Prop_Fridge_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Fridge_01.gltf",
+   "category": "prop",
+   "w": 2.561,
+   "h": 2.184,
+   "d": 0.888
+  },
+  {
+   "id": "cyber_SM_Prop_Fridge_01_Insert_01",
+   "name": "SM_Prop_Fridge_01_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Fridge_01_Insert_01.gltf",
+   "category": "prop",
+   "w": 2.016,
+   "h": 1.733,
+   "d": 0.343
+  },
+  {
+   "id": "cyber_SM_Prop_Graffiti_01",
+   "name": "SM_Prop_Graffiti_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Graffiti_01.gltf",
+   "category": "prop",
+   "w": 2.5,
+   "h": 2.5,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Cube_01",
+   "name": "SM_Prop_Greeble_Cube_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Cube_01.gltf",
+   "category": "prop",
+   "w": 2.5,
+   "h": 2.5,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Cube_02",
+   "name": "SM_Prop_Greeble_Cube_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Cube_02.gltf",
+   "category": "prop",
+   "w": 2.588,
+   "h": 2.588,
+   "d": 2.588
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Cube_03",
+   "name": "SM_Prop_Greeble_Cube_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Cube_03.gltf",
+   "category": "prop",
+   "w": 5.8,
+   "h": 5.0,
+   "d": 5.8
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Wall_01",
+   "name": "SM_Prop_Greeble_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Wall_01.gltf",
+   "category": "prop",
+   "w": 2.655,
+   "h": 6.0,
+   "d": 0.925
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Wall_02",
+   "name": "SM_Prop_Greeble_Wall_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Wall_02.gltf",
+   "category": "prop",
+   "w": 3.098,
+   "h": 6.482,
+   "d": 1.96
+  },
+  {
+   "id": "cyber_SM_Prop_Greeble_Wall_03",
+   "name": "SM_Prop_Greeble_Wall_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greeble_Wall_03.gltf",
+   "category": "prop",
+   "w": 2.792,
+   "h": 6.0,
+   "d": 1.446
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_01",
+   "name": "SM_Prop_Greebles_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_01.gltf",
+   "category": "prop",
+   "w": 1.194,
+   "h": 1.615,
+   "d": 0.42
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_02",
+   "name": "SM_Prop_Greebles_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_02.gltf",
+   "category": "prop",
+   "w": 1.383,
+   "h": 1.556,
+   "d": 0.302
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_03",
+   "name": "SM_Prop_Greebles_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_03.gltf",
+   "category": "prop",
+   "w": 0.466,
+   "h": 0.863,
+   "d": 0.235
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_04",
+   "name": "SM_Prop_Greebles_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_04.gltf",
+   "category": "prop",
+   "w": 1.601,
+   "h": 1.379,
+   "d": 0.177
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_05",
+   "name": "SM_Prop_Greebles_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_05.gltf",
+   "category": "prop",
+   "w": 0.972,
+   "h": 0.972,
+   "d": 0.19
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_05_Split",
+   "name": "SM_Prop_Greebles_05_Split",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_05_Split.gltf",
+   "category": "prop",
+   "w": 0.972,
+   "h": 0.972,
+   "d": 0.19
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_06",
+   "name": "SM_Prop_Greebles_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_06.gltf",
+   "category": "prop",
+   "w": 0.848,
+   "h": 1.227,
+   "d": 0.193
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_06_Split",
+   "name": "SM_Prop_Greebles_06_Split",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_06_Split.gltf",
+   "category": "prop",
+   "w": 0.848,
+   "h": 1.227,
+   "d": 0.193
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_07",
+   "name": "SM_Prop_Greebles_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_07.gltf",
+   "category": "prop",
+   "w": 0.802,
+   "h": 1.096,
+   "d": 0.193
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_08",
+   "name": "SM_Prop_Greebles_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_08.gltf",
+   "category": "prop",
+   "w": 0.277,
+   "h": 1.1,
+   "d": 0.294
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_09",
+   "name": "SM_Prop_Greebles_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_09.gltf",
+   "category": "prop",
+   "w": 1.176,
+   "h": 0.65,
+   "d": 0.263
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_10",
+   "name": "SM_Prop_Greebles_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_10.gltf",
+   "category": "prop",
+   "w": 0.575,
+   "h": 1.419,
+   "d": 0.256
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_11",
+   "name": "SM_Prop_Greebles_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_11.gltf",
+   "category": "prop",
+   "w": 0.935,
+   "h": 1.118,
+   "d": 0.49
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_12",
+   "name": "SM_Prop_Greebles_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_12.gltf",
+   "category": "prop",
+   "w": 3.225,
+   "h": 1.829,
+   "d": 0.317
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_13",
+   "name": "SM_Prop_Greebles_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_13.gltf",
+   "category": "prop",
+   "w": 1.424,
+   "h": 1.424,
+   "d": 0.22
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_14",
+   "name": "SM_Prop_Greebles_14",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_14.gltf",
+   "category": "prop",
+   "w": 2.781,
+   "h": 1.772,
+   "d": 0.195
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_15",
+   "name": "SM_Prop_Greebles_15",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_15.gltf",
+   "category": "prop",
+   "w": 2.539,
+   "h": 1.332,
+   "d": 0.195
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_16",
+   "name": "SM_Prop_Greebles_16",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_16.gltf",
+   "category": "prop",
+   "w": 2.295,
+   "h": 0.821,
+   "d": 0.267
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_17",
+   "name": "SM_Prop_Greebles_17",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_17.gltf",
+   "category": "prop",
+   "w": 0.814,
+   "h": 0.977,
+   "d": 0.22
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_18",
+   "name": "SM_Prop_Greebles_18",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_18.gltf",
+   "category": "prop",
+   "w": 0.599,
+   "h": 0.918,
+   "d": 0.309
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_19",
+   "name": "SM_Prop_Greebles_19",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_19.gltf",
+   "category": "prop",
+   "w": 1.872,
+   "h": 2.594,
+   "d": 0.278
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_20",
+   "name": "SM_Prop_Greebles_20",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_20.gltf",
+   "category": "prop",
+   "w": 2.104,
+   "h": 1.693,
+   "d": 0.23
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_21",
+   "name": "SM_Prop_Greebles_21",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_21.gltf",
+   "category": "prop",
+   "w": 0.149,
+   "h": 1.367,
+   "d": 0.125
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_22",
+   "name": "SM_Prop_Greebles_22",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_22.gltf",
+   "category": "prop",
+   "w": 0.361,
+   "h": 1.366,
+   "d": 0.134
+  },
+  {
+   "id": "cyber_SM_Prop_Greebles_23",
+   "name": "SM_Prop_Greebles_23",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Greebles_23.gltf",
+   "category": "prop",
+   "w": 0.987,
+   "h": 0.61,
+   "d": 0.148
+  },
+  {
+   "id": "cyber_SM_Prop_Hammock_01",
+   "name": "SM_Prop_Hammock_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hammock_01.gltf",
+   "category": "prop",
+   "w": 5.735,
+   "h": 1.363,
+   "d": 1.389
+  },
+  {
+   "id": "cyber_SM_Prop_Handheld_01",
+   "name": "SM_Prop_Handheld_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Handheld_01.gltf",
+   "category": "prop",
+   "w": 0.564,
+   "h": 0.044,
+   "d": 0.332
+  },
+  {
+   "id": "cyber_SM_Prop_Handheld_02",
+   "name": "SM_Prop_Handheld_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Handheld_02.gltf",
+   "category": "prop",
+   "w": 0.662,
+   "h": 0.04,
+   "d": 0.375
+  },
+  {
+   "id": "cyber_SM_Prop_Handheld_03",
+   "name": "SM_Prop_Handheld_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Handheld_03.gltf",
+   "category": "prop",
+   "w": 0.571,
+   "h": 0.04,
+   "d": 0.375
+  },
+  {
+   "id": "cyber_SM_Prop_Hibernation_Pod_01",
+   "name": "SM_Prop_Hibernation_Pod_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hibernation_Pod_01.gltf",
+   "category": "prop",
+   "w": 1.615,
+   "h": 2.926,
+   "d": 3.749
+  },
+  {
+   "id": "cyber_SM_Prop_Hibernation_Pod_01_Alt",
+   "name": "SM_Prop_Hibernation_Pod_01_Alt",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hibernation_Pod_01_Alt.gltf",
+   "category": "prop",
+   "w": 1.615,
+   "h": 2.926,
+   "d": 3.749
+  },
+  {
+   "id": "cyber_SM_Prop_Hibernation_Pod_Console_01",
+   "name": "SM_Prop_Hibernation_Pod_Console_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hibernation_Pod_Console_01.gltf",
+   "category": "prop",
+   "w": 1.738,
+   "h": 1.795,
+   "d": 3.023
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Planter_01",
+   "name": "SM_Prop_Holo_Planter_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Planter_01.gltf",
+   "category": "prop",
+   "w": 0.864,
+   "h": 1.524,
+   "d": 0.885
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Planter_02",
+   "name": "SM_Prop_Holo_Planter_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Planter_02.gltf",
+   "category": "prop",
+   "w": 0.746,
+   "h": 1.643,
+   "d": 0.812
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Planter_03",
+   "name": "SM_Prop_Holo_Planter_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Planter_03.gltf",
+   "category": "prop",
+   "w": 0.927,
+   "h": 1.917,
+   "d": 2.226
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Planter_04",
+   "name": "SM_Prop_Holo_Planter_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Planter_04.gltf",
+   "category": "prop",
+   "w": 1.481,
+   "h": 1.686,
+   "d": 2.969
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_01",
+   "name": "SM_Prop_Holo_Sign_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_01.gltf",
+   "category": "prop",
+   "w": 1.014,
+   "h": 1.009,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_02",
+   "name": "SM_Prop_Holo_Sign_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_02.gltf",
+   "category": "prop",
+   "w": 1.014,
+   "h": 1.009,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_03",
+   "name": "SM_Prop_Holo_Sign_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_03.gltf",
+   "category": "prop",
+   "w": 1.476,
+   "h": 1.268,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_04",
+   "name": "SM_Prop_Holo_Sign_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_04.gltf",
+   "category": "prop",
+   "w": 0.702,
+   "h": 0.962,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_05",
+   "name": "SM_Prop_Holo_Sign_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_05.gltf",
+   "category": "prop",
+   "w": 1.056,
+   "h": 1.577,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_06",
+   "name": "SM_Prop_Holo_Sign_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_06.gltf",
+   "category": "prop",
+   "w": 1.356,
+   "h": 1.253,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_07",
+   "name": "SM_Prop_Holo_Sign_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_07.gltf",
+   "category": "prop",
+   "w": 2.14,
+   "h": 0.203,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_08",
+   "name": "SM_Prop_Holo_Sign_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_08.gltf",
+   "category": "prop",
+   "w": 2.08,
+   "h": 0.292,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_09",
+   "name": "SM_Prop_Holo_Sign_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_09.gltf",
+   "category": "prop",
+   "w": 1.528,
+   "h": 0.317,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_10",
+   "name": "SM_Prop_Holo_Sign_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_10.gltf",
+   "category": "prop",
+   "w": 1.898,
+   "h": 0.371,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_11",
+   "name": "SM_Prop_Holo_Sign_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_11.gltf",
+   "category": "prop",
+   "w": 1.898,
+   "h": 0.371,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_12",
+   "name": "SM_Prop_Holo_Sign_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_12.gltf",
+   "category": "prop",
+   "w": 0.523,
+   "h": 0.477,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_13",
+   "name": "SM_Prop_Holo_Sign_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_13.gltf",
+   "category": "prop",
+   "w": 1.856,
+   "h": 0.565,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_14",
+   "name": "SM_Prop_Holo_Sign_14",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_14.gltf",
+   "category": "prop",
+   "w": 1.072,
+   "h": 0.955,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_15",
+   "name": "SM_Prop_Holo_Sign_15",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_15.gltf",
+   "category": "prop",
+   "w": 1.072,
+   "h": 0.955,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_16",
+   "name": "SM_Prop_Holo_Sign_16",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_16.gltf",
+   "category": "prop",
+   "w": 1.097,
+   "h": 1.326,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Holo_Sign_17",
+   "name": "SM_Prop_Holo_Sign_17",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Holo_Sign_17.gltf",
+   "category": "prop",
+   "w": 1.092,
+   "h": 0.971,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Hologram_Stand_01",
+   "name": "SM_Prop_Hologram_Stand_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hologram_Stand_01.gltf",
+   "category": "prop",
+   "w": 1.853,
+   "h": 0.413,
+   "d": 0.695
+  },
+  {
+   "id": "cyber_SM_Prop_Hologram_Stand_02",
+   "name": "SM_Prop_Hologram_Stand_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hologram_Stand_02.gltf",
+   "category": "prop",
+   "w": 2.022,
+   "h": 0.53,
+   "d": 0.345
+  },
+  {
+   "id": "cyber_SM_Prop_Hologram_Stand_03",
+   "name": "SM_Prop_Hologram_Stand_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hologram_Stand_03.gltf",
+   "category": "prop",
+   "w": 1.487,
+   "h": 0.639,
+   "d": 0.486
+  },
+  {
+   "id": "cyber_SM_Prop_Hologram_Table_01",
+   "name": "SM_Prop_Hologram_Table_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hologram_Table_01.gltf",
+   "category": "prop",
+   "w": 3.833,
+   "h": 1.193,
+   "d": 3.829
+  },
+  {
+   "id": "cyber_SM_Prop_Hologram_Table_02",
+   "name": "SM_Prop_Hologram_Table_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hologram_Table_02.gltf",
+   "category": "prop",
+   "w": 2.088,
+   "h": 0.938,
+   "d": 3.232
+  },
+  {
+   "id": "cyber_SM_Prop_Hospital_Bed_01",
+   "name": "SM_Prop_Hospital_Bed_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hospital_Bed_01.gltf",
+   "category": "prop",
+   "w": 1.565,
+   "h": 1.083,
+   "d": 2.872
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_01",
+   "name": "SM_Prop_Hover_Light_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_01.gltf",
+   "category": "prop",
+   "w": 0.846,
+   "h": 1.349,
+   "d": 0.864
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_02",
+   "name": "SM_Prop_Hover_Light_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_02.gltf",
+   "category": "prop",
+   "w": 1.081,
+   "h": 1.287,
+   "d": 0.411
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_03",
+   "name": "SM_Prop_Hover_Light_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_03.gltf",
+   "category": "prop",
+   "w": 1.327,
+   "h": 1.287,
+   "d": 0.604
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_04",
+   "name": "SM_Prop_Hover_Light_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_04.gltf",
+   "category": "prop",
+   "w": 0.764,
+   "h": 1.297,
+   "d": 0.764
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_05",
+   "name": "SM_Prop_Hover_Light_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_05.gltf",
+   "category": "prop",
+   "w": 0.812,
+   "h": 0.411,
+   "d": 0.874
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Light_07",
+   "name": "SM_Prop_Hover_Light_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Light_07.gltf",
+   "category": "prop",
+   "w": 0.475,
+   "h": 0.437,
+   "d": 0.446
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_Pad_01",
+   "name": "SM_Prop_Hover_Pad_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_Pad_01.gltf",
+   "category": "prop",
+   "w": 1.768,
+   "h": 0.944,
+   "d": 1.768
+  },
+  {
+   "id": "cyber_SM_Prop_Hover_light_06",
+   "name": "SM_Prop_Hover_light_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Hover_light_06.gltf",
+   "category": "prop",
+   "w": 0.781,
+   "h": 0.276,
+   "d": 0.781
+  },
+  {
+   "id": "cyber_SM_Prop_IV_Station_01",
+   "name": "SM_Prop_IV_Station_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_IV_Station_01.gltf",
+   "category": "prop",
+   "w": 1.014,
+   "h": 1.671,
+   "d": 0.88
+  },
+  {
+   "id": "cyber_SM_Prop_Information_Booth_01",
+   "name": "SM_Prop_Information_Booth_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Information_Booth_01.gltf",
+   "category": "prop",
+   "w": 1.349,
+   "h": 2.712,
+   "d": 1.349
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Can_01",
+   "name": "SM_Prop_Junk_Can_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Can_01.gltf",
+   "category": "prop",
+   "w": 0.124,
+   "h": 0.201,
+   "d": 0.107
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Can_02",
+   "name": "SM_Prop_Junk_Can_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Can_02.gltf",
+   "category": "prop",
+   "w": 0.132,
+   "h": 0.106,
+   "d": 0.215
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Can_03",
+   "name": "SM_Prop_Junk_Can_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Can_03.gltf",
+   "category": "prop",
+   "w": 0.472,
+   "h": 0.205,
+   "d": 0.441
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Can_04",
+   "name": "SM_Prop_Junk_Can_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Can_04.gltf",
+   "category": "prop",
+   "w": 0.683,
+   "h": 0.203,
+   "d": 0.688
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_01",
+   "name": "SM_Prop_Junk_Paper_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_01.gltf",
+   "category": "prop",
+   "w": 1.287,
+   "h": 0.027,
+   "d": 0.845
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_02",
+   "name": "SM_Prop_Junk_Paper_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_02.gltf",
+   "category": "prop",
+   "w": 0.54,
+   "h": 0.027,
+   "d": 0.479
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_03",
+   "name": "SM_Prop_Junk_Paper_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_03.gltf",
+   "category": "prop",
+   "w": 0.252,
+   "h": 0.0,
+   "d": 0.333
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_04",
+   "name": "SM_Prop_Junk_Paper_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_04.gltf",
+   "category": "prop",
+   "w": 1.49,
+   "h": 0.027,
+   "d": 1.448
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_05",
+   "name": "SM_Prop_Junk_Paper_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_05.gltf",
+   "category": "prop",
+   "w": 1.28,
+   "h": 0.041,
+   "d": 0.928
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_06",
+   "name": "SM_Prop_Junk_Paper_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_06.gltf",
+   "category": "prop",
+   "w": 0.846,
+   "h": 0.033,
+   "d": 0.809
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_07",
+   "name": "SM_Prop_Junk_Paper_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_07.gltf",
+   "category": "prop",
+   "w": 0.887,
+   "h": 0.032,
+   "d": 0.538
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_08",
+   "name": "SM_Prop_Junk_Paper_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_08.gltf",
+   "category": "prop",
+   "w": 1.98,
+   "h": 0.043,
+   "d": 1.789
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_09",
+   "name": "SM_Prop_Junk_Paper_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_09.gltf",
+   "category": "prop",
+   "w": 1.817,
+   "h": 0.038,
+   "d": 1.929
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_10",
+   "name": "SM_Prop_Junk_Paper_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_10.gltf",
+   "category": "prop",
+   "w": 2.138,
+   "h": 0.028,
+   "d": 2.057
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_11",
+   "name": "SM_Prop_Junk_Paper_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_11.gltf",
+   "category": "prop",
+   "w": 2.05,
+   "h": 0.035,
+   "d": 1.938
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_12",
+   "name": "SM_Prop_Junk_Paper_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_12.gltf",
+   "category": "prop",
+   "w": 0.458,
+   "h": 0.073,
+   "d": 0.628
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_13",
+   "name": "SM_Prop_Junk_Paper_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_13.gltf",
+   "category": "prop",
+   "w": 0.486,
+   "h": 0.073,
+   "d": 0.622
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Paper_14",
+   "name": "SM_Prop_Junk_Paper_14",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Paper_14.gltf",
+   "category": "prop",
+   "w": 0.49,
+   "h": 0.073,
+   "d": 0.625
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Pipe_01",
+   "name": "SM_Prop_Junk_Pipe_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Pipe_01.gltf",
+   "category": "prop",
+   "w": 6.52,
+   "h": 0.902,
+   "d": 1.007
+  },
+  {
+   "id": "cyber_SM_Prop_Junk_Pipe_02",
+   "name": "SM_Prop_Junk_Pipe_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Junk_Pipe_02.gltf",
+   "category": "prop",
+   "w": 4.927,
+   "h": 0.95,
+   "d": 0.879
+  },
+  {
+   "id": "cyber_SM_Prop_Keyboard_01",
+   "name": "SM_Prop_Keyboard_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Keyboard_01.gltf",
+   "category": "prop",
+   "w": 0.624,
+   "h": 0.056,
+   "d": 0.254
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_01",
+   "name": "SM_Prop_Lamp_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_01.gltf",
+   "category": "prop",
+   "w": 0.321,
+   "h": 3.756,
+   "d": 0.283
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_02",
+   "name": "SM_Prop_Lamp_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_02.gltf",
+   "category": "prop",
+   "w": 0.859,
+   "h": 1.205,
+   "d": 0.261
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_03",
+   "name": "SM_Prop_Lamp_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_03.gltf",
+   "category": "prop",
+   "w": 1.273,
+   "h": 1.103,
+   "d": 0.208
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_04",
+   "name": "SM_Prop_Lamp_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_04.gltf",
+   "category": "prop",
+   "w": 0.276,
+   "h": 0.833,
+   "d": 0.405
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_05",
+   "name": "SM_Prop_Lamp_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_05.gltf",
+   "category": "prop",
+   "w": 1.717,
+   "h": 1.052,
+   "d": 0.473
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_06",
+   "name": "SM_Prop_Lamp_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_06.gltf",
+   "category": "prop",
+   "w": 0.46,
+   "h": 1.03,
+   "d": 0.473
+  },
+  {
+   "id": "cyber_SM_Prop_Lamp_07",
+   "name": "SM_Prop_Lamp_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lamp_07.gltf",
+   "category": "prop",
+   "w": 3.694,
+   "h": 1.189,
+   "d": 0.286
+  },
+  {
+   "id": "cyber_SM_Prop_Lantern_01",
+   "name": "SM_Prop_Lantern_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lantern_01.gltf",
+   "category": "prop",
+   "w": 0.382,
+   "h": 1.158,
+   "d": 1.211
+  },
+  {
+   "id": "cyber_SM_Prop_Lantern_02",
+   "name": "SM_Prop_Lantern_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Lantern_02.gltf",
+   "category": "prop",
+   "w": 0.328,
+   "h": 1.108,
+   "d": 1.006
+  },
+  {
+   "id": "cyber_SM_Prop_Laser_01",
+   "name": "SM_Prop_Laser_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Laser_01.gltf",
+   "category": "prop",
+   "w": 0.081,
+   "h": 0.085,
+   "d": 0.07
+  },
+  {
+   "id": "cyber_SM_Prop_Laser_Beam_01",
+   "name": "SM_Prop_Laser_Beam_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Laser_Beam_01.gltf",
+   "category": "prop",
+   "w": 0.039,
+   "h": 2.925,
+   "d": 0.034
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_01",
+   "name": "SM_Prop_Manholes_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_01.gltf",
+   "category": "prop",
+   "w": 1.333,
+   "h": 0.146,
+   "d": 1.333
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_02",
+   "name": "SM_Prop_Manholes_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_02.gltf",
+   "category": "prop",
+   "w": 1.289,
+   "h": 0.118,
+   "d": 1.289
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_03",
+   "name": "SM_Prop_Manholes_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_03.gltf",
+   "category": "prop",
+   "w": 1.197,
+   "h": 0.227,
+   "d": 1.197
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_04",
+   "name": "SM_Prop_Manholes_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_04.gltf",
+   "category": "prop",
+   "w": 1.173,
+   "h": 0.209,
+   "d": 1.169
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_05",
+   "name": "SM_Prop_Manholes_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_05.gltf",
+   "category": "prop",
+   "w": 1.427,
+   "h": 0.239,
+   "d": 1.233
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_06",
+   "name": "SM_Prop_Manholes_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_06.gltf",
+   "category": "prop",
+   "w": 1.482,
+   "h": 0.203,
+   "d": 1.291
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_07",
+   "name": "SM_Prop_Manholes_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_07.gltf",
+   "category": "prop",
+   "w": 1.321,
+   "h": 0.227,
+   "d": 1.149
+  },
+  {
+   "id": "cyber_SM_Prop_Manholes_08",
+   "name": "SM_Prop_Manholes_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Manholes_08.gltf",
+   "category": "prop",
+   "w": 1.399,
+   "h": 0.192,
+   "d": 1.285
+  },
+  {
+   "id": "cyber_SM_Prop_Medical_Chair_01",
+   "name": "SM_Prop_Medical_Chair_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Medical_Chair_01.gltf",
+   "category": "prop",
+   "w": 0.779,
+   "h": 1.55,
+   "d": 2.203
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_01",
+   "name": "SM_Prop_Monitor_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_01.gltf",
+   "category": "prop",
+   "w": 0.952,
+   "h": 1.363,
+   "d": 0.168
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_02",
+   "name": "SM_Prop_Monitor_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_02.gltf",
+   "category": "prop",
+   "w": 0.522,
+   "h": 1.181,
+   "d": 0.074
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_03",
+   "name": "SM_Prop_Monitor_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_03.gltf",
+   "category": "prop",
+   "w": 0.829,
+   "h": 1.399,
+   "d": 0.113
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_04",
+   "name": "SM_Prop_Monitor_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_04.gltf",
+   "category": "prop",
+   "w": 1.265,
+   "h": 0.882,
+   "d": 0.097
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_05",
+   "name": "SM_Prop_Monitor_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_05.gltf",
+   "category": "prop",
+   "w": 0.513,
+   "h": 1.568,
+   "d": 0.154
+  },
+  {
+   "id": "cyber_SM_Prop_Monitor_06",
+   "name": "SM_Prop_Monitor_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Monitor_06.gltf",
+   "category": "prop",
+   "w": 1.546,
+   "h": 0.733,
+   "d": 0.303
+  },
+  {
+   "id": "cyber_SM_Prop_NeonSign_01",
+   "name": "SM_Prop_NeonSign_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_NeonSign_01.gltf",
+   "category": "prop",
+   "w": 0.719,
+   "h": 0.863,
+   "d": 0.067
+  },
+  {
+   "id": "cyber_SM_Prop_NeonSign_02",
+   "name": "SM_Prop_NeonSign_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_NeonSign_02.gltf",
+   "category": "prop",
+   "w": 1.708,
+   "h": 0.863,
+   "d": 0.067
+  },
+  {
+   "id": "cyber_SM_Prop_NeonSign_03",
+   "name": "SM_Prop_NeonSign_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_NeonSign_03.gltf",
+   "category": "prop",
+   "w": 2.177,
+   "h": 0.863,
+   "d": 0.067
+  },
+  {
+   "id": "cyber_SM_Prop_NeonSign_04",
+   "name": "SM_Prop_NeonSign_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_NeonSign_04.gltf",
+   "category": "prop",
+   "w": 3.142,
+   "h": 0.863,
+   "d": 0.067
+  },
+  {
+   "id": "cyber_SM_Prop_Noodle_Box_01",
+   "name": "SM_Prop_Noodle_Box_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Noodle_Box_01.gltf",
+   "category": "prop",
+   "w": 0.186,
+   "h": 0.206,
+   "d": 0.194
+  },
+  {
+   "id": "cyber_SM_Prop_Noodle_Box_02",
+   "name": "SM_Prop_Noodle_Box_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Noodle_Box_02.gltf",
+   "category": "prop",
+   "w": 0.245,
+   "h": 0.351,
+   "d": 0.287
+  },
+  {
+   "id": "cyber_SM_Prop_Old_Mattress_01",
+   "name": "SM_Prop_Old_Mattress_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Old_Mattress_01.gltf",
+   "category": "prop",
+   "w": 1.062,
+   "h": 0.246,
+   "d": 2.047
+  },
+  {
+   "id": "cyber_SM_Prop_Old_Mattress_02",
+   "name": "SM_Prop_Old_Mattress_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Old_Mattress_02.gltf",
+   "category": "prop",
+   "w": 1.062,
+   "h": 0.864,
+   "d": 0.986
+  },
+  {
+   "id": "cyber_SM_Prop_Old_Mattress_03",
+   "name": "SM_Prop_Old_Mattress_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Old_Mattress_03.gltf",
+   "category": "prop",
+   "w": 1.075,
+   "h": 0.258,
+   "d": 2.259
+  },
+  {
+   "id": "cyber_SM_Prop_Old_Television_01",
+   "name": "SM_Prop_Old_Television_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Old_Television_01.gltf",
+   "category": "prop",
+   "w": 1.311,
+   "h": 1.31,
+   "d": 0.671
+  },
+  {
+   "id": "cyber_SM_Prop_Old_Television_02",
+   "name": "SM_Prop_Old_Television_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Old_Television_02.gltf",
+   "category": "prop",
+   "w": 1.311,
+   "h": 1.278,
+   "d": 0.748
+  },
+  {
+   "id": "cyber_SM_Prop_Pill_Bottle_01",
+   "name": "SM_Prop_Pill_Bottle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pill_Bottle_01.gltf",
+   "category": "prop",
+   "w": 0.072,
+   "h": 0.12,
+   "d": 0.063
+  },
+  {
+   "id": "cyber_SM_Prop_Pill_Bottle_02",
+   "name": "SM_Prop_Pill_Bottle_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pill_Bottle_02.gltf",
+   "category": "prop",
+   "w": 0.072,
+   "h": 0.12,
+   "d": 0.063
+  },
+  {
+   "id": "cyber_SM_Prop_Pill_Bottle_03",
+   "name": "SM_Prop_Pill_Bottle_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pill_Bottle_03.gltf",
+   "category": "prop",
+   "w": 0.224,
+   "h": 0.056,
+   "d": 0.065
+  },
+  {
+   "id": "cyber_SM_Prop_Pill_Dispenser_01",
+   "name": "SM_Prop_Pill_Dispenser_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pill_Dispenser_01.gltf",
+   "category": "prop",
+   "w": 0.477,
+   "h": 1.92,
+   "d": 0.521
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_01",
+   "name": "SM_Prop_Pills_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_01.gltf",
+   "category": "prop",
+   "w": 0.039,
+   "h": 0.014,
+   "d": 0.041
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_02",
+   "name": "SM_Prop_Pills_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_02.gltf",
+   "category": "prop",
+   "w": 0.043,
+   "h": 0.013,
+   "d": 0.042
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_03",
+   "name": "SM_Prop_Pills_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_03.gltf",
+   "category": "prop",
+   "w": 0.061,
+   "h": 0.014,
+   "d": 0.028
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_04",
+   "name": "SM_Prop_Pills_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_04.gltf",
+   "category": "prop",
+   "w": 0.061,
+   "h": 0.021,
+   "d": 0.022
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_05",
+   "name": "SM_Prop_Pills_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_05.gltf",
+   "category": "prop",
+   "w": 0.061,
+   "h": 0.021,
+   "d": 0.022
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_06",
+   "name": "SM_Prop_Pills_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_06.gltf",
+   "category": "prop",
+   "w": 0.061,
+   "h": 0.021,
+   "d": 0.022
+  },
+  {
+   "id": "cyber_SM_Prop_Pills_07",
+   "name": "SM_Prop_Pills_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pills_07.gltf",
+   "category": "prop",
+   "w": 0.061,
+   "h": 0.021,
+   "d": 0.022
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_01",
+   "name": "SM_Prop_Pipe_Attatchment_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_01.gltf",
+   "category": "prop",
+   "w": 0.496,
+   "h": 0.671,
+   "d": 0.541
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_02",
+   "name": "SM_Prop_Pipe_Attatchment_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_02.gltf",
+   "category": "prop",
+   "w": 0.901,
+   "h": 1.113,
+   "d": 1.044
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_03",
+   "name": "SM_Prop_Pipe_Attatchment_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_03.gltf",
+   "category": "prop",
+   "w": 66.127,
+   "h": 111.131,
+   "d": 70.073
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_Circle_Base_01",
+   "name": "SM_Prop_Pipe_Attatchment_Circle_Base_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_Circle_Base_01.gltf",
+   "category": "prop",
+   "w": 0.343,
+   "h": 1.317,
+   "d": 1.385
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_Circle_End_01",
+   "name": "SM_Prop_Pipe_Attatchment_Circle_End_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_Circle_End_01.gltf",
+   "category": "prop",
+   "w": 0.303,
+   "h": 1.542,
+   "d": 1.621
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_Square_Base_01",
+   "name": "SM_Prop_Pipe_Attatchment_Square_Base_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_Square_Base_01.gltf",
+   "category": "prop",
+   "w": 0.373,
+   "h": 1.391,
+   "d": 1.391
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Attatchment_Square_End_01",
+   "name": "SM_Prop_Pipe_Attatchment_Square_End_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Attatchment_Square_End_01.gltf",
+   "category": "prop",
+   "w": 0.508,
+   "h": 1.617,
+   "d": 1.617
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_01",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_01.gltf",
+   "category": "prop",
+   "w": 1.137,
+   "h": 0.171,
+   "d": 1.137
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_02",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_02.gltf",
+   "category": "prop",
+   "w": 1.137,
+   "h": 0.171,
+   "d": 1.137
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_03",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_03.gltf",
+   "category": "prop",
+   "w": 1.137,
+   "h": 0.305,
+   "d": 1.137
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_04",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_04.gltf",
+   "category": "prop",
+   "w": 1.137,
+   "h": 0.401,
+   "d": 1.291
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_05",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_05.gltf",
+   "category": "prop",
+   "w": 66.127,
+   "h": 16.749,
+   "d": 148.719
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_06",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_06.gltf",
+   "category": "prop",
+   "w": 1.18,
+   "h": 0.318,
+   "d": 1.142
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Junction_Attatchment_07",
+   "name": "SM_Prop_Pipe_Junction_Attatchment_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Junction_Attatchment_07.gltf",
+   "category": "prop",
+   "w": 1.137,
+   "h": 0.213,
+   "d": 1.137
+  },
+  {
+   "id": "cyber_SM_Prop_Pipe_Small_Adapter_01",
+   "name": "SM_Prop_Pipe_Small_Adapter_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Pipe_Small_Adapter_01.gltf",
+   "category": "prop",
+   "w": 0.354,
+   "h": 1.119,
+   "d": 1.119
+  },
+  {
+   "id": "cyber_SM_Prop_Plates_01",
+   "name": "SM_Prop_Plates_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Plates_01.gltf",
+   "category": "prop",
+   "w": 0.442,
+   "h": 0.046,
+   "d": 0.442
+  },
+  {
+   "id": "cyber_SM_Prop_Plates_02",
+   "name": "SM_Prop_Plates_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Plates_02.gltf",
+   "category": "prop",
+   "w": 0.441,
+   "h": 0.046,
+   "d": 0.407
+  },
+  {
+   "id": "cyber_SM_Prop_Plates_03",
+   "name": "SM_Prop_Plates_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Plates_03.gltf",
+   "category": "prop",
+   "w": 0.422,
+   "h": 0.046,
+   "d": 0.422
+  },
+  {
+   "id": "cyber_SM_Prop_Plushie_01",
+   "name": "SM_Prop_Plushie_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Plushie_01.gltf",
+   "category": "prop",
+   "w": 0.446,
+   "h": 0.481,
+   "d": 0.311
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_01",
+   "name": "SM_Prop_Poster_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_01.gltf",
+   "category": "prop",
+   "w": 0.509,
+   "h": 0.829,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_02",
+   "name": "SM_Prop_Poster_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_02.gltf",
+   "category": "prop",
+   "w": 0.573,
+   "h": 0.829,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_03",
+   "name": "SM_Prop_Poster_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_03.gltf",
+   "category": "prop",
+   "w": 0.572,
+   "h": 0.829,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_04",
+   "name": "SM_Prop_Poster_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_04.gltf",
+   "category": "prop",
+   "w": 0.497,
+   "h": 0.829,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_05",
+   "name": "SM_Prop_Poster_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_05.gltf",
+   "category": "prop",
+   "w": 0.554,
+   "h": 0.73,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_06",
+   "name": "SM_Prop_Poster_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_06.gltf",
+   "category": "prop",
+   "w": 0.439,
+   "h": 0.73,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_07",
+   "name": "SM_Prop_Poster_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_07.gltf",
+   "category": "prop",
+   "w": 0.443,
+   "h": 0.713,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_08",
+   "name": "SM_Prop_Poster_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_08.gltf",
+   "category": "prop",
+   "w": 0.568,
+   "h": 0.858,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_09",
+   "name": "SM_Prop_Poster_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_09.gltf",
+   "category": "prop",
+   "w": 0.562,
+   "h": 0.858,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_10",
+   "name": "SM_Prop_Poster_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_10.gltf",
+   "category": "prop",
+   "w": 0.617,
+   "h": 0.767,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_11",
+   "name": "SM_Prop_Poster_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_11.gltf",
+   "category": "prop",
+   "w": 0.636,
+   "h": 0.767,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_12",
+   "name": "SM_Prop_Poster_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_12.gltf",
+   "category": "prop",
+   "w": 0.265,
+   "h": 0.364,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_13",
+   "name": "SM_Prop_Poster_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_13.gltf",
+   "category": "prop",
+   "w": 0.265,
+   "h": 0.364,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_14",
+   "name": "SM_Prop_Poster_14",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_14.gltf",
+   "category": "prop",
+   "w": 0.282,
+   "h": 0.354,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_15",
+   "name": "SM_Prop_Poster_15",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_15.gltf",
+   "category": "prop",
+   "w": 0.282,
+   "h": 0.371,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_16",
+   "name": "SM_Prop_Poster_16",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_16.gltf",
+   "category": "prop",
+   "w": 0.265,
+   "h": 0.363,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_17",
+   "name": "SM_Prop_Poster_17",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_17.gltf",
+   "category": "prop",
+   "w": 0.265,
+   "h": 0.364,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_18",
+   "name": "SM_Prop_Poster_18",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_18.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 0.363,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_19",
+   "name": "SM_Prop_Poster_19",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_19.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 0.364,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_20",
+   "name": "SM_Prop_Poster_20",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_20.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 0.363,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Poster_21",
+   "name": "SM_Prop_Poster_21",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Poster_21.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 0.364,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Power_Terminal_01",
+   "name": "SM_Prop_Power_Terminal_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Power_Terminal_01.gltf",
+   "category": "prop",
+   "w": 0.797,
+   "h": 0.668,
+   "d": 0.795
+  },
+  {
+   "id": "cyber_SM_Prop_Power_Terminal_02",
+   "name": "SM_Prop_Power_Terminal_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Power_Terminal_02.gltf",
+   "category": "prop",
+   "w": 0.26,
+   "h": 0.566,
+   "d": 0.3
+  },
+  {
+   "id": "cyber_SM_Prop_Power_Terminal_03_Base_01",
+   "name": "SM_Prop_Power_Terminal_03_Base_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Power_Terminal_03_Base_01.gltf",
+   "category": "prop",
+   "w": 1.854,
+   "h": 0.978,
+   "d": 2.095
+  },
+  {
+   "id": "cyber_SM_Prop_Power_Terminal_03_PowerCell_01",
+   "name": "SM_Prop_Power_Terminal_03_PowerCell_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Power_Terminal_03_PowerCell_01.gltf",
+   "category": "prop",
+   "w": 1.043,
+   "h": 3.549,
+   "d": 1.169
+  },
+  {
+   "id": "cyber_SM_Prop_Powerpole_01",
+   "name": "SM_Prop_Powerpole_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Powerpole_01.gltf",
+   "category": "prop",
+   "w": 2.61,
+   "h": 6.331,
+   "d": 0.979
+  },
+  {
+   "id": "cyber_SM_Prop_Propane_Tank_01",
+   "name": "SM_Prop_Propane_Tank_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Propane_Tank_01.gltf",
+   "category": "prop",
+   "w": 0.352,
+   "h": 0.671,
+   "d": 0.383
+  },
+  {
+   "id": "cyber_SM_Prop_Radio_01",
+   "name": "SM_Prop_Radio_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Radio_01.gltf",
+   "category": "prop",
+   "w": 0.578,
+   "h": 0.554,
+   "d": 0.232
+  },
+  {
+   "id": "cyber_SM_Prop_Recycle_Bin_01",
+   "name": "SM_Prop_Recycle_Bin_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Recycle_Bin_01.gltf",
+   "category": "prop",
+   "w": 4.589,
+   "h": 1.82,
+   "d": 2.067
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Charger_01",
+   "name": "SM_Prop_Robot_Charger_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Charger_01.gltf",
+   "category": "prop",
+   "w": 1.403,
+   "h": 1.333,
+   "d": 1.379
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Part_01",
+   "name": "SM_Prop_Robot_Part_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Part_01.gltf",
+   "category": "prop",
+   "w": 0.266,
+   "h": 0.423,
+   "d": 0.257
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Part_02",
+   "name": "SM_Prop_Robot_Part_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Part_02.gltf",
+   "category": "prop",
+   "w": 0.613,
+   "h": 0.285,
+   "d": 0.817
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Part_03",
+   "name": "SM_Prop_Robot_Part_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Part_03.gltf",
+   "category": "prop",
+   "w": 0.187,
+   "h": 0.111,
+   "d": 0.583
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Part_04",
+   "name": "SM_Prop_Robot_Part_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Part_04.gltf",
+   "category": "prop",
+   "w": 0.47,
+   "h": 0.155,
+   "d": 0.535
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Part_05",
+   "name": "SM_Prop_Robot_Part_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Part_05.gltf",
+   "category": "prop",
+   "w": 0.116,
+   "h": 0.523,
+   "d": 0.241
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_01",
+   "name": "SM_Prop_Robot_Posed_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_01.gltf",
+   "category": "prop",
+   "w": 1.044,
+   "h": 1.022,
+   "d": 0.951
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_02",
+   "name": "SM_Prop_Robot_Posed_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_02.gltf",
+   "category": "prop",
+   "w": 1.388,
+   "h": 0.502,
+   "d": 0.609
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_03",
+   "name": "SM_Prop_Robot_Posed_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_03.gltf",
+   "category": "prop",
+   "w": 1.794,
+   "h": 0.461,
+   "d": 1.638
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_04",
+   "name": "SM_Prop_Robot_Posed_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_04.gltf",
+   "category": "prop",
+   "w": 1.024,
+   "h": 0.691,
+   "d": 0.732
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_05",
+   "name": "SM_Prop_Robot_Posed_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_05.gltf",
+   "category": "prop",
+   "w": 1.191,
+   "h": 0.292,
+   "d": 1.763
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_06",
+   "name": "SM_Prop_Robot_Posed_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_06.gltf",
+   "category": "prop",
+   "w": 0.551,
+   "h": 1.296,
+   "d": 0.634
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_Hanging_01",
+   "name": "SM_Prop_Robot_Posed_Hanging_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_Hanging_01.gltf",
+   "category": "prop",
+   "w": 1.337,
+   "h": 2.012,
+   "d": 0.378
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_Pile_01",
+   "name": "SM_Prop_Robot_Posed_Pile_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_Pile_01.gltf",
+   "category": "prop",
+   "w": 1.839,
+   "h": 0.649,
+   "d": 1.439
+  },
+  {
+   "id": "cyber_SM_Prop_Robot_Posed_Pile_02",
+   "name": "SM_Prop_Robot_Posed_Pile_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robot_Posed_Pile_02.gltf",
+   "category": "prop",
+   "w": 1.566,
+   "h": 0.918,
+   "d": 1.021
+  },
+  {
+   "id": "cyber_SM_Prop_Robotic_Needle_Arm_01",
+   "name": "SM_Prop_Robotic_Needle_Arm_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Robotic_Needle_Arm_01.gltf",
+   "category": "prop",
+   "w": 1.396,
+   "h": 3.178,
+   "d": 1.33
+  },
+  {
+   "id": "cyber_SM_Prop_Rug_01",
+   "name": "SM_Prop_Rug_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Rug_01.gltf",
+   "category": "prop",
+   "w": 0.995,
+   "h": 0.071,
+   "d": 2.569
+  },
+  {
+   "id": "cyber_SM_Prop_Rug_02",
+   "name": "SM_Prop_Rug_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Rug_02.gltf",
+   "category": "prop",
+   "w": 1.552,
+   "h": 0.065,
+   "d": 2.446
+  },
+  {
+   "id": "cyber_SM_Prop_Rug_03",
+   "name": "SM_Prop_Rug_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Rug_03.gltf",
+   "category": "prop",
+   "w": 2.29,
+   "h": 0.058,
+   "d": 2.265
+  },
+  {
+   "id": "cyber_SM_Prop_Satellite_01",
+   "name": "SM_Prop_Satellite_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Satellite_01.gltf",
+   "category": "prop",
+   "w": 2.045,
+   "h": 2.018,
+   "d": 1.378
+  },
+  {
+   "id": "cyber_SM_Prop_Satellite_02",
+   "name": "SM_Prop_Satellite_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Satellite_02.gltf",
+   "category": "prop",
+   "w": 0.994,
+   "h": 1.345,
+   "d": 0.994
+  },
+  {
+   "id": "cyber_SM_Prop_Satellite_03",
+   "name": "SM_Prop_Satellite_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Satellite_03.gltf",
+   "category": "prop",
+   "w": 1.934,
+   "h": 1.593,
+   "d": 1.044
+  },
+  {
+   "id": "cyber_SM_Prop_Server_01",
+   "name": "SM_Prop_Server_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Server_01.gltf",
+   "category": "prop",
+   "w": 0.922,
+   "h": 2.283,
+   "d": 1.003
+  },
+  {
+   "id": "cyber_SM_Prop_Shelf_01",
+   "name": "SM_Prop_Shelf_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shelf_01.gltf",
+   "category": "prop",
+   "w": 1.789,
+   "h": 2.153,
+   "d": 0.567
+  },
+  {
+   "id": "cyber_SM_Prop_Shelf_02",
+   "name": "SM_Prop_Shelf_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shelf_02.gltf",
+   "category": "prop",
+   "w": 0.956,
+   "h": 2.153,
+   "d": 0.567
+  },
+  {
+   "id": "cyber_SM_Prop_Shelf_03",
+   "name": "SM_Prop_Shelf_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shelf_03.gltf",
+   "category": "prop",
+   "w": 1.958,
+   "h": 1.443,
+   "d": 0.567
+  },
+  {
+   "id": "cyber_SM_Prop_Shelf_Wall_01",
+   "name": "SM_Prop_Shelf_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shelf_Wall_01.gltf",
+   "category": "prop",
+   "w": 1.603,
+   "h": 0.351,
+   "d": 0.437
+  },
+  {
+   "id": "cyber_SM_Prop_Shield_01",
+   "name": "SM_Prop_Shield_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shield_01.gltf",
+   "category": "prop",
+   "w": 0.589,
+   "h": 1.021,
+   "d": 0.169
+  },
+  {
+   "id": "cyber_SM_Prop_Shield_Force_Field_01",
+   "name": "SM_Prop_Shield_Force_Field_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shield_Force_Field_01.gltf",
+   "category": "prop",
+   "w": 0.649,
+   "h": 1.082,
+   "d": 0.201
+  },
+  {
+   "id": "cyber_SM_Prop_Shower_01",
+   "name": "SM_Prop_Shower_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Shower_01.gltf",
+   "category": "prop",
+   "w": 2.5,
+   "h": 3.116,
+   "d": 2.5
+  },
+  {
+   "id": "cyber_SM_Prop_Single_Bed_01",
+   "name": "SM_Prop_Single_Bed_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Single_Bed_01.gltf",
+   "category": "prop",
+   "w": 1.431,
+   "h": 0.643,
+   "d": 2.497
+  },
+  {
+   "id": "cyber_SM_Prop_Sink_Wall_01",
+   "name": "SM_Prop_Sink_Wall_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Sink_Wall_01.gltf",
+   "category": "prop",
+   "w": 0.652,
+   "h": 0.644,
+   "d": 0.73
+  },
+  {
+   "id": "cyber_SM_Prop_Slime_Puddle_01",
+   "name": "SM_Prop_Slime_Puddle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Slime_Puddle_01.gltf",
+   "category": "prop",
+   "w": 0.879,
+   "h": 0.013,
+   "d": 0.828
+  },
+  {
+   "id": "cyber_SM_Prop_Small_Table_01",
+   "name": "SM_Prop_Small_Table_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Small_Table_01.gltf",
+   "category": "prop",
+   "w": 1.199,
+   "h": 1.123,
+   "d": 1.199
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_01",
+   "name": "SM_Prop_Snack_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_01.gltf",
+   "category": "prop",
+   "w": 0.306,
+   "h": 0.136,
+   "d": 0.343
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_02",
+   "name": "SM_Prop_Snack_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_02.gltf",
+   "category": "prop",
+   "w": 0.233,
+   "h": 0.104,
+   "d": 0.261
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_03",
+   "name": "SM_Prop_Snack_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_03.gltf",
+   "category": "prop",
+   "w": 0.112,
+   "h": 0.068,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_04",
+   "name": "SM_Prop_Snack_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_04.gltf",
+   "category": "prop",
+   "w": 0.113,
+   "h": 0.069,
+   "d": 0.292
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_05",
+   "name": "SM_Prop_Snack_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_05.gltf",
+   "category": "prop",
+   "w": 0.112,
+   "h": 0.068,
+   "d": 0.288
+  },
+  {
+   "id": "cyber_SM_Prop_Snack_06",
+   "name": "SM_Prop_Snack_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Snack_06.gltf",
+   "category": "prop",
+   "w": 0.13,
+   "h": 0.106,
+   "d": 0.13
+  },
+  {
+   "id": "cyber_SM_Prop_Stool_01",
+   "name": "SM_Prop_Stool_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Stool_01.gltf",
+   "category": "prop",
+   "w": 0.485,
+   "h": 0.808,
+   "d": 0.471
+  },
+  {
+   "id": "cyber_SM_Prop_Stool_02",
+   "name": "SM_Prop_Stool_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Stool_02.gltf",
+   "category": "prop",
+   "w": 0.634,
+   "h": 1.28,
+   "d": 0.763
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Console_01",
+   "name": "SM_Prop_Street_Console_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Console_01.gltf",
+   "category": "prop",
+   "w": 0.818,
+   "h": 1.391,
+   "d": 0.734
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Console_02",
+   "name": "SM_Prop_Street_Console_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Console_02.gltf",
+   "category": "prop",
+   "w": 1.004,
+   "h": 1.359,
+   "d": 0.832
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_01",
+   "name": "SM_Prop_Street_Light_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_01.gltf",
+   "category": "prop",
+   "w": 0.421,
+   "h": 0.421,
+   "d": 0.214
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_03",
+   "name": "SM_Prop_Street_Light_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_03.gltf",
+   "category": "prop",
+   "w": 1.037,
+   "h": 0.74,
+   "d": 0.051
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_04",
+   "name": "SM_Prop_Street_Light_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_04.gltf",
+   "category": "prop",
+   "w": 0.456,
+   "h": 1.418,
+   "d": 0.456
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_05",
+   "name": "SM_Prop_Street_Light_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_05.gltf",
+   "category": "prop",
+   "w": 0.986,
+   "h": 0.359,
+   "d": 0.14
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_06",
+   "name": "SM_Prop_Street_Light_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_06.gltf",
+   "category": "prop",
+   "w": 1.723,
+   "h": 1.408,
+   "d": 0.523
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_07",
+   "name": "SM_Prop_Street_Light_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_07.gltf",
+   "category": "prop",
+   "w": 0.664,
+   "h": 0.595,
+   "d": 0.178
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_09",
+   "name": "SM_Prop_Street_Light_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_09.gltf",
+   "category": "prop",
+   "w": 0.233,
+   "h": 0.505,
+   "d": 0.125
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_10",
+   "name": "SM_Prop_Street_Light_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_10.gltf",
+   "category": "prop",
+   "w": 0.288,
+   "h": 1.165,
+   "d": 0.294
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_11",
+   "name": "SM_Prop_Street_Light_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_11.gltf",
+   "category": "prop",
+   "w": 1.206,
+   "h": 0.605,
+   "d": 0.19
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_12",
+   "name": "SM_Prop_Street_Light_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_12.gltf",
+   "category": "prop",
+   "w": 1.671,
+   "h": 0.186,
+   "d": 0.164
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_13",
+   "name": "SM_Prop_Street_Light_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_13.gltf",
+   "category": "prop",
+   "w": 1.206,
+   "h": 0.605,
+   "d": 0.19
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_Large_01",
+   "name": "SM_Prop_Street_Light_Large_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_Large_01.gltf",
+   "category": "prop",
+   "w": 1.024,
+   "h": 3.003,
+   "d": 1.711
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Light_Large_02",
+   "name": "SM_Prop_Street_Light_Large_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Light_Large_02.gltf",
+   "category": "prop",
+   "w": 0.663,
+   "h": 2.992,
+   "d": 1.589
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Pole_01",
+   "name": "SM_Prop_Street_Pole_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Pole_01.gltf",
+   "category": "prop",
+   "w": 1.3,
+   "h": 8.614,
+   "d": 0.68
+  },
+  {
+   "id": "cyber_SM_Prop_Street_Pole_02",
+   "name": "SM_Prop_Street_Pole_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_Pole_02.gltf",
+   "category": "prop",
+   "w": 0.854,
+   "h": 5.377,
+   "d": 0.795
+  },
+  {
+   "id": "cyber_SM_Prop_Street_light_02",
+   "name": "SM_Prop_Street_light_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Street_light_02.gltf",
+   "category": "prop",
+   "w": 1.991,
+   "h": 0.245,
+   "d": 0.08
+  },
+  {
+   "id": "cyber_SM_Prop_Syringe_01",
+   "name": "SM_Prop_Syringe_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Syringe_01.gltf",
+   "category": "prop",
+   "w": 0.191,
+   "h": 0.033,
+   "d": 0.034
+  },
+  {
+   "id": "cyber_SM_Prop_Syringe_Gun_01",
+   "name": "SM_Prop_Syringe_Gun_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Syringe_Gun_01.gltf",
+   "category": "prop",
+   "w": 0.098,
+   "h": 0.268,
+   "d": 0.598
+  },
+  {
+   "id": "cyber_SM_Prop_Target_Hologram_01",
+   "name": "SM_Prop_Target_Hologram_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Target_Hologram_01.gltf",
+   "category": "prop",
+   "w": 2.486,
+   "h": 2.814,
+   "d": 0.001
+  },
+  {
+   "id": "cyber_SM_Prop_Target_Hologram_02",
+   "name": "SM_Prop_Target_Hologram_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Target_Hologram_02.gltf",
+   "category": "prop",
+   "w": 1.339,
+   "h": 2.088,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Target_Hologram_03",
+   "name": "SM_Prop_Target_Hologram_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Target_Hologram_03.gltf",
+   "category": "prop",
+   "w": 1.382,
+   "h": 2.11,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Target_Hologram_04",
+   "name": "SM_Prop_Target_Hologram_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Target_Hologram_04.gltf",
+   "category": "prop",
+   "w": 1.095,
+   "h": 2.088,
+   "d": 0.0
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Chainsaw_Neon_01",
+   "name": "SM_Prop_Tool_Chainsaw_Neon_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Chainsaw_Neon_01.gltf",
+   "category": "prop",
+   "w": 0.35,
+   "h": 0.315,
+   "d": 1.09
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Circular_Saw_01",
+   "name": "SM_Prop_Tool_Circular_Saw_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Circular_Saw_01.gltf",
+   "category": "prop",
+   "w": 0.307,
+   "h": 0.425,
+   "d": 0.457
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Hacksaw_01",
+   "name": "SM_Prop_Tool_Hacksaw_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Hacksaw_01.gltf",
+   "category": "prop",
+   "w": 0.03,
+   "h": 0.216,
+   "d": 0.606
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Handsaw_01",
+   "name": "SM_Prop_Tool_Handsaw_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Handsaw_01.gltf",
+   "category": "prop",
+   "w": 0.04,
+   "h": 0.239,
+   "d": 0.806
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Neon_Saw_01",
+   "name": "SM_Prop_Tool_Neon_Saw_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Neon_Saw_01.gltf",
+   "category": "prop",
+   "w": 0.12,
+   "h": 0.245,
+   "d": 0.969
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Paint_Brush_01",
+   "name": "SM_Prop_Tool_Paint_Brush_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Paint_Brush_01.gltf",
+   "category": "prop",
+   "w": 0.138,
+   "h": 0.067,
+   "d": 0.459
+  },
+  {
+   "id": "cyber_SM_Prop_Tool_Paint_Brush_02",
+   "name": "SM_Prop_Tool_Paint_Brush_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Tool_Paint_Brush_02.gltf",
+   "category": "prop",
+   "w": 0.16,
+   "h": 0.109,
+   "d": 0.455
+  },
+  {
+   "id": "cyber_SM_Prop_Traffic_Lights_01",
+   "name": "SM_Prop_Traffic_Lights_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Traffic_Lights_01.gltf",
+   "category": "prop",
+   "w": 0.977,
+   "h": 1.356,
+   "d": 0.453
+  },
+  {
+   "id": "cyber_SM_Prop_Traffic_Lights_02",
+   "name": "SM_Prop_Traffic_Lights_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Traffic_Lights_02.gltf",
+   "category": "prop",
+   "w": 2.921,
+   "h": 3.314,
+   "d": 1.426
+  },
+  {
+   "id": "cyber_SM_Prop_Traffic_Lights_03",
+   "name": "SM_Prop_Traffic_Lights_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Traffic_Lights_03.gltf",
+   "category": "prop",
+   "w": 2.921,
+   "h": 3.314,
+   "d": 0.894
+  },
+  {
+   "id": "cyber_SM_Prop_Trash_Bin_01",
+   "name": "SM_Prop_Trash_Bin_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Trash_Bin_01.gltf",
+   "category": "prop",
+   "w": 0.832,
+   "h": 2.103,
+   "d": 0.669
+  },
+  {
+   "id": "cyber_SM_Prop_Trash_Bin_02",
+   "name": "SM_Prop_Trash_Bin_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Trash_Bin_02.gltf",
+   "category": "prop",
+   "w": 0.844,
+   "h": 1.447,
+   "d": 0.831
+  },
+  {
+   "id": "cyber_SM_Prop_Trash_Bin_03",
+   "name": "SM_Prop_Trash_Bin_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Trash_Bin_03.gltf",
+   "category": "prop",
+   "w": 0.597,
+   "h": 0.971,
+   "d": 0.568
+  },
+  {
+   "id": "cyber_SM_Prop_Trash_Skip_01",
+   "name": "SM_Prop_Trash_Skip_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Trash_Skip_01.gltf",
+   "category": "prop",
+   "w": 1.575,
+   "h": 1.119,
+   "d": 1.159
+  },
+  {
+   "id": "cyber_SM_Prop_Vending_Machine_01",
+   "name": "SM_Prop_Vending_Machine_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Vending_Machine_01.gltf",
+   "category": "prop",
+   "w": 1.297,
+   "h": 2.317,
+   "d": 0.854
+  },
+  {
+   "id": "cyber_SM_Prop_Vending_Machine_01_Insert_01",
+   "name": "SM_Prop_Vending_Machine_01_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Vending_Machine_01_Insert_01.gltf",
+   "category": "prop",
+   "w": 0.731,
+   "h": 1.576,
+   "d": 0.32
+  },
+  {
+   "id": "cyber_SM_Prop_Vending_Machine_02",
+   "name": "SM_Prop_Vending_Machine_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Vending_Machine_02.gltf",
+   "category": "prop",
+   "w": 1.246,
+   "h": 2.602,
+   "d": 0.713
+  },
+  {
+   "id": "cyber_SM_Prop_Water_Puddle_01",
+   "name": "SM_Prop_Water_Puddle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Water_Puddle_01.gltf",
+   "category": "prop",
+   "w": 0.754,
+   "h": 0.0,
+   "d": 0.813
+  },
+  {
+   "id": "cyber_SM_Prop_Water_Puddle_02",
+   "name": "SM_Prop_Water_Puddle_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Water_Puddle_02.gltf",
+   "category": "prop",
+   "w": 0.809,
+   "h": 0.0,
+   "d": 0.898
+  },
+  {
+   "id": "cyber_SM_Prop_Water_Puddle_03",
+   "name": "SM_Prop_Water_Puddle_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Water_Puddle_03.gltf",
+   "category": "prop",
+   "w": 0.357,
+   "h": 0.0,
+   "d": 0.216
+  },
+  {
+   "id": "cyber_SM_Prop_Weapon_Rack_01",
+   "name": "SM_Prop_Weapon_Rack_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Weapon_Rack_01.gltf",
+   "category": "prop",
+   "w": 0.677,
+   "h": 0.903,
+   "d": 0.192
+  },
+  {
+   "id": "cyber_SM_Prop_Weapon_Rack_02",
+   "name": "SM_Prop_Weapon_Rack_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Weapon_Rack_02.gltf",
+   "category": "prop",
+   "w": 0.964,
+   "h": 0.575,
+   "d": 0.192
+  },
+  {
+   "id": "cyber_SM_Prop_Weapon_Rack_03",
+   "name": "SM_Prop_Weapon_Rack_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Weapon_Rack_03.gltf",
+   "category": "prop",
+   "w": 0.085,
+   "h": 0.349,
+   "d": 0.206
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_01",
+   "name": "SM_Prop_Wires_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_01.gltf",
+   "category": "prop",
+   "w": 0.176,
+   "h": 2.099,
+   "d": 0.787
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_02",
+   "name": "SM_Prop_Wires_02",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_02.gltf",
+   "category": "prop",
+   "w": 0.425,
+   "h": 1.162,
+   "d": 0.119
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_03",
+   "name": "SM_Prop_Wires_03",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_03.gltf",
+   "category": "prop",
+   "w": 0.068,
+   "h": 1.011,
+   "d": 0.071
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_04",
+   "name": "SM_Prop_Wires_04",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_04.gltf",
+   "category": "prop",
+   "w": 0.654,
+   "h": 0.5,
+   "d": 0.063
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_05",
+   "name": "SM_Prop_Wires_05",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_05.gltf",
+   "category": "prop",
+   "w": 0.716,
+   "h": 0.603,
+   "d": 0.055
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_06",
+   "name": "SM_Prop_Wires_06",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_06.gltf",
+   "category": "prop",
+   "w": 0.496,
+   "h": 0.245,
+   "d": 0.049
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_07",
+   "name": "SM_Prop_Wires_07",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_07.gltf",
+   "category": "prop",
+   "w": 2.358,
+   "h": 0.682,
+   "d": 0.466
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_08",
+   "name": "SM_Prop_Wires_08",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_08.gltf",
+   "category": "prop",
+   "w": 1.114,
+   "h": 0.916,
+   "d": 1.114
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_09",
+   "name": "SM_Prop_Wires_09",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_09.gltf",
+   "category": "prop",
+   "w": 2.381,
+   "h": 0.934,
+   "d": 1.114
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_10",
+   "name": "SM_Prop_Wires_10",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_10.gltf",
+   "category": "prop",
+   "w": 3.374,
+   "h": 0.175,
+   "d": 2.723
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_11",
+   "name": "SM_Prop_Wires_11",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_11.gltf",
+   "category": "prop",
+   "w": 3.374,
+   "h": 0.193,
+   "d": 2.723
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_12",
+   "name": "SM_Prop_Wires_12",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_12.gltf",
+   "category": "prop",
+   "w": 1.473,
+   "h": 0.098,
+   "d": 1.82
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_13",
+   "name": "SM_Prop_Wires_13",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_13.gltf",
+   "category": "prop",
+   "w": 1.977,
+   "h": 0.168,
+   "d": 1.771
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_14",
+   "name": "SM_Prop_Wires_14",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_14.gltf",
+   "category": "prop",
+   "w": 8.195,
+   "h": 0.207,
+   "d": 1.315
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_15",
+   "name": "SM_Prop_Wires_15",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_15.gltf",
+   "category": "prop",
+   "w": 1.542,
+   "h": 0.904,
+   "d": 0.563
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_16",
+   "name": "SM_Prop_Wires_16",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_16.gltf",
+   "category": "prop",
+   "w": 10.837,
+   "h": 0.159,
+   "d": 2.311
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_17",
+   "name": "SM_Prop_Wires_17",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_17.gltf",
+   "category": "prop",
+   "w": 4.018,
+   "h": 1.701,
+   "d": 0.535
+  },
+  {
+   "id": "cyber_SM_Prop_Wires_18",
+   "name": "SM_Prop_Wires_18",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Wires_18.gltf",
+   "category": "prop",
+   "w": 7.051,
+   "h": 2.063,
+   "d": 0.228
+  },
+  {
+   "id": "cyber_SM_Prop_Work_Bench_01",
+   "name": "SM_Prop_Work_Bench_01",
+   "set": "cyber",
+   "file": "cyber_SM_Prop_Work_Bench_01.gltf",
+   "category": "prop",
+   "w": 2.12,
+   "h": 0.881,
+   "d": 1.268
+  },
+  {
+   "id": "cyber_SM_Veh_Cart_01",
+   "name": "SM_Veh_Cart_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Cart_01.gltf",
+   "category": "vehicle",
+   "w": 2.108,
+   "h": 2.489,
+   "d": 4.152
+  },
+  {
+   "id": "cyber_SM_Veh_Food_Trailer_01",
+   "name": "SM_Veh_Food_Trailer_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Food_Trailer_01.gltf",
+   "category": "vehicle",
+   "w": 3.914,
+   "h": 5.364,
+   "d": 6.431
+  },
+  {
+   "id": "cyber_SM_Veh_Food_Truck_01",
+   "name": "SM_Veh_Food_Truck_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Food_Truck_01.gltf",
+   "category": "vehicle",
+   "w": 4.952,
+   "h": 7.632,
+   "d": 9.265
+  },
+  {
+   "id": "cyber_SM_Veh_Food_Truck_01_Food_Insert_01",
+   "name": "SM_Veh_Food_Truck_01_Food_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Food_Truck_01_Food_Insert_01.gltf",
+   "category": "vehicle",
+   "w": 2.595,
+   "h": 1.21,
+   "d": 3.579
+  },
+  {
+   "id": "cyber_SM_Veh_Luxury_Car_01",
+   "name": "SM_Veh_Luxury_Car_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Luxury_Car_01.gltf",
+   "category": "vehicle",
+   "w": 3.092,
+   "h": 3.009,
+   "d": 5.471
+  },
+  {
+   "id": "cyber_SM_Veh_SUV_01",
+   "name": "SM_Veh_SUV_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_SUV_01.gltf",
+   "category": "vehicle",
+   "w": 3.525,
+   "h": 4.618,
+   "d": 6.99
+  },
+  {
+   "id": "cyber_SM_Veh_Train_Cockpit_01",
+   "name": "SM_Veh_Train_Cockpit_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Train_Cockpit_01.gltf",
+   "category": "vehicle",
+   "w": 3.471,
+   "h": 4.669,
+   "d": 12.075
+  },
+  {
+   "id": "cyber_SM_Veh_Train_Cockpit_01_Alt",
+   "name": "SM_Veh_Train_Cockpit_01_Alt",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Train_Cockpit_01_Alt.gltf",
+   "category": "vehicle",
+   "w": 3.471,
+   "h": 4.669,
+   "d": 12.075
+  },
+  {
+   "id": "cyber_SM_Veh_Train_Middle_01",
+   "name": "SM_Veh_Train_Middle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Train_Middle_01.gltf",
+   "category": "vehicle",
+   "w": 3.86,
+   "h": 4.727,
+   "d": 12.68
+  },
+  {
+   "id": "cyber_SM_Veh_Truck_01",
+   "name": "SM_Veh_Truck_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Truck_01.gltf",
+   "category": "vehicle",
+   "w": 3.557,
+   "h": 3.788,
+   "d": 9.455
+  },
+  {
+   "id": "cyber_SM_Veh_Truck_01_Hover_Pads_01",
+   "name": "SM_Veh_Truck_01_Hover_Pads_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Truck_01_Hover_Pads_01.gltf",
+   "category": "vehicle",
+   "w": 3.885,
+   "h": 1.156,
+   "d": 6.567
+  },
+  {
+   "id": "cyber_SM_Veh_Truck_01_Module_01",
+   "name": "SM_Veh_Truck_01_Module_01",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Truck_01_Module_01.gltf",
+   "category": "vehicle",
+   "w": 3.067,
+   "h": 4.051,
+   "d": 7.084
+  },
+  {
+   "id": "cyber_SM_Veh_Truck_01_Module_02",
+   "name": "SM_Veh_Truck_01_Module_02",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Truck_01_Module_02.gltf",
+   "category": "vehicle",
+   "w": 3.361,
+   "h": 3.437,
+   "d": 6.941
+  },
+  {
+   "id": "cyber_SM_Veh_Truck_01_Module_03",
+   "name": "SM_Veh_Truck_01_Module_03",
+   "set": "cyber",
+   "file": "cyber_SM_Veh_Truck_01_Module_03.gltf",
+   "category": "vehicle",
+   "w": 3.229,
+   "h": 3.037,
+   "d": 7.093
+  },
+  {
+   "id": "cyber_SM_Wep_Charm_01",
+   "name": "SM_Wep_Charm_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Charm_01.gltf",
+   "category": "weapon",
+   "w": 0.063,
+   "h": 0.216,
+   "d": 0.073
+  },
+  {
+   "id": "cyber_SM_Wep_Dagger_01",
+   "name": "SM_Wep_Dagger_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Dagger_01.gltf",
+   "category": "weapon",
+   "w": 0.055,
+   "h": 0.502,
+   "d": 0.096
+  },
+  {
+   "id": "cyber_SM_Wep_Dagger_02",
+   "name": "SM_Wep_Dagger_02",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Dagger_02.gltf",
+   "category": "weapon",
+   "w": 0.056,
+   "h": 0.515,
+   "d": 0.099
+  },
+  {
+   "id": "cyber_SM_Wep_Grenade_01",
+   "name": "SM_Wep_Grenade_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Grenade_01.gltf",
+   "category": "weapon",
+   "w": 0.115,
+   "h": 0.128,
+   "d": 0.115
+  },
+  {
+   "id": "cyber_SM_Wep_Laser_Gun_01",
+   "name": "SM_Wep_Laser_Gun_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Laser_Gun_01.gltf",
+   "category": "weapon",
+   "w": 0.118,
+   "h": 0.434,
+   "d": 1.044
+  },
+  {
+   "id": "cyber_SM_Wep_Missile_01",
+   "name": "SM_Wep_Missile_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Missile_01.gltf",
+   "category": "weapon",
+   "w": 0.584,
+   "h": 1.471,
+   "d": 0.584
+  },
+  {
+   "id": "cyber_SM_Wep_Missile_Crate_01",
+   "name": "SM_Wep_Missile_Crate_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Missile_Crate_01.gltf",
+   "category": "weapon",
+   "w": 0.654,
+   "h": 0.492,
+   "d": 1.76
+  },
+  {
+   "id": "cyber_SM_Wep_Missile_Crate_01_Insert_01",
+   "name": "SM_Wep_Missile_Crate_01_Insert_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Missile_Crate_01_Insert_01.gltf",
+   "category": "weapon",
+   "w": 0.423,
+   "h": 0.167,
+   "d": 1.471
+  },
+  {
+   "id": "cyber_SM_Wep_Paint_Gun_01",
+   "name": "SM_Wep_Paint_Gun_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Paint_Gun_01.gltf",
+   "category": "weapon",
+   "w": 0.127,
+   "h": 0.331,
+   "d": 0.372
+  },
+  {
+   "id": "cyber_SM_Wep_Pistol_01",
+   "name": "SM_Wep_Pistol_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Pistol_01.gltf",
+   "category": "weapon",
+   "w": 0.07,
+   "h": 0.318,
+   "d": 0.506
+  },
+  {
+   "id": "cyber_SM_Wep_Rifle_01",
+   "name": "SM_Wep_Rifle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Rifle_01.gltf",
+   "category": "weapon",
+   "w": 0.1,
+   "h": 0.341,
+   "d": 0.926
+  },
+  {
+   "id": "cyber_SM_Wep_SMG_01",
+   "name": "SM_Wep_SMG_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_SMG_01.gltf",
+   "category": "weapon",
+   "w": 0.079,
+   "h": 0.29,
+   "d": 0.636
+  },
+  {
+   "id": "cyber_SM_Wep_Shock_Stick_01",
+   "name": "SM_Wep_Shock_Stick_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shock_Stick_01.gltf",
+   "category": "weapon",
+   "w": 0.086,
+   "h": 0.958,
+   "d": 0.111
+  },
+  {
+   "id": "cyber_SM_Wep_Shock_Stick_02",
+   "name": "SM_Wep_Shock_Stick_02",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shock_Stick_02.gltf",
+   "category": "weapon",
+   "w": 0.109,
+   "h": 0.983,
+   "d": 0.316
+  },
+  {
+   "id": "cyber_SM_Wep_Shock_Stick_03",
+   "name": "SM_Wep_Shock_Stick_03",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shock_Stick_03.gltf",
+   "category": "weapon",
+   "w": 0.221,
+   "h": 1.269,
+   "d": 0.193
+  },
+  {
+   "id": "cyber_SM_Wep_Shock_Stick_04",
+   "name": "SM_Wep_Shock_Stick_04",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shock_Stick_04.gltf",
+   "category": "weapon",
+   "w": 0.137,
+   "h": 1.038,
+   "d": 0.118
+  },
+  {
+   "id": "cyber_SM_Wep_Shock_Stick_05",
+   "name": "SM_Wep_Shock_Stick_05",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shock_Stick_05.gltf",
+   "category": "weapon",
+   "w": 0.119,
+   "h": 0.976,
+   "d": 0.175
+  },
+  {
+   "id": "cyber_SM_Wep_Shuriken_01",
+   "name": "SM_Wep_Shuriken_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shuriken_01.gltf",
+   "category": "weapon",
+   "w": 0.205,
+   "h": 0.022,
+   "d": 0.211
+  },
+  {
+   "id": "cyber_SM_Wep_Shuriken_03",
+   "name": "SM_Wep_Shuriken_03",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shuriken_03.gltf",
+   "category": "weapon",
+   "w": 0.263,
+   "h": 0.016,
+   "d": 0.226
+  },
+  {
+   "id": "cyber_SM_Wep_Shuriken_05",
+   "name": "SM_Wep_Shuriken_05",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Shuriken_05.gltf",
+   "category": "weapon",
+   "w": 0.066,
+   "h": 0.057,
+   "d": 0.291
+  },
+  {
+   "id": "cyber_SM_Wep_Sniper_Rifle_01",
+   "name": "SM_Wep_Sniper_Rifle_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sniper_Rifle_01.gltf",
+   "category": "weapon",
+   "w": 0.154,
+   "h": 0.393,
+   "d": 1.815
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_01",
+   "name": "SM_Wep_Sword_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_01.gltf",
+   "category": "weapon",
+   "w": 0.154,
+   "h": 1.458,
+   "d": 0.191
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_01_Sheath_01",
+   "name": "SM_Wep_Sword_01_Sheath_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_01_Sheath_01.gltf",
+   "category": "weapon",
+   "w": 0.108,
+   "h": 1.014,
+   "d": 0.186
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_02",
+   "name": "SM_Wep_Sword_02",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_02.gltf",
+   "category": "weapon",
+   "w": 0.154,
+   "h": 1.458,
+   "d": 0.191
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_02_Sheath_01",
+   "name": "SM_Wep_Sword_02_Sheath_01",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_02_Sheath_01.gltf",
+   "category": "weapon",
+   "w": 0.108,
+   "h": 1.014,
+   "d": 0.186
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_03",
+   "name": "SM_Wep_Sword_03",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_03.gltf",
+   "category": "weapon",
+   "w": 0.095,
+   "h": 1.463,
+   "d": 0.191
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_04",
+   "name": "SM_Wep_Sword_04",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_04.gltf",
+   "category": "weapon",
+   "w": 0.129,
+   "h": 1.432,
+   "d": 0.324
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_05",
+   "name": "SM_Wep_Sword_05",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_05.gltf",
+   "category": "weapon",
+   "w": 0.081,
+   "h": 1.494,
+   "d": 0.293
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_06",
+   "name": "SM_Wep_Sword_06",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_06.gltf",
+   "category": "weapon",
+   "w": 0.1,
+   "h": 1.478,
+   "d": 0.096
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_07",
+   "name": "SM_Wep_Sword_07",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_07.gltf",
+   "category": "weapon",
+   "w": 0.077,
+   "h": 1.483,
+   "d": 0.434
+  },
+  {
+   "id": "cyber_SM_Wep_Sword_08",
+   "name": "SM_Wep_Sword_08",
+   "set": "cyber",
+   "file": "cyber_SM_Wep_Sword_08.gltf",
+   "category": "weapon",
+   "w": 0.085,
+   "h": 1.423,
+   "d": 0.243
+  }
+ ]
+}
