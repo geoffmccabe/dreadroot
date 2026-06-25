@@ -10,10 +10,16 @@ import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { meshGroundHeight } from './meshColliderSystem';
 import { fireSiegeExplosion } from './SiegeExplosion';
+import { getCityMusicTime } from './SciFiCityMusic';
 
 const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
 const DROP_H = 100;   // metres above the landing spot each demon drops from
 const GRAVITY = 22;   // m/s² fall
+
+// Music-timed blasts: when the soundtrack's loop time crosses each of these (seconds), fire a blast at
+// every demon's landed spot. Geoff's timecodes 0:0:17:20 + 0:01:09:00 → 17.20s + 69.00s.
+const BLAST_TIMES = [17.20, 69.00];
+const LANDED_POS: [number, number, number][] = [];   // filled as demons land
 
 // INSTANCE-specific content. A Map (SciFi City) can have many INSTANCES — an ongoing multiplayer Open
 // World vs single-player Challenges — that differ in content. The dancers belong to the "Death Dark
@@ -31,7 +37,7 @@ export interface DancingDemonDef { pos: [number, number, number]; yaw?: number; 
 // building mesh below it (see the snap in <Dancer>). X/Z are placed exactly as given.
 const DANCERS: DancingDemonDef[] = [
   { pos: [-3.966, 26.650, -21.300], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved — old spot too cramped to dance)
-  { pos: [36.905, 26.650, -0.293], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved)
+  { pos: [37.507, 26.650, -1.152], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved)
   { pos: [13.850, 12.284, 69.129], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign (moved off the wall)
   { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
 ];
@@ -96,10 +102,28 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: DancingDemonDef) 
     g.position.y += vy.current * dt;
     if (g.position.y <= landY.current) {
       g.position.y = landY.current; phase.current = 'land'; toDance();
-      fireSiegeExplosion(pos[0], landY.current, pos[2], 1);   // same grenade blast on impact (cosmetic only — no damage)
+      LANDED_POS.push([pos[0], landY.current, pos[2]]);        // remember where it landed (for the music blasts)
+      fireSiegeExplosion(pos[0], landY.current, pos[2], 3);    // BIG grenade blast on impact (cosmetic — no damage)
     }
   });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
+}
+
+// Fires a blast at every landed demon when the soundtrack's loop time crosses a BLAST_TIMES entry.
+function MusicBlasts() {
+  const lastT = useRef(-1);
+  useFrame(() => {
+    const t = getCityMusicTime();
+    if (t == null) { lastT.current = -1; return; }
+    if (t < lastT.current) lastT.current = -1;   // the loop wrapped → re-arm all times
+    for (const bt of BLAST_TIMES) {
+      if (lastT.current < bt && t >= bt) {
+        for (const p of LANDED_POS) fireSiegeExplosion(p[0], p[1], p[2], 3);
+      }
+    }
+    lastT.current = t;
+  });
+  return null;
 }
 
 export function DancingDemons() {
@@ -107,7 +131,8 @@ export function DancingDemons() {
   // the challenge name. Once Geoff confirms the spot via a laser readout, restore the instance gate:
   //   const name = useSyncExternalStore(subscribeChallenge, () => { const s = getChallengeState(); return s.active ? s.name : ''; });
   //   if (!isDancerInstance(name)) return null;
-  return <>{DANCERS.map((d, i) => <Dancer key={i} {...d} />)}</>;
+  useEffect(() => { LANDED_POS.length = 0; }, []);   // reset on (re)entering the city so it doesn't accumulate
+  return <>{DANCERS.map((d, i) => <Dancer key={i} {...d} />)}<MusicBlasts /></>;
 }
 
 useGLTF.preload(URL);

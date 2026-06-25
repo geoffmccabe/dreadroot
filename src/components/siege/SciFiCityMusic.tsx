@@ -7,11 +7,19 @@ import { useEffect } from 'react';
 const SRC = '/SciFi_City_Soundtrack.mp3';
 const VOLUME = 0.7;
 
+// Expose the soundtrack's playback position so effects can sync to it (e.g. music-timed demon blasts).
+// Returns seconds into the current loop, or null if not playing.
+let _cityMusic: HTMLAudioElement | null = null;
+export function getCityMusicTime(): number | null {
+  return _cityMusic && !_cityMusic.paused ? _cityMusic.currentTime : null;
+}
+
 export function SciFiCityMusic() {
   useEffect(() => {
     const audio = new Audio(SRC);
     audio.loop = true;
     audio.volume = VOLUME;
+    _cityMusic = audio;
     let cleanupGesture: (() => void) | null = null;
     const tryPlay = () => audio.play().catch(() => {
       // Autoplay blocked → arm a one-shot gesture listener to start it.
@@ -31,6 +39,7 @@ export function SciFiCityMusic() {
       cleanupGesture?.();
       audio.pause();
       audio.src = '';
+      if (_cityMusic === audio) _cityMusic = null;
     };
   }, []);
   return null;
