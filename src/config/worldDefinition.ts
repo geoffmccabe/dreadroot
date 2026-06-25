@@ -134,22 +134,17 @@ export interface WorldDefinition {
   bounds?: { min: [number, number]; max: [number, number] } | null;
 
   /**
-   * HARD invisible-wall arena box (world meters). Unlike `bounds` (advisory), this is ENFORCED
-   * every frame by WorldBoundsWall: the player's position is clamped inside the box on ALL sides —
-   * including vertically and INCLUDING while flying — so they can never leave the arena. Used by
-   * walled challenge maps (Yeti Time). min/max are XZ corners; floorY/ceilingY cap the height.
+   * HARD invisible wall for walled maps (e.g. Snowy Cabin). Enforced every frame as the final step
+   * of the mover (see worldBoundsClamp): an open XZ polyline (`line`) the player cannot CROSS while
+   * below `height` metres above the terrain. Above that height there is no wall, so a determined
+   * vertical boost (Rocket Boot) can clear the top and reach the rest of the map. It's a swept
+   * segment test, so it holds at any horizontal speed (no tunnelling). `floorY` is an optional void
+   * floor. Replaces the old all-altitude containment box.
    */
   wallBox?: {
-    min: [number, number];
-    max: [number, number];
+    line: [number, number][];
+    height: number;
     floorY?: number;
-    ceilingY?: number;
-    /**
-     * Optional closed XZ polygon (world meters, [x, z] pairs). When present it OVERRIDES the
-     * min/max box: the player is kept INSIDE the polygon every frame (point-in-polygon), so an
-     * irregular edge-to-edge wall can section off part of a larger map. Holds while flying too.
-     */
-    polygon?: [number, number][];
   } | null;
 
   ground: GroundConfig;
@@ -303,14 +298,15 @@ export const YETI_TIME_WORLD: WorldDefinition = {
   ground: { kind: 'heightmap', surfaceY: 0 },
   // Snowy-cabin spawn (Geoff's in-world reading; fwd [0.969,-0.212,0.126] → yaw/pitch).
   spawn: { position: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
-  // Snowy-town arena = the SOUTH corner of Adventure Town, sealed off by Geoff's traced
-  // dividing wall (the 7 edge-to-edge points below, west→east along the high-Z village side).
-  // The polygon closes generously around the spawn (south) side so the player is contained in
-  // the snowy corner and can neither cross into the rest of the village nor fly out over the line.
+  // Snowy Cabin arena = the SOUTH corner of Adventure Town, fenced off by Geoff's traced dividing
+  // wall (the 7 edge-to-edge points below, west→east along the high-Z village side). The wall is
+  // 100 m tall — about the height of the map's tallest peak — so a determined Rocket-Boot climb can
+  // clear the top and reach the rest of the map (where an easter egg hides). Below 100 m it's
+  // impassable from either side, at any speed.
   wallBox: {
-    min: [-300, -300], max: [300, 145],   // fallback box (unused while `polygon` is set)
-    floorY: -5, ceilingY: 150,
-    polygon: [
+    height: 100,
+    floorY: -5,
+    line: [
       [25.986, 142.278],   // P1 — just outside the map (NW)
       [32.536, 57.750],    // P2
       [46.303, 29.096],    // P3
@@ -318,9 +314,6 @@ export const YETI_TIME_WORLD: WorldDefinition = {
       [106.225, 28.233],   // P5
       [127.198, 54.663],   // P6
       [149.028, 109.448],  // P7 — other side of the map (NE)
-      [300, -300],         // close around the spawn (south) side
-      [-300, -300],
-      [-300, 142.278],
     ],
   },
   props: undefined,

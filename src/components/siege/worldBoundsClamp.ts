@@ -1,57 +1,56 @@
-// worldBoundsClamp — the single authoritative "keep the player inside the arena" clamp for walled
-// maps (e.g. Yeti Time / Snowy Cabin). It MUST run as the very last thing after the player has been
-// moved each frame, or the mover overwrites it and the player ends the frame outside the wall (the
-// "I can walk through the barrier" bug). So it is called at the END of the movement useFrame
-// (SiegeFlyController) rather than from its own loosely-ordered useFrame.
+// worldBoundsClamp — the authoritative invisible-wall enforcement for walled maps (Snowy Cabin).
+// It MUST run as the very last thing after the player has moved each frame (called at the end of
+// SiegeFlyController's movement), or the mover overwrites it and the player ends the frame on the
+// wrong side.
 //
-// When the active world defines `wallBox`:
-//   * `polygon` (preferred): an irregular closed XZ polygon. We point-in-polygon test the camera;
-//     if it stepped outside, snap it back to the last position that was inside. Seals off an
-//     arbitrary edge-to-edge wall carved out of a larger map, and holds at any speed / while flying.
-//   * `min/max`: a simple axis-aligned box fallback when no polygon is given.
-//   * floorY / ceilingY: optional vertical lid + floor.
+// The wall is an OPEN XZ polyline (`wallBox.line`) that the player cannot CROSS while below
+// `wallBox.height` metres above the terrain. We test the player's movement this frame as a SEGMENT
+// (previous XZ → current XZ) against every wall segment; if it crosses one and the player is below
+// the wall top, we revert XZ to the previous spot. Because it's a swept segment test it holds at any
+// horizontal speed (no tunnelling), and because it only blocks BELOW the height, a determined
+// vertical boost over the top is allowed (drops the player into the rest of the map).
 //
-// Single local player, so the "last inside" spot is module-level state (reset on map change).
+// Single local player, so the previous-position state is module-level (reset on map change).
 
 import type { Camera } from 'three';
 import { getActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
+import { sampleHeight } from './terrainHeight';
 
-const MARGIN = 0.35;   // keep the player capsule a touch inside a box wall (matches PLAYER_RADIUS)
+let prevX = 0, prevZ = 0, havePrev = false, lastMap = '';
 
-let lastInX = 0, lastInZ = 0, haveLast = false, lastMap = '';
-
-// Standard ray-casting point-in-polygon (XZ plane). poly = [[x,z], …] closed implicitly.
-function inPoly(x: number, z: number, poly: [number, number][]) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0], zi = poly[i][1];
-    const xj = poly[j][0], zj = poly[j][1];
-    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-  }
-  return inside;
+// True if segments AB and CD intersect (standard orientation test; collinear-touch ignored, fine here).
+function ccw(ax: number, az: number, bx: number, bz: number, cx: number, cz: number) {
+  return (cz - az) * (bx - ax) > (bz - az) * (cx - ax);
+}
+function segCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number) {
+  return ccw(ax, az, cx, cz, dx, dz) !== ccw(bx, bz, cx, cz, dx, dz)
+      && ccw(ax, az, bx, bz, cx, cz) !== ccw(ax, az, bx, bz, dx, dz);
 }
 
 export function clampToWorldBounds(camera: Camera): void {
   const mapId = getActiveMapId();
-  if (mapId !== lastMap) { lastMap = mapId; haveLast = false; }   // reset "last inside" on map change
+  if (mapId !== lastMap) { lastMap = mapId; havePrev = false; }   // reset on map change
   const wb = getWorldDefinition(mapId).wallBox;
   if (!wb) return;
   const p = camera.position;
 
-  if (wb.polygon && wb.polygon.length >= 3) {
-    if (inPoly(p.x, p.z, wb.polygon)) {
-      lastInX = p.x; lastInZ = p.z; haveLast = true;   // remember the good spot
-    } else if (haveLast) {
-      p.x = lastInX; p.z = lastInZ;                     // bounced off the wall — snap back
-    }
-  } else {
-    const minX = wb.min[0] + MARGIN, maxX = wb.max[0] - MARGIN;
-    const minZ = wb.min[1] + MARGIN, maxZ = wb.max[1] - MARGIN;
-    if (p.x < minX) p.x = minX; else if (p.x > maxX) p.x = maxX;
-    if (p.z < minZ) p.z = minZ; else if (p.z > maxZ) p.z = maxZ;
-  }
+  if (wb.floorY != null && p.y < wb.floorY) p.y = wb.floorY;   // void floor
 
-  if (wb.ceilingY != null && p.y > wb.ceilingY) p.y = wb.ceilingY;
-  if (wb.floorY != null && p.y < wb.floorY) p.y = wb.floorY;
+  const line = wb.line;
+  if (line && line.length >= 2) {
+    // Wall is only solid below `height` metres above the local terrain. Above it → free to pass.
+    const ground = sampleHeight(p.x, p.z) ?? 0;
+    const belowTop = (p.y - ground) < wb.height;
+    if (havePrev && belowTop && (prevX !== p.x || prevZ !== p.z)) {
+      let crossed = false;
+      for (let i = 0; i < line.length - 1; i++) {
+        if (segCross(prevX, prevZ, p.x, p.z, line[i][0], line[i][1], line[i + 1][0], line[i + 1][1])) {
+          crossed = true; break;
+        }
+      }
+      if (crossed) { p.x = prevX; p.z = prevZ; }   // can't cross the wall below its top
+    }
+    prevX = p.x; prevZ = p.z; havePrev = true;
+  }
 }
