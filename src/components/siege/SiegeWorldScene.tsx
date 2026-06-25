@@ -12,7 +12,6 @@ import { TerrainLayer } from './TerrainLayer';
 import { WaterLayer } from './WaterLayer';
 import { PlacementEditor } from './PlacementEditor';
 import { CharacterTest } from './CharacterTest';
-import { CharacterLineup } from './CharacterLineup';
 import { MonsterLineup } from './MonsterLineup';
 import { MonsterEnemy } from './MonsterEnemy';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
@@ -77,8 +76,8 @@ export function SiegeWorldScene({ world, editorMode, transformMode, charAnim }: 
       {/* Placement gizmo kept available (editor mode). */}
       {editorMode && <PlacementEditor editorMode={editorMode} mode={transformMode} />}
 
-      {/* Sky lineups (reference rows) — independent of the ground. */}
-      <CharacterLineup origin={[-122, 45, 310]} />
+      {/* Monster reference row (static). The old static CharacterLineup was removed — the animated
+          "&&&" lineup (SiegeCharacterLineup) supersedes it and the two were overlapping. */}
       <MonsterLineup origin={[-115, 45, 318]} />
 
       {/* Laser-pointer probe: press L to copy where you're looking + what you hit. */}
