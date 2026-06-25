@@ -64,13 +64,13 @@ export function CoordsHud() {
     <div
       style={{
         position: 'fixed', left: pos.left, top: pos.top, width: 300,
-        color: 'rgba(255,255,255,0.92)', font: '12px ui-monospace, monospace',
-        background: 'rgba(8, 24, 16, 0.82)', border: '1px solid rgba(90,200,140,0.55)',
-        borderRadius: 12, padding: '8px 10px', pointerEvents: 'auto',
+        color: 'var(--pt-debug-body-color)', font: 'var(--pt-debug-body-size) var(--pt-debug-body-family)',
+        background: 'var(--pt-debug-bg)', border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+        borderRadius: 'var(--pt-debug-radius)', padding: '8px 10px', pointerEvents: 'auto',
         boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
       }}
     >
-      <div {...handleProps} style={{ ...handleProps.style, color: '#7fe6a8', fontWeight: 700, marginBottom: 4 }}>⌖ Laser inspector</div>
+      <div {...handleProps} style={{ ...handleProps.style, color: 'var(--pt-debug-heading-color)', fontWeight: 700, marginBottom: 4 }}>⌖ Laser inspector</div>
       <div style={{ wordBreak: 'break-all' }}>
         {hitName
           ? <>pointing at: <b style={{ color: '#ffe' }}>{hitName}</b></>

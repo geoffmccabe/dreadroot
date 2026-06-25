@@ -373,11 +373,11 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
           id="fps-display"
           className="pointer-events-none"
           style={{
-            borderRadius: '6px',
-            border: '1px solid hsla(var(--hud-border))',
-            background: 'hsla(var(--hud-bg))',
-            color: 'hsl(var(--hud-text))',
-            fontFamily: 'Inter, sans-serif',
+            borderRadius: 'var(--pt-debug-radius)',
+            border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+            background: 'var(--pt-debug-bg)',
+            color: 'var(--pt-debug-body-color)',
+            fontFamily: 'var(--pt-debug-body-family)',
             padding: '4px 8px',
             display: 'flex',
             alignItems: 'center',
@@ -394,11 +394,11 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
         {isInspectorMode && isLookingAtSky && !inspectData && (
           <div
             style={{
-              borderRadius: '6px',
-              border: '1px solid hsla(200, 70%, 60%, 0.8)',
-              background: 'hsla(200, 30%, 20%, 0.98)',
-              color: 'hsl(200, 80%, 90%)',
-              fontFamily: 'monospace',
+              borderRadius: 'var(--pt-debug-radius)',
+              border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+              background: 'var(--pt-debug-bg)',
+              color: 'var(--pt-debug-body-color)',
+              fontFamily: 'var(--pt-debug-body-family)',
               padding: '8px 10px',
               fontSize: '11px',
               lineHeight: '1.5',
@@ -408,7 +408,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             }}
           >
             {/* Header with close button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(200, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
               <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
@@ -437,11 +437,11 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
         {inspectData && (
           <div
             style={{
-              borderRadius: '6px',
-              border: '1px solid hsla(40, 70%, 60%, 0.8)',
-              background: 'hsla(40, 30%, 20%, 0.98)',
-              color: 'hsl(40, 80%, 90%)',
-              fontFamily: 'monospace',
+              borderRadius: 'var(--pt-debug-radius)',
+              border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+              background: 'var(--pt-debug-bg)',
+              color: 'var(--pt-debug-body-color)',
+              fontFamily: 'var(--pt-debug-body-family)',
               padding: '8px 10px',
               fontSize: '11px',
               lineHeight: '1.5',
@@ -453,7 +453,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             }}
           >
             {/* Header with close button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid hsla(40, 50%, 50%, 0.5)', paddingBottom: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
               <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
@@ -480,7 +480,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             </div>
 
             {/* Sources Section */}
-            <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+            <div style={{ borderTop: '1px solid var(--pt-debug-border)', paddingTop: '4px', marginBottom: '6px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>DATA SOURCES</div>
 
               {/* Mesh */}
@@ -570,7 +570,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
             </div>
 
             {/* Orphan Check Section */}
-            <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+            <div style={{ borderTop: '1px solid var(--pt-debug-border)', paddingTop: '4px', marginBottom: '6px' }}>
               <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>CONSISTENCY CHECK</div>
               {inspectData.isOrphaned ? (
                 <div>
@@ -586,7 +586,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
 
             {/* Block Details Section */}
             {inspectData.sources.state.found && (
-              <div style={{ borderTop: '1px solid hsla(40, 50%, 50%, 0.5)', paddingTop: '4px', marginBottom: '6px' }}>
+              <div style={{ borderTop: '1px solid var(--pt-debug-border)', paddingTop: '4px', marginBottom: '6px' }}>
                 <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>BLOCK DETAILS</div>
                 <div style={{ fontSize: '10px' }}>
                   <div>ID: {inspectData.sources.state.blockId}</div>
@@ -648,7 +648,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
                     disabled={isDeleting}
                     style={{
                       background: 'hsl(40, 30%, 35%)',
-                      border: '1px solid hsla(40, 50%, 50%, 0.5)',
+                      border: '1px solid var(--pt-debug-border)',
                       borderRadius: '4px',
                       color: 'hsl(40, 80%, 90%)',
                       cursor: isDeleting ? 'not-allowed' : 'pointer',
@@ -691,7 +691,7 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
                 onClick={handleCopy}
                 style={{
                   background: copied ? 'hsl(120, 40%, 35%)' : 'hsl(40, 30%, 35%)',
-                  border: '1px solid hsla(40, 50%, 50%, 0.5)',
+                  border: '1px solid var(--pt-debug-border)',
                   borderRadius: '4px',
                   color: 'hsl(40, 80%, 90%)',
                   cursor: 'pointer',
@@ -717,11 +717,11 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
         id="fps-display"
         className="pointer-events-none"
         style={{
-          borderRadius: '6px',
-          border: '1px solid hsla(var(--hud-border))',
-          background: 'hsla(var(--hud-bg))',
-          color: 'hsl(var(--hud-text))',
-          fontFamily: 'Inter, sans-serif',
+          borderRadius: 'var(--pt-debug-radius)',
+          border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+          background: 'var(--pt-debug-bg)',
+          color: 'var(--pt-debug-body-color)',
+          fontFamily: 'var(--pt-debug-body-family)',
           padding: '4px 8px',
         }}
       >
@@ -738,10 +738,10 @@ function VersionBadge() {
     <div
       className="pointer-events-none"
       style={{
-        borderRadius: '6px',
-        background: 'hsla(150, 60%, 35%, 0.55)',
-        color: 'hsl(150, 80%, 95%)',
-        fontFamily: 'Inter, sans-serif',
+        borderRadius: 'var(--pt-debug-radius)',
+        background: 'var(--pt-debug-bg)',
+        color: 'var(--pt-debug-heading-color)',
+        fontFamily: 'var(--pt-debug-body-family)',
         padding: '4px 8px',
         fontSize: '11px',
         fontWeight: 600,
@@ -793,7 +793,7 @@ export function DFlowOutputPanel() {
   if (!visible) return null;
 
   return (
-    <div className="fixed top-16 left-2 z-[9999] bg-black/90 border border-white/30 rounded-lg p-3">
+    <div className="debug-panel fixed top-16 left-2 z-[9999] p-3">
       <div className="text-white font-mono text-sm mb-2">
         D-Flow: {sampleCount} samples
       </div>

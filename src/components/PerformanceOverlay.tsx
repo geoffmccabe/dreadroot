@@ -434,7 +434,7 @@ sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid heapMB`;
   const issues = getIssues();
 
   return (
-    <div className="fixed top-2 left-2 z-[9999] bg-black/90 text-white font-mono text-[11px] p-3 rounded-lg select-none min-w-[240px] max-w-[280px] border border-white/20 shadow-lg">
+    <div className="debug-panel fixed top-2 left-2 z-[9999] text-[11px] p-3 select-none min-w-[240px] max-w-[280px]">
       {/* Header */}
       <div className="flex justify-between items-center mb-2 pb-2 border-b border-white/20">
         <div className="flex items-center gap-2">

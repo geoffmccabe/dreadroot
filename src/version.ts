@@ -10,4 +10,4 @@
 //                     redesigns, paradigm changes)
 //
 // Do NOT touch this manually — the AI bumps it on every push.
-export const APP_VERSION = '4.174.3';
+export const APP_VERSION = '4.175.0';

@@ -65,6 +65,7 @@ export function ArrayTextureDebugPanel() {
       open={snap.open}
       onClose={() => arrayDebug.toggle()}
       title="Array Texture (Stage 1 debug)"
+      variant="debug"
       defaultWidth={300}
       defaultHeight={360}
       initialStyle={{ top: 72, left: 16 }}

@@ -20,14 +20,31 @@ interface GamePanelProps {
   maxHeight?: number;
   /** Base position before the user drags it (e.g. { top: 80, left: 16 }). */
   initialStyle?: CSSProperties;
+  /** 'hud' = User/Admin look (default). 'debug' = Siege-Debug dark-green look. */
+  variant?: 'hud' | 'debug';
 }
+
+// Surface tokens per variant — keeps GamePanel driven by the panel-theme vars.
+const SURFACES = {
+  hud: {
+    bg: 'hsla(var(--hud-bg))', border: '1px solid hsla(var(--hud-border))',
+    radius: 'var(--hud-radius)', blur: 'var(--hud-blur)',
+    text: 'hsl(var(--hud-text))', font: 'var(--hud-font)', head: 'hsl(var(--hud-text-bright))',
+  },
+  debug: {
+    bg: 'var(--pt-debug-bg)', border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
+    radius: 'var(--pt-debug-radius)', blur: 'var(--pt-debug-blur)',
+    text: 'var(--pt-debug-body-color)', font: 'var(--pt-debug-body-family)', head: 'var(--pt-debug-heading-color)',
+  },
+} as const;
 
 export function GamePanel({
   open, onClose, title, children,
   defaultWidth = 380, defaultHeight = 560,
   minWidth = 300, maxWidth = 900, minHeight = 280, maxHeight = 900,
-  initialStyle,
+  initialStyle, variant = 'hud',
 }: GamePanelProps) {
+  const surf = SURFACES[variant];
   const [size, setSize] = useState({ width: defaultWidth, height: defaultHeight });
   const [isResizing, setIsResizing] = useState(false);
   const glow = useGlowPanel();
@@ -64,8 +81,8 @@ export function GamePanel({
       ref={(node) => {
         drag.panelRef.current = node;
         if (node) {
-          node.style.setProperty('background', 'hsla(var(--hud-bg))', 'important');
-          node.style.setProperty('border', '1px solid hsla(var(--hud-border))', 'important');
+          node.style.setProperty('background', surf.bg, 'important');
+          node.style.setProperty('border', surf.border, 'important');
         }
       }}
       className="hud-panel fixed flex flex-col overflow-hidden"
@@ -74,20 +91,20 @@ export function GamePanel({
         height: size.height,
         zIndex: 50,
         ...(initialStyle ?? { top: 80, left: 16 }),
-        borderRadius: 'var(--hud-radius)',
+        borderRadius: surf.radius,
         transition: isResizing ? 'none' : glow.glowTransition,
         boxShadow: glow.boxShadow,
-        backdropFilter: isResizing ? 'none' : 'var(--hud-blur)',
-        WebkitBackdropFilter: isResizing ? 'none' : 'var(--hud-blur)',
-        color: 'hsl(var(--hud-text))',
-        fontFamily: 'var(--hud-font)',
+        backdropFilter: isResizing ? 'none' : surf.blur,
+        WebkitBackdropFilter: isResizing ? 'none' : surf.blur,
+        color: surf.text,
+        fontFamily: surf.font,
         ...drag.dragStyle,
       }}
     >
       <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
       <div
         className="flex-shrink-0 flex items-center justify-between px-3 pt-3 pb-2 select-none"
-        style={{ cursor: 'move', color: 'hsl(var(--hud-text-bright))' }}
+        style={{ cursor: 'move', color: surf.head }}
         onMouseDown={drag.onHeaderMouseDown}
       >
         <div className="font-semibold text-sm">{title}</div>
