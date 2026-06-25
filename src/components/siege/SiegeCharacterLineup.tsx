@@ -24,6 +24,10 @@ const AHEAD = 5;     // metres in front of the player the row appears
 // STABLE asset version (not APP_VERSION) so the browser caches the meshes + the shared animation
 // library across deploys — they only re-download when CHAR_ASSET_VERSION is bumped (i.e. when the
 // glbs are actually rebuilt). Draco-compressed, decoded via /draco/.
+// scratch for the tail swish (no per-frame allocation)
+const _tailEuler = new THREE.Euler();
+const _tailQ = new THREE.Quaternion();
+
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
@@ -45,6 +49,9 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
     cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
     return bs.sort((a, b) => a.name.localeCompare(b.name));
   }, [cloned]);
+  // Capture each tail bone's REST rotation so the swish is applied RELATIVE to the curve/droop
+  // instead of overwriting it (overwriting flattened the tail straight).
+  const tailRest = useMemo(() => tailBones.map((b) => b.quaternion.clone()), [tailBones]);
 
   // Publish the clip names once (identical across characters — same skeleton/clips).
   useEffect(() => { if (names.length) setCharAnimNames(names); }, [names]);
@@ -77,13 +84,13 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
       const N = tailBones.length;
       for (let i = 0; i < N; i++) {
         const frac = i / (N - 1);
-        const amp = 0.10 + 0.18 * frac;          // base → tip (whip); large enough to clearly BEND
-        const ph = t * 1.5 - i * 0.7;            // travelling wave (phase lag per bone)
-        // Bend about the perpendicular axes (Z = side-to-side, X = up-down) — NOT Y, which only
-        // twists a round tube and looks stiff/straight.
-        tailBones[i].rotation.z = Math.sin(ph) * amp;
-        tailBones[i].rotation.x = Math.sin(ph * 0.5 + 1.2) * amp * 0.5;
-        tailBones[i].rotation.y = 0;
+        const amp = 0.10 + 0.20 * frac;          // base → tip (whip), grows toward the tip
+        const ph = t * 1.6 - i * 0.7;            // travelling wave (phase lag per bone)
+        // Swish about the bone's perpendicular bend axes (NOT Y = twist). Composed onto the REST
+        // rotation so the resting curve/droop is kept. X = side-to-side here, Z = small up-down.
+        _tailEuler.set(Math.sin(ph) * amp, 0, Math.sin(ph * 0.5 + 1.2) * amp * 0.3);
+        _tailQ.setFromEuler(_tailEuler);
+        tailBones[i].quaternion.copy(tailRest[i]).multiply(_tailQ);
       }
     }
     const seq = getFlightSeq();

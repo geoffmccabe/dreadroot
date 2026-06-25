@@ -1895,9 +1895,9 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           character ~3m in front of the camera and the player kept ending up inside/at its
           feet. Re-enable by flipping `false` when the held-weapon character work is ready. */}
       {false && isSiege && <React.Suspense fallback={null}><SiegeCharacter /></React.Suspense>}
-      {/* Standalone diagnostic: Thorn + Shi Yang standing side-by-side near spawn, animated
-          (idle), with name tags — walk up to compare arm/hand distortion. No dropdown/avatar. */}
-      {isSiegeReview && workMode && <SiegeCharacterPair />}
+      {/* Old static diagnostic (Shi Yang standing near spawn) removed — it was the "static character"
+          overlapping the animated &&& lineup. The lineup supersedes it. */}
+      {false && <SiegeCharacterPair />}
       {/* Monster spawner (@<#>#<qty> command) + combat — enabled on ALL siege maps so you can
           spawn enemies and fight them for testing/demos, not just the SWW review map. */}
       {isSiege && <SiegeNewMonsterLineup />}
