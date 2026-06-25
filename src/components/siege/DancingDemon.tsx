@@ -9,6 +9,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { meshGroundHeight } from './meshColliderSystem';
+import { fireSiegeExplosion } from './SiegeExplosion';
 
 const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
 const DROP_H = 100;   // metres above the landing spot each demon drops from
@@ -93,7 +94,10 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: DancingDemonDef) 
     // FALL
     vy.current -= GRAVITY * dt;
     g.position.y += vy.current * dt;
-    if (g.position.y <= landY.current) { g.position.y = landY.current; phase.current = 'land'; toDance(); }
+    if (g.position.y <= landY.current) {
+      g.position.y = landY.current; phase.current = 'land'; toDance();
+      fireSiegeExplosion(pos[0], landY.current, pos[2], 1);   // same grenade blast on impact (cosmetic only — no damage)
+    }
   });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }

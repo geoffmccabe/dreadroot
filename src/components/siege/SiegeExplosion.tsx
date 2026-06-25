@@ -120,8 +120,7 @@ export const SiegeExplosion = forwardRef<SiegeExplosionHandle>((_, ref) => {
   const alpMat = useMemo(() => new THREE.ShaderMaterial({ uniforms: { uTex: { value: smokeTex } }, vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, blending: THREE.NormalBlending }), [smokeTex]);
   const _v = useMemo(() => new THREE.Vector4(), []);
 
-  useImperativeHandle(ref, () => ({
-    burst(x, y, z, scale = 1) {
+  const burst = useMemo(() => (x: number, y: number, z: number, scale = 1) => {
       for (let si = 0; si < SYS.length; si++) {
         const cfg = SYS[si];
         const cloud = cfg.add ? addCloud.current! : alpCloud.current!;
@@ -143,8 +142,9 @@ export const SiegeExplosion = forwardRef<SiegeExplosionHandle>((_, ref) => {
           cloud.sysi[i] = si;
         }
       }
-    },
-  }), []);
+    }, []);
+  useImperativeHandle(ref, () => ({ burst }), [burst]);
+  useEffect(() => { _siegeBurst = burst; return () => { if (_siegeBurst === burst) _siegeBurst = null; }; }, [burst]);
 
   useFrame((_s, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
