@@ -7,6 +7,7 @@
 // (the instance becomes "managed" so WorldObjectsLayer stops owning its collider — survives
 // streaming reloads) and reversible (V again → back to the single box). Siege-only.
 import { useEffect, useRef } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
@@ -97,6 +98,7 @@ export function VoxelizeTool() {
     };
 
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       // Ctrl/Cmd+B — copy ALL saved collider overrides to the clipboard, to bake into the
       // shipped map (paste to the dev → committed to /siege/world/collider_overrides.json).
       if (e.code === 'KeyB' && (e.ctrlKey || e.metaKey)) {

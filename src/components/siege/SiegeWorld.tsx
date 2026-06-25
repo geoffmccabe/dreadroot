@@ -2,6 +2,7 @@
 // plus the HUD overlay (controls, coords, and the village placement editor).
 
 import { useEffect, useState } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { Canvas } from '@react-three/fiber';
 import { getWorldDefinition } from '@/config/worldDefinition';
 import { APP_VERSION } from '@/version';
@@ -30,6 +31,7 @@ export function SiegeWorld({ worldId = 'siege-test' }: Props) {
     if (!editorMode) return;
     const id = setInterval(() => tick((n) => n + 1), 150);
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       if (e.code === 'Digit1') setMode('translate');
       if (e.code === 'Digit2') setMode('rotate');
       if (e.code === 'Digit3') setMode('scale');

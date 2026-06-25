@@ -5,6 +5,7 @@
 // Delete = remove selected, Esc = disarm/deselect. Keys/clicks are captured only in builder mode,
 // so normal play is untouched.
 import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useGLTF } from '@react-three/drei';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -88,6 +89,7 @@ export function BuilderController() {
       if (b.armed) place(); else selectAtCrosshair();
     };
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       const b = getBuilder();
       if (!b.enabled || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (e.target as HTMLElement | null)?.tagName;

@@ -12,6 +12,7 @@ import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
 import { setTeleportArmed, isTeleportArmed } from './teleportStore';
 import { setActiveMapId } from '@/config/activeMap';
 import { getSiegeAdmin } from './siegeAdmin';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 
 const DEMO_BY_CODE = Object.fromEntries(SIEGE_DEMOS.map((d) => [d.code, d]));
 
@@ -66,6 +67,7 @@ export function SiegeTeleport() {
     (window as unknown as { __siegeJump?: typeof jump }).__siegeJump = jump;
 
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // never hijack typing in a panel field
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {     // ARM
         e.preventDefault(); e.stopPropagation(); arm(); return;
       }

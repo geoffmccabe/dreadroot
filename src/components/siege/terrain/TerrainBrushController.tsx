@@ -6,6 +6,7 @@
 // Mode/size/strength/blur also come from the styled panel via terrainBrushState.
 
 import { useEffect, useMemo, useRef } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { applyBrush, getHeight } from './heightField';
@@ -77,6 +78,7 @@ export function TerrainBrushController() {
 
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       if (!getBrushState().enabled) return;
       const code = e.code;
       if (code === 'KeyB') { applying.current = true; flatTarget.current = undefined; e.preventDefault(); e.stopImmediatePropagation(); }

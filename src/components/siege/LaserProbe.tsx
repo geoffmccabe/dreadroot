@@ -3,6 +3,7 @@
 // what it's touching to probeState (so the C-copy in CoordsHud can report it).
 
 import { useEffect, useMemo, useState } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { probeState } from './probeState';
@@ -54,6 +55,7 @@ export function LaserProbe() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       if (e.code === 'KeyL') setOn((v) => {
         const nv = !v; probeState.on = nv;
         if (!nv) { probeState.mesh = null; probeState.instanceId = -1; probeState.hasHit = false; }

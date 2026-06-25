@@ -8,6 +8,7 @@
 // All world-specific values come from the WorldDefinition — no hardcoded map size.
 
 import { useEffect, useRef } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useThree, useFrame } from '@react-three/fiber';
 import { PointerLockControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -58,6 +59,7 @@ export function SiegeFlyController({ world }: Props) {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;   // don't capture WASD/etc. while typing in a panel
       keys.current.add(e.code);
       // God-mode / fly toggle — Dreadroot convention: ` (Backquote). F kept as an alias.
       if (e.code === 'Backquote' || e.code === 'KeyF') flying.current = !flying.current;
