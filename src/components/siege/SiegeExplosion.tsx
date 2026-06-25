@@ -4,7 +4,7 @@
 // and ALPHA-blend dark (smoke puff, sparks, falling debris). All burst once at t=0. We mirror
 // that with two THREE.Points clouds + a procedural radial-glow texture. Call `burst(x,y,z,scale)`
 // to fire one. Designed to play ALONGSIDE the existing grenade VFX, not replace it.
-import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -182,3 +182,25 @@ export const SiegeExplosion = forwardRef<SiegeExplosionHandle>((_, ref) => {
   );
 });
 SiegeExplosion.displayName = 'SiegeExplosion';
+
+// ── Global fire-and-forget API (mirrors fireGhostExplosion) ────────────────────
+// Callers (e.g. DancingDemon) fire a blast without holding a ref. A single mounted
+// <SiegeExplosions/> manager subscribes and routes each call to one pooled SiegeExplosion
+// (its particle pool handles overlapping bursts). Cosmetic only — no damage.
+interface Fire { x: number; y: number; z: number; scale: number }
+const fireSubs = new Set<(f: Fire) => void>();
+
+/** Fire one Siege rocket-blast at a world point (visual only). */
+export function fireSiegeExplosion(x: number, y: number, z: number, scale = 1) {
+  fireSubs.forEach((cb) => cb({ x, y, z, scale }));
+}
+
+/** Mount ONCE (e.g. in SiegeWorldLayers) — replays every fireSiegeExplosion() call. */
+export function SiegeExplosions() {
+  const ref = useRef<SiegeExplosionHandle>(null);
+  useEffect(() => {
+    const on = (f: Fire) => ref.current?.burst(f.x, f.y, f.z, f.scale);
+    fireSubs.add(on); return () => { fireSubs.delete(on); };
+  }, []);
+  return <SiegeExplosion ref={ref} />;
+}

@@ -45,6 +45,7 @@ import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
 import { GhostExplosions } from './GhostExplosion';
+import { SiegeExplosions } from './SiegeExplosion';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -121,6 +122,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <DamageNumbers />
       {/* Ghost death blasts (transparent-black explosion + heat-haze refraction). */}
       <GhostExplosions />
+      {/* Siege rocket-blast pool (dancing-demon landings + other fireSiegeExplosion callers). */}
+      <SiegeExplosions />
 
       {terrainReady && (
         <>
