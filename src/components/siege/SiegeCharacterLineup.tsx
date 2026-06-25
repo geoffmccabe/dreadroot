@@ -77,10 +77,13 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
       const N = tailBones.length;
       for (let i = 0; i < N; i++) {
         const frac = i / (N - 1);
-        const amp = 0.05 + 0.11 * frac;          // base → tip (whip)
+        const amp = 0.10 + 0.18 * frac;          // base → tip (whip); large enough to clearly BEND
         const ph = t * 1.5 - i * 0.7;            // travelling wave (phase lag per bone)
-        tailBones[i].rotation.y = Math.sin(ph) * amp;                    // side-to-side swish
-        tailBones[i].rotation.x = Math.sin(ph * 0.5 + 1.2) * amp * 0.45; // gentle vertical undulation
+        // Bend about the perpendicular axes (Z = side-to-side, X = up-down) — NOT Y, which only
+        // twists a round tube and looks stiff/straight.
+        tailBones[i].rotation.z = Math.sin(ph) * amp;
+        tailBones[i].rotation.x = Math.sin(ph * 0.5 + 1.2) * amp * 0.5;
+        tailBones[i].rotation.y = 0;
       }
     }
     const seq = getFlightSeq();
