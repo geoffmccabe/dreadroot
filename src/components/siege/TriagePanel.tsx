@@ -4,6 +4,7 @@
 // back so fixes can be worked through systematically.
 
 import { useEffect, useState } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { heading } from './playerState';
 import { probeState } from './probeState';
 
@@ -53,7 +54,7 @@ export function TriagePanel() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) return;
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTypingTarget(e)) return;
       // All triage keys are GATED on the laser being ON, so they never clash with normal
       // play keys. While the laser is ON: C = plain capture; B = flag BAD, G = flag GOOD
       // (B/G also need a hit) — one keypress per item, no clicking. With the laser OFF,

@@ -3,6 +3,7 @@
 // returns the 40-item reel), then spins a reel that lands on the prize (index 39) and reveals it.
 // All economy is server-side; this is presentation + the trigger.
 import { useEffect, useRef, useState } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { supabase } from '@/integrations/supabase/client';
 import { useSiegeLobbyZones, getChestInRange } from '../siegeLobbyZones';
 import { useChestPhase, startChest, revealChest, closeChest, getChestReel, getChestPrize } from './chestState';
@@ -23,7 +24,7 @@ export function MagicChestPanel({ superadmin = false }: { superadmin?: boolean }
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'KeyV' || e.metaKey || e.ctrlKey || e.altKey) return;
       if (!getChestInRange() || phaseRef.current !== 'idle') return;
-      const t = (e.target as HTMLElement | null)?.tagName; if (t === 'INPUT' || t === 'TEXTAREA') return;
+      if (isTypingTarget(e)) return;
       e.preventDefault(); e.stopImmediatePropagation();
       void open();
     };

@@ -92,8 +92,6 @@ export function BuilderController() {
       if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       const b = getBuilder();
       if (!b.enabled || e.metaKey || e.ctrlKey || e.altKey) return;
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const sel = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
         const step = (Math.PI / 12) * (e.code === 'BracketRight' ? 1 : -1);

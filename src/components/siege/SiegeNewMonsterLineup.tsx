@@ -6,6 +6,7 @@
 //    animation (so they don't skate).
 // Once these basics are confirmed, they get wired into the Challenge Creator.
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useGLTF, useAnimations, Billboard, Text } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
@@ -96,7 +97,7 @@ function useCyclePanel(enabled: boolean) {
     subs.add(show);
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== 'KeyM') return;
-      const t = (e.target as HTMLElement | null)?.tagName; if (t === 'INPUT' || t === 'TEXTAREA') return;
+      if (isTypingTarget(e)) return;
       clipIdx++; emit();
     };
     window.addEventListener('keydown', onKey);
@@ -112,7 +113,7 @@ function useLineupToggle(toggle: () => void) {
     let count = 0;
     let t: ReturnType<typeof setTimeout> | null = null;
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (isTypingTarget(e)) return;
       // '@' (US) or Shift+physical-2 (layout-independent via e.code), matching the spawn/NPC commands.
       if (!(e.key === '@' || (e.shiftKey && e.code === 'Digit2'))) return;
       count++;
@@ -152,7 +153,7 @@ function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void)
     const reset = () => { stage = 'idle'; mon = 0; if (timer) { clearTimeout(timer); timer = null; } };
     const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(reset, 4000); };
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (isTypingTarget(e)) return;
       const k = e.key;
       if (stage === 'idle') { if (k === '@') { stage = 'mon'; arm(); } return; }
       if (k === '#') { arm(); return; } // optional separator

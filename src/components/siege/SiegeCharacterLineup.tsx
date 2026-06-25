@@ -5,6 +5,7 @@
 //
 // In-canvas only (renders inside <Canvas>); the HUD readout lives in SiegeCharLineupHud (DOM).
 import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
@@ -132,9 +133,7 @@ export function SiegeCharacterLineup() {
   useEffect(() => {
     let amp: number[] = [];
     const onKey = (e: KeyboardEvent) => {
-      // Never hijack typing in a field.
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) return;
+      if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
         const now = Date.now();
         amp = amp.filter((t) => now - t < 900);
