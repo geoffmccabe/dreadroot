@@ -19,7 +19,7 @@ import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getActiveGame } from '@/config/activeGame';
-import { getActiveMapId } from '@/config/activeMap';
+import { getActiveMapId, useActiveMapId } from '@/config/activeMap';
 import { challengeWorldArrival } from '../siegeAreas';
 import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
@@ -48,6 +48,21 @@ export function ChallengeRunner() {
     pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
     faintNext: false, idc: 0,
   }).current;
+
+  // Leaving the arena (Cmd-J / teleport to another world) must END the challenge and clear its mobs —
+  // otherwise they keep chasing the camera into the new world AND new waves keep spawning there.
+  const mapId = useActiveMapId();
+  useEffect(() => {
+    const ch = challengeRef.current;
+    const arenaMap = ch?.mapId || preMap.current || '';
+    if (r.active && mapId !== arenaMap) {
+      r.active = false; r.countdownUntil = 0; r.pending = [];
+      setMobs([]);
+      setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
+    } else if (!r.active) {
+      setMobs([]);   // clear any leftover mobs on a map change when no challenge is running
+    }
+  }, [mapId, r]);
 
   const buildMobs = (drop: MonsterDrop, _seed: number, _spread: boolean): Spawned[] => {
     const out: Spawned[] = [];

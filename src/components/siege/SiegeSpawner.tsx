@@ -26,6 +26,7 @@ import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused, toggleBullse
 import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hitboxEditor';
 import { exportHitboxes } from './hitboxConfig';
 import { suppressQA } from '@/config/qaGuard';
+import { useActiveMapId } from '@/config/activeMap';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -33,6 +34,10 @@ type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov
 export function SiegeSpawner() {
   const camera = useThree((s) => s.camera);
   const [demons, setDemons] = useState<Demon[]>([]);
+  // Monsters must NEVER follow the player across a map change (Cmd-J / teleport) — they chase the
+  // camera regardless of world, so clear all test-spawns whenever the active map changes.
+  const mapId = useActiveMapId();
+  useEffect(() => { setDemons([]); }, [mapId]);
   const stage = useRef<'idle' | 'type' | 'type2' | 'qty' | 'hbwait'>('idle');
   const firstDigit = useRef('');
   const stageTimer = useRef<number | null>(null);
