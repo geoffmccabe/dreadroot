@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import type { WorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from './terrainHeight';
 import { playerState } from './playerState';
+import { clampToWorldBounds } from './worldBoundsClamp';
 
 // Movement constants — chosen to match Dreadroot's controls.
 const WALK_SPEED = 5.5;   // m/s
@@ -129,6 +130,10 @@ export function SiegeFlyController({ world }: Props) {
         }
       }
     }
+
+    // FINAL say: keep the player inside the arena wall (walled maps like Snowy Cabin). Must run
+    // after ALL movement/gravity above, or the move overwrites it and the player ends up outside.
+    clampToWorldBounds(camera);
 
     // publish position + facing for the coordinate HUD
     playerState.x = camera.position.x;

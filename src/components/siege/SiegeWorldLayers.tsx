@@ -178,7 +178,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {world.id === 'yeti-time' && (
             <Suspense fallback={null}>
               {/* Same Adventure Town geometry, tinted 80% pure white for the snowy look. */}
-              <DemoScene file="adventure_demo.gltf" group="yetitown" tintWhite={0.8} tintMatch="FloorTile|DirtMound|GroundMound|Hill|SnowPile|Ice|Road" />
+              <DemoScene file="adventure_demo.gltf" group="yetitown" lowerY={2.5} tintWhite={0.8} tintMatch="FloorTile|DirtMound|GroundMound|Hill|SnowPile|Ice|Road" />
               <MeshColliderPlayer />
             </Suspense>
           )}
