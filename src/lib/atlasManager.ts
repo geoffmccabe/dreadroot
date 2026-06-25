@@ -162,7 +162,12 @@ async function loadGifFrames(url: string): Promise<{
   frameDelay: number;
 } | null> {
   try {
-    const response = await fetch(url);
+    // 10s timeout to match loadImage(): a stalled GIF fetch must never hang the
+    // atlas sync (the awaited init step) — that freezes the loading screen forever.
+    const controller = new AbortController();
+    const abortTimer = setTimeout(() => controller.abort(), 10000);
+    const response = await fetch(url, { signal: controller.signal })
+      .finally(() => clearTimeout(abortTimer));
     if (!response.ok) return null;
 
     const arrayBuffer = await response.arrayBuffer();
