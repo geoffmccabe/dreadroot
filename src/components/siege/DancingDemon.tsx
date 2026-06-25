@@ -1,8 +1,7 @@
-// PoleDancer — decorative dancing girls on the pole-dance poles. A female Synty model (hunterf) with
-// a retargeted Mixamo dance clip ('dance'), red devil-tinted and self-lit, looping in place. Same
-// model + clip for every pole; per-pole position/scale/tint give the three some variety. Static decor
-// (no AI / no combat). NOTE: a true "pole dance" clip wasn't available open-source, so this is a
-// hip-hop dance stand-in on the pole — swap the clip in hunterf_dance.glb to upgrade.
+// DancingDemon — ambient "dancing DF Demon" decorations in the SciFi City. NOT a pole dancer: it's the
+// Fantasy Rivals DF Demon model (dfdemon_dance.glb = dfdemon + a retargeted Mixamo dance clip), lightly
+// red-tinted, looping a dance in place. They exist ONLY here because we placed them here — purely
+// decorative (no AI / no combat). Placed at Geoff's laser-readout spots and snapped onto the surface.
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
@@ -22,21 +21,19 @@ const isDancerInstance = (challengeName: string): boolean => {
   return n.includes('dark') && n.includes('city');
 };
 
-export interface PoleDancerDef { pos: [number, number, number]; yaw?: number; scale?: number; tint?: string }
+export interface DancingDemonDef { pos: [number, number, number]; yaw?: number; scale?: number; tint?: string }
 
-// The three poles (world coords). Pole #1 base block was reported at (12, 4, -27); the dancer stands
-// ONE dancer (dfdemon, red-tinted), placed ~1m from the pole-base reading [12,4,-27], 1m toward the
-// door (−Z guess). Floor Y kept at the base's 4 — send a laser readout at the exact spot to refine.
-// Dancing monsters at Geoff-picked spots (laser readouts), 6m tall (model ≈1.9m → scale ≈3.14). Each
-// ground-snaps onto the surface under its XZ (rooftop / ledge), so they sit on the building, not float.
-const DANCERS: PoleDancerDef[] = [
+// Four dancing DF Demons at Geoff's laser-readout spots, 6m tall (model ≈1.9m → scale ≈3.14). The `pos`
+// is the CAMERA/eye position he read (a few metres above the surface), so each snaps DOWN onto the
+// building mesh below it (see the snap in <Dancer>). X/Z are placed exactly as given.
+const DANCERS: DancingDemonDef[] = [
   { pos: [-2.214, 32.008, -5.028], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
   { pos: [38.589, 32.008, 35.227], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
   { pos: [13.566, 10.805, 70.058], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign
   { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
 ];
 
-function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
+function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: DancingDemonDef) {
   const { scene, animations } = useGLTF(URL);
   const group = useRef<THREE.Group>(null);
   const cloned = useMemo(() => {
@@ -81,7 +78,7 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }
 
-export function PoleDancers() {
+export function DancingDemons() {
   // TEMP (placement debug): render on the city map UNCONDITIONALLY so she's easy to find regardless of
   // the challenge name. Once Geoff confirms the spot via a laser readout, restore the instance gate:
   //   const name = useSyncExternalStore(subscribeChallenge, () => { const s = getChallengeState(); return s.active ? s.name : ''; });

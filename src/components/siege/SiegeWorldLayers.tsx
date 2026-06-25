@@ -22,7 +22,7 @@ import { DemoScene } from './scifi/DemoScene';
 import { CityHolePatches } from './scifi/CityHolePatches';
 import { SiegeStarDome } from './SiegeStarDome';
 import { SciFiCityMusic } from './SciFiCityMusic';
-import { PoleDancers } from './PoleDancer';
+import { DancingDemons } from './DancingDemon';
 import { Hoverbike } from './Hoverbike';
 import { SetSampler } from './scifi/SetSampler';
 import { NightDimmer } from './NightDimmer';
@@ -139,7 +139,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
           {/* Pole-dance girls in the SciFi City nightclub. */}
-          {world.id === 'city-demo' && <PoleDancers />}
+          {world.id === 'city-demo' && <DancingDemons />}
           {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
           {world.id === 'city-demo' && (
             <Suspense fallback={null}>
