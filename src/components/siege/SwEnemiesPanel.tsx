@@ -35,20 +35,27 @@ export function SwEnemiesPanel() {
           </CardHeader>
           <CardContent className="text-sm grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1">
             <Stat label="Model" value={m.model} />
-            <Stat label="Health" value={m.health} />
+            <Stat label="Health" value={m.health || '—'} />
             <Stat label="Damage" value={m.dmgMin != null ? `${m.dmgMin}–${m.dmgMax}` : '—'} />
             <Stat label="Attack range" value={m.attackRange != null ? `${m.attackRange} m` : '—'} />
             <Stat label="Attack every" value={m.attackMs != null ? `${m.attackMs} ms` : '—'} />
-            <Stat label="Speed" value={`${m.speed} m/s`} />
+            <Stat label="Speed" value={m.speed != null ? `${m.speed} m/s` : '—'} />
             <Stat label="Gait" value={m.gait} />
-            <Stat label="npcType" value={m.id} />
+            <Stat label="npcType" value={m.special.includes('decor') ? '—' : m.id} />
+            {/* How to spawn — full width (the SiegeSpawner key sequence). */}
+            <div className="col-span-2 sm:col-span-3 flex justify-between gap-2 pt-1 mt-1 border-t border-border/40">
+              <span className="text-muted-foreground">Spawn</span>
+              <span className="font-medium text-right">{m.spawn}</span>
+            </div>
           </CardContent>
         </Card>
       ))}
       <p className="text-xs text-muted-foreground pt-1">
-        Stats are read from the Siege Worlds monster catalog. Names are editable here and the list
-        auto-sorts alphabetically. Full stat editing (incl. strike chance / hit chance / range×height)
-        lands with the unified monster registry.
+        Every Siege Worlds monster (catalog types 1–18) plus the Pole Dancer (decor). Stats come from
+        the SWW monster catalog; names are editable here and the list auto-sorts alphabetically.
+        Spawn in-game with the SiegeSpawner: press <b>!</b>, the two-digit npcType, then a quantity
+        (0 = 10) — e.g. <b>!07</b> then <b>3</b> spawns 3 Spintrolls. Full stat editing lands with the
+        unified monster registry.
       </p>
     </div>
   );
