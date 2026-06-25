@@ -12,6 +12,7 @@ import { useEffect } from 'react';
 import { useSwMonsters, type SwMonster } from './siegeMonsterRegistry';
 import { saveMonsterOverride, clearMonsterOverride, syncMonsterStats } from './monsterStats';
 import { TAG_GROUPS } from './monsterTags';
+import { MonsterHexThumb, MonsterPortCanvas, defaultColor } from './challenge/MonsterPreview';
 
 const STAT_FIELDS: { key: keyof SwMonster; label: string }[] = [
   { key: 'health', label: 'Health' },
@@ -57,6 +58,12 @@ function NumField({ m, fkey, label }: { m: SwMonster; fkey: keyof SwMonster; lab
 function MonsterCard({ m }: { m: SwMonster }) {
   return (
     <Card>
+     <div className="flex items-stretch gap-1">
+      {/* Live rotating model in a hexagon, popping out over the frame (left rail). */}
+      <div className="flex items-center justify-center pl-3 pr-1 shrink-0">
+        <MonsterHexThumb type={m.id} color={defaultColor(m.id)} size={88} />
+      </div>
+      <div className="flex-1 min-w-0">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3 flex-wrap">
           <Label className="text-xs text-muted-foreground">Name</Label>
@@ -135,6 +142,8 @@ function MonsterCard({ m }: { m: SwMonster }) {
           <div className="flex gap-2"><span className="text-muted-foreground shrink-0">Spawn</span><span>{m.spawn}</span></div>
         </div>
       </CardContent>
+      </div>
+     </div>
     </Card>
   );
 }
@@ -146,6 +155,8 @@ export function SwEnemiesPanel() {
   useEffect(() => { void syncMonsterStats(); }, []);
   return (
     <div className="space-y-4">
+      {/* One shared WebGL canvas behind the hex thumbs (all rows draw into it). */}
+      <MonsterPortCanvas />
       {monsters.map((m) => <MonsterCard key={m.id} m={m} />)}
       <p className="text-xs text-muted-foreground pt-1">
         Edits save to Supabase, cache locally, and apply to every new spawn — and to challenges (their

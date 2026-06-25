@@ -156,6 +156,34 @@ export function MonsterThumb({ type, color, size = 60 }: { type: number; color: 
   );
 }
 
+// Hexagon turntable for list rows (e.g. the Enemies SW admin cards). The monster is rendered in a
+// larger, UN-clipped <View> than the hexagon frame behind it, so its silhouette overlaps the hex
+// edges for a 3D pop-out. Shares the same MonsterPortCanvas as MonsterThumb. `size` = hex width.
+const HEX = 'polygon(50% 1%, 93% 25%, 93% 75%, 50% 99%, 7% 75%, 7% 25%)';
+export function MonsterHexThumb({ type, color, size = 80 }: { type: number; color: ColorMods; size?: number }) {
+  const view = Math.round(size * 1.28);   // 3D box bigger than the hex → monster pokes past the edges
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {/* Hex frame: an accent-glow plate with a gradient-filled hex inset on top (the "border"). */}
+      <div style={{
+        position: 'absolute', inset: 0, clipPath: HEX, WebkitClipPath: HEX,
+        background: 'hsl(var(--panel-glow) / 0.85)',
+        filter: 'drop-shadow(0 0 7px hsl(var(--panel-glow) / 0.55))',
+      }} />
+      <div style={{
+        position: 'absolute', inset: 2, clipPath: HEX, WebkitClipPath: HEX, background: BOX_BG,
+      }} />
+      {/* The monster — larger box, centred, transparent, NOT clipped → overlaps the hex. */}
+      <View style={{
+        position: 'absolute', left: '50%', top: '48%', width: view, height: view,
+        transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+      }}>
+        <Scene type={type} color={color} dist={3.5} fov={30} />
+      </View>
+    </div>
+  );
+}
+
 // One fixed, transparent, click-through Canvas that draws every <MonsterThumb> on the page.
 export function MonsterPortCanvas() {
   return (
