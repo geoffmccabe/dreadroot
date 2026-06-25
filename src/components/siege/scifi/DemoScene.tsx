@@ -21,7 +21,7 @@ const COLLIDER_RATIO = 1.0;
 const PER_JOB = 40;           // meshes registered per budgeted tick
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
-export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false, tintWhite = 0 }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean; tintWhite?: number }) {
+export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false, tintWhite = 0, tintMatch }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean; tintWhite?: number; tintMatch?: string }) {
   // Draco-compressed (to fit Cloudflare's 25MB/file limit); decode via local /draco/.
   const { scene } = useGLTF(`/siege/scifi_demo/${file}`, '/draco/');
 
@@ -31,8 +31,13 @@ export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = fal
     // Snowy tint (Snowy Town): blend the lit albedo toward pure white by `tintWhite` (0.8 = 80%
     // white / 20% original). Materials are CLONED first — scene.clone(true) shares material refs
     // with the cached glTF, so editing them in place would also recolour the normal Adventure Town.
+    // The Adventure atlas is ONE shared material across every mesh, so we cannot tint "the
+    // material" — that whitens the whole scene (the bug). Instead tint ONLY meshes whose name
+    // matches `tintMatch` (the ground/terrain pieces) by giving them their OWN tinted clone of
+    // the shared material; everything else keeps the original untinted material.
     if (tintWhite > 0) {
       const t = Math.min(1, tintWhite);
+      const re = tintMatch ? new RegExp(tintMatch, 'i') : null;
       const done = new Map<THREE.Material, THREE.Material>();
       const tintOne = (mat: THREE.Material) => {
         let cl = done.get(mat);
@@ -52,6 +57,7 @@ export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = fal
       model.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
+        if (re && !re.test(m.name ?? '')) return;   // only the terrain/ground meshes
         m.material = Array.isArray(m.material) ? m.material.map(tintOne) : tintOne(m.material);
       });
     }
@@ -91,7 +97,7 @@ export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = fal
     wrap.position.set(-c.x, ground - box.min.y - lowerY, -c.z);
     wrap.updateMatrixWorld(true);
     return wrap;
-  }, [scene, scale, lowerY, hidePlanet, tintWhite]);
+  }, [scene, scale, lowerY, hidePlanet, tintWhite, tintMatch]);
 
   useEffect(() => {
     const meshes: THREE.Mesh[] = [];

@@ -139,7 +139,18 @@ export interface WorldDefinition {
    * including vertically and INCLUDING while flying — so they can never leave the arena. Used by
    * walled challenge maps (Yeti Time). min/max are XZ corners; floorY/ceilingY cap the height.
    */
-  wallBox?: { min: [number, number]; max: [number, number]; floorY?: number; ceilingY?: number } | null;
+  wallBox?: {
+    min: [number, number];
+    max: [number, number];
+    floorY?: number;
+    ceilingY?: number;
+    /**
+     * Optional closed XZ polygon (world meters, [x, z] pairs). When present it OVERRIDES the
+     * min/max box: the player is kept INSIDE the polygon every frame (point-in-polygon), so an
+     * irregular edge-to-edge wall can section off part of a larger map. Holds while flying too.
+     */
+    polygon?: [number, number][];
+  } | null;
 
   ground: GroundConfig;
 
@@ -292,10 +303,26 @@ export const YETI_TIME_WORLD: WorldDefinition = {
   ground: { kind: 'heightmap', surfaceY: 0 },
   // Snowy-cabin spawn (Geoff's in-world reading; fwd [0.969,-0.212,0.126] → yaw/pitch).
   spawn: { position: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
-  // Wall OFF for now — the boundary capture gave a single repeated point, so there's nothing to
-  // trace yet. Left null so Geoff can fly freely to the real corners; the wall goes in once we have
-  // 2+ distinct X/Z boundary spots.
-  wallBox: null,
+  // Snowy-town arena = the SOUTH corner of Adventure Town, sealed off by Geoff's traced
+  // dividing wall (the 7 edge-to-edge points below, west→east along the high-Z village side).
+  // The polygon closes generously around the spawn (south) side so the player is contained in
+  // the snowy corner and can neither cross into the rest of the village nor fly out over the line.
+  wallBox: {
+    min: [-300, -300], max: [300, 145],   // fallback box (unused while `polygon` is set)
+    floorY: -5, ceilingY: 150,
+    polygon: [
+      [25.986, 142.278],   // P1 — just outside the map (NW)
+      [32.536, 57.750],    // P2
+      [46.303, 29.096],    // P3
+      [69.458, 34.882],    // P4
+      [106.225, 28.233],   // P5
+      [127.198, 54.663],   // P6
+      [149.028, 109.448],  // P7 — other side of the map (NE)
+      [300, -300],         // close around the spawn (south) side
+      [-300, -300],
+      [-300, 142.278],
+    ],
+  },
   props: undefined,
 };
 
