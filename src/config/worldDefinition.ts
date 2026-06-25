@@ -293,7 +293,7 @@ export const ADVENTURE_DEMO_WORLD: WorldDefinition = {
  *  fly to the real snowy cabin (press N, read the SIEGE-DEBUG position) and give the true numbers. */
 export const YETI_TIME_WORLD: WorldDefinition = {
   id: 'yeti-time',
-  name: 'Snowy Town',
+  name: 'Snowy Cabin',
   gameId: 'siege-worlds',
   ownerId: null,
   wireId: 31,

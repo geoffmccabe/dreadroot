@@ -28,7 +28,7 @@ export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = fal
   const root = useMemo(() => {
     const model = scene.clone(true);
     if (scale !== 1) model.scale.setScalar(scale);   // huge scenes (Space ~10km) shrink to view
-    // Snowy tint (Snowy Town): blend the lit albedo toward pure white by `tintWhite` (0.8 = 80%
+    // Snowy tint (Snowy Cabin): blend the lit albedo toward pure white by `tintWhite` (0.8 = 80%
     // white / 20% original). Materials are CLONED first — scene.clone(true) shares material refs
     // with the cached glTF, so editing them in place would also recolour the normal Adventure Town.
     // The Adventure atlas is ONE shared material across every mesh, so we cannot tint "the
