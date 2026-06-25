@@ -58,13 +58,15 @@ export function InitializationOverlay() {
   const fileColor = isSiege ? '#ff6a5a' : undefined;    // [file] tag: cyan/blue → red in SWW
   const accentColor = isSiege ? '#ff9a3c' : undefined;  // counts/✓: green → bright orange in SWW
 
-  // Auto-scroll to bottom when new steps appear
+  // Auto-scroll to the bottom as steps stream in AND when init completes (the "Ready to Play"
+  // block is added on completion, not as a step — without this the log stops mid-list and the
+  // user never sees the click-to-continue prompt). rAF so the new content has laid out first.
   useEffect(() => {
     const el = scrollContainerRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [steps]);
+    if (!el) return;
+    const id = requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+    return () => cancelAnimationFrame(id);
+  }, [steps, isInitializing, totalDurationSecs]);
 
   const handleCopy = useCallback(() => {
     // Click sound (short blip) — gives audible feedback the button worked.
@@ -160,10 +162,18 @@ export function InitializationOverlay() {
             }
           </h1>
 
+          {/* Dark-theme scrollbar for the log (the default light one clashes on this dark overlay). */}
+          <style>{`
+            .init-log-scroll { scrollbar-width: thin; scrollbar-color: #888 #000; }
+            .init-log-scroll::-webkit-scrollbar { width: 10px; }
+            .init-log-scroll::-webkit-scrollbar-track { background: #000; border-radius: 5px; }
+            .init-log-scroll::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; border: 2px solid #000; background-clip: padding-box; }
+            .init-log-scroll::-webkit-scrollbar-thumb:hover { background: #aaa; background-clip: padding-box; }
+          `}</style>
           {/* Steps container - scrollable */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 rounded-lg p-4 backdrop-blur-sm overflow-y-auto min-h-0"
+            className="init-log-scroll flex-1 rounded-lg p-4 backdrop-blur-sm overflow-y-auto min-h-0"
             style={{
               backgroundColor: 'hsla(var(--panel-bg-strong))',
               border: '1px solid hsla(var(--panel-border-strong))',
