@@ -74,7 +74,7 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 }, // laser readout yaw 183.9°, pitch 5.2°
   // Yeti Time — walled snowy arena reusing Adventure Town's geometry (identical coords). PLACEHOLDER
   // arrival = the Adventure Town drop; replace with the snowy-cabin spawn Geoff reads in-world.
-  { code: 'KeyY', key: 'Y', name: 'Yeti Time', mapId: 'yeti-time', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 },
+  { code: 'KeyY', key: 'Y', name: 'Snowy Town', mapId: 'yeti-time', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 },
   // "Various 2" component sampler grids (loose pieces for map/challenge building).
   { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
   { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
@@ -95,7 +95,7 @@ export const CHALLENGE_WORLDS: ChallengeWorld[] = [
   { mapId: 'city-demo', label: 'SciFi City' },
   { mapId: 'space-demo', label: 'SciFi Space' },
   { mapId: 'adventure-demo', label: 'Adventure Town' },
-  { mapId: 'yeti-time', label: 'Yeti Time' },
+  { mapId: 'yeti-time', label: 'Snowy Town' },
 ];
 /** Arrival pos + facing for a challenge world (from its SIEGE_DEMOS entry). null = open world. */
 export const challengeWorldArrival = (mapId: string | undefined): { pos: [number, number, number]; yaw?: number; pitch?: number } | null => {
