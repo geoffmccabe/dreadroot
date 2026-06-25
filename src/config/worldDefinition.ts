@@ -300,11 +300,11 @@ export const YETI_TIME_WORLD: WorldDefinition = {
   spawn: { position: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
   // Snowy Cabin arena = the SOUTH corner of Adventure Town, fenced off by Geoff's traced dividing
   // wall (the 7 edge-to-edge points below, west→east along the high-Z village side). The wall is
-  // 100 m tall — about the height of the map's tallest peak — so a determined Rocket-Boot climb can
-  // clear the top and reach the rest of the map (where an easter egg hides). Below 100 m it's
-  // impassable from either side, at any speed.
+  // 150 m tall (the map's tallest peak is ~100 m), so clearing it needs a determined Rocket-Boot
+  // climb well above the highest ground to reach the rest of the map (where an easter egg hides).
+  // Below 150 m it's impassable from either side, at any speed.
   wallBox: {
-    height: 100,
+    height: 150,
     floorY: -5,
     line: [
       [25.986, 142.278],   // P1 — just outside the map (NW)
