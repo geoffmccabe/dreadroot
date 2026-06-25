@@ -5,6 +5,7 @@
 import { useEffect } from 'react';
 import { themeToVars, type GamePanelThemes } from './panelTheme';
 import { usePanelThemes } from './panelThemeStore';
+import { usePanelThemePersistence } from './panelThemePersistence';
 
 export function applyPanelThemeVars(themes: GamePanelThemes): void {
   const root = document.documentElement;
@@ -14,6 +15,7 @@ export function applyPanelThemeVars(themes: GamePanelThemes): void {
 
 export function PanelThemeProvider() {
   const themes = usePanelThemes();
+  usePanelThemePersistence(); // load this game's saved themes + save edits
   useEffect(() => { applyPanelThemeVars(themes); }, [themes]);
   return null;
 }

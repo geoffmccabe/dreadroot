@@ -33,7 +33,27 @@ export function usePanelDrag(onGrab?: () => void) {
       ny = Math.max(0, Math.min(window.innerHeight - 40, m.clientY - offY));
       if (raf) return;
       raf = true;
-      requestAnimationFrame(() => { raf = false; setPos({ x: nx, y: ny }); });
+      requestAnimationFrame(() => {
+        raf = false;
+        // Write the position as !important inline styles directly on the node. The
+        // panels pin their corner via CSS !important (.{user,admin}-panel-dialog
+        // [data-state="open"]), which a normal inline style can't beat — so a plain
+        // style prop wouldn't move them. Inline !important wins. (Don't also put
+        // left/top in the React style object, or React would re-set them without the
+        // important flag and clobber this.)
+        const node = panelRef.current;
+        if (node) {
+          node.style.setProperty('position', 'fixed', 'important');
+          node.style.setProperty('left', `${nx}px`, 'important');
+          node.style.setProperty('top', `${ny}px`, 'important');
+          node.style.setProperty('right', 'auto', 'important');
+          node.style.setProperty('bottom', 'auto', 'important');
+          node.style.setProperty('transform', 'none', 'important');
+          node.style.setProperty('translate', 'none', 'important');
+          node.style.setProperty('margin', '0', 'important');
+        }
+        setPos({ x: nx, y: ny });
+      });
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
@@ -43,10 +63,10 @@ export function usePanelDrag(onGrab?: () => void) {
     document.addEventListener('mouseup', onUp);
   }, [onGrab]);
 
-  // When moved, override the modal's centering with an explicit position.
-  const dragStyle: CSSProperties = pos
-    ? { position: 'fixed', left: pos.x, top: pos.y, transform: 'none', margin: 0 }
-    : {};
+  // Position is applied as !important inline styles during the drag (see onMove);
+  // dragStyle stays empty so React never re-sets left/top without the important flag.
+  // Kept in the return for call-site compatibility.
+  const dragStyle: CSSProperties = {};
 
   return { panelRef, onHeaderMouseDown, dragStyle, moved: pos !== null };
 }
