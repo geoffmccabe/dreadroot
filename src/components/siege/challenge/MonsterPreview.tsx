@@ -6,7 +6,7 @@
 // saturation / tint), generalizing the in-game zombie shader. Scale comes from the known modelHeight
 // (like MonsterEnemy), NOT Box3.setFromObject (that returns an empty box for not-yet-mounted skinned
 // meshes → scale ~0 → invisible). Meshes are frustumCulled=false too.
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations, View, PerspectiveCamera } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -104,8 +104,10 @@ function Model({ type, color }: { type: number; color: ColorMods }) {
   const url = urlFor(type), mh = heightFor(type), flames = flamesFor(type);
   const count = countFor(type), upsideDown = isUpsideDown(type), opacity = opacityFor(type), spin = spinRate(type);
   const scaleMul = count > 1 ? 0.62 : 1;
-  // The Crawler (18) plays its in-game crawl clip, fast, so the card shows it scuttling, not standing.
-  const clipKey = type === 18 ? 'crawl' : undefined;
+  // Per-type clip to match the in-game look: Crawler (18) scuttles via its 'crawl' clip; the DF
+  // Demon (19) DANCES (its default/idle clip is a broken pose — the dance clip is the good one,
+  // same one DancingDemon plays in the SciFi City).
+  const clipKey = type === 18 ? 'crawl' : type === 19 ? 'dance' : undefined;
   const rate = type === 18 ? 2.2 : 1;
   const turn = useRef<THREE.Group>(null);
   useFrame((_, d) => { if (turn.current) turn.current.rotation.y += d * spin; });
@@ -162,8 +164,16 @@ export function MonsterThumb({ type, color, size = 60 }: { type: number; color: 
 const HEX = 'polygon(50% 1%, 93% 25%, 93% 75%, 50% 99%, 7% 75%, 7% 25%)';
 export function MonsterHexThumb({ type, color, size = 80 }: { type: number; color: ColorMods; size?: number }) {
   const view = Math.round(size * 1.28);   // 3D box bigger than the hex → monster pokes past the edges
+  const wrap = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ cx: number; cy: number } | null>(null);
+  const big = view * 5;                    // hover preview: 5× the monster's vertical size
+  const onEnter = () => {
+    const r = wrap.current?.getBoundingClientRect();
+    if (r) setHover({ cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+  };
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div ref={wrap} style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}
+         onMouseEnter={onEnter} onMouseLeave={() => setHover(null)}>
       {/* Hex frame: an accent-glow plate with a gradient-filled hex inset on top (the "border"). */}
       <div style={{
         position: 'absolute', inset: 0, clipPath: HEX, WebkitClipPath: HEX,
@@ -180,6 +190,17 @@ export function MonsterHexThumb({ type, color, size = 80 }: { type: number; colo
       }}>
         <Scene type={type} color={color} dist={3.5} fov={30} />
       </View>
+      {/* Hover: a big spinning instance (own Canvas, transparent, click-through) centred over the hex. */}
+      {hover && (
+        <div style={{
+          position: 'fixed', left: hover.cx - big / 2, top: hover.cy - big / 2, width: big, height: big,
+          zIndex: 200, pointerEvents: 'none',
+        }}>
+          <Canvas gl={{ alpha: true, antialias: true }} dpr={[1, 2]} style={{ width: '100%', height: '100%' }}>
+            <Scene type={type} color={color} dist={3.5} fov={30} />
+          </Canvas>
+        </div>
+      )}
     </div>
   );
 }
