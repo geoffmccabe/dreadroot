@@ -9,7 +9,7 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
-import { groundAt } from './siegeGround';
+import { meshGroundHeight } from './meshColliderSystem';
 
 const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
 
@@ -65,13 +65,18 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
     a?.reset().fadeIn(0.4).play();
     return () => { a?.fadeOut(0.2); };
   }, [actions, names]);
-  // Drop her onto the actual floor — the city was lowered ~2.8m after the pole reading was taken, so
-  // the baked Y is stale. Snap to the BVH floor once it's available (keeps Y if the floor is voxel).
+  // Drop her onto the BUILDING SURFACE just below the (eye-height) reading — NOT the terrain. Geoff's
+  // "pos:" is the camera/eye, ~1.6–3m above the real surface. Use mesh-only ground (so a rooftop dancer
+  // can't snap down to the distant terrain), cast from just above the reading, accept only within 8m,
+  // and retry until the city BVH has loaded; give up after ~5s and keep the reading.
   const grounded = useRef(false);
+  const tries = useRef(0);
   useFrame(() => {
     const g = group.current; if (!g || grounded.current) return;
-    const f = groundAt(pos[0], pos[2], pos[1] + 4);
-    if (f != null) { g.position.y = f; grounded.current = true; }
+    tries.current++;
+    const f = meshGroundHeight(pos[0], pos[2], pos[1] + 1.0);
+    if (f != null && pos[1] - f < 8) { g.position.y = f; grounded.current = true; }
+    else if (tries.current > 300) grounded.current = true;
   });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }

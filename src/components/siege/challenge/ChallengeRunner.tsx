@@ -10,7 +10,7 @@ import { CatalogMonster, makeHordeMember, type MType, type Ov, type MonsterMods 
 import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
 import { groundAt } from '../siegeGround';
-import { raycastMesh } from '../meshColliderSystem';
+import { raycastMesh, meshGroundHeight } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, fireChallengeRevive } from './challengeControl';
@@ -247,12 +247,13 @@ export function ChallengeRunner() {
     // Drop the player onto the street once the baked world's BVH ground is available (fixes spawning
     // 20m in the air and hovering there until you move).
     if (groundSnap.current) {
-      const g = groundAt(camera.position.x, camera.position.z, camera.position.y + 1);
-      if (g != null) {
-        const target = g + 1.6;                                  // eye height above the street
-        if (camera.position.y > target + 0.3) camera.position.y = target;   // floating → drop onto it
-        if (Math.abs(camera.position.y - target) < 0.5 || now > groundSnap.current.until) groundSnap.current = null;
-      } else if (now > groundSnap.current.until) groundSnap.current = null;
+      // The baked drop-Y is an eye-height guess; the BVH street is the truth. Find the street with a
+      // GENEROUS ceiling (it may be above OR below the spawn) and snap eye = street + 1.6 ONCE the mesh
+      // is ready (up or down), then stop. Mesh-only first so we land on the street, not the terrain.
+      const g = meshGroundHeight(camera.position.x, camera.position.z, camera.position.y + 8)
+             ?? groundAt(camera.position.x, camera.position.z, camera.position.y + 8);
+      if (g != null) { camera.position.y = g + 1.6; groundSnap.current = null; }
+      else if (now > groundSnap.current.until) groundSnap.current = null;
     }
 
     // 0. Pre-game countdown: hold until it ends (or START NOW set it to the past), THEN wave 1.
