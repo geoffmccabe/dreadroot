@@ -8,6 +8,7 @@ import { CrawlerMonster } from './CrawlerMonster';
 import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
+import { getMonsterOverride } from './monsterStats';
 
 export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
@@ -42,7 +43,7 @@ export const CFG: Partial<Record<MType, {
   boss?: 'teleporter'; noStun?: boolean; noKnockback?: boolean; bossSpeedFactor?: number; lightning?: boolean;
   bodyFlames?: BodyFlame[]; smokeTrail?: boolean; spin?: SpinConfig;
   meleeContact?: { dmg: [number, number]; kb: [number, number]; cooldownMs?: number };
-  attackRange?: number; attackMs?: number;
+  attackRange?: number; attackMs?: number; aggro?: number; wanderRadius?: number;
   attackStyle?: 'spin-lunge'; hitSound?: string; missSound?: string; attackSound?: string; roarSound?: string;
   walkSound?: string; hurtSound?: string; lungeOnSwing?: boolean; callSound?: string; annoyedSound?: string;
   bulletTumble?: boolean; deathStyle?: 'deflate' | 'topple';
@@ -84,6 +85,31 @@ export const CFG: Partial<Record<MType, {
   19: { url: '/siege/monsters/dfdemon_dance.glb',   modelHeight: 1.9,  height: 2.4, speed: 3.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 120, animSpeed: 1.0, zombie: false, enrageOnHit: true, attackRange: 2.0, attackMs: 1200, meleeContact: { dmg: [8, 18], kb: [2, 5], cooldownMs: 1200 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { run: 'walk' } },
 };
 
+// effectiveCfg — CFG[type] with the admin's saved overrides (the editable base stats) merged on
+// top. CatalogMonster + the challenge runner read THIS, so an admin's edits apply to every new
+// spawn (and challenges inherit them, since their boss % multipliers ride on top of this base).
+export function effectiveCfg(type: MType): (typeof CFG)[MType] {
+  const base = CFG[type];
+  if (!base) return base;
+  const o = getMonsterOverride(type) as Record<string, number | string | boolean | undefined>;
+  if (!o || Object.keys(o).length === 0) return base;
+  const m: Record<string, unknown> = { ...base };
+  const num = (k: string) => (typeof o[k] === 'number' ? (o[k] as number) : undefined);
+  for (const k of ['health', 'speed', 'attackRange', 'attackMs', 'sizeJitter', 'speedJitter', 'animSpeed', 'height', 'aggro', 'wanderRadius']) {
+    const v = num(k); if (v != null) m[k] = v;
+  }
+  if (o.gait === 'hop' || o.gait === 'climb') m.gait = o.gait;
+  for (const k of ['noStun', 'noKnockback', 'enrageOnHit']) if (typeof o[k] === 'boolean') m[k] = o[k];
+  if (base.meleeContact && [num('dmgMin'), num('dmgMax'), num('kbMin'), num('kbMax')].some((v) => v != null)) {
+    m.meleeContact = {
+      ...base.meleeContact,
+      dmg: [num('dmgMin') ?? base.meleeContact.dmg[0], num('dmgMax') ?? base.meleeContact.dmg[1]],
+      kb: [num('kbMin') ?? base.meleeContact.kb[0], num('kbMax') ?? base.meleeContact.kb[1]],
+    };
+  }
+  return m as (typeof CFG)[MType];
+}
+
 // Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.
 export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; baseHealth: number }[] = [
   { id: 1, name: 'Demon Horde',              baseHeight: 1.8,  baseHealth: 100 },
@@ -119,14 +145,14 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ri
   if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
   // Type 18 = the Crawler — self-contained surface-crawl locomotion (walls + undersides), not CFG-driven.
   if (type === 18) return <CrawlerMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
-  const m = CFG[type];
+  const m = effectiveCfg(type);   // CFG + admin base-stat overrides
   const o = ov;
   if (!m && !o) return null;
   const sz = mods?.sizeMul ?? 1, sp = mods?.speedMul ?? 1, hp = mods?.healthMul ?? 1;
   return (
     <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
-      modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={400}
-      speed={(o?.speed ?? m!.speed) * sp} wanderRadius={6} health={(o?.health ?? m!.health) * hp}
+      modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={m?.aggro ?? 400}
+      speed={(o?.speed ?? m!.speed) * sp} wanderRadius={m?.wanderRadius ?? 6} health={(o?.health ?? m!.health) * hp}
       animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
       clips={m?.clips}
       sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}

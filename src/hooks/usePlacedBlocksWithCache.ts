@@ -12,6 +12,7 @@ import { gameUsesVoxels } from '@/config/gameRegistry';
 import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
+import { syncMonsterStats } from '@/components/siege/monsterStats';
 import { warmUpShaders } from '@/lib/shaderWarmup';
 import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
@@ -240,6 +241,18 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         initLogFinishStep(ambientStepId!, loaded ? 1 : 0);
         return loaded;
       })();
+
+      // SWW monster base-stat overrides: sync admin edits from Supabase into the local IndexedDB
+      // cache so challenges + spawns load fast and reflect any changes since this device's last login.
+      // Sync in every game (the admin panel needs the current data), but only LOG it in Siege Worlds.
+      if (!needsVoxels) {
+        const npcStepId = initLogStartStep('siegeMonsterStats', 'Checking for NPC model updates...');
+        const npcSync = await syncMonsterStats();
+        initLogFinishStep(npcStepId!);
+        initLogStep('siegeMonsterStats', `${npcSync.updated} models updated since last login`, npcSync.updated);
+      } else {
+        await syncMonsterStats();
+      }
 
       // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk
       // loader (it was loading ~290k Dreadroot blocks into the world + collision grid in siege).

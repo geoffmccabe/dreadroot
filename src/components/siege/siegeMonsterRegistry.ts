@@ -1,30 +1,40 @@
-// siegeMonsterRegistry — the read model behind the Admin → NPC → "Enemies SW" panel.
-// Siege Worlds monsters are a SEPARATE system from the EMS/Dreadroot enemies. The roster is
-// MONSTER_CATALOG (every spawnable SWW type, ids 1-18); detailed combat stats live in the
-// gameplay catalog (siegeMonsterCatalog.CFG, keyed by npcType). Types 6 (skeleton horde),
-// 9 (Ghost) and 18 (Crawler) render via their own components, so they have no CFG row — we
-// fall back to the catalog's base stats for those. The Pole Dancer (decor) is appended last.
-// Each card also shows HOW TO SPAWN it (the SiegeSpawner sequence). Names are editable here
-// (per-device localStorage) and the list auto-sorts alphabetically.
+// siegeMonsterRegistry — the read model behind the Admin → NPC → "Enemies SW" panel. Roster is
+// MONSTER_CATALOG (every SWW type). Stats come from effectiveCfg (code defaults + admin overrides),
+// so the panel shows the LIVE base values and re-renders whenever an admin saves an edit. Types 6
+// (skeleton horde), 9 (Ghost) and 18 (Crawler) render via their own components (no CFG row) — their
+// stats fall back to the catalog base and aren't stat-editable (name + tags still are). Tags default
+// to an auto-derived set (monsterTags) and can be overridden per monster.
 import { useSyncExternalStore } from 'react';
-import { CFG, MONSTER_CATALOG, type MType } from './siegeMonsterCatalog';
+import { CFG, MONSTER_CATALOG, effectiveCfg, type MType } from './siegeMonsterCatalog';
+import { getMonsterOverride, subscribeMonsterStats } from './monsterStats';
+import { deriveTags } from './monsterTags';
 
 export interface SwMonster {
-  id: number;                 // npcType (19 = the decor Pole Dancer, not a real spawn type)
-  name: string;               // display name (override or default)
-  model: string;              // glb basename
-  health: number;
-  dmgMin: number | null;
-  dmgMax: number | null;
-  attackRange: number | null; // metres
-  attackMs: number | null;    // ms between attacks
-  speed: number | null;       // m/s
+  id: number;
+  name: string;
+  model: string;
+  health: number | null;
+  dmgMin: number | null; dmgMax: number | null;
+  kbMin: number | null; kbMax: number | null;
+  attackRange: number | null; attackMs: number | null;
+  speed: number | null;
+  aggro: number | null; wanderRadius: number | null;
+  sizeJitter: number | null; speedJitter: number | null; animSpeed: number | null; height: number | null;
   gait: string;
-  special: string;            // boss / ranged / spin / attack-style / kind tags
-  spawn: string;              // how to spawn it (admin)
-  pathfinding: string;        // how it moves / navigates (read-only — native AI)
-  behavior: string;           // notable AI behaviors (read-only — native AI)
+  noStun: boolean; noKnockback: boolean; enrageOnHit: boolean;
+  tags: string[];
+  spawn: string;
+  pathfinding: string;
+  behavior: string;
+  editable: boolean;   // CFG-driven types support full stat editing; component types: name + tags only
 }
+
+// Models for the special, non-CFG component monsters (each has its own renderer).
+const SPECIAL_MODELS: Record<number, string> = {
+  6: 'skeletonheavy / light / ranger',
+  9: 'skeletonflesh',
+  18: 'skeletonflesh_crawl',
+};
 
 // Native AI / pathfinding per monster (read-only — these behaviors live in each monster's
 // renderer/AI, not in editable stats; listed so admins understand how each one acts).
@@ -47,28 +57,8 @@ const AI: Record<number, { pathfinding: string; behavior: string }> = {
   16: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (10 m); committed swipe; topple death.' },
   17: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Giant (12 m); committed swipe; topple death.' },
   18: { pathfinding: 'Wall-crawler — walks floors, walls + ceilings; climbs over enemies (own component).', behavior: 'Bite attack; scuttles along surfaces.' },
-  19: { pathfinding: 'None — decorative.', behavior: 'Loops a dance clip in the Death Dark City challenge.' },
+  19: { pathfinding: 'Ground chase; enrages when shot.', behavior: 'Dancing demon (DF model); committed swipe; topple death.' },
 };
-
-// Models + tags for the special, non-CFG catalog types (each has its own renderer).
-const SPECIAL_MODELS: Record<number, string> = {
-  6: 'skeletonheavy / light / ranger',
-  9: 'skeletonflesh',
-  18: 'skeletonflesh_crawl',
-};
-const SPECIAL_TAGS: Record<number, string> = {
-  6: 'horde · randomized',
-  9: 'flying ghost',
-  18: 'wall-crawler',
-};
-
-const KEY = 'dr_sw_monster_names';
-
-function loadOverrides(): Record<number, string> {
-  try { return JSON.parse(localStorage.getItem(KEY) || '{}'); } catch { return {}; }
-}
-
-let overrides = loadOverrides();
 
 function modelLabel(url: string): string {
   return url.split('/').pop()?.replace(/\.glb$/, '') ?? url;
@@ -81,69 +71,41 @@ function spawnCmd(id: number): string {
 
 function compute(): SwMonster[] {
   const list: SwMonster[] = MONSTER_CATALOG.map((cat) => {
-    const m = CFG[cat.id as MType];
+    const m = effectiveCfg(cat.id as MType);   // CFG types → merged stats; component types → undefined
+    const o = getMonsterOverride(cat.id);
+    const mc = m?.meleeContact;
+    const height = m?.height ?? cat.baseHeight;
     return {
       id: cat.id,
-      name: overrides[cat.id] ?? cat.name,
+      name: typeof o.name === 'string' ? o.name : cat.name,
       model: m ? modelLabel(m.url) : (SPECIAL_MODELS[cat.id] ?? '—'),
       health: m?.health ?? cat.baseHealth,
-      dmgMin: m?.meleeContact?.dmg?.[0] ?? null,
-      dmgMax: m?.meleeContact?.dmg?.[1] ?? null,
-      attackRange: m?.attackRange ?? null,
-      attackMs: m?.attackMs ?? null,
+      dmgMin: mc?.dmg?.[0] ?? null, dmgMax: mc?.dmg?.[1] ?? null,
+      kbMin: mc?.kb?.[0] ?? null, kbMax: mc?.kb?.[1] ?? null,
+      attackRange: m?.attackRange ?? null, attackMs: m?.attackMs ?? null,
       speed: m?.speed ?? null,
+      aggro: m ? (m.aggro ?? 400) : null, wanderRadius: m ? (m.wanderRadius ?? 6) : null,
+      sizeJitter: m?.sizeJitter ?? null, speedJitter: m?.speedJitter ?? null,
+      animSpeed: m?.animSpeed ?? null, height,
       gait: m?.gait ?? '—',
-      special: m
-        ? [
-            m.boss ? `boss:${m.boss}` : '',
-            m.spray ? 'ranged' : '',
-            m.spin ? 'spin' : '',
-            m.attackStyle ?? '',
-            m.enrageOnHit ? 'enrages' : '',
-            m.lightning ? 'lightning' : '',
-            m.bodyFlames ? 'flames' : '',
-            m.smokeTrail ? 'smoke' : '',
-            m.noStun ? 'no-stun' : '',
-            m.noKnockback ? 'no-kb' : '',
-          ].filter(Boolean).join(' ')
-        : (SPECIAL_TAGS[cat.id] ?? ''),
+      noStun: !!m?.noStun, noKnockback: !!m?.noKnockback, enrageOnHit: !!m?.enrageOnHit,
+      tags: Array.isArray(o.tags) ? (o.tags as string[]) : deriveTags(m ?? null, cat.id, height),
       spawn: spawnCmd(cat.id),
       pathfinding: AI[cat.id]?.pathfinding ?? '—',
       behavior: AI[cat.id]?.behavior ?? '—',
+      editable: !!CFG[cat.id as MType],
     };
   });
-
-  // Pole Dancer — decorative dancing demon (dfdemon_dance), no AI/combat. Auto-placed in the
-  // "Death Dark City" SciFi-City challenge instance, so there's no spawn command.
-  list.push({
-    id: 19,
-    name: overrides[19] ?? 'Pole Dancer',
-    model: 'dfdemon_dance',
-    health: 0, dmgMin: null, dmgMax: null, attackRange: null, attackMs: null,
-    speed: null, gait: 'dance', special: 'decor',
-    spawn: 'Auto — appears in the "Death Dark City" challenge (decor, not spawnable)',
-    pathfinding: AI[19].pathfinding, behavior: AI[19].behavior,
-  });
-
-  // Auto-sort alphabetically by name — re-sorts whenever a name changes.
   return list.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// Cached snapshot so useSyncExternalStore gets a stable reference between changes.
+// Snapshot recomputed whenever an override changes (or the cache loads), so the panel re-renders.
 let snapshot: SwMonster[] = compute();
 const subs = new Set<() => void>();
+subscribeMonsterStats(() => { snapshot = compute(); subs.forEach((f) => f()); });
 
 export function getSwMonsters(): SwMonster[] { return snapshot; }
-
-export function setSwMonsterName(id: number, name: string): void {
-  overrides = { ...overrides, [id]: name };
-  try { localStorage.setItem(KEY, JSON.stringify(overrides)); } catch { /* ignore */ }
-  snapshot = compute();
-  subs.forEach((f) => f());
-}
-
 export function subscribeSwMonsters(f: () => void): () => void { subs.add(f); return () => { subs.delete(f); }; }
-
 export function useSwMonsters(): SwMonster[] {
   return useSyncExternalStore(subscribeSwMonsters, getSwMonsters, getSwMonsters);
 }
