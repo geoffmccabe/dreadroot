@@ -290,11 +290,12 @@ export const YETI_TIME_WORLD: WorldDefinition = {
   meshColliders: false, // reuses Adventure Town's DemoScene colliders
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
   ground: { kind: 'heightmap', surfaceY: 0 },
-  // PLACEHOLDER — replace with the snowy-cabin spawn (world coords read in Adventure Town).
-  spawn: { position: [84.855, 6, 139.182], yaw: 0.068, pitch: 0.090 },
-  // PLACEHOLDER box (±40 m around the placeholder spawn, 0–45 m tall). Replace with the real
-  // snowy-cabin corners + height once Geoff reads them in-world.
-  wallBox: { min: [44.8, 99.2], max: [124.9, 179.2], floorY: 0, ceilingY: 45 },
+  // Snowy-cabin spawn (Geoff's in-world reading; fwd [0.969,-0.212,0.126] → yaw/pitch).
+  spawn: { position: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
+  // Wall OFF for now — the boundary capture gave a single repeated point, so there's nothing to
+  // trace yet. Left null so Geoff can fly freely to the real corners; the wall goes in once we have
+  // 2+ distinct X/Z boundary spots.
+  wallBox: null,
   props: undefined,
 };
 

@@ -72,9 +72,9 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
   // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
   { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 }, // laser readout yaw 183.9°, pitch 5.2°
-  // Yeti Time — walled snowy arena reusing Adventure Town's geometry (identical coords). PLACEHOLDER
-  // arrival = the Adventure Town drop; replace with the snowy-cabin spawn Geoff reads in-world.
-  { code: 'KeyY', key: 'Y', name: 'Snowy Town', mapId: 'yeti-time', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 },
+  // Snowy Town — walled snowy arena reusing Adventure Town's geometry (identical coords). Arrival =
+  // the snowy-cabin spawn (Geoff's in-world reading); monsters scatter around this point.
+  { code: 'KeyY', key: 'Y', name: 'Snowy Town', mapId: 'yeti-time', pos: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
   // "Various 2" component sampler grids (loose pieces for map/challenge building).
   { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
   { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
