@@ -20,7 +20,7 @@ const FALLBACK = '/siege/monsters/skeletonlight.glb';                 // type 6 
 // Types without a CFG entry (6 = horde, 9 = Ghost) get a model here so the preview isn't blank.
 const PREVIEW_MODEL: Record<number, { url: string; h: number }> = {
   9: { url: '/siege/monsters/skeletonflesh.glb', h: 1.803 },        // Ghost (rendered upside-down + faint in-game)
-  18: { url: '/siege/monsters/skeletonflesh.glb', h: 1.803 },       // Crawler (bloody skeleton base; crawls surfaces in-game)
+  18: { url: '/siege/monsters/skeletonflesh_crawl.glb', h: 1.803 }, // Crawler — the SAME crawl model + clip it uses in-game
 };
 const urlFor = (type: number) => PREVIEW_MODEL[type]?.url ?? CFG[type as MType]?.url ?? FALLBACK;
 const heightFor = (type: number) => PREVIEW_MODEL[type]?.h ?? CFG[type as MType]?.modelHeight ?? 1.795;
@@ -68,8 +68,10 @@ function setupMaterials(c: THREE.Group, opacity: number): RecolorUniforms[] {
 }
 
 // One animated monster (its own skeleton clone + mixer), placed at `offset` within the group.
-function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset }: {
-  url: string; modelHeight: number; color: ColorMods; opacity: number; upsideDown: boolean; scaleMul: number; offset: [number, number, number];
+// clipKey picks which animation to play (substring match, e.g. 'crawl'); default = idle/first clip.
+// rate scales playback (e.g. the Crawler crawls FAST in-game, so its preview does too).
+function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset, clipKey, rate = 1 }: {
+  url: string; modelHeight: number; color: ColorMods; opacity: number; upsideDown: boolean; scaleMul: number; offset: [number, number, number]; clipKey?: string; rate?: number;
 }) {
   const { scene, animations } = useGLTF(url);
   const uniforms = useRef<RecolorUniforms[]>([]);
@@ -78,11 +80,12 @@ function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset
   const root = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, root);
   useEffect(() => {
-    const idleName = names.find((nm) => nm.toLowerCase().includes('idle')) ?? names[0];
-    const a = idleName ? actions[idleName] : null;
-    if (a) { a.reset().fadeIn(0.3).play(); a.time = Math.random() * (a.getClip().duration || 1); }   // desync horde members
+    const match = clipKey ? names.find((nm) => nm.toLowerCase().includes(clipKey)) : undefined;
+    const name = match ?? names.find((nm) => nm.toLowerCase().includes('idle')) ?? names[0];
+    const a = name ? actions[name] : null;
+    if (a) { a.reset().fadeIn(0.3).play(); a.timeScale = rate; a.time = Math.random() * (a.getClip().duration || 1); }   // desync horde members
     return () => { a?.fadeOut(0.2); };
-  }, [actions, names]);
+  }, [actions, names, clipKey, rate]);
 
   const scale = (TARGET / (modelHeight || 1.795)) * scaleMul;
   const half = (TARGET * scaleMul) / 2;
@@ -101,13 +104,16 @@ function Model({ type, color }: { type: number; color: ColorMods }) {
   const url = urlFor(type), mh = heightFor(type), flames = flamesFor(type);
   const count = countFor(type), upsideDown = isUpsideDown(type), opacity = opacityFor(type), spin = spinRate(type);
   const scaleMul = count > 1 ? 0.62 : 1;
+  // The Crawler (18) plays its in-game crawl clip, fast, so the card shows it scuttling, not standing.
+  const clipKey = type === 18 ? 'crawl' : undefined;
+  const rate = type === 18 ? 2.2 : 1;
   const turn = useRef<THREE.Group>(null);
   useFrame((_, d) => { if (turn.current) turn.current.rotation.y += d * spin; });
   const feetY = -TARGET / 2, radius = 0.2 * TARGET;
   return (
     <group ref={turn}>
       {HORDE_OFFSETS.slice(0, count).map((o, i) => (
-        <Member key={i} url={url} modelHeight={mh} color={color} opacity={opacity} upsideDown={upsideDown} scaleMul={scaleMul} offset={count > 1 ? o : [0, 0, 0]} />
+        <Member key={i} url={url} modelHeight={mh} color={color} opacity={opacity} upsideDown={upsideDown} scaleMul={scaleMul} offset={count > 1 ? o : [0, 0, 0]} clipKey={clipKey} rate={rate} />
       ))}
       {count === 1 && flames && flames.length > 0 && (
         <group position={[0, feetY, 0]}>

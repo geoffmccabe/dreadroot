@@ -9,7 +9,7 @@ import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 
-export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18;
+export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
 export type Ov = { url: string; modelHeight: number; height: number; speed: number; health: number;
                    desat: number; hueShift: number; tintRed: number; animSpeed: number };
@@ -79,6 +79,9 @@ export const CFG: Partial<Record<MType, {
   15: { url: '/siege/monsters/elementalgolem.glb',  modelHeight: 2.0, height: 8.0,  speed: 2.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 400, animSpeed: 0.55, zombie: false, enrageOnHit: true, attackRange: 4.6, attackMs: 2000, meleeContact: { dmg: [30, 60], kb: [5, 11], cooldownMs: 2000 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   16: { url: '/siege/monsters/mechanicalgolem.glb', modelHeight: 2.0, height: 10.0, speed: 2.4, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 500, animSpeed: 0.5,  zombie: false, enrageOnHit: true, attackRange: 5.4, attackMs: 2000, meleeContact: { dmg: [38, 72], kb: [6, 12], cooldownMs: 2000 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   17: { url: '/siege/monsters/fortgolem.glb',       modelHeight: 2.0, height: 12.0, speed: 2.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 600, animSpeed: 0.45, zombie: false, enrageOnHit: true, attackRange: 6.4, attackMs: 2200, meleeContact: { dmg: [48, 92], kb: [7, 14], cooldownMs: 2200 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
+  // DF Demon — the Fantasy Rivals demon seen dancing in the SciFi City. Same FR melee style as 10-17,
+  // but its clips are named idle/walk/attack (defaults), so no clip remap except run→walk for enrage.
+  19: { url: '/siege/monsters/dfdemon_dance.glb',   modelHeight: 1.9,  height: 2.4, speed: 3.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 120, animSpeed: 1.0, zombie: false, enrageOnHit: true, attackRange: 2.0, attackMs: 1200, meleeContact: { dmg: [8, 18], kb: [2, 5], cooldownMs: 1200 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { run: 'walk' } },
 };
 
 // Display registry (creator dropdowns + boss original→new readouts). baseHeight = normal height.
@@ -101,6 +104,7 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 16, name: 'Mechanical Golem',        baseHeight: 10.0, baseHealth: 500 },
   { id: 17, name: 'Fort Golem',              baseHeight: 12.0, baseHealth: 600 },
   { id: 18, name: 'Crawlies',                baseHeight: 0.85, baseHealth: 40 },
+  { id: 19, name: 'DF Demon',                baseHeight: 2.4,  baseHealth: 120 },
 ];
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
