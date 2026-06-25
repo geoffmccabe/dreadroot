@@ -8,7 +8,6 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
-import { meshGroundHeight } from './meshColliderSystem';
 import { fireSiegeExplosion } from './SiegeExplosion';
 import { getCityMusicTime } from './SciFiCityMusic';
 
@@ -17,9 +16,18 @@ const DROP_H = 100;   // metres above the landing spot each demon drops from
 const GRAVITY = 22;   // m/s² fall
 
 // Music-timed blasts: when the soundtrack's loop time crosses each of these (seconds), fire a blast at
-// every demon's landed spot. Geoff's timecodes 0:0:17:20 + 0:01:09:00 → 17.20s + 69.00s.
+// every demon's CURRENT centre. Geoff's timecodes 0:0:17:20 + 0:01:09:00 → 17.20s + 69.00s.
 const BLAST_TIMES = [17.20, 69.00];
-const LANDED_POS: [number, number, number][] = [];   // filled as demons land
+const BLAST_SCALE = 9;   // grenade blast ×9 — big enough to read on a rooftop
+
+// The laser readout is the EYE position; Geoff stood on each spot, so the floor is one standing
+// height below it. We drop the demon onto THIS, not the mesh collider (which catches roof railings/
+// props at variable heights and leaves the demon hovering 1–3 m up).
+const EYE = 1.6;
+
+// Live centre of each mounted demon (tracks the dance's root motion, so a blast lands ON the demon
+// wherever it has danced to — not back at the spawn spot). Each <Dancer> registers/removes its getter.
+const DEMON_CENTERS = new Set<(out: THREE.Vector3) => void>();
 
 // INSTANCE-specific content. A Map (SciFi City) can have many INSTANCES — an ongoing multiplayer Open
 // World vs single-player Challenges — that differ in content. The dancers belong to the "Death Dark
@@ -74,51 +82,49 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: DancingDemonDef) 
     return () => { a?.fadeOut(0.2); };
   }, [actions, idleName]);
 
-  // ENTRANCE: each demon drops from 100m onto the surface below the (eye-height) reading, then starts
-  // dancing on landing. The landing target is the BUILDING mesh just below the reading (mesh-only, within
-  // 8m so it can't fall to the distant terrain); if no collider is found in ~5s it lands at the reading.
-  // Hidden until it has a target so it never flashes at the eye-Y first.
-  const phase = useRef<'wait' | 'fall' | 'land'>('wait');
-  const landY = useRef(0);
+  // The demon's live centre = its Hips bone (the dance has root motion, so the body drifts off the
+  // spawn spot). Blasts target this so they always land ON the demon. Falls back to the group origin.
+  const hips = useMemo(() => { let h: THREE.Object3D | null = null; cloned.traverse((o) => { if (!h && o.name === 'Hips') h = o; }); return h; }, [cloned]);
+  const centerOf = useMemo(() => (out: THREE.Vector3) => {
+    if (hips) hips.getWorldPosition(out);
+    else if (group.current) group.current.getWorldPosition(out);
+  }, [hips]);
+  useEffect(() => { DEMON_CENTERS.add(centerOf); return () => { DEMON_CENTERS.delete(centerOf); }; }, [centerOf]);
+
+  // ENTRANCE: drop from 100m onto the floor Geoff stood on (reading minus one standing height — NOT the
+  // mesh collider, which catches roof props and leaves the demon hovering), then dance + blast on impact.
+  const phase = useRef<'fall' | 'land'>('fall');
+  const landY = useRef(pos[1] - EYE);
   const vy = useRef(0);
-  const tries = useRef(0);
+  const started = useRef(false);
+  const _c = useMemo(() => new THREE.Vector3(), []);
   useFrame((_, dt) => {
     const g = group.current; if (!g || phase.current === 'land') return;
     dt = Math.min(dt, 0.05);
-    const toDance = () => {
-      if (idleName) actions[idleName]?.fadeOut(0.25);
-      const d = danceName ? actions[danceName] : null; d?.reset().fadeIn(0.3).play();
-    };
-    if (phase.current === 'wait') {
-      g.visible = false;
-      tries.current++;
-      const f = meshGroundHeight(pos[0], pos[2], pos[1] + 1.0);
-      const target = (f != null && pos[1] - f < 8) ? f : (tries.current > 300 ? pos[1] : null);
-      if (target != null) { landY.current = target; g.position.set(pos[0], target + DROP_H, pos[2]); g.visible = true; vy.current = 0; phase.current = 'fall'; }
-      return;
-    }
-    // FALL
+    if (!started.current) { g.position.set(pos[0], landY.current + DROP_H, pos[2]); started.current = true; }
     vy.current -= GRAVITY * dt;
     g.position.y += vy.current * dt;
     if (g.position.y <= landY.current) {
-      g.position.y = landY.current; phase.current = 'land'; toDance();
-      LANDED_POS.push([pos[0], landY.current, pos[2]]);        // remember where it landed (for the music blasts)
-      fireSiegeExplosion(pos[0], landY.current, pos[2], 3);    // BIG grenade blast on impact (cosmetic — no damage)
+      g.position.y = landY.current; phase.current = 'land';
+      if (idleName) actions[idleName]?.fadeOut(0.25);
+      (danceName ? actions[danceName] : null)?.reset().fadeIn(0.3).play();
+      centerOf(_c); fireSiegeExplosion(_c.x, _c.y, _c.z, BLAST_SCALE);   // BIG blast at the demon's centre (cosmetic)
     }
   });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }
 
-// Fires a blast at every landed demon when the soundtrack's loop time crosses a BLAST_TIMES entry.
+// Fires a blast at every demon's current centre when the soundtrack's loop time crosses a BLAST_TIMES entry.
 function MusicBlasts() {
   const lastT = useRef(-1);
+  const _c = useMemo(() => new THREE.Vector3(), []);
   useFrame(() => {
     const t = getCityMusicTime();
     if (t == null) { lastT.current = -1; return; }
     if (t < lastT.current) lastT.current = -1;   // the loop wrapped → re-arm all times
     for (const bt of BLAST_TIMES) {
       if (lastT.current < bt && t >= bt) {
-        for (const p of LANDED_POS) fireSiegeExplosion(p[0], p[1], p[2], 3);
+        for (const getC of DEMON_CENTERS) { getC(_c); fireSiegeExplosion(_c.x, _c.y, _c.z, BLAST_SCALE); }
       }
     }
     lastT.current = t;
@@ -131,7 +137,6 @@ export function DancingDemons() {
   // the challenge name. Once Geoff confirms the spot via a laser readout, restore the instance gate:
   //   const name = useSyncExternalStore(subscribeChallenge, () => { const s = getChallengeState(); return s.active ? s.name : ''; });
   //   if (!isDancerInstance(name)) return null;
-  useEffect(() => { LANDED_POS.length = 0; }, []);   // reset on (re)entering the city so it doesn't accumulate
   return <>{DANCERS.map((d, i) => <Dancer key={i} {...d} />)}<MusicBlasts /></>;
 }
 
