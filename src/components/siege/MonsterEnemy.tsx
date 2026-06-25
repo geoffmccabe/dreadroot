@@ -15,6 +15,8 @@ import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { raycastMesh } from './meshColliderSystem';
+import { getNavProfile } from './siegeNavProfile';
+import { getActiveMapId } from '@/config/activeMap';
 import { addCorpseZone, removeCorpseZone, corpseSlow } from './siegeCorpses';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import type { ColorMods } from './challenge/challengeTypes';
@@ -379,7 +381,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Skeleton injured-crawl + death-variant state.
     deathVariant: '',
     // Stuck-detection + pathfinding (kicks in only when blocked from reaching the player).
-    bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0, crouching: false,
+    bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0, crouching: false, bvhClimb: false,
     path: null as import('./siegePathfinding').PathPt[] | null });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
@@ -681,6 +683,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const now = performance.now();
     const dx = camera.position.x - s.x, dz = camera.position.z - s.z;
     const dist = Math.hypot(dx, dz) || 1;
+    const nav = getNavProfile(getActiveMapId());   // per-MAP pursuit traits (climb-to-roof, A*, crawl)
 
     // ── Line-of-sight to the player (3D, torso→torso) ──
     // A wall OR ceiling between us blocks ALL melee/contact damage, so a monster outside a hiding
@@ -1166,7 +1169,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // out of reach, it's blocked — route AROUND the wall with grid A* and steer toward the next
       // waypoint (recomputed every ~0.8s). Switches to the crawl anim where the rig has one.
       let cdx = dx, cdz = dz, cdist = dist, pathLoco = false;
-      if (c.meleeContact && dist > c.attackRange + 0.6) {
+      if (c.meleeContact && nav.pathfindAround && dist > c.attackRange + 0.6) {
         if (s.progressAt === 0 || dist < s.bestDist - 0.25) { s.bestDist = dist; s.progressAt = now; }
         if (now - s.progressAt > 1500) {                                   // not getting closer → stuck
           // Player WAY above us (flew to a roof / hovering): there's no walkable route to a flying
@@ -1433,7 +1436,23 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       }
     }
 
-    s.wasClimbing = climbing;   // continuity so an in-progress wall climb isn't dropped mid-ascent
+    // ── BVH climb-to-roof (mesh worlds, e.g. SciFi City) ──
+    // Box-collider walls are handled by the climb gait above. For triangle-MESH buildings (which the
+    // gait can't read) a monster would otherwise stop at the base when you fly to a roof. If the map
+    // allows it, the player is above, and a mesh wall is right in front (toward you), scale that wall
+    // up to the roof. Only while still BELOW you, so they don't climb into the sky.
+    let bvhClimbing = false;
+    if (nav.climbToRoof && !climbing && moving && camera.position.y - (s.y + H * 0.5) > 0.5 && dist < CLIMB_LOD) {
+      const fdx = dx / dist, fdz = dz / dist;
+      if (raycastMesh(preX, s.y + 1.0, preZ, fdx, 0, fdz, 0.7) != null) {   // a mesh wall just ahead
+        bvhClimbing = true;
+        s.x = preX; s.z = preZ;                                             // hold at the wall face (don't clip through)
+        // Head cleared the top (no hit at head height) → crest forward ONTO the roof.
+        if (raycastMesh(preX, s.y + H + 0.2, preZ, fdx, 0, fdz, 0.9) == null) { s.x += fdx * SPD * 0.6 * delta; s.z += fdz * SPD * 0.6 * delta; }
+      }
+    }
+    s.bvhClimb = bvhClimbing;
+    s.wasClimbing = climbing || bvhClimbing;   // continuity so an in-progress wall climb isn't dropped mid-ascent
 
     // ── Vertical ──
     if (climbing) {
@@ -1443,6 +1462,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       s.y = Math.min(wallTop, s.y + SPD * 0.5 * delta);
       s.vy = 0;
       if (wallIsMonster) { s.x += mvx * SPD * 0.5 * delta; s.z += mvz * SPD * 0.5 * delta; }
+    } else if (bvhClimbing) {
+      // Scale the mesh wall face upward (slightly faster than box-climb so they keep pace with a jet-boosting player).
+      s.y += SPD * 0.7 * delta; s.vy = 0;
     } else {
       // Gravity + land on the highest standable surface.
       s.vy -= GRAVITY * delta;

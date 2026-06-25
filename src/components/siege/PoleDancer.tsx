@@ -4,10 +4,12 @@
 // (no AI / no combat). NOTE: a true "pole dance" clip wasn't available open-source, so this is a
 // hip-hop dance stand-in on the pole — swap the clip in hunterf_dance.glb to upgrade.
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
+import { groundAt } from './siegeGround';
 
 const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
 
@@ -58,16 +60,22 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
     a?.reset().fadeIn(0.4).play();
     return () => { a?.fadeOut(0.2); };
   }, [actions, names]);
+  // Drop her onto the actual floor — the city was lowered ~2.8m after the pole reading was taken, so
+  // the baked Y is stale. Snap to the BVH floor once it's available (keeps Y if the floor is voxel).
+  const grounded = useRef(false);
+  useFrame(() => {
+    const g = group.current; if (!g || grounded.current) return;
+    const f = groundAt(pos[0], pos[2], pos[1] + 4);
+    if (f != null) { g.position.y = f; grounded.current = true; }
+  });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }
 
 export function PoleDancers() {
-  // Only in the matching challenge instance — not the open-world city map.
-  const challengeName = useSyncExternalStore(subscribeChallenge, () => {
-    const s = getChallengeState();
-    return s.active ? s.name : '';
-  });
-  if (!isDancerInstance(challengeName)) return null;
+  // TEMP (placement debug): render on the city map UNCONDITIONALLY so she's easy to find regardless of
+  // the challenge name. Once Geoff confirms the spot via a laser readout, restore the instance gate:
+  //   const name = useSyncExternalStore(subscribeChallenge, () => { const s = getChallengeState(); return s.active ? s.name : ''; });
+  //   if (!isDancerInstance(name)) return null;
   return <>{DANCERS.map((d, i) => <Dancer key={i} {...d} />)}</>;
 }
 
