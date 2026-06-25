@@ -2,7 +2,7 @@
 // right of the orange jet-boost triangles in the HUD. Each triangle is split into 4
 // side-by-side sections (25/50/75/100%); a charged burst is deep purple, a spent one turns
 // much brighter purple — so the bar reads like hearts filling, but per-quarter. One burst =
-// one 0.25s forward zoom (E). Reads the rocketBelt store directly (no prop threading); only
+// one 0.25s forward zoom (Shift+E). Reads the rocketBelt store directly (no prop threading); only
 // renders when a belt is equipped (max > 0).
 import { useRocketBeltCharges } from '@/config/rocketBelt';
 
@@ -17,7 +17,7 @@ export function RocketBeltHud({ className }: { className?: string }) {
   return (
     <div
       className={`flex items-center gap-0.5 ${className ?? ''}`}
-      title={`Rocket Belt — ${available}/${max} bursts (E to zoom forward)`}
+      title={`Rocket Belt — ${available}/${max} bursts (Shift+E to zoom forward)`}
     >
       {Array.from({ length: triangles }).map((_, t) => {
         // How many of THIS triangle's 4 sections are still charged (fill left→right).
