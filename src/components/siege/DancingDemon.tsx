@@ -27,7 +27,7 @@ export interface DancingDemonDef { pos: [number, number, number]; yaw?: number; 
 // is the CAMERA/eye position he read (a few metres above the surface), so each snaps DOWN onto the
 // building mesh below it (see the snap in <Dancer>). X/Z are placed exactly as given.
 const DANCERS: DancingDemonDef[] = [
-  { pos: [-2.214, 32.008, -5.028], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
+  { pos: [-3.966, 26.650, -21.300], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved — old spot too cramped to dance)
   { pos: [38.589, 32.008, 35.227], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
   { pos: [13.850, 12.284, 69.129], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign (moved off the wall)
   { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
