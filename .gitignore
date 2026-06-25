@@ -36,3 +36,12 @@ perftest-results/
 
 # Oversized assets must not ship to Cloudflare Pages (25MB/file limit)
 public/PlayerSkins.fbx
+
+# Dev-source assets — never serve these; the game loads converted .glb/.gltf/.webp only.
+# (They blew past GitHub's 100MB limit and bloated the repo.)
+public/Starblind 3D Character Models/
+public/Synty Animation Packs/
+*.blend
+*.blend1
+*.unitypackage
+public/*.psd
