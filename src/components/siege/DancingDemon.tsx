@@ -28,7 +28,7 @@ export interface DancingDemonDef { pos: [number, number, number]; yaw?: number; 
 // building mesh below it (see the snap in <Dancer>). X/Z are placed exactly as given.
 const DANCERS: DancingDemonDef[] = [
   { pos: [-3.966, 26.650, -21.300], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved — old spot too cramped to dance)
-  { pos: [38.589, 32.008, 35.227], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop
+  { pos: [36.905, 26.650, -0.293], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved)
   { pos: [13.850, 12.284, 69.129], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign (moved off the wall)
   { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
 ];
