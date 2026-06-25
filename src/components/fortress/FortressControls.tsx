@@ -2595,7 +2595,20 @@ export function FirstPersonControls({
         velocity.current.set(0, 0, 0);
         camera.position.add(deltaMovement);
         onGround.current = false;
-        
+
+        // SW debug readout — god-mode/FLY path. The full writer below (normal physics) is skipped by
+        // this branch's `return`, so without this the debug X/Z + view FREEZE while flying (only Y
+        // updated), making every captured coordinate identical. Write the full set from the finalized
+        // fly position so copied coords are always live.
+        if (groundHeightFn) {
+          sdbg.isSiege = true; sdbg.godMode = true; sdbg.onGround = false;
+          sdbg.playerX = camera.position.x; sdbg.playerY = camera.position.y; sdbg.playerZ = camera.position.z;
+          const _f = camera.getWorldDirection(_sdbgDir);
+          sdbg.fwdX = _f.x; sdbg.fwdY = _f.y; sdbg.fwdZ = _f.z;
+          sdbg.yawDeg = (Math.atan2(_f.x, _f.z) * 180 / Math.PI + 360) % 360;
+          sdbg.pitchDeg = Math.asin(Math.max(-1, Math.min(1, _f.y))) * 180 / Math.PI;
+        }
+
         // Broadcast position to multiplayer (throttled to 20Hz)
         if (now - lastBroadcastRef.current >= BROADCAST_INTERVAL) {
           lastBroadcastRef.current = now;
