@@ -243,15 +243,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       })();
 
       // SWW monster base-stat overrides: sync admin edits from Supabase into the local IndexedDB
-      // cache so challenges + spawns load fast and reflect any changes since this device's last login.
-      // Sync in every game (the admin panel needs the current data), but only LOG it in Siege Worlds.
+      // cache so challenges + spawns load fast and reflect changes since this device's last login.
+      // ONLY in Siege Worlds — never block a Dreadroot load with a SWW-only query (the admin panel
+      // loads it lazily on mount for other games).
       if (!needsVoxels) {
         const npcStepId = initLogStartStep('siegeMonsterStats', 'Checking for NPC model updates...');
         const npcSync = await syncMonsterStats();
         initLogFinishStep(npcStepId!);
-        initLogStep('siegeMonsterStats', `${npcSync.updated} models updated since last login`, npcSync.updated);
-      } else {
-        await syncMonsterStats();
+        initLogStep('siegeMonsterStats', `${npcSync.updated} models updated since last login`);
       }
 
       // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk

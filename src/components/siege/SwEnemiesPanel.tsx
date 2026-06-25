@@ -8,8 +8,9 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { useEffect } from 'react';
 import { useSwMonsters, type SwMonster } from './siegeMonsterRegistry';
-import { saveMonsterOverride, clearMonsterOverride } from './monsterStats';
+import { saveMonsterOverride, clearMonsterOverride, syncMonsterStats } from './monsterStats';
 import { TAG_GROUPS } from './monsterTags';
 
 const STAT_FIELDS: { key: keyof SwMonster; label: string }[] = [
@@ -140,6 +141,9 @@ function MonsterCard({ m }: { m: SwMonster }) {
 
 export function SwEnemiesPanel() {
   const monsters = useSwMonsters();
+  // Pull the latest overrides from Supabase when the admin opens the panel (Dreadroot doesn't
+  // sync at world-init, and another admin may have edited from a different device).
+  useEffect(() => { void syncMonsterStats(); }, []);
   return (
     <div className="space-y-4">
       {monsters.map((m) => <MonsterCard key={m.id} m={m} />)}
