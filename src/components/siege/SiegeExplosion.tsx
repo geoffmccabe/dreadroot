@@ -144,7 +144,6 @@ export const SiegeExplosion = forwardRef<SiegeExplosionHandle>((_, ref) => {
       }
     }, []);
   useImperativeHandle(ref, () => ({ burst }), [burst]);
-  useEffect(() => { _siegeBurst = burst; return () => { if (_siegeBurst === burst) _siegeBurst = null; }; }, [burst]);
 
   useFrame((_s, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05);
