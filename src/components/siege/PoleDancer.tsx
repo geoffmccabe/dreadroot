@@ -27,8 +27,14 @@ export interface PoleDancerDef { pos: [number, number, number]; yaw?: number; sc
 // The three poles (world coords). Pole #1 base block was reported at (12, 4, -27); the dancer stands
 // ONE dancer (dfdemon, red-tinted), placed ~1m from the pole-base reading [12,4,-27], 1m toward the
 // door (−Z guess). Floor Y kept at the base's 4 — send a laser readout at the exact spot to refine.
+// Five dancing monsters scattered around the city (ambient, with the soundtrack). All ground-snap to
+// the floor under their XZ, so only the XZ needs to land in the city.
 const DANCERS: PoleDancerDef[] = [
-  { pos: [12, 4, -28], yaw: 0, scale: 1.0, tint: '#e23b3b' },
+  { pos: [12, 4, -28], yaw: 0,    scale: 1.0,  tint: '#e23b3b' },
+  { pos: [38, 4, 8],   yaw: 1.2,  scale: 1.05, tint: '#e23b3b' },
+  { pos: [-8, 4, 22],  yaw: 2.4,  scale: 0.95, tint: '#e23b3b' },
+  { pos: [52, 4, -18], yaw: -1.5, scale: 1.0,  tint: '#e23b3b' },
+  { pos: [22, 4, 40],  yaw: 0.7,  scale: 1.08, tint: '#e23b3b' },
 ];
 
 function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
@@ -45,8 +51,8 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: PoleDancerDef) {
       m.material = Array.isArray(m.material) ? mats : mats[0];
       mats.forEach((mm) => {
         const sm = mm as THREE.MeshStandardMaterial;
-        if ('color' in sm && sm.color) sm.color.lerp(col, 0.55);                          // red devil tint
-        if ('emissive' in sm) { sm.emissive = col.clone(); sm.emissiveIntensity = 0.35; } // self-light on dark maps
+        if ('color' in sm && sm.color) sm.color.lerp(col, 0.14);                          // light red tint (−75%) so the model reads
+        if ('emissive' in sm) { sm.emissive = col.clone(); sm.emissiveIntensity = 0.09; } // faint self-light on dark maps
         if ('metalness' in sm) sm.metalness = 0;
         sm.needsUpdate = true;
       });
