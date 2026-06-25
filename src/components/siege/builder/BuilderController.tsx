@@ -13,6 +13,7 @@ import { sampleHeight } from '../terrainHeight';
 import {
   getBuilder, setBuilder, addObject, updateObject, removeObject, useBuilder,
 } from './builderObjectsState';
+import { scifiAsset } from '@/config/assetBase';
 
 const MARCH_MAX = 800;   // meters the placement ray reaches
 const MARCH_STEP = 2;    // coarse step (m), refined by bisection
@@ -20,7 +21,7 @@ const clampScale = (s: number) => Math.min(50, Math.max(0.05, s));
 const groundY = (x: number, z: number) => { const h = sampleHeight(x, z); return h == null ? 0 : h; };
 
 function GhostModel({ file }: { file: string }) {
-  const { scene } = useGLTF(`/siege/scifi/${file}`, '/draco/');
+  const { scene } = useGLTF(scifiAsset(file), '/draco/');
   const ghost = useMemo(() => {
     const c = scene.clone(true);
     c.traverse((o) => {

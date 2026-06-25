@@ -8,9 +8,10 @@ import * as THREE from 'three';
 import { useActiveMapId } from '@/config/activeMap';
 import { loadMap } from '../terrain/mapPersistence';
 import { useBuilder, setObjects, type PlacedObject } from './builderObjectsState';
+import { scifiAsset } from '@/config/assetBase';
 
 function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }) {
-  const { scene } = useGLTF(`/siege/scifi/${obj.file}`, '/draco/');
+  const { scene } = useGLTF(scifiAsset(obj.file), '/draco/');
   const grp = useRef<THREE.Group>(null);
   // Highlight the selected object's bounds (null disables the helper).
   useHelper(selected ? (grp as React.MutableRefObject<THREE.Object3D>) : null, THREE.BoxHelper, 0x6cf0ff);

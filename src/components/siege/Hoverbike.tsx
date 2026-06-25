@@ -7,8 +7,9 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { setHoverbikeInRange } from './hoverbikeStore';
 import { meshGroundHeight } from './meshColliderSystem';
+import { scifiAsset } from '@/config/assetBase';
 
-const URL = '/siege/scifi/worlds_SM_Veh_Hover_Bike_02.gltf';
+const URL = scifiAsset('worlds_SM_Veh_Hover_Bike_02.gltf');
 // Y is Geoff's eye-height reading (~3m above the helipad). Snap DOWN to the mesh surface just below it
 // (the helipad) — only within 8m so it can't drop to the street far below.
 const X = -31.093, Y = 12.546, Z = -44.667;

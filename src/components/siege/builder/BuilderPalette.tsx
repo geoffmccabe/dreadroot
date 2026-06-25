@@ -13,6 +13,7 @@ import { serializeField } from '../terrain/heightField';
 import { getBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
+import { scifiData } from '@/config/assetBase';
 
 // The converted asset sets (catalogs live at /siege/scifi/_catalog_<set>.json).
 const SETS: { id: string; label: string }[] = [
@@ -45,7 +46,7 @@ export function BuilderPalette() {
     let alive = true;
     const cached = catalogCache.get(set);
     if (cached) { setItems(cached); return; }
-    fetch(`/siege/scifi/_catalog_${set}.json`).then((r) => r.json()).then((d) => {
+    fetch(scifiData(`_catalog_${set}.json`)).then((r) => r.json()).then((d) => {
       const its = (d.items ?? []) as CatItem[];
       catalogCache.set(set, its);
       if (alive) setItems(its);

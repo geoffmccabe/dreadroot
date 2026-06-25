@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { sampleHeight } from '../terrainHeight';
 import { toRenderSpace } from '@/lib/renderSpace';
+import { scifiAsset } from '@/config/assetBase';
 
 // First converted city models — a spread of building / prop / vehicle / sign.
 const MODELS = [
@@ -32,7 +33,7 @@ const COLS = 4;
 const PITCH = 12;
 
 function ShowcaseModel({ file, x, z }: { file: string; x: number; z: number }) {
-  const { scene } = useGLTF(`/siege/scifi/${file}.gltf`);
+  const { scene } = useGLTF(scifiAsset(`${file}.gltf`));
   const obj = useMemo(() => {
     const model = scene.clone(true);           // static meshes → plain clone is fine
     const box = new THREE.Box3().setFromObject(model);

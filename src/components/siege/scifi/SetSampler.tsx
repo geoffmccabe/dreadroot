@@ -7,6 +7,7 @@ import { Component, Suspense, useEffect, useMemo, useState, type ReactNode } fro
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { sampleHeight } from '../terrainHeight';
+import { scifiAsset, scifiData } from '@/config/assetBase';
 
 interface SamplerItem { file: string; w: number; h: number; d: number; category: string; }
 interface SamplerManifest { set: string; cell: number; count: number; items: SamplerItem[]; }
@@ -23,7 +24,7 @@ class ModelBoundary extends Component<{ children: ReactNode }, { failed: boolean
 function SamplerModel({ file, x, z }: { file: string; x: number; z: number }) {
   // '/draco/' so draco-compressed models (e.g. the big assembled mech) decode; plain
   // models ignore it.
-  const { scene } = useGLTF(`/siege/scifi/${file}`, '/draco/');
+  const { scene } = useGLTF(scifiAsset(file), '/draco/');
   const obj = useMemo(() => {
     const model = scene.clone(true);
     const id = file.replace(/\.gltf$/, '');
@@ -53,7 +54,7 @@ export function SetSampler({ set }: { set: string }) {
   const [manifest, setManifest] = useState<SamplerManifest | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(`/siege/scifi/_sampler_${set}.json`)
+    fetch(scifiData(`_sampler_${set}.json`))
       .then((r) => r.json())
       .then((m) => { if (alive) setManifest(m); })
       .catch(() => { /* manifest missing */ });

@@ -6,14 +6,15 @@ import { useGLTF } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getChestPhase } from './chestState';
+import { scifiAsset } from '@/config/assetBase';
 
 const POS: [number, number, number] = [-84.69, 23.7, 312.155];
 const YAW = Math.PI;             // face roughly toward the player approach
 const LID_OPEN = -1.8;           // radians
 
 export function MagicChest() {
-  const base = useGLTF('/siege/scifi/kingdom_SM_Prop_Chest_01.gltf', '/draco/');
-  const lid = useGLTF('/siege/scifi/kingdom_SM_Prop_Chest_01_Lid.gltf', '/draco/');
+  const base = useGLTF(scifiAsset('kingdom_SM_Prop_Chest_01.gltf'), '/draco/');
+  const lid = useGLTF(scifiAsset('kingdom_SM_Prop_Chest_01_Lid.gltf'), '/draco/');
   const baseScene = useMemo(() => base.scene.clone(true), [base.scene]);
   const lidScene = useMemo(() => lid.scene.clone(true), [lid.scene]);
   const lidRef = useRef<THREE.Group>(null);
@@ -30,5 +31,5 @@ export function MagicChest() {
   );
 }
 
-useGLTF.preload('/siege/scifi/kingdom_SM_Prop_Chest_01.gltf', '/draco/');
-useGLTF.preload('/siege/scifi/kingdom_SM_Prop_Chest_01_Lid.gltf', '/draco/');
+useGLTF.preload(scifiAsset('kingdom_SM_Prop_Chest_01.gltf'), '/draco/');
+useGLTF.preload(scifiAsset('kingdom_SM_Prop_Chest_01_Lid.gltf'), '/draco/');
