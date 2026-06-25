@@ -31,6 +31,12 @@ Total: **~1,985 siege files + 96 unreferenced.**
 
 ## 3. Key architectural decision — ONE URL interceptor, not 49 file edits
 
+> **DECIDED (2026-Jun-25):** the URL interceptor is the **permanent** solution — NOT a temporary
+> hack, and there is **no Phase C cleanup**. `setURLModifier` is the canonical three.js CDN-redirect
+> API: one source of truth, impossible for future loaders to forget. The "explicit per-loader path
+> helper across 49 files" alternative was considered and rejected as *more* fragile (49 touch points,
+> silent breakage if a new loader forgets the helper), not cleaner.
+
 49 source files hardcode `/siege/...` paths. Editing each is error-prone and collides badly with the
 co-build window. **But ~45 of them are three.js asset loads** (`useGLTF`, `TextureLoader`), which all
 route through `THREE.DefaultLoadingManager`. So we redirect them with **one** install:
