@@ -2,6 +2,7 @@ import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
+import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
@@ -455,12 +456,14 @@ export function FirstPersonControls({
 
   // Handle respawn position - teleport player when respawnPosition changes
   useEffect(() => {
-    if (respawnPosition) {
-      camera.position.copy(respawnPosition);
-      velocity.current.set(0, 0, 0);
-      knockbackVelRef.current.set(0, 0, 0);
-      onRespawnComplete?.();
-    }
+    if (!respawnPosition) return;
+    velocity.current.set(0, 0, 0);
+    knockbackVelRef.current.set(0, 0, 0);
+    // Siege challenge death: the player stays where they FELL for the defeat experience — don't yank
+    // them to the world spawn (that was the "dropped out of SciFi City" bug). Normal DreadRoot
+    // respawns still teleport.
+    if (!isSiegePlayerDead()) camera.position.copy(respawnPosition);
+    onRespawnComplete?.();
   }, [respawnPosition, camera, onRespawnComplete]);
   
   // Collision boxes for fortress walls only (block colliders are now managed by useChunkLoader)
@@ -2429,15 +2432,23 @@ export function FirstPersonControls({
         chopCountRef.current = 0;
       }
       
+      // Player died (e.g. mid-charge) → HARD-STOP all weapon fire + the looping pentabullet charge
+      // whine, which otherwise sticks ON forever (the grating sound on death). Polled every frame so it
+      // cuts the instant death is flagged.
+      if (isSiegePlayerDead()) {
+        if (pentabulletPhaseRef.current !== 'idle') cancelPentabulletCharge();
+        autoFiringRef.current = false;
+      }
+
       // Automatic-weapon hold-to-fire: repeat-fire while held (Phase 1). The shot
       // fn self-gates on the weapon's shootCooldown, so calling it every frame
       // produces the correct cadence.
-      if (autoFiringRef.current && showCrosshairsRef.current) {
+      if (autoFiringRef.current && showCrosshairsRef.current && !isSiegePlayerDead()) {
         fireWeaponShotRef.current?.();
       }
 
       // Pentabullet charging logic (only in shooting mode with mouse held)
-      if (leftMouseDownRef.current && showCrosshairsRef.current && pentabulletChargeStartRef.current) {
+      if (leftMouseDownRef.current && showCrosshairsRef.current && pentabulletChargeStartRef.current && !isSiegePlayerDead()) {
         const chargeTime = (now - pentabulletChargeStartRef.current) / 1000;
         pentabulletChargeRef.current = chargeTime;
         
