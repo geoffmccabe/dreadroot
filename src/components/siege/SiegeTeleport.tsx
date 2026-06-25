@@ -9,7 +9,7 @@ import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
-import { setTeleportArmed } from './teleportStore';
+import { setTeleportArmed, isTeleportArmed } from './teleportStore';
 import { setActiveMapId } from '@/config/activeMap';
 import { getSiegeAdmin } from './siegeAdmin';
 
@@ -40,14 +40,17 @@ function destFor(slot: number, overrides: Record<number, Saved>): Saved | null {
 export function SiegeTeleport() {
   const camera = useThree((s) => s.camera);
   useEffect(() => {
-    let armed = false;
     const overrides = loadOverrides();
     const euler = new THREE.Euler(0, 0, 0, 'YXZ');
     const r3 = (n: number) => Math.round(n * 1000) / 1000;
-    const disarm = () => { armed = false; setTeleportArmed(false); };
+    // The teleport store is the SINGLE source of truth for "armed" — so disarming from a
+    // MENU CLICK (which only flips the store) also stops the key interception here. Keeping a
+    // separate local flag caused the bug where, after clicking a Jump-To entry, the menu hid
+    // but the keys stayed captured, so WASD movement (A/S/D are demo-jump letters) teleported.
+    const disarm = () => { setTeleportArmed(false); };
     // No auto-dismiss timer — the menu stays open until the player picks a spot or hits Esc.
     // Free the cursor so the menu's clickable entries work in FPS pointer-lock.
-    const arm = () => { armed = true; setTeleportArmed(true); document.exitPointerLock?.(); };
+    const arm = () => { setTeleportArmed(true); document.exitPointerLock?.(); };
 
     // Shared jump, used by the keys AND by out-of-Canvas UI (Cmd-J menu clicks +
     // the Challenges → Worlds cards) via window.__siegeJump.
@@ -66,7 +69,7 @@ export function SiegeTeleport() {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyJ') {     // ARM
         e.preventDefault(); e.stopPropagation(); arm(); return;
       }
-      if (!armed) return;
+      if (!isTeleportArmed()) return;
       if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
       // Letter = jump to a baked asset-set demo map (each is its own map). adminOnly maps (e.g. the
       // in-progress Apocalypse City) only jump for admins.
