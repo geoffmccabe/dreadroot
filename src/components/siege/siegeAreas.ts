@@ -44,6 +44,9 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 8, name: 'Jungle',        pos: [-733, 29, 651] },
   // Builder sandbox — its OWN map (flat editable terrain), reached like any other area.
   { slot: 9, name: 'Starblink',     pos: [0, 3, 0], mapId: 'starblink' },
+  // Snowy Town — the walled snowy challenge world (NOT an asset demo). Cmd-J then 0. Drops at the
+  // snowy-cabin spawn; this same pos/facing is the challenge arrival (via challengeWorldArrival).
+  { slot: 0, name: 'Snowy Town',    pos: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214, mapId: 'yeti-time' },
 ];
 
 /**
@@ -72,9 +75,7 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
   // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
   { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 }, // laser readout yaw 183.9°, pitch 5.2°
-  // Snowy Town — walled snowy arena reusing Adventure Town's geometry (identical coords). Arrival =
-  // the snowy-cabin spawn (Geoff's in-world reading); monsters scatter around this point.
-  { code: 'KeyY', key: 'Y', name: 'Snowy Town', mapId: 'yeti-time', pos: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214 },
+  // (Snowy Town is NOT an asset demo — it lives in the top "Jump To" list, SIEGE_TELEPORTS slot 0.)
   // "Various 2" component sampler grids (loose pieces for map/challenge building).
   { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
   { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
@@ -97,8 +98,12 @@ export const CHALLENGE_WORLDS: ChallengeWorld[] = [
   { mapId: 'adventure-demo', label: 'Adventure Town' },
   { mapId: 'yeti-time', label: 'Snowy Town' },
 ];
-/** Arrival pos + facing for a challenge world (from its SIEGE_DEMOS entry). null = open world. */
+/** Arrival pos + facing for a challenge world — from its SIEGE_DEMOS (asset demo) entry OR its
+ *  SIEGE_TELEPORTS (Jump-To) entry, e.g. Snowy Town. null = open world / unknown map. */
 export const challengeWorldArrival = (mapId: string | undefined): { pos: [number, number, number]; yaw?: number; pitch?: number } | null => {
+  if (!mapId) return null;
   const d = SIEGE_DEMOS.find((x) => x.mapId === mapId);
-  return d ? { pos: d.pos, yaw: d.yaw, pitch: d.pitch } : null;
+  if (d) return { pos: d.pos, yaw: d.yaw, pitch: d.pitch };
+  const t = SIEGE_TELEPORTS.find((x) => x.mapId === mapId);
+  return t ? { pos: t.pos, yaw: t.yaw, pitch: t.pitch } : null;
 };
