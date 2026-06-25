@@ -152,7 +152,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               (placements + colliders + laser-taggable), with the editable heightmap ground under it. */}
           {world.id === 'apoc-city' && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders dataDir="/siege/apoc" renderDist={110} />
+              <WorldObjectsLayer meshColliders dataDir="/siege/apoc" renderDist={70} maxGroups={45} maxInstances={1200} />
               <MeshColliderPlayer />
             </Suspense>
           )}

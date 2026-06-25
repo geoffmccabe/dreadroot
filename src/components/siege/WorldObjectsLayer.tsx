@@ -282,7 +282,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320 }: { meshColliders?: boolean; dataDir?: string; renderDist?: number } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9 }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -340,18 +340,33 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   });
   const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, _k: i })), [data]);
   const nearGroups = useMemo(() => {
-    const [CX, CZ] = center, R2 = renderDist * renderDist;   // render distance (m), per-map (dense maps
-    // like the Apocalypse city pass a smaller value so far fewer of the 8000 objects load/render at once).
-    const out: (Group & { _k: number })[] = [];
+    const [CX, CZ] = center, R2 = renderDist * renderDist;   // render distance (m), per-map.
+    // Filter instances to within range; track each group's NEAREST instance for prioritising.
+    const scored: { g: Group & { _k: number }; near: number[][]; d: number }[] = [];
     for (const g of allGroups) {
+      let best = Infinity;
       const near = g.matrices.filter((mx) => {
-        const dx = mx[12] - CX, dz = mx[14] - CZ;
-        return dx * dx + dz * dz < R2;
+        const dx = mx[12] - CX, dz = mx[14] - CZ; const dd = dx * dx + dz * dz;
+        if (dd < best) best = dd;
+        return dd < R2;
       });
-      if (near.length) out.push({ ...g, matrices: near });
+      if (near.length) scored.push({ g, near, d: best });
+    }
+    scored.sort((a, b) => a.d - b.d);
+    // HARD SAFETY BUDGET: cap the number of groups (= simultaneous glTF/draco loads) AND total
+    // instances (= geometry/colliders), closest-first. A dense map (the 8000-object Apocalypse city)
+    // could otherwise load hundreds of models at once and crash the GPU/tab. Defaults are effectively
+    // unlimited so the SWW world is unchanged; the apoc mount passes tight values.
+    const out: (Group & { _k: number })[] = [];
+    let budget = maxInstances;
+    for (const s of scored) {
+      if (out.length >= maxGroups || budget <= 0) break;
+      const take = s.near.length > budget ? s.near.slice(0, budget) : s.near;
+      out.push({ ...s.g, matrices: take });
+      budget -= take.length;
     }
     return out;
-  }, [allGroups, center, renderDist]);
+  }, [allGroups, center, renderDist, maxGroups, maxInstances]);
 
   if (!data) return null;
   return (
