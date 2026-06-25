@@ -29,6 +29,7 @@ export interface ChallengeState {
   wave: number;         // 1-10 (0 = not started)
   totalWaves: number;
   waveEndsAt: number;   // performance.now() ms when the wave times out (0 = none / final)
+  countdownUntil: number;   // performance.now() ms the pre-game 10s countdown ends (0 = none)
   announce: ChallengeAnnounce | null;
   completed: boolean;
   startedAt: number;    // performance.now() ms
@@ -37,7 +38,7 @@ export interface ChallengeState {
 }
 
 let state: ChallengeState = {
-  active: false, name: '', wave: 0, totalWaves: 10, waveEndsAt: 0,
+  active: false, name: '', wave: 0, totalWaves: 10, waveEndsAt: 0, countdownUntil: 0,
   announce: null, completed: false, startedAt: 0, finishedAt: 0, result: null,
 };
 const listeners = new Set<() => void>();

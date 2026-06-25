@@ -13,7 +13,7 @@ import { groundAt } from '../siegeGround';
 import { raycastMesh } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
-import { setChallengeToggle, setChallengeLose, setChallengeStart } from './challengeControl';
+import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip } from './challengeControl';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
@@ -44,7 +44,7 @@ export function ChallengeRunner() {
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const preMap = useRef<string | null>(null);          // which map, so we can jump back on finish
   const r = useRef({
-    active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0,
+    active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0, countdownUntil: 0,
     pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
     faintNext: false, idc: 0,
   }).current;
@@ -144,8 +144,10 @@ export function ChallengeRunner() {
     // the street as soon as the ground exists.
     if (arr?.pos) groundSnap.current = { until: now + 6000 };
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
-    setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null });
-    startWave(now);
+    // 10s pre-game countdown: ready weapons while it counts; wave 1 (and its timer) start after,
+    // so these seconds don't eat the wave. START NOW (fireChallengeSkip) jumps straight in.
+    r.countdownUntil = now + 10000;
+    setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null, wave: 0, waveEndsAt: 0, countdownUntil: r.countdownUntil, announce: null });
   };
 
   const revert = () => {
@@ -156,10 +158,10 @@ export function ChallengeRunner() {
   };
 
   const stop = () => {
-    r.active = false;
+    r.active = false; r.countdownUntil = 0;
     setMobs([]);
     revert();
-    setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, result: null });
+    setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
   };
 
   // Record one play to the leaderboard. Only SAVED challenges (with an id) have a board — the
@@ -203,7 +205,8 @@ export function ChallengeRunner() {
     setChallengeToggle(() => { if (r.active) stop(); else start(TEST_CHALLENGE); });
     setChallengeLose(() => lose());
     setChallengeStart((ch) => { if (r.active) stop(); start(ch); });   // play an authored challenge
-    return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); };
+    setChallengeSkip(() => { if (r.active && r.countdownUntil) r.countdownUntil = performance.now(); });  // START NOW
+    return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); setChallengeSkip(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -230,6 +233,12 @@ export function ChallengeRunner() {
         if (camera.position.y > target + 0.3) camera.position.y = target;   // floating → drop onto it
         if (Math.abs(camera.position.y - target) < 0.5 || now > groundSnap.current.until) groundSnap.current = null;
       } else if (now > groundSnap.current.until) groundSnap.current = null;
+    }
+
+    // 0. Pre-game countdown: hold until it ends (or START NOW set it to the past), THEN wave 1.
+    if (r.countdownUntil) {
+      if (now >= r.countdownUntil) { r.countdownUntil = 0; setChallengeState({ countdownUntil: 0 }); startWave(now); }
+      return;
     }
 
     // 1. Spawn drops whose time has come.

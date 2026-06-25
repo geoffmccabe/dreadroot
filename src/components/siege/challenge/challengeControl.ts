@@ -12,3 +12,7 @@ export function setChallengeLose(fn: (() => void) | null) { lose = fn; }
 export function fireChallengeLose() { lose?.(); }   // no-op unless a challenge is running
 export function setChallengeStart(fn: ((ch: Challenge) => void) | null) { startCh = fn; }
 export function fireChallengeStart(ch: Challenge) { startCh?.(ch); }   // play a specific (authored) challenge
+
+let skip: (() => void) | null = null;
+export function setChallengeSkip(fn: (() => void) | null) { skip = fn; }
+export function fireChallengeSkip() { skip?.(); }   // START NOW — end the pre-game countdown early
