@@ -11,6 +11,8 @@ import { getChallengeState, subscribeChallenge } from './challenge/challengeStor
 import { meshGroundHeight } from './meshColliderSystem';
 
 const URL = '/siege/monsters/dfdemon_dance.glb';   // Fantasy Rivals demon + retargeted dance clip
+const DROP_H = 100;   // metres above the landing spot each demon drops from
+const GRAVITY = 22;   // m/s² fall
 
 // INSTANCE-specific content. A Map (SciFi City) can have many INSTANCES — an ongoing multiplayer Open
 // World vs single-player Challenges — that differ in content. The dancers belong to the "Death Dark
@@ -56,24 +58,42 @@ function Dancer({ pos, yaw = 0, scale = 1, tint = '#e23b3b' }: DancingDemonDef) 
     return c;
   }, [scene, tint]);
   const { actions, names } = useAnimations(animations, group);
+  const danceName = useMemo(() => names.find((x) => /dance/i.test(x)) ?? names[0], [names]);
+  const idleName = useMemo(() => names.find((x) => /idle/i.test(x)) ?? danceName, [names, danceName]);
+  // Idle pose while it falls; switch to the dance on landing.
   useEffect(() => {
-    const n = names.find((x) => /dance/i.test(x)) ?? names[0];
-    const a = n ? actions[n] : null;
-    a?.reset().fadeIn(0.4).play();
+    const a = idleName ? actions[idleName] : null;
+    a?.reset().fadeIn(0.3).play();
     return () => { a?.fadeOut(0.2); };
-  }, [actions, names]);
-  // Drop her onto the BUILDING SURFACE just below the (eye-height) reading — NOT the terrain. Geoff's
-  // "pos:" is the camera/eye, ~1.6–3m above the real surface. Use mesh-only ground (so a rooftop dancer
-  // can't snap down to the distant terrain), cast from just above the reading, accept only within 8m,
-  // and retry until the city BVH has loaded; give up after ~5s and keep the reading.
-  const grounded = useRef(false);
+  }, [actions, idleName]);
+
+  // ENTRANCE: each demon drops from 100m onto the surface below the (eye-height) reading, then starts
+  // dancing on landing. The landing target is the BUILDING mesh just below the reading (mesh-only, within
+  // 8m so it can't fall to the distant terrain); if no collider is found in ~5s it lands at the reading.
+  // Hidden until it has a target so it never flashes at the eye-Y first.
+  const phase = useRef<'wait' | 'fall' | 'land'>('wait');
+  const landY = useRef(0);
+  const vy = useRef(0);
   const tries = useRef(0);
-  useFrame(() => {
-    const g = group.current; if (!g || grounded.current) return;
-    tries.current++;
-    const f = meshGroundHeight(pos[0], pos[2], pos[1] + 1.0);
-    if (f != null && pos[1] - f < 8) { g.position.y = f; grounded.current = true; }
-    else if (tries.current > 300) grounded.current = true;
+  useFrame((_, dt) => {
+    const g = group.current; if (!g || phase.current === 'land') return;
+    dt = Math.min(dt, 0.05);
+    const toDance = () => {
+      if (idleName) actions[idleName]?.fadeOut(0.25);
+      const d = danceName ? actions[danceName] : null; d?.reset().fadeIn(0.3).play();
+    };
+    if (phase.current === 'wait') {
+      g.visible = false;
+      tries.current++;
+      const f = meshGroundHeight(pos[0], pos[2], pos[1] + 1.0);
+      const target = (f != null && pos[1] - f < 8) ? f : (tries.current > 300 ? pos[1] : null);
+      if (target != null) { landY.current = target; g.position.set(pos[0], target + DROP_H, pos[2]); g.visible = true; vy.current = 0; phase.current = 'fall'; }
+      return;
+    }
+    // FALL
+    vy.current -= GRAVITY * dt;
+    g.position.y += vy.current * dt;
+    if (g.position.y <= landY.current) { g.position.y = landY.current; phase.current = 'land'; toDance(); }
   });
   return <group ref={group} position={pos} rotation={[0, yaw, 0]} scale={scale}><primitive object={cloned} /></group>;
 }
