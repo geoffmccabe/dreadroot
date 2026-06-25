@@ -84,7 +84,7 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
       const N = tailBones.length;
       for (let i = 0; i < N; i++) {
         const frac = i / (N - 1);
-        const amp = 0.10 + 0.20 * frac;          // base → tip (whip), grows toward the tip
+        const amp = 0.22 + 0.42 * frac;          // base → tip (whip) — doubled for a clear bend
         const ph = t * 1.6 - i * 0.7;            // travelling wave (phase lag per bone)
         // Swish about the bone's perpendicular bend axes (NOT Y = twist). Composed onto the REST
         // rotation so the resting curve/droop is kept. X = side-to-side here, Z = small up-down.
