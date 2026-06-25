@@ -133,6 +133,14 @@ export interface WorldDefinition {
    */
   bounds?: { min: [number, number]; max: [number, number] } | null;
 
+  /**
+   * HARD invisible-wall arena box (world meters). Unlike `bounds` (advisory), this is ENFORCED
+   * every frame by WorldBoundsWall: the player's position is clamped inside the box on ALL sides —
+   * including vertically and INCLUDING while flying — so they can never leave the arena. Used by
+   * walled challenge maps (Yeti Time). min/max are XZ corners; floorY/ceilingY cap the height.
+   */
+  wallBox?: { min: [number, number]; max: [number, number]; floorY?: number; ceilingY?: number } | null;
+
   ground: GroundConfig;
 
   /**
@@ -266,6 +274,30 @@ export const ADVENTURE_DEMO_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/** Yeti Time — a WALLED snowy challenge arena that REUSES Adventure Town's baked geometry (same
+ *  glTF via the same DemoScene → identical world coordinates), but boxes the player into the
+ *  snow-covered cabin area behind the village with a hard invisible wall (see `wallBox`). The map's
+ *  monsters get tinted white for a snowy 10-wave challenge.
+ *  NOTE: spawn + wallBox below are PLACEHOLDERS centred on the Adventure Town arrival — Geoff will
+ *  fly to the real snowy cabin (press N, read the SIEGE-DEBUG position) and give the true numbers. */
+export const YETI_TIME_WORLD: WorldDefinition = {
+  id: 'yeti-time',
+  name: 'Yeti Time',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 31,
+  kind: 'siege',
+  meshColliders: false, // reuses Adventure Town's DemoScene colliders
+  bounds: { min: [-1500, -1500], max: [1500, 1500] },
+  ground: { kind: 'heightmap', surfaceY: 0 },
+  // PLACEHOLDER — replace with the snowy-cabin spawn (world coords read in Adventure Town).
+  spawn: { position: [84.855, 6, 139.182], yaw: 0.068, pitch: 0.090 },
+  // PLACEHOLDER box (±40 m around the placeholder spawn, 0–45 m tall). Replace with the real
+  // snowy-cabin corners + height once Geoff reads them in-world.
+  wallBox: { min: [44.8, 99.2], max: [124.9, 179.2], floorY: 0, ceilingY: 45 },
+  props: undefined,
+};
+
 /** Component-only sets (no baked scene) shown as auto-arranged sampler grids, each its
  *  own map. Same heightmap ground + fill light + per-model BVH colliders as the demos. */
 function samplerWorld(id: string, name: string, wireId: number): WorldDefinition {
@@ -332,6 +364,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
   [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
   [ADVENTURE_DEMO_WORLD.id]: ADVENTURE_DEMO_WORLD,
+  [YETI_TIME_WORLD.id]: YETI_TIME_WORLD,
   [CYBER_SAMPLER_WORLD.id]: CYBER_SAMPLER_WORLD,
   [MECH_SAMPLER_WORLD.id]: MECH_SAMPLER_WORLD,
   [WORLDS_SAMPLER_WORLD.id]: WORLDS_SAMPLER_WORLD,

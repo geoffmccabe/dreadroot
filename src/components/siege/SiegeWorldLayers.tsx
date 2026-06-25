@@ -33,6 +33,7 @@ import { MonsterEnemy } from './MonsterEnemy';
 import { SiegeMonsterParade } from './SiegeMonsterParade';
 import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
+import { WorldBoundsWall } from './WorldBoundsWall';
 import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { DarkLordLightning } from './darkLord/DarkLordLightning';
@@ -130,6 +131,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
+          {/* Hard arena walls for walled maps (Yeti Time). No-op unless the world sets `wallBox`. */}
+          <WorldBoundsWall />
           {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
           {!isBlank && <SiegeItemGrid />}
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
@@ -166,6 +169,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {world.id === 'adventure-demo' && (
             <Suspense fallback={null}>
               {/* Baked Synty Adventure fantasy village — auto-grounded/recentered by DemoScene. */}
+              <DemoScene file="adventure_demo.gltf" group="adventuredemo" />
+              <MeshColliderPlayer />
+            </Suspense>
+          )}
+          {/* Yeti Time — the SAME Adventure Town geometry (identical world coords), walled into the
+              snowy-cabin area by WorldBoundsWall (mounted below, reads the map's wallBox). */}
+          {world.id === 'yeti-time' && (
+            <Suspense fallback={null}>
               <DemoScene file="adventure_demo.gltf" group="adventuredemo" />
               <MeshColliderPlayer />
             </Suspense>
