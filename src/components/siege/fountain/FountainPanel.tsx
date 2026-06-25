@@ -25,16 +25,18 @@ export function FountainPanel() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [, tick] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   const unlocked = useRef(false);
 
-  // Free the cursor so the modal is usable; tick the countdown.
+  // Free the cursor so the modal is usable; tick the countdown. Re-arm the dismiss when you
+  // leave the zone, so walking back in (or X then re-enter) reopens it.
   useEffect(() => {
     if (fountainInRange && !unlocked.current) { unlocked.current = true; document.exitPointerLock?.(); }
-    if (!fountainInRange) unlocked.current = false;
+    if (!fountainInRange) { unlocked.current = false; setDismissed(false); }
   }, [fountainInRange]);
   useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(id); }, []);
 
-  if (!fountainInRange) return null;
+  if (!fountainInRange || dismissed) return null;
 
   const donate = async () => {
     const n = parseInt(amt, 10);
@@ -59,6 +61,10 @@ export function FountainPanel() {
 
   return (
     <div style={card}>
+      <button onClick={() => setDismissed(true)} aria-label="Close" title="Close"
+        style={{ position: 'absolute', top: 10, right: 12, width: 28, height: 28, lineHeight: '24px',
+          cursor: 'pointer', color: '#8fd6ff', background: 'rgba(255,255,255,0.08)',
+          border: '1px solid hsla(200,70%,55%,0.5)', borderRadius: 8, fontSize: 16, fontWeight: 700 }}>✕</button>
       <div style={{ font: '700 20px ui-monospace, monospace', color: '#8fd6ff', marginBottom: 6, letterSpacing: 1 }}>⛲ THE FOUNTAIN</div>
       <div style={{ opacity: 0.9, lineHeight: 1.5, marginBottom: 12 }}>
         Donate <b>$DIVI</b> to grant <b>Double-Drops for everyone</b> playing the game. The more you give, the longer it lasts.
@@ -90,7 +96,7 @@ export function FountainPanel() {
           </div>
         ))}
       </div>
-      <div style={{ opacity: 0.5, fontSize: 11, marginTop: 10 }}>Walk away to close.</div>
+      <div style={{ opacity: 0.5, fontSize: 11, marginTop: 10 }}>Press ✕ or walk away to close.</div>
     </div>
   );
 }

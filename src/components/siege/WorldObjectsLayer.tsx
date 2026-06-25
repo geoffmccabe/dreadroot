@@ -11,6 +11,14 @@ import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
+import { scifiAsset } from '@/config/assetBase';
+
+// The siege/scifi library moved off the Pages build onto R2 (assets.dreadroot.com). Placement
+// `url`s saved as local /siege/scifi/<name>.gltf must resolve to the merged .glb on R2, or the
+// object (warpgate, crystals, etc.) loads neither geometry nor texture and renders grey. World
+// exports under /siege/world/ stay in the Pages build and pass through unchanged.
+const resolveModelUrl = (url: string): string =>
+  url.startsWith('/siege/scifi/') ? scifiAsset(url.slice('/siege/scifi/'.length)) : url;
 
 let _meshGroupId = 0;
 import { voxelizeGeometry } from './voxelize';
@@ -338,7 +346,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       setCenter([camera.position.x, camera.position.z]);
     }
   });
-  const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, _k: i })), [data]);
+  const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, url: resolveModelUrl(g.url), _k: i })), [data]);
   const nearGroups = useMemo(() => {
     const [CX, CZ] = center, R2 = renderDist * renderDist;   // render distance (m), per-map.
     // Filter instances to within range; track each group's NEAREST instance for prioritising.
