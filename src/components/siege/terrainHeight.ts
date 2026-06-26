@@ -25,8 +25,16 @@ type HeightProvider = (x: number, z: number) => number | null;
 let dynamicProvider: HeightProvider | null = null;
 export function setDynamicHeightProvider(fn: HeightProvider | null) { dynamicProvider = fn; }
 
+// Baked heightmap provider — for BAKED-MESH maps (e.g. Adventure Town / Snowy Cabin) a one-time pass
+// ray-traces the collider mesh from the sky and stores the real top-surface elevation on a grid; this
+// provider serves it. It takes PRIORITY over `dynamicProvider` (which on those maps is a flat Y=0
+// fallback plane — a false floor UNDER the terrain). With it, the player's gravity floor and every
+// entity's groundAt() get the true elevation, so nothing sinks through the ground.
+let bakedProvider: HeightProvider | null = null;
+export function setBakedHeightProvider(fn: HeightProvider | null) { bakedProvider = fn; }
+
 export function hasTerrain() {
-  return tiles.length > 0 || dynamicProvider != null;
+  return tiles.length > 0 || dynamicProvider != null || bakedProvider != null;
 }
 
 /** Ground height at world (x,z), or null if outside all tiles. Bilinear. */
