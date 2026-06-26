@@ -172,14 +172,18 @@ export function SiegeCharacterLineup() {
   // Spread along the row axis (perpendicular to the facing direction).
   const rx = Math.cos(anchor.yaw), rz = -Math.sin(anchor.yaw);
 
+  // Each character gets its OWN Suspense so a slow/failed glb only blanks that one slot — never the
+  // whole row (a single shared boundary meant one bad asset hid every character).
   return (
-    <Suspense fallback={null}>
+    <>
       {LINEUP_CHARS.map((c, i) => {
         const off = (i - (n - 1) / 2) * SPACING;
         return (
-          <LineupChar key={c.name} file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} />
+          <Suspense key={c.name} fallback={null}>
+            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} />
+          </Suspense>
         );
       })}
-    </Suspense>
+    </>
   );
 }
