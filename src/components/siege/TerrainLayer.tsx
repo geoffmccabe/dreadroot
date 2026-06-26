@@ -75,7 +75,8 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
   const [group, setGroup] = useState<THREE.Group | null>(null);
 
   const grass = useMemo(() => {
-    const t = new THREE.TextureLoader().load('/siege/terrain/grass.png');
+    // Worn-rock base detail texture (neutral), tinted per-vertex into sand/grass/rock by tileColor().
+    const t = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
     return t;

@@ -29,7 +29,7 @@ export function FlatGroundLayer({ world, onReady }: { world: WorldDefinition; on
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
 
   const mesh = useMemo(() => {
-    const grass = new THREE.TextureLoader().load('/siege/terrain/grass.png');
+    const grass = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
     grass.colorSpace = THREE.SRGBColorSpace;
     grass.repeat.set(sizeX / TEX_REPEAT_M, sizeZ / TEX_REPEAT_M);

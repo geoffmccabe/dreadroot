@@ -38,7 +38,8 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const loaded = useRef(new Map<number, THREE.Mesh>());
 
   const grass = useMemo(() => {
-    const t = new THREE.TextureLoader().load('/siege/terrain/grass.png');
+    // Worn-rock base detail texture (neutral), tinted per-vertex into the biome colours below.
+    const t = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.colorSpace = THREE.SRGBColorSpace;
     return t;
