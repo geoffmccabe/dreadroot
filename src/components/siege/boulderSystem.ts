@@ -22,6 +22,7 @@ export interface Boulder {
   dmgMin: number; dmgMax: number; kbMin: number; kbMax: number;
   hit: Set<string>;            // demon ids already struck (so it bowls through a horde, one each)
   lastPlayerHit: number;
+  color?: string;              // hex tint for the projectile (authored per Spawn Card); default rock grey
 }
 let boulders: Boulder[] = [];
 let seq = 0;
@@ -31,7 +32,7 @@ export function clearBoulders() { boulders = []; }
 // Launch from (ox,oy,oz) to land on (tx,ty,tz) at `angleDeg` above horizontal — perfect arc.
 export function throwBoulder(
   ox: number, oy: number, oz: number, tx: number, ty: number, tz: number, angleDeg: number,
-  opts: { dmgMin?: number; dmgMax?: number; kbMin?: number; kbMax?: number } = {},
+  opts: { dmgMin?: number; dmgMax?: number; kbMin?: number; kbMax?: number; color?: string } = {},
 ) {
   const dx = tx - ox, dz = tz - oz;
   const d = Math.hypot(dx, dz) || 0.001;
@@ -46,7 +47,7 @@ export function throwBoulder(
     id: seq++, x: ox, y: oy, z: oz, vx: dirx * vH, vy, vz: dirz * vH,
     rolling: false, born: performance.now(), slowSince: 0,
     dmgMin: opts.dmgMin ?? 50, dmgMax: opts.dmgMax ?? 200, kbMin: opts.kbMin ?? 5, kbMax: opts.kbMax ?? 20,
-    hit: new Set(), lastPlayerHit: 0,
+    hit: new Set(), lastPlayerHit: 0, color: opts.color,
   });
 }
 

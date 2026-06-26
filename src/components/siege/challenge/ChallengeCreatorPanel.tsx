@@ -433,7 +433,7 @@ export function ChallengeCreatorPanel() {
         {drop.boss && (
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
             {slider(i, di, 'sizePct', 'Size', drop, 25, 1000, (p) => `${c.baseHeight.toFixed(1)}m → ${(c.baseHeight * p / 100).toFixed(1)}m`)}
-            {slider(i, di, 'healthPct', 'Health', drop, 25, 1000, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
+            {slider(i, di, 'healthPct', 'Health', drop, 25, 10000, (p) => `${c.baseHealth} → ${Math.round(c.baseHealth * p / 100)} HP`)}
             {slider(i, di, 'speedPct', 'Speed', drop, 25, 1000, (p) => `100% → ${p}%`)}
             {slider(i, di, 'damagePct', 'Damage', drop, 25, 1000, (p) => `100% → ${p}%`)}
           </div>
@@ -473,6 +473,15 @@ export function ChallengeCreatorPanel() {
             </div>
           );
         })()}
+
+        {/* Elemental Golem only: colour of its thrown boulders (default rock grey). */}
+        {drop.type === 15 && (
+          <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px solid hsla(210,30%,45%,0.25)' }}>
+            <label style={lbl}>Ball Color</label>
+            <input type="color" value={drop.ballColor ?? '#8a8a8a'} onChange={(e) => patchDrop(i, di, { ballColor: e.target.value })}
+                   style={{ width: '100%', height: 26, padding: 0, border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, background: 'transparent', cursor: 'pointer' }} />
+          </div>
+        )}
       </>
     );
   };

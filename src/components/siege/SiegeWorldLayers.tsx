@@ -35,6 +35,7 @@ import { SiegeItemGrid } from './SiegeItemGrid';
 import { MeshColliderPlayer } from './MeshColliderPlayer';
 import { WorldBoundsWall } from './WorldBoundsWall';
 import { MeshHeightmapBaker } from './MeshHeightmapBaker';
+import { SiegeBoulders } from './SiegeBoulders';
 import { SiegeTeleport } from './SiegeTeleport';
 import { SprayAttackRenderer } from './spray/SprayAttackRenderer';
 import { DarkLordLightning } from './darkLord/DarkLordLightning';
@@ -149,6 +150,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* Bake a real heightmap from the glTF collider mesh so the player + monsters sit on the true
               surface (these baked-mesh maps have no real heightfield — only a flat Y=0 fallback plane). */}
           <MeshHeightmapBaker active={world.id === 'yeti-time' || world.id === 'adventure-demo'} />
+          {/* Elemental Golem boulder projectiles (simulated + drawn in-game, not just the lineup). */}
+          <SiegeBoulders />
           {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
           {!isBlank && <SiegeItemGrid />}
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the

@@ -24,7 +24,7 @@ import { getActiveMapId, useActiveMapId } from '@/config/activeMap';
 import { challengeWorldArrival } from '../siegeAreas';
 import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
-interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
+interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; ballColor?: string; rise: boolean; }
 
 export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
@@ -105,7 +105,7 @@ export function ChallengeRunner() {
     const pushAt = (mx: number, mz: number, ground: number) => {
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({ id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
-        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color, rise: drop.dropHeight == null });
+        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color, ballColor: drop.ballColor, rise: drop.dropHeight == null });
     };
     const n = drop.count;
 
@@ -396,7 +396,7 @@ export function ChallengeRunner() {
     <>
       {mobs.map((s) => (
         <CatalogMonster key={s.id} id={s.id} type={s.type} spawn={s.spawn} ov={s.ov} mods={s.mods} color={s.color}
-                        riseFromGround={s.rise} onDespawn={removeMob} />
+                        ballColor={s.ballColor} riseFromGround={s.rise} onDespawn={removeMob} />
       ))}
     </>
   );
