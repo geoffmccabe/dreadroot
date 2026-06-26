@@ -32,6 +32,10 @@ export interface MonsterDrop {
   staggerMs?: number;      // if set, the `count` spawn ONE every this-many ms (only during this wave)
   boss?: BossMods;         // if set, apply boss modifiers to every monster in this drop
   color?: ColorMods;       // if set, recolour this drop's monsters (else the monster's natural look)
+  // SUPERADMIN "special": a hard-coded, world/map-specific set piece (easter egg etc.) chosen from the
+  // Specials registry. When set, this drop is NOT a normal monster spawn — the runner invokes the
+  // hard-coded behaviour keyed by `code` instead (see ChallengeRunner). `type/count/x/z` are ignored.
+  special?: { code: number; name: string };
 }
 
 /** One of the 10 waves. All authoring fields are optional (nothing is required). */

@@ -66,6 +66,9 @@ export function ChallengeRunner() {
   }, [mapId, r]);
 
   const buildMobs = (drop: MonsterDrop, _seed: number, _spread: boolean): Spawned[] => {
+    // SPECIAL set piece: not a monster spawn. Phase 2 will invoke its hard-coded behaviour (keyed by
+    // drop.special.code); for now it spawns nothing (a safe no-op) so it never drops a stray monster.
+    if (drop.special) return [];
     const out: Spawned[] = [];
     const ch = challengeRef.current!;
     // Spread spawns AROUND the arena instead of dripping from one point. Centre = the arena arrival

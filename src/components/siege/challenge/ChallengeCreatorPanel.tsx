@@ -12,6 +12,8 @@ import { BLEND_MODES } from './colorMods';
 import { BannerInput } from './BannerInput';
 import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
+import { SpecialsModal } from './SpecialsModal';
+import { listLiveSpecials, type SpecialRow } from './specialsStorage';
 import { SIEGE_TELEPORTS, CHALLENGE_WORLDS } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
@@ -51,6 +53,7 @@ const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.8)', bord
 const lbl: React.CSSProperties = { fontSize: 11, color: '#9fb4d0', fontWeight: 600, display: 'block', marginBottom: 3 };
 const inp: React.CSSProperties = { width: '100%', background: 'hsla(220,25%,8%,0.9)', border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, color: '#e8eefb', padding: '5px 7px', fontSize: 13, fontFamily: 'inherit' };
 const btn = (active = false): React.CSSProperties => ({ background: active ? '#3a6ea8' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
+const PURPLE = '#7a2db8';   // the superadmin "special" accent (purple on white)
 
 // Where the big floating monster preview sits relative to a spawn card: centred above it (or below
 // if there's no room), clamped to the viewport.
@@ -173,6 +176,9 @@ export function ChallengeCreatorPanel() {
   const [preview, setPreview] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);  // card hover
   const [pinned, setPinned] = useState<{ wave: number; drop: number; x: number; y: number } | null>(null);    // dropdown open
   const [hoverType, setHoverType] = useState<number | null>(null);                                              // hovered option
+  const [specialsOpen, setSpecialsOpen] = useState(false);                                                      // SPECIAL manager modal (superadmin)
+  const [liveSpecials, setLiveSpecials] = useState<SpecialRow[]>([]);                                           // LIVE specials for the +Special menu
+  const [specialMenu, setSpecialMenu] = useState<{ wave: number; left: number; top: number } | null>(null);     // open +Special dropdown
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -183,6 +189,11 @@ export function ChallengeCreatorPanel() {
 
   // Load the signed-in user's roles when the panel opens (admins/superadmins get extra powers).
   useEffect(() => { if (open && user?.id) fetchRoles(user.id).then(setRoles); }, [open, user?.id]);
+
+  // Superadmin: load the LIVE specials for the +Special menus (re-runs when the game changes or roles
+  // arrive). The SPECIAL modal calls back to refresh this after edits.
+  const isSuperRole = roles.includes('superadmin');
+  useEffect(() => { if (open && isSuperRole) listLiveSpecials(ch.game ?? getActiveGame()).then(setLiveSpecials); }, [open, isSuperRole, ch.game]);
 
   // The creator is simply whoever is signed in (player or admin) — not a chooser. Stamp it onto any
   // NEW (unsaved) challenge — or a loaded one whose creator is just a placeholder (system/anon/blank,
@@ -274,6 +285,8 @@ export function ChallengeCreatorPanel() {
   const addWave = () => setCh((c) => ({ ...c, waves: [...c.waves, { name: `Wave ${c.waves.length + 1}`, timeSec: 60, drops: [] }] }));
   const removeWave = (i: number) => setCh((c) => ({ ...c, waves: c.waves.filter((_, k) => k !== i) }));
   const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0 }] })));
+  // Superadmin: append a SPECIAL set piece to a wave (a non-monster drop keyed by code#).
+  const addSpecial = (i: number, s: SpecialRow) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 0, count: 0, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0, special: { code: s.code, name: s.name } }] })));
   const removeDrop = (i: number, di: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.filter((_, j) => j !== di) })));
 
   const run = () => { setCreatorOpen(false); fireChallengeStart(clone(ch)); };
@@ -295,7 +308,41 @@ export function ChallengeCreatorPanel() {
   // The full spawn card body — shared by the live card AND the floating drag preview, so the
   // dragged thing IS the real card (every field), not a summary chip. Grabbing the header captures
   // where in the card the cursor is (ox,oy) so the card tracks the cursor 1:1 with no recenter.
+  // Shared drag-grab handler for a spawn/special card header.
+  const startDrag = (e: React.MouseEvent, i: number, di: number) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); e.preventDefault();
+    const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
+    const rect = cardEl?.getBoundingClientRect();
+    dragHover.current = di; setPreview(null); setPinned(null); setHoverType(null);
+    setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
+    setDragPos({ x: e.clientX, y: e.clientY });
+  };
+
   const spawnInner = (drop: MonsterDrop, i: number, di: number, startAt: number) => {
+    // SPECIAL set piece — a purple, non-monster card (no preview / monster picker).
+    if (drop.special) {
+      return (
+        <>
+          <div onMouseDown={(e) => startDrag(e, i, di)} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
+            <div style={{ width: 60, height: 60, flexShrink: 0, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: `1px solid ${PURPLE}`, color: PURPLE, fontSize: 26, fontWeight: 900 }}>★</div>
+            <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: PURPLE }}><span style={{ color: '#5e7494' }}>⠿</span> Special</div>
+                <div style={{ fontSize: 11, color: '#7fd0ff', marginTop: 2 }}>@ {fmtMS(startAt)}</div>
+              </div>
+              <button style={{ ...btn(), padding: '1px 7px', fontSize: 11 }} onMouseDown={(e) => e.stopPropagation()} onClick={() => setConfirmDel({ wave: i, drop: di })}>✕</button>
+            </div>
+          </div>
+          <div style={{ background: '#fff', color: PURPLE, borderRadius: 6, padding: '7px 9px', fontWeight: 800, fontSize: 13 }}>
+            <span style={{ background: PURPLE, color: '#fff', borderRadius: 4, padding: '1px 6px', marginRight: 6, fontSize: 11 }}>#{drop.special.code}</span>
+            {drop.special.name}
+          </div>
+          <label style={{ ...lbl, marginTop: 6 }}>Seconds since last spawn</label>
+          <NumField style={inp} value={drop.afterSec || undefined} min={0} allowEmpty placeholder="0" onChange={(n) => patchDrop(i, di, { afterSec: n ?? 0 })} />
+        </>
+      );
+    }
     const c = cat(drop.type);
     const col = drop.color ?? defaultColor(drop.type);
     // While THIS card's dropdown is open, hovering an option overrides the thumbnail's monster
@@ -305,15 +352,7 @@ export function ChallengeCreatorPanel() {
     const thumbColor = overriding ? defaultColor(thumbType) : col;
     return (
       <>
-        <div onMouseDown={(e) => {
-               if (e.button !== 0) return;
-               e.stopPropagation(); e.preventDefault();
-               const cardEl = (e.currentTarget as HTMLElement).closest('[data-spawn]') as HTMLElement | null;
-               const rect = cardEl?.getBoundingClientRect();
-               dragHover.current = di; setPreview(null); setPinned(null); setHoverType(null);
-               setDrag({ wave: i, from: di, w: rect?.width ?? 220, ox: rect ? e.clientX - rect.left : 110, oy: rect ? e.clientY - rect.top : 16 });
-               setDragPos({ x: e.clientX, y: e.clientY });
-             }}
+        <div onMouseDown={(e) => startDrag(e, i, di)}
              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, cursor: 'grab', userSelect: 'none' }}>
           {/* The big floating preview shows ONLY while hovering this little square (not the whole card). */}
           <div style={{ display: 'flex' }}
@@ -481,6 +520,7 @@ export function ChallengeCreatorPanel() {
                 {ch.id && <button style={{ ...btn(), background: '#7a2b2b' }} onClick={() => setConfirmDelCh(true)}>🗑 Delete</button>}
                 <button className={dirty ? 'chal-save-pulse' : undefined} style={{ ...btn(true), background: dirty ? '#2e8b57' : undefined }} onClick={onSave}>💾 Save</button>
                 <button style={{ ...btn(true), background: '#3a6ea8' }} onClick={run}>▶ Run</button>
+                {isSuper && <button style={{ ...btn(), background: '#fff', color: PURPLE, border: `1px solid ${PURPLE}`, fontWeight: 800 }} onClick={() => setSpecialsOpen(true)}>★ SPECIAL</button>}
                 {saveMsg && <span style={{ fontSize: 11, color: msgErr ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</span>}
               </div>
               {/* Region spawn coordinates (superadmin, only when this challenge IS a region spawner).
@@ -542,6 +582,12 @@ export function ChallengeCreatorPanel() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                     <div style={{ fontSize: 14, fontWeight: 800 }}>Monster Spawning</div>
                     <button style={{ ...btn(true), padding: '4px 10px', fontSize: 12 }} onClick={() => addDrop(i)}>＋ Add Spawn</button>
+                    {isSuper && (
+                      <button style={{ ...btn(), background: '#fff', color: PURPLE, border: `1px solid ${PURPLE}`, padding: '4px 10px', fontSize: 12, fontWeight: 800 }}
+                              onClick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSpecialMenu({ wave: i, left: r.left, top: r.bottom + 4 }); }}>
+                        ★ +Special
+                      </button>
+                    )}
                     {(() => {
                       const total = wave.drops.reduce((a, d) => a + (d.afterSec ?? 0), 0);
                       return total > wave.timeSec
@@ -601,6 +647,33 @@ export function ChallengeCreatorPanel() {
 
       {/* The single transparent canvas that draws every card's small monster thumbnail. */}
       <MonsterPortCanvas />
+
+      {/* ＋Special dropdown (superadmin): LIVE specials for this wave's world. */}
+      {specialMenu && createPortal(
+        <>
+          <div onClick={() => setSpecialMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 225 }} />
+          <div className="chal-scroll" style={{ position: 'fixed', left: specialMenu.left, top: specialMenu.top, minWidth: 230, maxHeight: 300, overflowY: 'auto', zIndex: 226, ...card, padding: 4 }}>
+            {(() => {
+              const avail = liveSpecials.filter((s) => !s.world || s.world === ch.mapId);
+              if (!avail.length) return <div style={{ padding: '7px 9px', fontSize: 12, color: '#9fb4d0' }}>No LIVE specials for this world. Create/enable them in ★ SPECIAL.</div>;
+              return avail.map((s) => (
+                <div key={s.id} onClick={() => { addSpecial(specialMenu.wave, s); setSpecialMenu(null); }}
+                     style={{ padding: '7px 9px', borderRadius: 5, cursor: 'pointer', fontSize: 13, color: '#e8eefb' }}
+                     onMouseEnter={(e) => (e.currentTarget.style.background = 'hsla(270,50%,40%,0.45)')}
+                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ color: PURPLE, background: '#fff', borderRadius: 4, padding: '1px 6px', fontWeight: 800, fontSize: 11, marginRight: 6 }}>#{s.code}</span>{s.name}
+                </div>
+              ));
+            })()}
+          </div>
+        </>, document.body)}
+
+      {/* SPECIAL manager (superadmin): create/name/LIVE the set pieces. */}
+      {specialsOpen && isSuper && user?.id && (
+        <SpecialsModal game={ch.game ?? getActiveGame()} userId={user.id}
+                       onClose={() => setSpecialsOpen(false)}
+                       onChanged={() => { if (isSuper) listLiveSpecials(ch.game ?? getActiveGame()).then(setLiveSpecials); }} />
+      )}
 
       {/* Open: pick a saved challenge (your own; admins see everyone's). */}
       {picker && (

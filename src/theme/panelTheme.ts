@@ -80,7 +80,6 @@ const ADMIN: PanelTheme = {
   surface: {
     ...USER.surface,
     border: { h: 210, s: 100, l: 60 }, borderOpacity: 1, borderWidth: 1, // bright blue
-    darken: 0.4, // a bit darker than User (40% vs 20%)
   },
   text: {
     heading:    { ...USER.text.heading },
