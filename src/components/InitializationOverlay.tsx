@@ -51,7 +51,10 @@ export function InitializationOverlay() {
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
   const logoSrc = isSiege ? '/sww_logo_transp_v1_hq.webp' : '/Dreadroot_words_logo_horiz_2400px.webp';
-  const overlayBg = isSiege ? 'rgba(8,0,0,0.93)' : 'hsla(var(--panel-bg-strong))';
+  // Translucent so the live 3D world shows THROUGH the overlay (darkened) while it streams in —
+  // the player watches the lobby build up behind the logs, then "Ready to Play". Kept dark enough
+  // to read the panel against a bright scene; the log panel itself stays opaque (panelBg).
+  const overlayBg = isSiege ? 'rgba(6,0,0,0.6)' : 'rgba(0,0,0,0.6)';
   const panelBg = isSiege ? 'rgba(22,6,6,0.96)' : 'hsla(var(--hud-bg))';
   const panelBorder = isSiege ? '#a01818' : 'hsla(var(--hud-border))';
   const titleColor = isSiege ? '#ff5436' : 'hsl(var(--hud-text))';
