@@ -41,7 +41,7 @@ export function ChallengeRunner() {
   const { user } = useAuth();
   const [mobs, setMobs] = useState<Spawned[]>([]);
   const challengeRef = useRef<Challenge | null>(null);
-  const groundSnap = useRef<{ until: number } | null>(null);   // drop the player onto the street once its BVH loads
+  const groundSnap = useRef<{ until: number; ceil: number; holdY: number } | null>(null);   // drop the player onto the street once its BVH loads
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const preMap = useRef<string | null>(null);          // which map, so we can jump back on finish
   const r = useRef({
@@ -95,7 +95,10 @@ export function ChallengeRunner() {
       cx0 = drop.x; cz0 = drop.z;
       cy0 = groundAt(cx0, cz0, arenaY + 60) ?? sampleHeight(cx0, cz0) ?? arenaY;
     }
-    const groundAtPt = (x: number, z: number) => groundAt(x, z, cy0 + 8) ?? sampleHeight(x, z) ?? cy0;
+    // Cast from WELL ABOVE the whole arena (peaks reach ~100 m) so we always hit the TOP surface, not a
+    // lower layer underneath — casting from cy0+small missed any terrain that rises above it and buried
+    // the monster in the layer below.
+    const groundAtPt = (x: number, z: number) => groundAt(x, z, cy0 + 200) ?? sampleHeight(x, z) ?? cy0;
     const pushAt = (mx: number, mz: number, ground: number) => {
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({ id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
@@ -147,13 +150,13 @@ export function ChallengeRunner() {
       : (ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45);
     const minR = mode === 'random' && drop.pattern?.minDist != null ? Math.max(0, drop.pattern.minDist) : Math.min(12, scatter * 0.4);
     for (let i = 0; i < n; i++) {
-      const BAND = 8;
+      const BAND = 12;
       let mx = cx0, mz = cz0, ground = cy0, placed = false, haveBest = false;
       for (let t = 0; t < 20; t++) {
         const ang = Math.random() * Math.PI * 2;
         const rr = minR + Math.sqrt(Math.random()) * Math.max(0.001, scatter - minR);   // sqrt → uniform over the area
         const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
-        const g = groundAt(tx, tz, cy0 + BAND) ?? sampleHeight(tx, tz);
+        const g = groundAt(tx, tz, cy0 + 200) ?? sampleHeight(tx, tz);   // TRUE top surface (high ceiling), then keep near the player's level
         if (g == null || Math.abs(g - cy0) > BAND) continue;
         if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; }
         if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 6) != null) continue;
@@ -221,7 +224,7 @@ export function ChallengeRunner() {
     // Baked worlds (city, etc.): the scene's BVH ground loads a moment AFTER arrival, so the player can
     // hover in the air until it's ready (an exploit — sit up high and shoot down). Snap them down onto
     // the street as soon as the ground exists.
-    if (arr?.pos) groundSnap.current = { until: now + 6000 };
+    if (arr?.pos) groundSnap.current = { until: now + 15000, ceil: arr.pos[1] + 3, holdY: arr.pos[1] };
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     // 10s pre-game countdown: ready weapons while it counts; wave 1 (and its timer) start after,
     // so these seconds don't eat the wave. START NOW (fireChallengeSkip) jumps straight in.
@@ -308,13 +311,18 @@ export function ChallengeRunner() {
     // Drop the player onto the street once the baked world's BVH ground is available (fixes spawning
     // 20m in the air and hovering there until you move).
     if (groundSnap.current) {
-      // The baked drop-Y is an eye-height guess; the BVH street is the truth. Find the street with a
-      // GENEROUS ceiling (it may be above OR below the spawn) and snap eye = street + 1.6 ONCE the mesh
-      // is ready (up or down), then stop. Mesh-only first so we land on the street, not the terrain.
-      const g = meshGroundHeight(camera.position.x, camera.position.z, camera.position.y + 8)
-             ?? groundAt(camera.position.x, camera.position.z, camera.position.y + 8);
+      // The ground here is the baked MESH (no real heightmap), and 80+ collider meshes build in the
+      // BACKGROUND — so the surface isn't ready for a moment after arrival. Cast from a FIXED ceiling
+      // just above the intended spawn (NOT the live camera Y, which drops as the player falls — on a
+      // high arena that dropped ceiling can no longer see the real ground above it, the bug that left
+      // you stuck at the bottom). HOLD the player at the spawn until the mesh is ready instead of
+      // letting them sink through to the lower terrain layer, then snap eye = ground + 1.6.
+      const gc = groundSnap.current.ceil;
+      const g = meshGroundHeight(camera.position.x, camera.position.z, gc)
+             ?? groundAt(camera.position.x, camera.position.z, gc);
       if (g != null) { camera.position.y = g + 1.6; groundSnap.current = null; }
       else if (now > groundSnap.current.until) groundSnap.current = null;
+      else camera.position.y = groundSnap.current.holdY;   // not ready yet → hold at spawn, don't fall through
     }
 
     // 0. Pre-game countdown: hold until it ends (or START NOW set it to the past), THEN wave 1.
