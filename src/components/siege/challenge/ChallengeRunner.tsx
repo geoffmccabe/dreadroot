@@ -90,24 +90,26 @@ export function ChallengeRunner() {
       ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100, damageMul: drop.boss.damagePct / 100 }
       : undefined;
     for (let i = 0; i < drop.count; i++) {
-      // Pick an OPEN spawn point: on the street near the player's level, with open sky above. Rejects
-      // spots inside/under a building (a roof overhead) or on a roof/in a pit (wrong level) — those
-      // were trapping monsters where you could hear but never reach them. Falls back to the arena
-      // centre (the known-open drop point) if no open spot is found.
-      let mx = cx0, mz = cz0, ground = cy0, haveBest = false;
-      for (let t = 0; t < 16; t++) {
+      // Scatter horizontally around the player, then sit the monster on the REAL mesh ground at that
+      // spot (this map's height varies — there is no flat "street"). Keep them on terrain connected to
+      // the player's level (within BAND m) so they don't drop onto the lower surrounding ground "under"
+      // an elevated arena, and skip spots trapped under a roof/overhang. If nothing qualifies, place on
+      // a CLOSE ring around the player — never a single centre pile-up.
+      const BAND = 8;
+      let mx = cx0, mz = cz0, ground = cy0, placed = false, haveBest = false;
+      for (let t = 0; t < 20; t++) {
         const ang = Math.random() * Math.PI * 2;
         const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
         const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
-        const g = groundAt(tx, tz, cy0 + 4) ?? sampleHeight(tx, tz);
-        if (g == null) continue;                                         // no ground at all → skip
-        // Best-effort spread-out point — but only if it's near the arena level. Points far off the
-        // plateau (the lower surrounding map) are NEVER used, so if every ring point is off-level we
-        // fall back to the arena CENTRE on the player's plateau, not a spot under the map.
-        if (!haveBest && Math.abs(g - cy0) <= 4) { mx = tx; mz = tz; ground = g; haveBest = true; }
-        if (Math.abs(g - cy0) > 2.5) continue;                          // not street level (roof/pit)
-        if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 5) != null) continue;  // a roof within 5m → enclosed
-        mx = tx; mz = tz; ground = g; break;                            // fully open street point
+        const g = groundAt(tx, tz, cy0 + BAND) ?? sampleHeight(tx, tz);  // the ACTUAL ground at THIS point
+        if (g == null || Math.abs(g - cy0) > BAND) continue;             // no ground / off the player's terrain
+        if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; } // a valid on-level point (its real height)
+        if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 6) != null) continue;  // roof/overhang above → skip
+        mx = tx; mz = tz; ground = g; placed = true; break;             // open ground around the player
+      }
+      if (!placed && !haveBest) {                                        // no scattered ground found → close ring at the player's level
+        const a = Math.random() * Math.PI * 2;
+        mx = cx0 + Math.cos(a) * minR; mz = cz0 + Math.sin(a) * minR; ground = cy0;
       }
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({
