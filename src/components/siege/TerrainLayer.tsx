@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { setTiles, type HeightTile } from './terrainHeight';
+import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
 
 interface TileMeta {
   file: string; res: number; sizeX: number; sizeZ: number;
@@ -85,6 +86,7 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
   useEffect(() => {
     let alive = true;
     (async () => {
+      const tStep = siegeLoadStart('TerrainLayer.tsx', 'Loading lobby terrain...');
       try {
         const manifest = await fetch('/siege/terrain/manifest.json').then((r) => r.json());
         const g = new THREE.Group();
@@ -98,8 +100,9 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
         if (!alive) return;
         setTiles(sampleTiles);
         setGroup(g);
+        siegeLoadFinish(tStep, (manifest.tiles as TileMeta[]).length);
         onReady?.();          // terrain is ready -> let everything else mount on top of it
-      } catch { /* manifest not present */ }
+      } catch { siegeLoadFinish(tStep); /* manifest not present */ }
     })();
     return () => { alive = false; };
   }, [grass]);

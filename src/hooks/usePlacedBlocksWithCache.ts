@@ -13,6 +13,7 @@ import { getChunkKey } from '@/lib/chunkManager';
 import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFinishStep, initLogErrorStep } from '@/contexts/InitializationContext';
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
 import { syncMonsterStats } from '@/components/siege/monsterStats';
+import { armSiegeWorldLoad } from '@/components/siege/siegeInitLoad';
 import { warmUpShaders } from '@/lib/shaderWarmup';
 import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
@@ -269,19 +270,21 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const realtimeStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
       initLogFinishStep(realtimeStepId!);
 
-      // Sync missing tree blocks in the background (fire-and-forget)
-      // This uses tree_blueprints to restore any blocks that failed to sync
-      supabase.rpc('sync_all_missing_tree_blocks', { p_world_id: worldId })
-        .then(({ data, error }) => {
-          if (error) {
-            console.log('[TreeSync] Function not available yet - run migration first');
-          } else if (data?.total_blocks_inserted > 0) {
-            console.log(`[TreeSync] Restored ${data.total_blocks_inserted} missing tree blocks from ${data.trees_processed} trees`);
-            // Trigger a soft refresh to load the restored blocks
-            chunkLoaderRef.current.refreshLoadedChunks?.();
-          }
-        })
-        .catch(() => {}); // Ignore if function doesn't exist yet
+      // Sync missing tree blocks in the background (fire-and-forget) — voxel (Dreadroot) only.
+      // This uses tree_blueprints to restore any blocks that failed to sync.
+      if (needsVoxels) {
+        supabase.rpc('sync_all_missing_tree_blocks', { p_world_id: worldId })
+          .then(({ data, error }) => {
+            if (error) {
+              console.log('[TreeSync] Function not available yet - run migration first');
+            } else if (data?.total_blocks_inserted > 0) {
+              console.log(`[TreeSync] Restored ${data.total_blocks_inserted} missing tree blocks from ${data.trees_processed} trees`);
+              // Trigger a soft refresh to load the restored blocks
+              chunkLoaderRef.current.refreshLoadedChunks?.();
+            }
+          })
+          .catch(() => {}); // Ignore if function doesn't exist yet
+      }
 
       // Signal that React rendering will begin
       initLogStep('usePlacedBlocksWithCache.ts', 'Queuing React re-render...');
@@ -298,17 +301,26 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         setTimeout(resolve, 150);
       });
 
-      // Pre-compile shader programs for every material flavour the game uses
-      // (atlas variants + non-tree block flavours including the expensive
-      // PhysicalMaterial). Without this, each first appearance mid-game
-      // freezes for ~0.5-1s while macOS compiles the shader.
-      const warmStep = initLogStartStep('usePlacedBlocksWithCache.ts', 'Pre-compiling shaders...');
-      warmUpShaders(getGlobalAtlasTexture());
-      if (warmStep) initLogFinishStep(warmStep);
+      // Pre-compile block-material shaders (atlas + non-tree flavours) so first appearance
+      // mid-game doesn't freeze ~0.5-1s while macOS compiles. Voxel (Dreadroot) only — Siege
+      // Worlds has no block atlas.
+      if (needsVoxels) {
+        const warmStep = initLogStartStep('usePlacedBlocksWithCache.ts', 'Pre-compiling shaders...');
+        warmUpShaders(getGlobalAtlasTexture());
+        if (warmStep) initLogFinishStep(warmStep);
+      }
 
-      // Finish initialization overlay
-      initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
-      initLogFinish();
+      // Finish the overlay. Dreadroot's world data is fully loaded by now (chunks ran above),
+      // so finish immediately. Siege Worlds streams its terrain + objects in the canvas AFTER
+      // START, so hand completion to the lobby loaders (they keep the overlay up with real
+      // progress until the world is actually on screen — see siegeInitLoad).
+      if (needsVoxels) {
+        initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
+        initLogFinish();
+      } else {
+        initLogStep('usePlacedBlocksWithCache.ts', 'Pre-load complete — loading game world...');
+        armSiegeWorldLoad();
+      }
 
       // Start ambient audio (will handle autoplay restrictions automatically)
       startAmbientAudio();

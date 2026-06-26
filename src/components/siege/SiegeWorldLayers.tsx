@@ -45,6 +45,8 @@ import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
 import { GhostExplosions } from './GhostExplosion';
+import { SiegeExplosions } from './SiegeExplosion';
+import { isSiegeLoadActive, completeSiegeWorldLoad } from './siegeInitLoad';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -56,8 +58,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // race where the parent's reset ran AFTER the child ground's onReady and clobbered it to
   // false (which silently hid everything in this block — incl. the sci-fi showcase).
   const [readyWorld, setReadyWorld] = useState<string | null>(null);
+  const [objReadyWorld, setObjReadyWorld] = useState<string | null>(null);
   const lightingMode = useSiegeLighting();   // Admin/Weather "Night Mood" preview
   const terrainReady = readyWorld === world.id;
+  const objectsReady = objReadyWorld === world.id;
   const signalReady = () => setReadyWorld(world.id);
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
   // monsters are in the world.
@@ -69,6 +73,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const isBlank = kind === 'flat' || isHeightmap;
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
+  // Finish the World-Initialization overlay once the LOBBY is actually on screen: terrain up AND
+  // objects loaded (blank builder maps have no objects, so terrain alone). Only acts during a SWW
+  // startup the orchestrator armed — a no-op for in-game map switches.
+  useEffect(() => {
+    if (isSiegeLoadActive() && terrainReady && (objectsReady || isBlank)) completeSiegeWorldLoad();
+  }, [terrainReady, objectsReady, isBlank]);
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}
@@ -121,13 +131,15 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <DamageNumbers />
       {/* Ghost death blasts (transparent-black explosion + heat-haze refraction). */}
       <GhostExplosions />
+      {/* Siege rocket-blast pool (dancing-demon landings + other fireSiegeExplosion callers). */}
+      <SiegeExplosions />
 
       {terrainReady && (
         <>
           {/* SWW scenery + colliders — only on the real terrain map, not flat canvases. */}
           {!isBlank && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders={world.meshColliders} />
+              <WorldObjectsLayer meshColliders={world.meshColliders} onReady={() => setObjReadyWorld(world.id)} />
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}

@@ -9,6 +9,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
+import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
 import { scifiAsset } from '@/config/assetBase';
@@ -290,7 +291,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9 }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number; onReady?: () => void } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -302,6 +303,8 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   const [cutout, setCutout] = useState<Set<string>>(new Set());
   useEffect(() => {
     let alive = true;
+    const oStep = siegeLoadStart('WorldObjectsLayer.tsx', 'Loading world objects + textures...');
+    const finishObjects = (count?: number) => { siegeLoadFinish(oStep, count); onReady?.(); };
     fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
     fetch(`${dataDir}/material_map.json`).then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
     fetch(`${dataDir}/cutout_textures.json`).then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
@@ -318,7 +321,8 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
           .catch(() => {})
           .finally(() => {
             fetch(`${dataDir}/placements.json`).then((r) => r.json())
-              .then((d) => alive && setData(d)).catch(() => {});
+              .then((d) => { if (alive) setData(d); finishObjects(d?.groups?.length); })
+              .catch(() => finishObjects());
           });
       });
     return () => { alive = false; };

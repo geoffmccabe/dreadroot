@@ -17,6 +17,8 @@ import { getMaterialVariantId, fnv1a32, canonicalizeTextureUrl } from '@/lib/ren
 import { useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { initLogStep } from '@/contexts/InitializationContext';
+import { getActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
 import { cullOccludedBlocks } from '@/lib/occlusionCulling';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 
@@ -498,18 +500,20 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
     return { fruitBlocks: fruit, atlasNonFruitBlocks: rest };
   }, [culledAtlasTreeBlocks]);
 
-  // Log render state to init overlay (once per session)
-  if (!_loggedTreeBlocksReady && atlasTreeBlocks.length > 0) {
+  // Log render state to init overlay (once per session) — voxel (Dreadroot) games only;
+  // Siege Worlds renders no blocks, so these must never appear in its init log.
+  const _logBlocks = gameUsesVoxels(getActiveGame());
+  if (_logBlocks && !_loggedTreeBlocksReady && atlasTreeBlocks.length > 0) {
     _loggedTreeBlocksReady = true;
     const culledCount = atlasTreeBlocks.length - culledAtlasTreeBlocks.length;
     initLogStep('PlacedBlocks.tsx', `Tree blocks loaded (${culledCount} interior culled)`, culledAtlasTreeBlocks.length);
   }
-  if (!_loggedAtlasRendering && atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0) {
+  if (_logBlocks && !_loggedAtlasRendering && atlasReady && atlasTexture && culledAtlasTreeBlocks.length > 0) {
     _loggedAtlasRendering = true;
     initLogStep('PlacedBlocks.tsx', `Tree atlas rendering started`, culledAtlasTreeBlocks.length);
   }
 
-  if (!_loggedNonTreeBlocks && groupedBlocks.size > 0) {
+  if (_logBlocks && !_loggedNonTreeBlocks && groupedBlocks.size > 0) {
     _loggedNonTreeBlocks = true;
     const totalNonTreeBlocks = Array.from(groupedBlocks.values()).reduce((sum, g) => sum + g.blocks.length, 0);
     initLogStep('PlacedBlocks.tsx', `Non-tree blocks rendering`, totalNonTreeBlocks);

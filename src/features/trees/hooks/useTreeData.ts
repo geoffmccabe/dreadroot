@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { PlantedTree, TreeFruit, SeedDefinition, TreeGrowthOptions } from '../types';
 import { TREE_CONFIG } from '../constants';
 import { initLogStep } from '@/contexts/InitializationContext';
+import { getActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
 import { isTreeDeleted, markTreeDeleted } from './useLocalGrowth';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { generateFungalTreeBlueprint } from '../lib/fungalTreeGenerator';
@@ -140,7 +142,9 @@ export function useTreeData(
   const blueprintRepairDoneRef = useRef(false);
 
   const fetchData = useCallback(async () => {
-    if (!worldId || !TREE_CONFIG.ENABLED) {
+    // Trees are a Dreadroot (voxel) feature — Siege Worlds has none, so skip the whole
+    // Supabase fetch + its init-log spam ("Seed definitions loaded", "No planted trees").
+    if (!worldId || !TREE_CONFIG.ENABLED || !gameUsesVoxels(getActiveGame())) {
       setIsLoading(false);
       return;
     }
