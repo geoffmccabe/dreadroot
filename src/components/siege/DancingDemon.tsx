@@ -46,7 +46,7 @@ export interface DancingDemonDef { pos: [number, number, number]; yaw?: number; 
 const DANCERS: DancingDemonDef[] = [
   { pos: [-3.966, 26.650, -21.300], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved — old spot too cramped to dance)
   { pos: [37.507, 26.650, -1.152], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // rooftop (moved)
-  { pos: [13.850, 12.284, 69.129], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // in front of the bright sign (moved off the wall)
+  { pos: [13.850, 11.280, 68.629], yaw: 0, scale: 3.14, tint: '#e23b3b' },   // bright sign — dropped ~1m + 0.5m off the +Z wall (−Z, toward city)
   { pos: [-28.260, 18.499, 30.185], yaw: 0, scale: 3.14, tint: '#e23b3b' },  // ledge
 ];
 
