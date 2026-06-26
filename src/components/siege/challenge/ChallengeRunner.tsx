@@ -76,8 +76,14 @@ export function ChallengeRunner() {
     // (min radius keeps them off the player's lap), so they come at you from all over the map.
     const arr = ch.mapId ? challengeWorldArrival(ch.mapId) : null;
     const cx0 = arr?.pos[0] ?? ch.spawn?.[0] ?? drop.x;
-    const cy0 = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
+    const cyRaw = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
     const cz0 = arr?.pos[2] ?? ch.spawn?.[2] ?? drop.z;
+    // GROUND TRUTH at the arena centre. This map's terrain is the baked 3D mesh (no heightmap →
+    // sampleHeight is null), so query the mesh. Anchor the spawn LEVEL to this, not the raw spawn Y
+    // (which is eye height / may sit above the floor after the scene was lowered). Without this, an
+    // elevated arena like the Snowy Cabin plateau drops monsters onto the lower surrounding ground
+    // — "under the map".
+    const cy0 = groundAt(cx0, cz0, cyRaw + 8) ?? sampleHeight(cx0, cz0) ?? cyRaw;
     const scatter = ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45;
     const minR = Math.min(12, scatter * 0.4);
     const mods: MonsterMods | undefined = drop.boss
@@ -95,9 +101,10 @@ export function ChallengeRunner() {
         const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
         const g = groundAt(tx, tz, cy0 + 4) ?? sampleHeight(tx, tz);
         if (g == null) continue;                                         // no ground at all → skip
-        // Best-effort: a spread-out ring point on SOME ground (used if no fully-open spot is found —
-        // better than dumping everyone on the player's lap, which happened before the city BVH loads).
-        if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; }
+        // Best-effort spread-out point — but only if it's near the arena level. Points far off the
+        // plateau (the lower surrounding map) are NEVER used, so if every ring point is off-level we
+        // fall back to the arena CENTRE on the player's plateau, not a spot under the map.
+        if (!haveBest && Math.abs(g - cy0) <= 4) { mx = tx; mz = tz; ground = g; haveBest = true; }
         if (Math.abs(g - cy0) > 2.5) continue;                          // not street level (roof/pit)
         if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 5) != null) continue;  // a roof within 5m → enclosed
         mx = tx; mz = tz; ground = g; break;                            // fully open street point
