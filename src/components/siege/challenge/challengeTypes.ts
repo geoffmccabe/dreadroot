@@ -36,6 +36,19 @@ export interface MonsterDrop {
   // Specials registry. When set, this drop is NOT a normal monster spawn — the runner invokes the
   // hard-coded behaviour keyed by `code` instead (see ChallengeRunner). `type/count/x/z` are ignored.
   special?: { code: number; name: string };
+  // How this drop's monsters are placed (see ChallengeRunner.buildMobs). Omitted = legacy scatter
+  // around the arena. random/grid/circle centre on the PLAYER's live position when the spawn fires;
+  // coords places them at an absolute world point (x,z), chosen on the minimap.
+  pattern?: SpawnPattern;
+}
+
+export type SpawnMode = 'random' | 'grid' | 'circle' | 'coords';
+export interface SpawnPattern {
+  mode: SpawnMode;
+  minDist?: number;   // random: inner radius from the player (default ~ a few m)
+  maxDist?: number;   // random: outer radius (default = challenge scatterRadius)
+  spacing?: number;   // grid: metres between monsters
+  radius?: number;    // circle: ring radius around the player
 }
 
 /** One of the 10 waves. All authoring fields are optional (nothing is required). */

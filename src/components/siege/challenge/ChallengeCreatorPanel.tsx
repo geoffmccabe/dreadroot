@@ -19,7 +19,7 @@ import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
 import { GAME_LIST } from '@/config/gameRegistry';
 import { playSound } from '@/lib/spatialAudio';
-import { WAVES_PER_CHALLENGE, type Challenge, type ChallengeWave, type MonsterDrop, type BossMods } from './challengeTypes';
+import { WAVES_PER_CHALLENGE, type Challenge, type ChallengeWave, type MonsterDrop, type BossMods, type SpawnMode } from './challengeTypes';
 
 const REGIONS = SIEGE_TELEPORTS.map((t) => t.name);   // Open-World regions for the superadmin spawner
 
@@ -281,10 +281,14 @@ export function ChallengeCreatorPanel() {
   const patch = (p: Partial<Challenge>) => setCh((c) => ({ ...c, ...p }));
   const patchWave = (i: number, p: Partial<ChallengeWave>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, ...p })));
   const patchDrop = (i: number, di: number, p: Partial<MonsterDrop>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.map((d, j) => (j === di ? { ...d, ...p } : d)) })));
+  // Merge into a drop's spawn pattern (defaults to random). Switching mode keeps the other fields so
+  // toggling back and forth doesn't lose a typed radius/spacing.
+  const patchPattern = (i: number, di: number, p: Partial<NonNullable<MonsterDrop['pattern']>>) =>
+    setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.map((d, j) => (j === di ? { ...d, pattern: { mode: 'random', ...(d.pattern ?? {}), ...p } } : d)) })));
   const patchBoss = (i: number, di: number, p: Partial<BossMods>) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.map((d, j) => (j === di ? { ...d, boss: { ...(d.boss ?? DEFAULT_BOSS), ...p } } : d)) })));
   const addWave = () => setCh((c) => ({ ...c, waves: [...c.waves, { name: `Wave ${c.waves.length + 1}`, timeSec: 60, drops: [] }] }));
   const removeWave = (i: number) => setCh((c) => ({ ...c, waves: c.waves.filter((_, k) => k !== i) }));
-  const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0 }] })));
+  const addDrop = (i: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 1, count: 1, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0, pattern: { mode: 'random' } }] })));
   // Superadmin: append a SPECIAL set piece to a wave (a non-monster drop keyed by code#).
   const addSpecial = (i: number, s: SpecialRow) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: [...w.drops, { type: 0, count: 0, x: c.spawn?.[0] ?? 0, z: c.spawn?.[2] ?? 0, special: { code: s.code, name: s.name } }] })));
   const removeDrop = (i: number, di: number) => setCh((c) => mapWave(c, i, (w) => ({ ...w, drops: w.drops.filter((_, j) => j !== di) })));
@@ -381,6 +385,42 @@ export function ChallengeCreatorPanel() {
         <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
           <div style={{ flex: 1 }}><label style={lbl}>Count</label><NumField style={inp} value={drop.count} min={1} onChange={(n) => patchDrop(i, di, { count: n ?? 1 })} /></div>
           <div style={{ flex: 1 }}><label style={lbl}>Height (blank=rise)</label><NumField style={inp} value={drop.dropHeight} allowEmpty placeholder="rise" onChange={(n) => patchDrop(i, di, { dropHeight: n })} /></div>
+        </div>
+        {/* Spawn pattern — how this drop is placed. random/grid/circle surround the player; coords = fixed. */}
+        <div style={{ marginTop: 6 }}>
+          <label style={lbl}>Spawn pattern</label>
+          <select style={inp} value={drop.pattern?.mode ?? 'random'} onChange={(e) => patchPattern(i, di, { mode: e.target.value as SpawnMode })}>
+            <option value="random">Random — within distance of player</option>
+            <option value="grid">Grid — surround player (horde)</option>
+            <option value="circle">Circle — ring around player</option>
+            <option value="coords">Coordinates — fixed point</option>
+          </select>
+          {(() => {
+            const pm = drop.pattern?.mode ?? 'random';
+            if (pm === 'grid') return (
+              <div style={{ marginTop: 6 }}><label style={lbl}>Spacing (m between)</label>
+                <NumField style={inp} value={drop.pattern?.spacing} min={1} allowEmpty placeholder="3" onChange={(nv) => patchPattern(i, di, { spacing: nv })} /></div>
+            );
+            if (pm === 'circle') return (
+              <div style={{ marginTop: 6 }}><label style={lbl}>Ring radius (m)</label>
+                <NumField style={inp} value={drop.pattern?.radius} min={1} allowEmpty placeholder="auto (by count)" onChange={(nv) => patchPattern(i, di, { radius: nv })} /></div>
+            );
+            if (pm === 'coords') return (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ flex: 1 }}><label style={lbl}>World X</label><NumField style={inp} value={drop.x} onChange={(nv) => patchDrop(i, di, { x: nv ?? 0 })} /></div>
+                  <div style={{ flex: 1 }}><label style={lbl}>World Z</label><NumField style={inp} value={drop.z} onChange={(nv) => patchDrop(i, di, { z: nv ?? 0 })} /></div>
+                </div>
+                <div style={{ fontSize: 10, color: '#7e90ad', marginTop: 3 }}>Minimap picker coming next — type coordinates for now.</div>
+              </div>
+            );
+            return (   // random
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Min dist (m)</label><NumField style={inp} value={drop.pattern?.minDist} min={0} allowEmpty placeholder="0" onChange={(nv) => patchPattern(i, di, { minDist: nv })} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Max dist (m)</label><NumField style={inp} value={drop.pattern?.maxDist} min={0} allowEmpty placeholder="scatter" onChange={(nv) => patchPattern(i, di, { maxDist: nv })} /></div>
+              </div>
+            );
+          })()}
         </div>
         {drop.count > 1 && (
           <div style={{ marginTop: 6 }}><label style={lbl}>Stagger: one every {drop.staggerMs ? (drop.staggerMs / 1000) : 0}s (0 = together)</label>

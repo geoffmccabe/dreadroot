@@ -71,52 +71,99 @@ export function ChallengeRunner() {
     if (drop.special) return [];
     const out: Spawned[] = [];
     const ch = challengeRef.current!;
-    // Spread spawns AROUND the arena instead of dripping from one point. Centre = the arena arrival
-    // (baked world) or the authored spawn. Each monster gets its OWN random point in a wide ring
-    // (min radius keeps them off the player's lap), so they come at you from all over the map.
-    const arr = ch.mapId ? challengeWorldArrival(ch.mapId) : null;
-    const cx0 = arr?.pos[0] ?? ch.spawn?.[0] ?? drop.x;
-    const cyRaw = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
-    const cz0 = arr?.pos[2] ?? ch.spawn?.[2] ?? drop.z;
-    // GROUND TRUTH at the arena centre. This map's terrain is the baked 3D mesh (no heightmap →
-    // sampleHeight is null), so query the mesh. Anchor the spawn LEVEL to this, not the raw spawn Y
-    // (which is eye height / may sit above the floor after the scene was lowered). Without this, an
-    // elevated arena like the Snowy Cabin plateau drops monsters onto the lower surrounding ground
-    // — "under the map".
-    const cy0 = groundAt(cx0, cz0, cyRaw + 8) ?? sampleHeight(cx0, cz0) ?? cyRaw;
-    const scatter = ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45;
-    const minR = Math.min(12, scatter * 0.4);
     const mods: MonsterMods | undefined = drop.boss
       ? { sizeMul: drop.boss.sizePct / 100, speedMul: drop.boss.speedPct / 100, healthMul: drop.boss.healthPct / 100, damageMul: drop.boss.damagePct / 100 }
       : undefined;
-    for (let i = 0; i < drop.count; i++) {
-      // Scatter horizontally around the player, then sit the monster on the REAL mesh ground at that
-      // spot (this map's height varies — there is no flat "street"). Keep them on terrain connected to
-      // the player's level (within BAND m) so they don't drop onto the lower surrounding ground "under"
-      // an elevated arena, and skip spots trapped under a roof/overhang. If nothing qualifies, place on
-      // a CLOSE ring around the player — never a single centre pile-up.
+
+    // Arena centre (legacy default / fallback) — the baked arrival or the authored spawn, anchored to
+    // the REAL mesh ground there (eye-height spawn Y can sit above the floor on an elevated arena).
+    const arr = ch.mapId ? challengeWorldArrival(ch.mapId) : null;
+    const ax = arr?.pos[0] ?? ch.spawn?.[0] ?? drop.x;
+    const ayRaw = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
+    const az = arr?.pos[2] ?? ch.spawn?.[2] ?? drop.z;
+    const arenaY = groundAt(ax, az, ayRaw + 8) ?? sampleHeight(ax, az) ?? ayRaw;
+
+    // PATTERN CENTRE. random/grid/circle surround the PLAYER's live position when the spawn fires;
+    // coords uses the authored world point; legacy (no pattern) uses the arena centre.
+    const mode = drop.pattern?.mode;
+    const playerCentred = mode === 'random' || mode === 'grid' || mode === 'circle';
+    let cx0 = ax, cz0 = az, cy0 = arenaY;
+    if (playerCentred) {
+      cx0 = camera.position.x; cz0 = camera.position.z;
+      cy0 = groundAt(cx0, cz0, camera.position.y + 2) ?? sampleHeight(cx0, cz0) ?? (camera.position.y - 1.6);
+    } else if (mode === 'coords') {
+      cx0 = drop.x; cz0 = drop.z;
+      cy0 = groundAt(cx0, cz0, arenaY + 60) ?? sampleHeight(cx0, cz0) ?? arenaY;
+    }
+    const groundAtPt = (x: number, z: number) => groundAt(x, z, cy0 + 8) ?? sampleHeight(x, z) ?? cy0;
+    const pushAt = (mx: number, mz: number, ground: number) => {
+      const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
+      out.push({ id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
+        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color, rise: drop.dropHeight == null });
+    };
+    const n = drop.count;
+
+    if (mode === 'grid') {
+      // Evenly-spaced square grid centred on the player, straddled by half a cell so none lands ON them.
+      const spacing = drop.pattern?.spacing && drop.pattern.spacing > 0 ? drop.pattern.spacing : 3;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+      const rows = Math.ceil(n / cols);
+      for (let k = 0; k < n; k++) {
+        const col = k % cols, row = Math.floor(k / cols);
+        const ox = (col - (cols - 1) / 2 + 0.5) * spacing;
+        const oz = (row - (rows - 1) / 2 + 0.5) * spacing;
+        const mx = cx0 + ox, mz = cz0 + oz;
+        pushAt(mx, mz, groundAtPt(mx, mz));
+      }
+      return out;
+    }
+    if (mode === 'circle') {
+      // One ring around the player, evenly spaced by count; radius scales with horde size if unset.
+      const R = drop.pattern?.radius && drop.pattern.radius > 0 ? drop.pattern.radius : Math.max(6, n * 0.6);
+      for (let k = 0; k < n; k++) {
+        const a = (Math.PI * 2 * k) / Math.max(1, n);
+        const mx = cx0 + Math.cos(a) * R, mz = cz0 + Math.sin(a) * R;
+        pushAt(mx, mz, groundAtPt(mx, mz));
+      }
+      return out;
+    }
+    if (mode === 'coords') {
+      // All at the authored point; a horde clusters in a tight ring so they don't perfectly overlap.
+      if (n <= 1) { pushAt(cx0, cz0, groundAtPt(cx0, cz0)); return out; }
+      const R = 1 + n * 0.15;
+      for (let k = 0; k < n; k++) {
+        const a = (Math.PI * 2 * k) / n;
+        const mx = cx0 + Math.cos(a) * R, mz = cz0 + Math.sin(a) * R;
+        pushAt(mx, mz, groundAtPt(mx, mz));
+      }
+      return out;
+    }
+
+    // RANDOM (explicit pattern, around the player) OR LEGACY (no pattern, around the arena): each monster
+    // gets its OWN open point in a min–max ring. Keep them on terrain connected to the centre's level
+    // (within BAND m) and skip spots trapped under a roof/overhang.
+    const scatter = mode === 'random'
+      ? (drop.pattern?.maxDist && drop.pattern.maxDist > 0 ? drop.pattern.maxDist : (ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45))
+      : (ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45);
+    const minR = mode === 'random' && drop.pattern?.minDist != null ? Math.max(0, drop.pattern.minDist) : Math.min(12, scatter * 0.4);
+    for (let i = 0; i < n; i++) {
       const BAND = 8;
       let mx = cx0, mz = cz0, ground = cy0, placed = false, haveBest = false;
       for (let t = 0; t < 20; t++) {
         const ang = Math.random() * Math.PI * 2;
-        const rr = minR + Math.sqrt(Math.random()) * (scatter - minR);   // sqrt → uniform over the area
+        const rr = minR + Math.sqrt(Math.random()) * Math.max(0.001, scatter - minR);   // sqrt → uniform over the area
         const tx = cx0 + Math.cos(ang) * rr, tz = cz0 + Math.sin(ang) * rr;
-        const g = groundAt(tx, tz, cy0 + BAND) ?? sampleHeight(tx, tz);  // the ACTUAL ground at THIS point
-        if (g == null || Math.abs(g - cy0) > BAND) continue;             // no ground / off the player's terrain
-        if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; } // a valid on-level point (its real height)
-        if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 6) != null) continue;  // roof/overhang above → skip
-        mx = tx; mz = tz; ground = g; placed = true; break;             // open ground around the player
+        const g = groundAt(tx, tz, cy0 + BAND) ?? sampleHeight(tx, tz);
+        if (g == null || Math.abs(g - cy0) > BAND) continue;
+        if (!haveBest) { mx = tx; mz = tz; ground = g; haveBest = true; }
+        if (raycastMesh(tx, g + 0.6, tz, 0, 1, 0, 6) != null) continue;
+        mx = tx; mz = tz; ground = g; placed = true; break;
       }
-      if (!placed && !haveBest) {                                        // no scattered ground found → close ring at the player's level
+      if (!placed && !haveBest) {
         const a = Math.random() * Math.PI * 2;
-        mx = cx0 + Math.cos(a) * minR; mz = cz0 + Math.sin(a) * minR; ground = cy0;
+        mx = cx0 + Math.cos(a) * Math.max(minR, 4); mz = cz0 + Math.sin(a) * Math.max(minR, 4); ground = cy0;
       }
-      const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
-      out.push({
-        id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
-        ov: drop.type === 6 ? makeHordeMember() : undefined, mods, color: drop.color,
-        rise: drop.dropHeight == null,
-      });
+      pushAt(mx, mz, ground);
     }
     return out;
   };
@@ -131,7 +178,9 @@ export function ChallengeRunner() {
       acc += (drop.afterSec ?? 0) * 1000;
       const base = now + acc;
       const dropSeed = r.waveIdx * 10000 + dropIdx * 100;
-      if (drop.staggerMs && drop.count > 1) {
+      // Grid/Circle are surround formations that spawn TOGETHER — stagger only applies to random/coords.
+      const canStagger = !drop.pattern || drop.pattern.mode === 'random' || drop.pattern.mode === 'coords';
+      if (drop.staggerMs && drop.count > 1 && canStagger) {
         // Each staggered monster gets its OWN seeded point (different + learnable).
         for (let i = 0; i < drop.count; i++) {
           r.pending.push({ drop: { ...drop, count: 1 }, at: base + i * drop.staggerMs, seed: dropSeed + 1 + i, spread: false });
