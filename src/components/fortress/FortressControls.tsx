@@ -2996,12 +2996,26 @@ export function FirstPersonControls({
         testPosRef.current.copy(camera.position);
         testPosRef.current.x += deltaMovement.x;
         
-        if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'x', undefined, onGround.current, velocity.current.y)) {
-          camera.position.x = prevPositionRef.current.x;
-          velocity.current.x = 0;
-          xBlocked = true;
-        } else {
-          camera.position.x = testPosRef.current.x;
+        // Substep so a fast move (Rocket Belt boost ~10x / knockback) can't tunnel past a thin
+        // wall: a single endpoint test would land PAST a 1-block wall and miss it. Walk in
+        // chunks smaller than the player's width so consecutive test boxes overlap (continuous
+        // sweep). One iteration at normal speed → no cost.
+        {
+          const COLLIDE_STEP = 0.4; // < player box width (2*0.3) → no gaps
+          const dirX = Math.sign(deltaMovement.x);
+          let remX = Math.abs(deltaMovement.x);
+          while (remX > 1e-6) {
+            const stepX = Math.min(COLLIDE_STEP, remX) * dirX;
+            testPosRef.current.copy(camera.position);
+            testPosRef.current.x += stepX;
+            if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'x', undefined, onGround.current, velocity.current.y)) {
+              velocity.current.x = 0;
+              xBlocked = true;
+              break;
+            }
+            camera.position.x = testPosRef.current.x;
+            remX -= COLLIDE_STEP;
+          }
         }
       }
 
@@ -3010,12 +3024,23 @@ export function FirstPersonControls({
         testPosRef.current.copy(camera.position);
         testPosRef.current.z += deltaMovement.z;
         
-        if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'z', undefined, onGround.current, velocity.current.y)) {
-          camera.position.z = prevPositionRef.current.z;
-          velocity.current.z = 0;
-          zBlocked = true;
-        } else {
-          camera.position.z = testPosRef.current.z;
+        // Substep (see X-axis note) — stop AT the wall instead of tunneling past it on a fast move.
+        {
+          const COLLIDE_STEP = 0.4;
+          const dirZ = Math.sign(deltaMovement.z);
+          let remZ = Math.abs(deltaMovement.z);
+          while (remZ > 1e-6) {
+            const stepZ = Math.min(COLLIDE_STEP, remZ) * dirZ;
+            testPosRef.current.copy(camera.position);
+            testPosRef.current.z += stepZ;
+            if (checkAxisCollisionFromCandidates(testPosRef.current, currentColliders, candidateCount, playerRadius, playerHeight, 'z', undefined, onGround.current, velocity.current.y)) {
+              velocity.current.z = 0;
+              zBlocked = true;
+              break;
+            }
+            camera.position.z = testPosRef.current.z;
+            remZ -= COLLIDE_STEP;
+          }
         }
       }
 
