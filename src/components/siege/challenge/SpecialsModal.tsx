@@ -19,6 +19,7 @@ function SpecialCard({ row, onChanged }: { row: SpecialRow; onChanged: () => voi
   const [world, setWorld] = useState(row.world ?? '');
   const [desc, setDesc] = useState(row.description ?? '');
   const [msg, setMsg] = useState('');
+  const [confirmDel, setConfirmDel] = useState(false);
   useEffect(() => { setName(row.name); setWorld(row.world ?? ''); setDesc(row.description ?? ''); }, [row.id]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = name !== row.name || world !== (row.world ?? '') || desc !== (row.description ?? '');
@@ -31,7 +32,7 @@ function SpecialCard({ row, onChanged }: { row: SpecialRow; onChanged: () => voi
     const err = await updateSpecial(row.id, { live: !row.live });
     if (err) setMsg('Error: ' + err); else onChanged();
   };
-  const del = async () => { if (!confirm(`Delete special #${row.code} "${row.name}"?`)) return; const err = await deleteSpecial(row.id); if (err) setMsg('Error: ' + err); else onChanged(); };
+  const del = async () => { const err = await deleteSpecial(row.id); if (err) { setMsg('Error: ' + err); setConfirmDel(false); } else onChanged(); };
 
   const worldLabel = CHALLENGE_WORLDS.find((w) => w.mapId === row.world)?.label;
   return (
@@ -42,7 +43,15 @@ function SpecialCard({ row, onChanged }: { row: SpecialRow; onChanged: () => voi
         <button onClick={toggleLive} style={{ ...btn(row.live), background: row.live ? '#2e8b57' : 'hsla(220,25%,22%,0.9)', padding: '4px 12px', fontSize: 12 }}>
           {row.live ? '● LIVE' : '○ Draft'}
         </button>
-        <button onClick={del} style={{ ...btn(), background: '#7a2b2b', padding: '4px 9px', fontSize: 12 }}>🗑</button>
+        {confirmDel ? (
+          <>
+            <span style={{ fontSize: 11, color: '#ffb3b3' }}>Delete?</span>
+            <button onClick={del} style={{ ...btn(), background: '#a83232', padding: '4px 9px', fontSize: 12 }}>Yes</button>
+            <button onClick={() => setConfirmDel(false)} style={{ ...btn(), padding: '4px 9px', fontSize: 12 }}>No</button>
+          </>
+        ) : (
+          <button onClick={() => setConfirmDel(true)} style={{ ...btn(), background: '#7a2b2b', padding: '4px 9px', fontSize: 12 }}>🗑</button>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 2 }}><label style={lbl}>Name</label><input style={inp} value={name} onChange={(e) => setName(e.target.value)} /></div>
@@ -56,7 +65,7 @@ function SpecialCard({ row, onChanged }: { row: SpecialRow; onChanged: () => voi
       </div>
       <div><label style={lbl}>Description / notes</label><textarea style={{ ...inp, resize: 'vertical', minHeight: 40 }} value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button className={dirty ? undefined : undefined} style={{ ...btn(true), background: dirty ? '#2e8b57' : undefined, opacity: dirty ? 1 : 0.6 }} onClick={save} disabled={!dirty}>💾 Save</button>
+        <button style={{ ...btn(true), background: dirty ? '#2e8b57' : undefined, opacity: dirty ? 1 : 0.6, cursor: dirty ? 'pointer' : 'default' }} onClick={save} disabled={!dirty}>💾 Save</button>
         {row.live && !worldLabel && row.world && <span style={{ fontSize: 11, color: '#ff9b9b' }}>world no longer exists</span>}
         {msg && <span style={{ fontSize: 11, color: msg.startsWith('Error') ? '#ff9b9b' : '#8fe6a0' }}>{msg}</span>}
         <span style={{ fontSize: 11, color: '#7e90ad', marginLeft: 'auto' }}>code #{row.code} — drop it from a wave's +Special</span>

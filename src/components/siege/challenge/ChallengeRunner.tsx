@@ -26,16 +26,6 @@ import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; rise: boolean; }
 
-// Deterministic pseudo-random in [0,1) from an integer seed (so spawn spots are the SAME every
-// play and the player can learn them).
-const hashRnd = (n: number) => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453123; return s - Math.floor(s); };
-// A seeded point on a uniform disk of `radius` around (cx,cz).
-function seededPoint(cx: number, cz: number, radius: number, seed: number): [number, number] {
-  const ang = hashRnd(seed * 1.7 + 0.3) * Math.PI * 2;
-  const rr = Math.sqrt(hashRnd(seed * 2.9 + 5.1)) * radius;
-  return [cx + Math.cos(ang) * rr, cz + Math.sin(ang) * rr];
-}
-
 export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
   const { user } = useAuth();
@@ -107,15 +97,19 @@ export function ChallengeRunner() {
     const n = drop.count;
 
     if (mode === 'grid') {
-      // Evenly-spaced square grid centred on the player, straddled by half a cell so none lands ON them.
+      // Evenly-spaced square grid CENTRED on the player. Build one extra cell, drop the cell nearest
+      // the player (so none spawns on top of them), and take n — symmetric for any count.
       const spacing = drop.pattern?.spacing && drop.pattern.spacing > 0 ? drop.pattern.spacing : 3;
-      const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
-      const rows = Math.ceil(n / cols);
-      for (let k = 0; k < n; k++) {
-        const col = k % cols, row = Math.floor(k / cols);
-        const ox = (col - (cols - 1) / 2 + 0.5) * spacing;
-        const oz = (row - (rows - 1) / 2 + 0.5) * spacing;
-        const mx = cx0 + ox, mz = cz0 + oz;
+      const cols = Math.max(1, Math.ceil(Math.sqrt(n + 1)));
+      const rows = Math.ceil((n + 1) / cols);
+      const cells: [number, number, number][] = [];
+      for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+        const ox = (col - (cols - 1) / 2) * spacing, oz = (row - (rows - 1) / 2) * spacing;
+        cells.push([ox, oz, ox * ox + oz * oz]);
+      }
+      cells.sort((a, b) => a[2] - b[2]);   // nearest the player first → skip cells[0]
+      for (let k = 1; k <= n && k < cells.length; k++) {
+        const mx = cx0 + cells[k][0], mz = cz0 + cells[k][1];
         pushAt(mx, mz, groundAtPt(mx, mz));
       }
       return out;
@@ -148,7 +142,11 @@ export function ChallengeRunner() {
     const scatter = mode === 'random'
       ? (drop.pattern?.maxDist && drop.pattern.maxDist > 0 ? drop.pattern.maxDist : (ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45))
       : (ch.scatterRadius && ch.scatterRadius > 0 ? ch.scatterRadius : 45);
-    const minR = mode === 'random' && drop.pattern?.minDist != null ? Math.max(0, drop.pattern.minDist) : Math.min(12, scatter * 0.4);
+    // Clamp the inner radius below the outer so a min ≥ max never collapses the ring to a thin band.
+    const minR = Math.min(
+      mode === 'random' && drop.pattern?.minDist != null ? Math.max(0, drop.pattern.minDist) : Math.min(12, scatter * 0.4),
+      scatter * 0.9,
+    );
     for (let i = 0; i < n; i++) {
       const BAND = 12;
       let mx = cx0, mz = cz0, ground = cy0, placed = false, haveBest = false;

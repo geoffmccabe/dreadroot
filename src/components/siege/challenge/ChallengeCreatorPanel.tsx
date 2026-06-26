@@ -192,8 +192,7 @@ export function ChallengeCreatorPanel() {
 
   // Superadmin: load the LIVE specials for the +Special menus (re-runs when the game changes or roles
   // arrive). The SPECIAL modal calls back to refresh this after edits.
-  const isSuperRole = roles.includes('superadmin');
-  useEffect(() => { if (open && isSuperRole) listLiveSpecials(ch.game ?? getActiveGame()).then(setLiveSpecials); }, [open, isSuperRole, ch.game]);
+  useEffect(() => { if (open && isSuper) listLiveSpecials(ch.game ?? getActiveGame()).then(setLiveSpecials); }, [open, isSuper, ch.game]);
 
   // The creator is simply whoever is signed in (player or admin) — not a chooser. Stamp it onto any
   // NEW (unsaved) challenge — or a loaded one whose creator is just a placeholder (system/anon/blank,
