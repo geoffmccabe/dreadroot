@@ -18,12 +18,16 @@ interface TileMeta {
 const WATER_Y = 22;        // sea level (Client.cs)
 const TEX_REPEAT_M = 6;    // detail texture tiles every 6 m (scale reference)
 
-// Sand/grass/rock blend weights for one vertex, from height + slope (matches the old tint bands):
-// beach band of sand around the waterline → grass higher → rock on steep ground, regardless of height.
+// Sand/grass/rock blend weights for one vertex, from height + slope.
+//  • Beach: PURE SAND from the waterline up a few metres, regardless of slope — shores slope up out of
+//    the water, and the slope→rock rule was overriding sand there (why the beach showed rock).
+//  • Above the beach: sand→grass transition, then grass; rock only on steep LAND.
+const BEACH_TOP = WATER_Y + 3;     // pure sand up to here (covers the sloped shore)
+const GRASS_FULL = WATER_Y + 7;    // fully grass above here
 function tileWeights(y: number, slopeUp: number, out: Float32Array, i: number) {
+  if (y < BEACH_TOP) { out[i * 3] = 1; out[i * 3 + 1] = 0; out[i * 3 + 2] = 0; return; }
   let s: number, g: number;
-  if (y < WATER_Y + 2.5) { s = 1; g = 0; }
-  else if (y < WATER_Y + 6) { const t = (y - (WATER_Y + 2.5)) / 3.5; s = 1 - t; g = t; }
+  if (y < GRASS_FULL) { const t = (y - BEACH_TOP) / (GRASS_FULL - BEACH_TOP); s = 1 - t; g = t; }
   else { s = 0; g = 1; }
   const rock = slopeUp < 0.78 ? Math.min(1, (0.78 - slopeUp) / 0.5) : 0;
   out[i * 3] = s * (1 - rock); out[i * 3 + 1] = g * (1 - rock); out[i * 3 + 2] = rock;
