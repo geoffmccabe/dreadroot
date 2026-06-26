@@ -14,7 +14,7 @@ import { raycastMesh, meshGroundHeight } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, fireChallengeRevive } from './challengeControl';
-import { setSiegePlayerDead } from '../siegePlayerState';
+import { setSiegePlayerDead, setSiegeSpawnPin } from '../siegePlayerState';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
@@ -48,6 +48,7 @@ export function ChallengeRunner() {
     const arenaMap = ch?.mapId || preMap.current || '';
     if (r.active && mapId !== arenaMap) {
       r.active = false; r.countdownUntil = 0; r.pending = [];
+      setSiegeSpawnPin(null); groundSnap.current = null;
       setMobs([]);
       setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
     } else if (!r.active) {
@@ -71,7 +72,17 @@ export function ChallengeRunner() {
     const ax = arr?.pos[0] ?? ch.spawn?.[0] ?? drop.x;
     const ayRaw = arr?.pos[1] ?? ch.spawn?.[1] ?? 26;
     const az = arr?.pos[2] ?? ch.spawn?.[2] ?? drop.z;
-    const arenaY = groundAt(ax, az, ayRaw + 8) ?? sampleHeight(ax, az) ?? ayRaw;
+    // Ray-trace the BAKED MESH from high above (peaks ~100 m) to get the TRUE top surface at a point.
+    // `sampleHeight` here is a flat fallback plane at Y=0 — a FALSE floor UNDER this elevated map — so
+    // only trust it when it sits near the reference level, and NEVER let it bury a spawn at 0 while the
+    // mesh BVH is still building; fall back to the reference (player's / arena's own level) instead.
+    const meshGround = (x: number, z: number, ref: number) => {
+      const m = groundAt(x, z, ref + 200);
+      if (m != null) return m;
+      const s = sampleHeight(x, z);
+      return (s != null && Math.abs(s - ref) <= 12) ? s : ref;
+    };
+    const arenaY = meshGround(ax, az, ayRaw);
 
     // PATTERN CENTRE. random/grid/circle surround the PLAYER's live position when the spawn fires;
     // coords uses the authored world point; legacy (no pattern) uses the arena centre.
@@ -80,15 +91,17 @@ export function ChallengeRunner() {
     let cx0 = ax, cz0 = az, cy0 = arenaY;
     if (playerCentred) {
       cx0 = camera.position.x; cz0 = camera.position.z;
-      cy0 = groundAt(cx0, cz0, camera.position.y + 2) ?? sampleHeight(cx0, cz0) ?? (camera.position.y - 1.6);
+      // Reference = the player's OWN foot level (they're standing on the real ground), so a not-ready
+      // mesh never collapses cy0 to the false 0 plane.
+      cy0 = meshGround(cx0, cz0, camera.position.y - 1.6);
     } else if (mode === 'coords') {
       cx0 = drop.x; cz0 = drop.z;
-      cy0 = groundAt(cx0, cz0, arenaY + 60) ?? sampleHeight(cx0, cz0) ?? arenaY;
+      cy0 = meshGround(cx0, cz0, arenaY);
     }
     // Cast from WELL ABOVE the whole arena (peaks reach ~100 m) so we always hit the TOP surface, not a
     // lower layer underneath — casting from cy0+small missed any terrain that rises above it and buried
     // the monster in the layer below.
-    const groundAtPt = (x: number, z: number) => groundAt(x, z, cy0 + 200) ?? sampleHeight(x, z) ?? cy0;
+    const groundAtPt = (x: number, z: number) => meshGround(x, z, cy0);
     const pushAt = (mx: number, mz: number, ground: number) => {
       const y = drop.dropHeight != null ? ground + drop.dropHeight : ground;
       out.push({ id: `chal${r.runId}_${r.idc++}`, type: drop.type, spawn: [mx, y, mz],
@@ -222,7 +235,10 @@ export function ChallengeRunner() {
     // Baked worlds (city, etc.): the scene's BVH ground loads a moment AFTER arrival, so the player can
     // hover in the air until it's ready (an exploit — sit up high and shoot down). Snap them down onto
     // the street as soon as the ground exists.
-    if (arr?.pos) groundSnap.current = { until: now + 15000, ceil: arr.pos[1] + 3, holdY: arr.pos[1] };
+    if (arr?.pos) {
+      groundSnap.current = { until: now + 30000, ceil: arr.pos[1] + 8, holdY: arr.pos[1] };
+      setSiegeSpawnPin(arr.pos[1]);   // PIN the player at the authored spawn Y until the real ground there is ready
+    }
     r.runId++; r.waveIdx = 0; r.active = true; r.faintNext = false; r.startedAt = now; r.idc = 0;
     // 10s pre-game countdown: ready weapons while it counts; wave 1 (and its timer) start after,
     // so these seconds don't eat the wave. START NOW (fireChallengeSkip) jumps straight in.
@@ -240,6 +256,8 @@ export function ChallengeRunner() {
   const stop = () => {
     r.active = false; r.countdownUntil = 0;
     setSiegePlayerDead(false);
+    setSiegeSpawnPin(null);   // release any spawn pin so the player isn't frozen after the challenge ends
+    groundSnap.current = null;
     setMobs([]);
     revert();
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
@@ -315,12 +333,15 @@ export function ChallengeRunner() {
       // high arena that dropped ceiling can no longer see the real ground above it, the bug that left
       // you stuck at the bottom). HOLD the player at the spawn until the mesh is ready instead of
       // letting them sink through to the lower terrain layer, then snap eye = ground + 1.6.
-      const gc = groundSnap.current.ceil;
+      const { ceil: gc, holdY, until } = groundSnap.current;
       const g = meshGroundHeight(camera.position.x, camera.position.z, gc)
              ?? groundAt(camera.position.x, camera.position.z, gc);
-      if (g != null) { camera.position.y = g + 1.6; groundSnap.current = null; }
-      else if (now > groundSnap.current.until) groundSnap.current = null;
-      else camera.position.y = groundSnap.current.holdY;   // not ready yet → hold at spawn, don't fall through
+      // Only SETTLE onto ground that's actually near the authored spawn (the real floor at that height).
+      // A surface far below (the lower terrain layer, which builds first) is rejected — keep the pin so
+      // the player stays at the spawn until the right ground is ready. Time out so we never trap them.
+      if (g != null && g + 1.6 >= holdY - 6) { camera.position.y = g + 1.6; groundSnap.current = null; setSiegeSpawnPin(null); }
+      else if (now > until) { groundSnap.current = null; setSiegeSpawnPin(null); }
+      // else: still pinned at the spawn Y by the controller — don't snap to the lower layer.
     }
 
     // 0. Pre-game countdown: hold until it ends (or START NOW set it to the past), THEN wave 1.

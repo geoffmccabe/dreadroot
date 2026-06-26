@@ -16,6 +16,7 @@ import type { WorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from './terrainHeight';
 import { playerState } from './playerState';
 import { clampToWorldBounds } from './worldBoundsClamp';
+import { getSiegeSpawnPin } from './siegePlayerState';
 
 // Movement constants — chosen to match Dreadroot's controls.
 const WALK_SPEED = 5.5;   // m/s
@@ -102,11 +103,18 @@ export function SiegeFlyController({ world }: Props) {
       camera.position.z += move.current.z;
     }
 
+    const pinY = getSiegeSpawnPin();
     if (flying.current) {
       // God-mode vertical: Q = up, Z = down (E = super speed).
       const vy = FLY_SPEED * boost * dt;
       if (k.has('KeyQ')) camera.position.y += vy;
       if (k.has('KeyZ')) camera.position.y -= vy;
+      velY.current = 0;
+      onGround.current = false;
+    } else if (pinY != null) {
+      // Challenge spawn pin: hold the authored spawn height, no gravity, until the real ground at that
+      // height is ready (ChallengeRunner clears the pin). Stops the player snapping onto a lower layer.
+      camera.position.y = pinY;
       velY.current = 0;
       onGround.current = false;
     } else {
