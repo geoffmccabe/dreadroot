@@ -17,19 +17,18 @@ import {
 } from './heightField';
 import { loadMap } from './mapPersistence';
 import { setBrushState } from './terrainBrushState';
+import { loadTerrainTex, makeTerrainBlendMaterial } from './terrainBlend';
 
 const VIEW_CELLS = 3;          // load radius in cells (3×128 = 384 m of editable detail) — mobile-friendly
 const TEX_REPEAT_M = 6;
 const KEY_OFF = 32768;         // matches heightField cellKey packing
 
-// Height/slope tint so sculpted hills read clearly (grass → rock on height + steepness).
-const GRASS = new THREE.Color(0x5c7a3a);
-const GRASS_HI = new THREE.Color(0x6f8a48);
-const ROCK = new THREE.Color(0x6d6660);
-const scratchColor = new THREE.Color(); // reused — no per-vertex/per-frame allocation
-function tint(y: number, base: number, slopeUp: number, out: THREE.Color) {
-  out.lerpColors(GRASS, GRASS_HI, Math.min(1, Math.max(0, (y - base) / 40)));
-  if (slopeUp < 0.82) out.lerp(ROCK, Math.min(1, (0.82 - slopeUp) / 0.5));
+// Sand/grass/rock blend weights so sculpted hills read clearly — grass on flatish ground, rock on
+// steep ground (no sand on editable maps; they have no fixed waterline). Written per-vertex into aWgt.
+const SLOPE_ROCK = 0.82;
+function cellWeights(slopeUp: number, out: Float32Array, i: number) {
+  const rock = slopeUp < SLOPE_ROCK ? Math.min(1, (SLOPE_ROCK - slopeUp) / 0.5) : 0;
+  out[i * 3] = 0; out[i * 3 + 1] = 1 - rock; out[i * 3 + 2] = rock;
 }
 
 export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; onReady?: () => void }) {
@@ -37,21 +36,18 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const groupRef = useRef<THREE.Group>(null);
   const loaded = useRef(new Map<number, THREE.Mesh>());
 
-  const grass = useMemo(() => {
-    // Worn-rock base detail texture (neutral), tinted per-vertex into the biome colours below.
-    const t = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, []);
-
-  // Night maps (SciFi City) darken the terrain 70% toward black so the green doesn't glow under the
-  // dark city; the material colour multiplies the grass map + vertex tints.
+  // Night maps (SciFi City) darken the terrain toward black so it doesn't glow under the dark city;
+  // the material colour multiplies the blended textures.
   const night = world.id === 'city-demo';
-  // ONE material shared by every cell (vertex-colored) — not one per cell.
+  // ONE sand/grass/rock blend material shared by every cell — not one per cell.
   const cellMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ map: grass, vertexColors: true, roughness: 1, metalness: 0, color: night ? new THREE.Color(0.3, 0.3, 0.3) : new THREE.Color(1, 1, 1) }),
-    [grass, night],
+    () => makeTerrainBlendMaterial(
+      loadTerrainTex('/sand_texture_seamless_1k_v1.webp'),
+      loadTerrainTex('/grass_texture_seamless_1k_v1.webp'),
+      loadTerrainTex('/worn_rock_natural_01_1k.webp'),
+      { color: night ? new THREE.Color(0.3, 0.3, 0.3) : new THREE.Color(1, 1, 1) },
+    ),
+    [night],
   );
 
   // Cell index range allowed by world bounds (null = unbounded).
@@ -103,7 +99,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const buildGeometry = (cx: number, cz: number): THREE.BufferGeometry => {
     const verts = new Float32Array(SAMPLES * SAMPLES * 3);
     const uvs = new Float32Array(SAMPLES * SAMPLES * 2);
-    const colors = new Float32Array(SAMPLES * SAMPLES * 3);
+    const weights = new Float32Array(SAMPLES * SAMPLES * 3);
     const baseX = cx * CELL_M, baseZ = cz * CELL_M;
     for (let iz = 0; iz < SAMPLES; iz++) {
       for (let ix = 0; ix < SAMPLES; ix++) {
@@ -122,22 +118,20 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute('aWgt', new THREE.BufferAttribute(weights, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    paintColors(geo);
+    paintWeights(geo);
     return geo;
   };
 
-  // Recolor from current heights + normals, in place (no allocation).
-  const paintColors = (geo: THREE.BufferGeometry) => {
-    const pos = geo.getAttribute('position'), normal = geo.getAttribute('normal');
-    const color = geo.getAttribute('color') as THREE.BufferAttribute;
-    for (let i = 0; i < SAMPLES * SAMPLES; i++) {
-      tint(pos.getY(i), baseY, normal.getY(i), scratchColor);
-      color.setXYZ(i, scratchColor.r, scratchColor.g, scratchColor.b);
-    }
-    color.needsUpdate = true;
+  // Recompute sand/grass/rock weights from current normals, in place (no allocation).
+  const paintWeights = (geo: THREE.BufferGeometry) => {
+    const normal = geo.getAttribute('normal');
+    const wgt = geo.getAttribute('aWgt') as THREE.BufferAttribute;
+    const arr = wgt.array as Float32Array;
+    for (let i = 0; i < SAMPLES * SAMPLES; i++) cellWeights(normal.getY(i), arr, i);
+    wgt.needsUpdate = true;
   };
 
   // Brush feedback: update an existing cell's heights IN PLACE — only Y + normals + colors
@@ -152,7 +146,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
       }
     pos.needsUpdate = true;
     geo.computeVertexNormals();
-    paintColors(geo);
+    paintWeights(geo);
   };
 
   const addCell = (key: number, cx: number, cz: number) => {

@@ -29,12 +29,13 @@ export function FlatGroundLayer({ world, onReady }: { world: WorldDefinition; on
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
 
   const mesh = useMemo(() => {
-    const grass = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
+    // Flat builder canvas → uniform grass (no waterline/slope here, so no blend needed).
+    const grass = new THREE.TextureLoader().load('/grass_texture_seamless_1k_v1.webp');
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
     grass.colorSpace = THREE.SRGBColorSpace;
     grass.repeat.set(sizeX / TEX_REPEAT_M, sizeZ / TEX_REPEAT_M);
     const geo = new THREE.PlaneGeometry(sizeX, sizeZ);
-    const mat = new THREE.MeshStandardMaterial({ map: grass, color: 0x6f8a48, roughness: 1, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ map: grass, roughness: 1, metalness: 0 });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2;
     // Position through the world→render boundary (identity today; large-world origin shift later).

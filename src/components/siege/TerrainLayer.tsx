@@ -1,13 +1,14 @@
 // TerrainLayer — builds the real Siege Worlds ground from the extracted heightfield
 // tiles. Each tile is a mesh in world coords, registered with the height sampler so
-// the player walks on it. Surface gets a tiling grass detail texture + height/slope
-// vertex colors (sand at the waterline, grass on land, rock on steep/high ground) so
-// the terrain reads clearly and at correct scale. Real splatmaps are a later upgrade.
+// the player walks on it. Surface blends THREE real textures (sand at the waterline,
+// grass on land, rock on steep ground) by a per-vertex weight authored from height +
+// slope, so the terrain reads clearly and at correct scale. Real splatmaps are a later upgrade.
 
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { setTiles, type HeightTile } from './terrainHeight';
 import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
+import { loadTerrainTex, makeTerrainBlendMaterial } from './terrain/terrainBlend';
 
 interface TileMeta {
   file: string; res: number; sizeX: number; sizeZ: number;
@@ -17,21 +18,18 @@ interface TileMeta {
 const WATER_Y = 22;        // sea level (Client.cs)
 const TEX_REPEAT_M = 6;    // detail texture tiles every 6 m (scale reference)
 
-const SAND = new THREE.Color(0xcdbd92);
-const GRASS = new THREE.Color(0x5c7a3a);
-const GRASS_HI = new THREE.Color(0x6f8a48);
-const ROCK = new THREE.Color(0x6d6660);
-
-function tileColor(y: number, slopeUp: number, out: THREE.Color) {
-  // beach band just around sea level -> sand
-  if (y < WATER_Y + 2.5) out.copy(SAND);
-  else if (y < WATER_Y + 6) out.lerpColors(SAND, GRASS, (y - (WATER_Y + 2.5)) / 3.5);
-  else out.lerpColors(GRASS, GRASS_HI, Math.min(1, (y - WATER_Y - 6) / 80));
-  // steep slopes -> rock, regardless of height
-  if (slopeUp < 0.78) out.lerp(ROCK, Math.min(1, (0.78 - slopeUp) / 0.5));
+// Sand/grass/rock blend weights for one vertex, from height + slope (matches the old tint bands):
+// beach band of sand around the waterline → grass higher → rock on steep ground, regardless of height.
+function tileWeights(y: number, slopeUp: number, out: Float32Array, i: number) {
+  let s: number, g: number;
+  if (y < WATER_Y + 2.5) { s = 1; g = 0; }
+  else if (y < WATER_Y + 6) { const t = (y - (WATER_Y + 2.5)) / 3.5; s = 1 - t; g = t; }
+  else { s = 0; g = 1; }
+  const rock = slopeUp < 0.78 ? Math.min(1, (0.78 - slopeUp) / 0.5) : 0;
+  out[i * 3] = s * (1 - rock); out[i * 3 + 1] = g * (1 - rock); out[i * 3 + 2] = rock;
 }
 
-function buildTileMesh(meta: TileMeta, heights: Float32Array, grass: THREE.Texture): THREE.Mesh {
+function buildTileMesh(meta: TileMeta, heights: Float32Array, mat: THREE.Material): THREE.Mesh {
   const { res, sizeX, sizeZ, pos } = meta;
   const verts = new Float32Array(res * res * 3);
   const uvs = new Float32Array(res * res * 2);
@@ -55,18 +53,11 @@ function buildTileMesh(meta: TileMeta, heights: Float32Array, grass: THREE.Textu
   geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   geo.setIndex(indices);
   geo.computeVertexNormals();
-  // vertex colors from height + slope (uses computed normals)
+  // per-vertex sand/grass/rock weights from height + slope (uses computed normals)
   const normal = geo.getAttribute('normal');
-  const colors = new Float32Array(res * res * 3);
-  const c = new THREE.Color();
-  for (let i = 0; i < res * res; i++) {
-    tileColor(verts[i * 3 + 1], normal.getY(i), c);
-    colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const mat = new THREE.MeshStandardMaterial({
-    map: grass, vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide,
-  });
+  const weights = new Float32Array(res * res * 3);
+  for (let i = 0; i < res * res; i++) tileWeights(verts[i * 3 + 1], normal.getY(i), weights, i);
+  geo.setAttribute('aWgt', new THREE.BufferAttribute(weights, 3));
   const mesh = new THREE.Mesh(geo, mat);
   mesh.userData.ground = true;
   return mesh;
@@ -75,13 +66,13 @@ function buildTileMesh(meta: TileMeta, heights: Float32Array, grass: THREE.Textu
 export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
   const [group, setGroup] = useState<THREE.Group | null>(null);
 
-  const grass = useMemo(() => {
-    // Worn-rock base detail texture (neutral), tinted per-vertex into sand/grass/rock by tileColor().
-    const t = new THREE.TextureLoader().load('/worn_rock_natural_01_1k.webp');
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  }, []);
+  // One shared sand/grass/rock blend material for every tile.
+  const mat = useMemo(() => makeTerrainBlendMaterial(
+    loadTerrainTex('/sand_texture_seamless_1k_v1.webp'),
+    loadTerrainTex('/grass_texture_seamless_1k_v1.webp'),
+    loadTerrainTex('/worn_rock_natural_01_1k.webp'),
+    { side: THREE.DoubleSide },
+  ), []);
 
   useEffect(() => {
     let alive = true;
@@ -94,7 +85,7 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
         for (const meta of manifest.tiles as TileMeta[]) {
           const buf = await fetch(`/siege/terrain/${meta.file}`).then((r) => r.arrayBuffer());
           const heights = new Float32Array(buf);
-          g.add(buildTileMesh(meta, heights, grass));
+          g.add(buildTileMesh(meta, heights, mat));
           sampleTiles.push({ posX: meta.pos[0], posZ: meta.pos[2], sizeX: meta.sizeX, sizeZ: meta.sizeZ, res: meta.res, heights });
         }
         if (!alive) return;
@@ -105,7 +96,7 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
       } catch { siegeLoadFinish(tStep); /* manifest not present */ }
     })();
     return () => { alive = false; };
-  }, [grass]);
+  }, [mat]);
 
   if (!group) return null;
   return <primitive object={group} />;
