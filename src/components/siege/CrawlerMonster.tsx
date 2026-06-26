@@ -29,6 +29,8 @@ import { meshGroundHeight, raycastMeshHit, meshHitResult } from './meshColliderS
 import { startLoopSound, updateLoopSound, stopLoopSound, play3DPositionalSound, type LoopSound } from '@/lib/spatialAudio';
 import { monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
+import { injectRecolor, setRecolor } from './challenge/colorMods';
+import type { ColorMods } from './challenge/challengeTypes';
 
 const URL = '/siege/monsters/skeletonflesh_crawl.glb';
 const MODEL_H = 1.803;
@@ -108,8 +110,8 @@ function castSurface(ox: number, oy: number, oz: number, dx: number, dy: number,
   return found;
 }
 
-export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
-  spawn: [number, number, number]; id?: string; onDespawn?: (id: string) => void; mods?: MonsterMods;
+export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
+  spawn: [number, number, number]; id?: string; onDespawn?: (id: string) => void; mods?: MonsterMods; color?: ColorMods;
 }) {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(URL);
@@ -143,11 +145,15 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods }: {
           else m.emissive = new THREE.Color(0x884436);
           m.emissiveIntensity = 0.8;
         }
+        // Authored Challenge recolour (sat/hue/tint/blend) — SAME shader as every other monster.
+        // Runs at the FINAL fragment stage, so it overrides the red emissive above: tinting a
+        // Crawlie white (or any colour) now works instead of being lost under the red glow.
+        if (color) setRecolor(injectRecolor(m), color);
         m.needsUpdate = true;
       });
     });
     return c;
-  }, [scene]);
+  }, [scene, color]);
 
   const { actions, names } = useAnimations(animations, inner);
   const actRef = useRef<THREE.AnimationAction | null>(null);

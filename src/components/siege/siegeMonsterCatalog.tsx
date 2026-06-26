@@ -144,7 +144,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ri
   // Type 9 = the Ghost — its own self-contained flying/upside-down/transparent component (not CFG-driven).
   if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
   // Type 18 = the Crawler — self-contained surface-crawl locomotion (walls + undersides), not CFG-driven.
-  if (type === 18) return <CrawlerMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
+  if (type === 18) return <CrawlerMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} color={color} />;
   const m = effectiveCfg(type);   // CFG + admin base-stat overrides
   const o = ov;
   if (!m && !o) return null;
