@@ -42,9 +42,9 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   // ONE sand/grass/rock blend material shared by every cell — not one per cell.
   const cellMat = useMemo(
     () => makeTerrainBlendMaterial(
-      loadTerrainTex('/sand_texture_seamless_1k_v1.webp'),
-      loadTerrainTex('/grass_texture_seamless_1k_v1.webp'),
-      loadTerrainTex('/worn_rock_natural_01_1k.webp'),
+      loadTerrainTex('/sww_terrain_sand.webp'),
+      loadTerrainTex('/sww_terrain_grass.webp'),
+      loadTerrainTex('/sww_terrain_rock.webp'),
       { color: night ? new THREE.Color(0.3, 0.3, 0.3) : new THREE.Color(1, 1, 1) },
     ),
     [night],

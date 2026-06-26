@@ -72,9 +72,9 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
 
   // One shared sand/grass/rock blend material for every tile.
   const mat = useMemo(() => makeTerrainBlendMaterial(
-    loadTerrainTex('/sand_texture_seamless_1k_v1.webp'),
-    loadTerrainTex('/grass_texture_seamless_1k_v1.webp'),
-    loadTerrainTex('/worn_rock_natural_01_1k.webp'),
+    loadTerrainTex('/sww_terrain_sand.webp'),
+    loadTerrainTex('/sww_terrain_grass.webp'),
+    loadTerrainTex('/sww_terrain_rock.webp'),
     { side: THREE.DoubleSide },
   ), []);
 

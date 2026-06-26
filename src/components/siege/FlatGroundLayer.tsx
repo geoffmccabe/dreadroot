@@ -30,7 +30,7 @@ export function FlatGroundLayer({ world, onReady }: { world: WorldDefinition; on
 
   const mesh = useMemo(() => {
     // Flat builder canvas → uniform grass (no waterline/slope here, so no blend needed).
-    const grass = new THREE.TextureLoader().load('/grass_texture_seamless_1k_v1.webp');
+    const grass = new THREE.TextureLoader().load('/sww_terrain_grass.webp');
     grass.wrapS = grass.wrapT = THREE.RepeatWrapping;
     grass.colorSpace = THREE.SRGBColorSpace;
     grass.repeat.set(sizeX / TEX_REPEAT_M, sizeZ / TEX_REPEAT_M);
