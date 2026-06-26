@@ -20,6 +20,31 @@ const SENTINEL = -99999;   // a grid cell with no mesh below it
 const SKY = 1000;          // ray origin Y — above any peak
 const PER_FRAME = 1500;    // samples baked per frame
 
+// Fill SENTINEL holes by repeatedly averaging each hole's known neighbours, so every in-bounds cell
+// ends up with a real elevation (no bogus Y=0 floor leaking through). Bounded passes; converges fast.
+function fillHoles(G: Float32Array, R: number) {
+  for (let pass = 0; pass < R; pass++) {
+    let holes = 0, changed = 0;
+    const next = G.slice();
+    for (let i = 0; i < G.length; i++) {
+      if (G[i] >= SENTINEL + 1) continue;           // already valid
+      holes++;
+      const c = i % R, r = (i / R) | 0;
+      let sum = 0, n = 0;
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr, cc = c + dc;
+        if (rr < 0 || cc < 0 || rr >= R || cc >= R) continue;
+        const v = G[rr * R + cc];
+        if (v >= SENTINEL + 1) { sum += v; n++; }
+      }
+      if (n) { next[i] = sum / n; changed++; }
+    }
+    G.set(next);
+    if (!holes || !changed) break;
+  }
+}
+
 export function MeshHeightmapBaker({ active }: { active: boolean }) {
   const st = useRef({
     phase: 'idle' as 'idle' | 'wait' | 'bake' | 'done',
@@ -61,9 +86,14 @@ export function MeshHeightmapBaker({ active }: { active: boolean }) {
         s.grid[s.i] = g == null ? SENTINEL : g;
       }
       if (s.i >= total) {
+        // HOLE-FILL: a sky-down ray can miss a cell (a gap between triangles, a thin spot). An unfilled
+        // hole would fall through to the flat Y=0 false floor → a monster/player buried there. Dilate the
+        // known elevations into the holes (iterative nearest-neighbour average) so EVERY in-bounds cell
+        // carries a real surface height. One-time cost; runs once when the bake finishes.
+        fillHoles(s.grid, s.res);
         const G = s.grid, R = s.res, mnX = s.minX, mnZ = s.minZ, sX = s.spanX, sZ = s.spanZ;
-        // Bilinear sampler; returns null on out-of-bounds or any sentinel corner (a hole) so it falls
-        // through to the existing flat provider there rather than reading a bogus value.
+        // Bilinear sampler; returns null only when OUTSIDE the baked grid (the existing flat provider
+        // serves those). Inside the grid the hole-fill guarantees no sentinels remain.
         setBakedHeightProvider((qx, qz) => {
           const fx = ((qx - mnX) / sX) * (R - 1), fz = ((qz - mnZ) / sZ) * (R - 1);
           if (fx < 0 || fz < 0 || fx > R - 1 || fz > R - 1) return null;

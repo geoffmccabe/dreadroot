@@ -32,6 +32,12 @@ export function setDynamicHeightProvider(fn: HeightProvider | null) { dynamicPro
 // entity's groundAt() get the true elevation, so nothing sinks through the ground.
 let bakedProvider: HeightProvider | null = null;
 export function setBakedHeightProvider(fn: HeightProvider | null) { bakedProvider = fn; }
+// The baked top-surface elevation ONLY (null on non-baked worlds, or out-of-bounds). Entities use it as
+// a hard "never below the ground" floor so nothing can sink under a baked-mesh map. Distinct from
+// sampleHeight (which also serves heightfield tiles / the flat fallback).
+export function bakedFloorAt(x: number, z: number): number | null {
+  return bakedProvider ? bakedProvider(x, z) : null;
+}
 
 export function hasTerrain() {
   return tiles.length > 0 || dynamicProvider != null || bakedProvider != null;
@@ -39,6 +45,14 @@ export function hasTerrain() {
 
 /** Ground height at world (x,z), or null if outside all tiles. Bilinear. */
 export function sampleHeight(x: number, z: number): number | null {
+  // BAKED MESH heightmap FIRST — on Adventure Town / Snowy Cabin this holds the TRUE top-surface
+  // elevation ray-traced from the sky, so it must win over the flat Y=0 `dynamicProvider` false
+  // floor that those maps also install. (Without this the baked map was computed every game and
+  // never read, so players + monsters fell through to Y=0, i.e. UNDER the terrain.)
+  if (bakedProvider) {
+    const h = bakedProvider(x, z);
+    if (h != null) return h;
+  }
   if (dynamicProvider) {
     const h = dynamicProvider(x, z);
     if (h != null) return h;

@@ -11,7 +11,7 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { sampleHeight } from './terrainHeight';
+import { sampleHeight, bakedFloorAt } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { raycastMesh } from './meshColliderSystem';
@@ -374,7 +374,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     lungeStart: 0, lungeOX: 0, lungeOZ: 0, lungeYaw0: 0, lungeStruck: false,
     spinVel: 0, zoomNext: 0, zoomUntil: 0, zoomVx: 0, zoomVz: 0, spinHitNext: 0, riseStart: 0,
     spiralHeading: 0, spiralPeriod: 0, spiralStart: 0, spiralOn: false, spiraling: false, lungeOY: 0,
-    deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0,
+    deathSnd: false, fellSound: false, lastHurtAt: 0, swingGap: 0, poseHoldUntil: 0,
     sprayFireAt: 0, sprayCheck: 0, sprayMiss: 0, wideNext: false, wideUntil: 0,
     tumbleYaw: 0, bulletTumble: false, killFired: false,
     // Bullseye topple terrain-settle state (per-fall, reset when bullseyeAt changes).
@@ -643,6 +643,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
     a.clampWhenFinished = once; a.fadeIn(0.15).play();
     st.current.cur = key;
+    // One-shot poses (attack/hit) clamp on their LAST frame when done. Record when that clamp has held
+    // well past the clip's natural length so the watchdog can release it — otherwise a stale swipeUntil
+    // gate could keep the monster frozen mid-swing ("stuck in a T-pose, then came back to life").
+    st.current.poseHoldUntil = once
+      ? performance.now() + ((a.getClip()?.duration ?? 0.6) * 1000) / Math.max(0.05, mixer.timeScale || 1) + 1500
+      : 0;
   };
   useEffect(() => { if (names.length) play(clips.idle); /* eslint-disable-next-line */ }, [actions, names]);
 
@@ -1034,6 +1040,12 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     let mvx = 0, mvz = 0, moving = false;
     s.crouching = false;   // default; the pursue branch sets it true while pathfinding into a tight space
 
+    // ANIM WATCHDOG: a one-shot pose (attack/hit) that has clamped on its last frame WAY past the clip's
+    // length is a freeze — release the swing gate and drop to idle so the monster never stays stuck in a
+    // frozen mid-swing T-pose. Normal engagement logic re-picks walk/attack/idle on the next frame.
+    if (s.poseHoldUntil && now > s.poseHoldUntil && !inst.dead) {
+      s.poseHoldUntil = 0; s.swipeUntil = 0; play(clips.idle);
+    }
     const stunned = now < inst.stunUntil;
     if (stunned) {                                          // hit-stunned -> flinch + hold
       g.rotation.y = Math.atan2(dx, dz) + c.faceOffset;
@@ -1399,6 +1411,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = false; }   // too tall → wall
         }
       }
+    }
+    // HEIGHTMAP SAFETY FLOOR (baked-mesh worlds only): if the step-reach ground query missed the real
+    // top surface (a gap, or a buried monster casting from below it) and this monster is sitting BELOW
+    // the baked elevation, lift the floor to it so nothing stays under the map. Skipped while a wall is
+    // in play so legitimate climbing isn't short-circuited; no-op on non-baked worlds (returns null).
+    if (wallTop === -Infinity) {
+      const top = bakedFloorAt(s.x, s.z);
+      if (top != null && groundY < top && feet < top - 0.4) groundY = top;
     }
     const grounded = feet <= groundY + 0.08 && s.vy <= 0.02;
     const belowTop = wallTop > -Infinity && feet < wallTop - 0.1;
