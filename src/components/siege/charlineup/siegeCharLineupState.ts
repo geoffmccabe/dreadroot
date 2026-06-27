@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
 // browser like an offline store). v2 = Draco meshes + shared animation library.
-export const CHAR_ASSET_VERSION = '16';
+export const CHAR_ASSET_VERSION = '17';
 // One shared, Draco/clip library holding every animation — loaded once, applied to every character
 // by bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only this.
 export const ANIM_LIBRARY = '/siege/characters/siege_anims.glb';
@@ -20,8 +20,7 @@ export interface LineupChar { name: string; file: string; scale: number; minY: n
 export const LINEUP_CHARS: LineupChar[] = [
   { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055 },
   { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455 },
-  { name: 'DagoOld', file: '/siege/characters/pilot_dago_old.glb', scale: 1.298, minY: -0.0590 }, // OLD Dago — side-by-side compare
-  { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.298, minY: -0.0590 },  // improved model (Dago5), 2.2m
+  { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.298, minY: -0.0590 },  // improved model (Dago5) — correct head + hands, 2.2m
   { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', scale: 0.965, minY: -0.0038 },
   { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 },  // animated stance reads short; bumped to look 1.75m
   { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', scale: 1.354, minY: -0.0121 }, // 2.4m; v3 — rigged + textured
