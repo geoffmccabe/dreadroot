@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { CFG, type MType, type BodyFlame } from '../siegeMonsterCatalog';
 import { DarkLordFlame } from '../DarkLordFlame';
 import { injectRecolor, setRecolor, type RecolorUniforms } from './colorMods';
+import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
 import type { ColorMods } from './challengeTypes';
 
 const FALLBACK = '/siege/monsters/skeletonlight.glb';                 // type 6 (horde) has no CFG
@@ -48,12 +49,14 @@ const HORDE_OFFSETS: [number, number, number][] = [
 // Brighten + recolour a clone's materials (the SAME shader the game uses), returning its uniforms.
 function setupMaterials(c: THREE.Group, opacity: number): RecolorUniforms[] {
   const list: RecolorUniforms[] = [];
+  const owned: THREE.Material[] = [];     // per-instance material clones → disposed on unmount
   c.traverse((o) => {
     const mesh = o as THREE.Mesh;
     mesh.frustumCulled = false;
     if (!mesh.isMesh) return;
     const src = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     const mats = src.map((mm) => (mm as THREE.Material).clone());
+    owned.push(...mats);
     mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
     mats.forEach((mm) => {
       const m = mm as THREE.MeshStandardMaterial;
@@ -64,6 +67,7 @@ function setupMaterials(c: THREE.Group, opacity: number): RecolorUniforms[] {
       list.push(injectRecolor(m));
     });
   });
+  trackInstanceMaterials(c, owned);
   return list;
 }
 
@@ -76,6 +80,7 @@ function Member({ url, modelHeight, color, opacity, upsideDown, scaleMul, offset
   const { scene, animations } = useGLTF(url);
   const uniforms = useRef<RecolorUniforms[]>([]);
   const cloned = useMemo(() => { const c = SkeletonUtils.clone(scene) as THREE.Group; uniforms.current = setupMaterials(c, opacity); return c; }, [scene, opacity]);
+  useDisposeInstanceMaterials(cloned);
   useEffect(() => { for (const u of uniforms.current) setRecolor(u, color); }, [color, cloned]);
   const root = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, root);

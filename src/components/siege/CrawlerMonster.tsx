@@ -30,6 +30,7 @@ import { startLoopSound, updateLoopSound, stopLoopSound, play3DPositionalSound, 
 import { monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
+import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
 import type { ColorMods } from './challenge/challengeTypes';
 
 const URL = '/siege/monsters/skeletonflesh_crawl.glb';
@@ -132,12 +133,14 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
 
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
+    const owned: THREE.Material[] = [];   // per-instance material clones → disposed on unmount
     c.traverse((o) => {
       const mesh = o as THREE.Mesh;
       mesh.frustumCulled = false;
       if (!mesh.isMesh) return;
       const src = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const mats = src.map((mm) => (mm as THREE.Material).clone());
+      owned.push(...mats);
       mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
@@ -155,8 +158,10 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
         m.needsUpdate = true;
       });
     });
+    trackInstanceMaterials(c, owned);
     return c;
   }, [scene, color]);
+  useDisposeInstanceMaterials(cloned);
 
   const { actions, names } = useAnimations(animations, inner);
   const actRef = useRef<THREE.AnimationAction | null>(null);

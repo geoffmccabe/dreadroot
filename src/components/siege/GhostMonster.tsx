@@ -15,6 +15,7 @@ import { useSmokeTrail } from './siegeSmoke';
 import { sampleHeight } from './terrainHeight';
 import { fireGhostExplosion } from './GhostExplosion';
 import { FIRE_SMOKE, registerRecipe } from '@/effects/recipes';
+import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
 const URL = '/siege/monsters/skeletonflesh.glb';
@@ -53,12 +54,14 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
     const us: { value: number }[] = [];
+    const owned: THREE.Material[] = [];   // per-instance material clones → disposed on unmount
     c.traverse((o) => {
       const mesh = o as THREE.Mesh;
       mesh.frustumCulled = false;
       if (!mesh.isMesh) return;
       const src = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       const mats = src.map((m) => (m as THREE.Material).clone());
+      owned.push(...mats);
       mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
@@ -87,8 +90,10 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       });
     });
     fadeU.current = us;
+    trackInstanceMaterials(c, owned);
     return c;
   }, [scene]);
+  useDisposeInstanceMaterials(cloned);
 
   // Idle clip at ¼ speed.
   const { actions, names } = useAnimations(animations, group);

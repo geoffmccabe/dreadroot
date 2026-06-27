@@ -19,6 +19,7 @@ import { getNavProfile } from './siegeNavProfile';
 import { getActiveMapId } from '@/config/activeMap';
 import { addCorpseZone, removeCorpseZone, corpseSlow } from './siegeCorpses';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
+import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
 import type { ColorMods } from './challenge/challengeTypes';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { getChallengeState } from './challenge/challengeStore';
@@ -338,6 +339,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // the residual between the tuned box and this lets the box keep its tuned offset
   // (e.g. forward onto the face) while riding the bone.
   const headRestLocal = useRef<{ x: number; y: number; z: number } | null>(null);
+  // Recapture the head rest offset if the rig is swapped (model hot-reload → new headBone), else the
+  // box keeps the previous model's offset and drifts off the skull.
+  useEffect(() => { headRestLocal.current = null; }, [headBone]);
   const headWireRef = useRef<THREE.Mesh>(null);   // the !hb head wireframe (world-space, bone-followed)
   const bullsWireRef = useRef<THREE.Mesh>(null);  // the !hb bullseye wireframe (nested in the head box)
   const group = useRef<THREE.Group>(null);
@@ -560,6 +564,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     const colHue = cfg.hueShift ?? 0;
     const colRed = cfg.tintRed ?? 0;
     const needsColor = colDesat > 0 || colHue !== 0 || colRed > 0;
+    const owned: THREE.Material[] = [];   // ONLY the per-instance clones below get disposed; shared
+                                          // cached materials (plain-brighten path) are left intact.
     cloned.traverse((o: THREE.Object3D) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
@@ -570,6 +576,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       let mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       if (cfg.zombie || needsColor || cm) {   // clone so per-demon uniforms are independent
         mats = mats.map((mm) => (mm as THREE.Material).clone());
+        owned.push(...mats);
         mesh.material = Array.isArray(mesh.material) ? mats : mats[0];
       }
       mats.forEach((mm) => {
@@ -620,7 +627,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         m.needsUpdate = true;
       });
     });
+    trackInstanceMaterials(cloned, owned);
   }, [cloned, J.desat]);
+  useDisposeInstanceMaterials(cloned);
 
   const clip = (key: string | undefined) => {
     if (!key) return null;   // guard: a missing clips.* key must never crash the frame loop
