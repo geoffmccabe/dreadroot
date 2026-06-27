@@ -134,6 +134,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
     const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx) || SOLID_PROP_RE.test(fbx);
+    const isTerrain = /terrain/i.test(fbx);   // baked ground mesh → walkable BVH (player + heightmap baker)
     const organicFine = /mushroom|stalag/i.test(fbx);   // overhang shapes → finer monster boxes
     const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
@@ -227,7 +228,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         }
       });
       let geoBox: THREE.Box3 | null = null;
-      if (solid || isRock) {  // rocks weren't in the solid list → had NO collider; include them
+      if (solid || isRock || isTerrain) {  // rocks/terrain weren't in the solid list → had NO collider; include them
         if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
         geoBox = src.geometry.boundingBox;
       }
@@ -248,7 +249,9 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           meshInputs.push({ key: src.geometry.uuid, matrix: m.clone(), geoBox });
           // Monsters: greedy boxes in their OWN grid (the player/bullets never read it,
           // so these can't become invisible walls). Denser than the old single box.
-          if (monsterBoxes.length < 4000 && !managedRocks.has(ikey)) {
+          if (monsterBoxes.length < 4000 && !managedRocks.has(ikey) && !isTerrain) {
+            // Terrain: monsters ground on the baked heightfield (MeshHeightmapBaker), NOT voxel boxes
+            // (voxelizing a 150 m ground mesh would produce a runaway box count).
             for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell, organicFine)) monsterBoxes.push(b);
           }
         } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {

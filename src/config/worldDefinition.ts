@@ -394,9 +394,9 @@ export const ENCHANTED_FOREST_WORLD: WorldDefinition = {
   // Editable heightmap floor sits below the baked terrain mesh; the sculpted terrain mesh (BVH) is
   // the real walkable surface, and MeshHeightmapBaker derives the heightfield from it.
   ground: { kind: 'heightmap', surfaceY: -20 },
-  // Brighter dusk so the terrain + plants are clearly visible (NightDimmer made it pitch black);
-  // bloom still makes the emissive glow read. Can re-darken once placement is confirmed.
-  fill: { ambient: 0.78, hemi: 0.58 },
+  // Dim dusk: visible but moody (the previous bright fill washed out all atmosphere). NightDimmer
+  // off (it went pitch black); the dim fill + dense fog below carry the dusk; bloom = emissive glow.
+  fill: { ambient: 0.4, hemi: 0.32 },
   night: false,
   spawn: { position: [0, 15, 0], yaw: 0 },
   props: undefined,
