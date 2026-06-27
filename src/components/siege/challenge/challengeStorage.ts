@@ -72,10 +72,11 @@ const runsTbl = () => (supabase as any).from('challenge_runs');
 export interface LeaderboardEntry { player_name: string | null; score: number; completed: boolean; time_ms: number | null; wave_reached: number | null; }
 export interface Leaderboard { top: LeaderboardEntry[]; plays: number; }
 
-/** Top-5 + the player's 1-based RANK for a just-finished score (how many runs beat it, +1) + total plays.
- *  Rank is independent of whether the player's own run has committed yet (it counts only scores ABOVE). */
+/** Top-100 + the player's 1-based RANK for a just-finished score (how many runs beat it, +1) + total
+ *  plays. The result panel shows the top 5 then scrolls down to the player's row. Rank is independent
+ *  of whether the player's own run has committed yet (it counts only scores ABOVE). */
 export async function challengeResultBoard(challengeId: string, score: number): Promise<{ top: LeaderboardEntry[]; rank: number; plays: number }> {
-  const board = (await listLeaderboards([challengeId], 5))[challengeId] ?? { top: [], plays: 0 };
+  const board = (await listLeaderboards([challengeId], 100))[challengeId] ?? { top: [], plays: 0 };
   const { count } = await runsTbl().select('id', { count: 'exact', head: true }).eq('challenge_id', challengeId).gt('score', Math.round(score));
   return { top: board.top, rank: (count ?? 0) + 1, plays: board.plays };
 }
