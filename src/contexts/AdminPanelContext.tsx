@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useRef, useCallback, useMem
 import type { FlameDemoHandle } from '@/components/fortress/FlameDemoSpawner';
 import type { EffectsHandle } from '@/effects/types';
 
-type AdminTab = 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects' | 'migrate';
+type AdminTab = 'characters' | 'coins' | 'billboards' | 'weather' | 'models' | 'users' | 'blocks' | 'seeds' | 'worlds' | 'npcs' | 'items' | 'effects' | 'migrate';
 
 // Subtab types for NPCs panel
 export type NPCSubtab = 'enemies' | 'enemies-sw' | 'friends' | 'pathfinding';

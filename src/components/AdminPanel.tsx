@@ -45,6 +45,7 @@ import { ChestsPanel } from './AdminPanel.ChestsPanel';
 import { MiningPanel } from './AdminPanel.MiningPanel';
 import { PathfindingConfigPanel } from '@/features/pathfinding/components/PathfindingConfigPanel';
 import { SwEnemiesPanel } from './siege/SwEnemiesPanel';
+import { SwCharactersPanel } from './siege/charadmin/SwCharactersPanel';
 import { useUserData } from '@/hooks/useUserData';
 import { useCreatureRegistry } from '@/hooks/useCreatureRegistry';
 import { WaterfallControls } from './AdminPanel.WaterfallControls';
@@ -200,7 +201,8 @@ export function AdminPanel({
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-12 flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-[repeat(13,minmax(0,1fr))] flex-shrink-0">
+            <TabsTrigger value="characters">Characters</TabsTrigger>
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
             <TabsTrigger value="weather">Weather</TabsTrigger>
@@ -214,6 +216,12 @@ export function AdminPanel({
             <TabsTrigger value="worlds">Worlds</TabsTrigger>
             <TabsTrigger value="migrate">Migrate</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="characters" className="mt-4 flex-1 overflow-hidden">
+            <ScrollArea className="h-[calc(90vh-180px)] pr-4">
+              <SwCharactersPanel />
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="coins" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={coinsSubtab} onValueChange={(v) => setCoinsSubtab(v as typeof coinsSubtab)} className="flex flex-col h-full">
