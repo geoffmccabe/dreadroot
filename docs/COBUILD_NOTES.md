@@ -14,6 +14,11 @@ dreadroot.com). This doc keeps us from colliding.
 
 We are co-building. Neither should assume it's alone in the repo.
 
+> **Monster SENSES (sight/sound/smell + stealth) are owned by one window as a separate layer.**
+> If you're improving NPC pathfinding/behaviour, read `docs/COBUILD_SENSES_OWNERSHIP.md` first:
+> route target-acquisition through the `acquireTarget()` seam and do NOT build vision cones, hearing,
+> smell, wind, camo, or stealth — leave that gap for the senses window.
+
 ## What SWW has added so far (so you know what's new and why)
 
 - `src/config/activeGame.ts` — runtime active-game store (`useActiveGame()`), `getActiveGame()`,
