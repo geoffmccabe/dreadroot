@@ -12,6 +12,7 @@ import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColli
 import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
+import { applyTrunkBark, TRUNK_TREE_RE } from './siegeTreeBark';
 import { scifiAsset } from '@/config/assetBase';
 
 // The siege/scifi library moved off the Pages build onto R2 (assets.dreadroot.com). Placement
@@ -202,6 +203,9 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
             if (m.alphaTest) m.alphaTest = 0;
             if (m.opacity >= 1) m.opacity = 0.7;
           }
+          // Trees: the trunk shares the green leaf atlas (Synty bark texture was dropped in export);
+          // recolor only the low-V (trunk) fragments to bark-brown in-shader. Real trees only.
+          if (TRUNK_TREE_RE.test(fbx)) applyTrunkBark(m);
           return;
         }
         // Kill baked flat self-illumination artifacts. Many world objects ship with a constant
