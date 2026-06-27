@@ -13,6 +13,7 @@ import { useSwMonsters, type SwMonster } from './siegeMonsterRegistry';
 import { saveMonsterOverride, clearMonsterOverride, syncMonsterStats } from './monsterStats';
 import { TAG_GROUPS } from './monsterTags';
 import { MonsterHexThumb, MonsterPortCanvas, defaultColor } from './challenge/MonsterPreview';
+import type { ComponentStatField } from './componentMonsterStats';
 
 const STAT_FIELDS: { key: keyof SwMonster; label: string }[] = [
   { key: 'health', label: 'Health' },
@@ -55,6 +56,43 @@ function NumField({ m, fkey, label }: { m: SwMonster; fkey: keyof SwMonster; lab
   );
 }
 
+// Schema-driven editable grid for component-driven monsters (horde/ghost/crawler). The fields come
+// from componentMonsterStats, so adding a new tunable there makes it appear here automatically. Saves
+// through the SAME override system (saveNum → saveMonsterOverride), keyed by npcType.
+function ComponentStatsGrid({ m }: { m: SwMonster }) {
+  const comp = m.component!;
+  const groups: { name: string; fields: ComponentStatField[] }[] = [];
+  for (const f of comp.fields) {
+    const g = f.group ?? '';
+    let bucket = groups.find((x) => x.name === g);
+    if (!bucket) { bucket = { name: g, fields: [] }; groups.push(bucket); }
+    bucket.fields.push(f);
+  }
+  return (
+    <div className="space-y-2">
+      {groups.map((g) => (
+        <div key={g.name}>
+          {g.name && <span className="text-[10px] uppercase tracking-wide text-primary/80 font-semibold">{g.name}</span>}
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-3 gap-y-1 mt-0.5">
+            {g.fields.map((f) => (
+              <div key={f.key} className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-muted-foreground">{f.label}</span>
+                <Input
+                  type="number"
+                  key={`${m.id}-${f.key}-${comp.values[f.key]}`}
+                  defaultValue={comp.values[f.key]}
+                  onBlur={(e) => saveNum(m.id, f.key, e.target.value)}
+                  className="h-7 text-xs"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MonsterCard({ m }: { m: SwMonster }) {
   return (
     // 20% darker than the surrounding panel so each monster card stands out.
@@ -75,35 +113,41 @@ function MonsterCard({ m }: { m: SwMonster }) {
             className="max-w-[220px] h-8 font-semibold"
           />
           <span className="text-[11px] text-muted-foreground">npcType {m.id}</span>
-          {!m.editable && <span className="text-[10px] text-amber-400">component-driven · name + tags only</span>}
+          {m.component && <span className="text-[10px] text-amber-400">component-driven · own stat set</span>}
+          {!m.editable && !m.component && <span className="text-[10px] text-amber-400">component-driven · name + tags only</span>}
           <Button variant="outline" size="sm" className="h-7 ml-auto text-xs" onClick={() => clearMonsterOverride(m.id)}>
             Reset to default
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Editable stats */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-3 gap-y-1">
-          {STAT_FIELDS.map((f) => <NumField key={String(f.key)} m={m} fkey={f.key} label={f.label} />)}
-          {/* Gait */}
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[10px] text-muted-foreground">Gait</span>
-            <select
-              key={`gait-${m.id}-${m.gait}`}
-              defaultValue={m.gait}
-              disabled={!m.editable}
-              onChange={(e) => saveMonsterOverride(m.id, { gait: e.target.value })}
-              className="h-7 text-xs rounded-md border border-input bg-background px-2"
-            >
-              <option value="climb">climb</option>
-              <option value="hop">hop</option>
-            </select>
+        {/* Editable stats — component monsters use their own schema-driven grid; CFG monsters the
+            fixed stat set + gait + flags. */}
+        {m.component ? (
+          <ComponentStatsGrid m={m} />
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-3 gap-y-1">
+            {STAT_FIELDS.map((f) => <NumField key={String(f.key)} m={m} fkey={f.key} label={f.label} />)}
+            {/* Gait */}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-muted-foreground">Gait</span>
+              <select
+                key={`gait-${m.id}-${m.gait}`}
+                defaultValue={m.gait}
+                disabled={!m.editable}
+                onChange={(e) => saveMonsterOverride(m.id, { gait: e.target.value })}
+                className="h-7 text-xs rounded-md border border-input bg-background px-2"
+              >
+                <option value="climb">climb</option>
+                <option value="hop">hop</option>
+              </select>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Flags */}
+        {/* Flags (CFG monsters only) + model */}
         <div className="flex flex-wrap gap-4">
-          {BOOL_FIELDS.map((f) => (
+          {!m.component && BOOL_FIELDS.map((f) => (
             <label key={String(f.key)} className="flex items-center gap-1.5 text-xs">
               <input
                 type="checkbox"

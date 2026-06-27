@@ -16,16 +16,13 @@ import { sampleHeight } from './terrainHeight';
 import { fireGhostExplosion } from './GhostExplosion';
 import { FIRE_SMOKE, registerRecipe } from '@/effects/recipes';
 import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
+import { effectiveComponentStats } from './componentMonsterStats';
 import type { MonsterMods } from './siegeMonsterCatalog';
 
 const URL = '/siege/monsters/skeletonflesh.glb';
-const MODEL_H = 1.803;          // intrinsic skeletonflesh height
-const BASE_H = 4;               // desired ghost height (m)
-const OPACITY = 0.2;            // 20% visible → 20% damage taken (siegeHorde scales by opacity)
-const HP = 100;
-const HIT_R = 1.4;              // impact radius around the committed strike point — move farther than this to dodge
-const STRIKE_JITTER = 0.25;     // the strike lands within this radius of where you stood when the dive began
-const DIVE_SPEED = 10.8;        // m/s — slow descent you can watch + shoot (20% faster than 9)
+const MODEL_H = 1.803;          // intrinsic skeletonflesh height (model property, not a tunable)
+// All other stats (height/opacity/health/hit radius/strike jitter/dive speed/jitter/damage) are
+// admin-tunable via componentMonsterStats (npcType 9); defaults below reproduce the originals.
 
 // Faint, fast-rising ghost smoke: 10s life, rises 3× base, low opacity, cool grey-blue.
 registerRecipe({ ...FIRE_SMOKE, code: 'ghost-smoke', lifetime: 10.0, rise: 3.0, spawnRate: 55,
@@ -40,11 +37,13 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(URL);
   const group = useRef<THREE.Group>(null);
+  // Admin-tunable base stats (read once per instance so it stays stable).
+  const cs = useRef(effectiveComponentStats(9)).current;
 
-  // Per-ghost variation (stable for this instance): ±15% size & speed.
+  // Per-ghost variation (stable for this instance): ± size & speed jitter.
   const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * 0.15, speed: 1 + (Math.random() * 2 - 1) * 0.15 };
-  const GH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
+  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * cs.sizeJitter, speed: 1 + (Math.random() * 2 - 1) * cs.speedJitter };
+  const GH = cs.height * V.current.size * (mods?.sizeMul ?? 1);
   const scale = GH / MODEL_H;
 
   // Clone the rig (own skeleton) + give it the ghost look via a FRESNEL rim: the silhouette edges
@@ -109,23 +108,23 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   // opacity 0.2 ⇒ takes 20% damage. noKnockback/noStun: the ghost drives its own motion.
   const inst = useRef<DemonInstance>({
     id: id ?? `ghost_${_gid++}`, x: spawn[0], y: spawn[1], z: spawn[2],
-    height: GH, radius: Math.max(0.5, GH * 0.22), hp: HP * (mods?.healthMul ?? 1), maxHp: HP * (mods?.healthMul ?? 1),
+    height: GH, radius: Math.max(0.5, GH * 0.22), hp: cs.health * (mods?.healthMul ?? 1), maxHp: cs.health * (mods?.healthMul ?? 1),
     dead: false, deadAt: 0, despawned: false, kvx: 0, kvz: 0, kvy: 0, stunUntil: 0, hitAt: 0,
-    headFrac: 0.25, noStun: true, noKnockback: true, yaw: 0, opacity: OPACITY,
+    headFrac: 0.25, noStun: true, noKnockback: true, yaw: 0, opacity: cs.opacity,
   }).current;
   useEffect(() => { addDemon(inst); return () => removeDemon(inst); }, [inst]);
   useSmokeTrail(inst, true, 'ghost-smoke');
 
   // Movement state: a center point (cx,cy,cz = body center) that swirls around+above the player,
   // re-rolling its orbit every 6-12s, and diving at the player every 2.5-6s.
-  const cx = useRef(spawn[0]), cy = useRef(spawn[1] + BASE_H), cz = useRef(spawn[2]);
+  const cx = useRef(spawn[0]), cy = useRef(spawn[1] + cs.height), cz = useRef(spawn[2]);
   const m = useRef({
     angle: Math.random() * Math.PI * 2, dir: Math.random() < 0.5 ? 1 : -1,
     radius: 6, height: 7, rev: 0.4, bobAmp: 1, bobFreq: 0.6, radAmp: 1, radFreq: 0.5,
     rerollAt: 0, mode: 'orbit' as 'orbit' | 'dive' | 'back', diveAt: 0, diveEndsBy: 0, hitDone: false, yaw: 0,
     dtx: 0, dty: 0, dtz: 0,                                            // committed strike point for the current dive
     lastHit: 0, wildUntil: 0, wildSpin: 0, wildYaw: 0,               // shot-mid-attack: fast spin about its own axis
-    px: spawn[0], py: spawn[1] + BASE_H, pz: spawn[2], vx: 0, vy: 0, vz: 0,   // prev pos + velocity (for death physics)
+    px: spawn[0], py: spawn[1] + cs.height, pz: spawn[2], vx: 0, vy: 0, vz: 0,   // prev pos + velocity (for death physics)
     deathInit: false, deadFrom: 0, deathSpin: 0, deathAngle: 0,
   }).current;
   const reroll = (now: number) => {
@@ -186,19 +185,19 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       // Begin a dive (but not while still tumbling from a hit). COMMIT to a strike point NOW — where
       // you are, +0.25m jitter — and drop straight down on it from above, so moving away dodges it.
       if (now > m.diveAt && now > m.wildUntil) {
-        const ja = Math.random() * Math.PI * 2, jr = Math.sqrt(Math.random()) * STRIKE_JITTER;
+        const ja = Math.random() * Math.PI * 2, jr = Math.sqrt(Math.random()) * cs.strikeJitter;
         m.dtx = px + Math.cos(ja) * jr; m.dtz = pz + Math.sin(ja) * jr; m.dty = py + 0.3;
         m.mode = 'dive'; m.hitDone = false; m.diveEndsBy = now + 2600;
       }
     } else if (m.mode === 'dive') {
-      tx = m.dtx; ty = m.dty; tz = m.dtz; chase = DIVE_SPEED * SPD;   // committed point, half-speed → dodgeable
+      tx = m.dtx; ty = m.dty; tz = m.dtz; chase = cs.diveSpeed * SPD;   // committed point, half-speed → dodgeable
       const arrived = Math.hypot(m.dtx - cx.current, m.dty - cy.current, m.dtz - cz.current) < 0.7;
       if (arrived || now > m.diveEndsBy) {
         if (!m.hitDone) {                                             // hit ONLY if you're still near the strike point
           m.hitDone = true;
-          if (Math.hypot(px - m.dtx, pz - m.dtz) < HIT_R) {
+          if (Math.hypot(px - m.dtx, pz - m.dtz) < cs.hitR) {
             const ddx = px - cx.current, ddy = py - cy.current, ddz = pz - cz.current, dd = Math.max(0.001, Math.hypot(ddx, ddy, ddz));
-            dealPlayerDamage(rnd([1, 50]) * (mods?.damageMul ?? 1), ddx / dd, ddy / dd, ddz / dd, rnd([2, 5]) * 6, '/punched.mp3', 'Ghost');
+            dealPlayerDamage(rnd([cs.dmgMin, cs.dmgMax]) * (mods?.damageMul ?? 1), ddx / dd, ddy / dd, ddz / dd, rnd([2, 5]) * 6, '/punched.mp3', 'Ghost');
           }
         }
         m.mode = 'back';

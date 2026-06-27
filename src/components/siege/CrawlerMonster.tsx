@@ -31,28 +31,22 @@ import { monsterColliderGrid } from '@/lib/spatialHashGrid';
 import type { MonsterMods } from './siegeMonsterCatalog';
 import { injectRecolor, setRecolor } from './challenge/colorMods';
 import { trackInstanceMaterials, useDisposeInstanceMaterials } from '@/lib/three/instanceMaterials';
+import { effectiveComponentStats } from './componentMonsterStats';
 import type { ColorMods } from './challenge/challengeTypes';
 
 const URL = '/siege/monsters/skeletonflesh_crawl.glb';
-const MODEL_H = 1.803;
-const BASE_H = 1.4;
+const MODEL_H = 1.803;        // intrinsic model height (not a tunable)
 const HEADING = 0;            // yaw offset of the rig vs travel direction (flip to Math.PI if reversed)
 const SCUTTLE = '/scuttle_monster.mp3';
 const BITE = '/Bite_hiss.mp3';
-const HP = 40;
-const SPEED = 3.4;
-const HOVER = 0.06;           // ride height above the surface
-const BODY_R = 0.28;          // body radius (wall-check reach, hole squeeze)
-const WALL_AHEAD = BODY_R + 0.3;
+// Gameplay + movement-feel stats (health/height/speed/jitter/attack/hover/bodyR/gravity/turnRate) are
+// admin-tunable via componentMonsterStats (npcType 18). Read per-instance in the component below.
+// These remain code constants: numerically sensitive raycast internals, not "settings".
 const STICK_UP = 0.25;        // stick-cast starts this far above the body
 const STICK_DOWN = 0.7;       // ...and reaches this far below (step-down tolerance)
 const CLIMB_DOT = 0.55;       // a forward hit whose normal differs from ours by > ~57° = a wall to climb
 const HEAD_DEADZONE = 0.15;   // if the goal projects to a tangent shorter than this (player ~along our
                               // surface normal) the heading is numerically unstable → HOLD it, don't spin
-const TURN_RATE = 4.0;        // max heading turn (rad/s) → body can never pinwheel; also de-snaps transitions
-const GRAV = 22;
-const ATTACK_R = 1.3;
-const ATTACK_MS = 1100;
 
 const rnd = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 let _cid = 0;
@@ -121,12 +115,18 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
   const { scene, animations } = useGLTF(URL);
   const group = useRef<THREE.Group>(null);
   const inner = useRef<THREE.Group>(null);
+  // Admin-tunable base stats (read once per instance). Destructure to the names the loop below uses;
+  // defaults reproduce the originals (hp 40, height 1.4, speed 3.4, hover .06, bodyR .28, grav 22…).
+  const cs = useRef(effectiveComponentStats(18)).current;
+  const HP = cs.health, SPEED = cs.speed, HOVER = cs.hover, BODY_R = cs.bodyR, GRAV = cs.gravity;
+  const TURN_RATE = cs.turnRate, ATTACK_R = cs.attackRange, ATTACK_MS = cs.attackMs;
+  const WALL_AHEAD = BODY_R + 0.3;
 
   // Per-Crawlie variety derived from a UNIQUE index (golden-ratio hash → well spread, guaranteed
-  // distinct per spawn — so no two crawl identically). size ±15%, speed ±25% (clearly visible).
+  // distinct per spawn — so no two crawl identically). size ± sizeJitter, speed ± speedJitter.
   const V = useRef<{ size: number; speed: number; idx: number } | null>(null);
-  if (!V.current) { const idx = ++_pri; V.current = { idx, size: 0.85 + ((idx * 0.7548776662) % 1) * 0.30, speed: 0.75 + ((idx * 0.6180339887) % 1) * 0.50 }; }
-  const CH = BASE_H * V.current.size * (mods?.sizeMul ?? 1);
+  if (!V.current) { const idx = ++_pri; V.current = { idx, size: (1 - cs.sizeJitter) + ((idx * 0.7548776662) % 1) * (2 * cs.sizeJitter), speed: (1 - cs.speedJitter) + ((idx * 0.6180339887) % 1) * (2 * cs.speedJitter) }; }
+  const CH = cs.height * V.current.size * (mods?.sizeMul ?? 1);
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
   if (priRef.current === 0) priRef.current = V.current.speed * 1000 + V.current.idx;   // faster ⇒ higher climb priority
@@ -396,7 +396,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     // BITE.
     if (pdist <= ATTACK_R && now >= st.nextBite) {
       st.nextBite = now + ATTACK_MS;
-      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -gx, -gy, -gz, rnd([1, 3]) * 4, '/punched.mp3', 'Crawlie');
+      dealPlayerDamage(rnd([cs.dmgMin, cs.dmgMax]) * (mods?.damageMul ?? 1), -gx, -gy, -gz, rnd([1, 3]) * 4, '/punched.mp3', 'Crawlie');
       camera.getWorldDirection(camDir);
       void play3DPositionalSound(BITE, aSrc.set(st.cx, st.cy, st.cz), camera.position, camDir, { baseVolume: 0.7 });
     }

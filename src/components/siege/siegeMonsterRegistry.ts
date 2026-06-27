@@ -8,6 +8,7 @@ import { useSyncExternalStore } from 'react';
 import { CFG, MONSTER_CATALOG, effectiveCfg, type MType } from './siegeMonsterCatalog';
 import { getMonsterOverride, subscribeMonsterStats } from './monsterStats';
 import { deriveTags } from './monsterTags';
+import { COMPONENT_DEFS, effectiveComponentStats, isComponentMonster, type ComponentStatField } from './componentMonsterStats';
 
 export interface SwMonster {
   id: number;
@@ -26,7 +27,10 @@ export interface SwMonster {
   spawn: string;
   pathfinding: string;
   behavior: string;
-  editable: boolean;   // CFG-driven types support full stat editing; component types: name + tags only
+  editable: boolean;   // CFG-driven types support the fixed stat grid; component types use `component`
+  // Component-driven monsters (horde/ghost/crawler) expose their OWN schema-driven editable stats
+  // (saved through the same override system, keyed by npcType). When present, the panel renders these.
+  component?: { fields: ComponentStatField[]; values: Record<string, number> };
 }
 
 // Models for the special, non-CFG component monsters (each has its own renderer).
@@ -74,18 +78,24 @@ function compute(): SwMonster[] {
     const m = effectiveCfg(cat.id as MType);   // CFG types → merged stats; component types → undefined
     const o = getMonsterOverride(cat.id);
     const mc = m?.meleeContact;
-    const height = m?.height ?? cat.baseHeight;
+    // Component-driven types (6/9/18): real, admin-tunable stats from componentMonsterStats. Display
+    // numbers come from there (honest), and the schema drives the panel's editable grid.
+    const comp = isComponentMonster(cat.id)
+      ? { fields: COMPONENT_DEFS[cat.id].fields, values: effectiveComponentStats(cat.id) }
+      : undefined;
+    const cv = comp?.values;
+    const height = comp ? (cv!.height ?? cat.baseHeight) : (m?.height ?? cat.baseHeight);
     return {
       id: cat.id,
       name: typeof o.name === 'string' ? o.name : cat.name,
       model: m ? modelLabel(m.url) : (SPECIAL_MODELS[cat.id] ?? '—'),
-      health: m?.health ?? cat.baseHealth,
-      dmgMin: mc?.dmg?.[0] ?? null, dmgMax: mc?.dmg?.[1] ?? null,
+      health: comp ? (cv!.health ?? null) : (m?.health ?? cat.baseHealth),
+      dmgMin: comp ? (cv!.dmgMin ?? null) : (mc?.dmg?.[0] ?? null), dmgMax: comp ? (cv!.dmgMax ?? null) : (mc?.dmg?.[1] ?? null),
       kbMin: mc?.kb?.[0] ?? null, kbMax: mc?.kb?.[1] ?? null,
-      attackRange: m?.attackRange ?? null, attackMs: m?.attackMs ?? null,
-      speed: m?.speed ?? null,
+      attackRange: comp ? (cv!.attackRange ?? null) : (m?.attackRange ?? null), attackMs: comp ? (cv!.attackMs ?? null) : (m?.attackMs ?? null),
+      speed: comp ? (cv!.speed ?? null) : (m?.speed ?? null),
       aggro: m ? (m.aggro ?? 400) : null, wanderRadius: m ? (m.wanderRadius ?? 6) : null,
-      sizeJitter: m?.sizeJitter ?? null, speedJitter: m?.speedJitter ?? null,
+      sizeJitter: comp ? (cv!.sizeJitter ?? null) : (m?.sizeJitter ?? null), speedJitter: comp ? (cv!.speedJitter ?? null) : (m?.speedJitter ?? null),
       animSpeed: m?.animSpeed ?? null, height,
       gait: m?.gait ?? '—',
       noStun: !!m?.noStun, noKnockback: !!m?.noKnockback, enrageOnHit: !!m?.enrageOnHit,
@@ -94,6 +104,7 @@ function compute(): SwMonster[] {
       pathfinding: AI[cat.id]?.pathfinding ?? '—',
       behavior: AI[cat.id]?.behavior ?? '—',
       editable: !!CFG[cat.id as MType],
+      component: comp,
     };
   });
   return list.sort((a, b) => a.name.localeCompare(b.name));

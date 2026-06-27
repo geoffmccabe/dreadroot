@@ -12,6 +12,7 @@ import { throwBoulder } from './boulderSystem';
 import { useThree } from '@react-three/fiber';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 import { getMonsterOverride } from './monsterStats';
+import { effectiveComponentStats } from './componentMonsterStats';
 
 export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
 export type BodyFlame = { radiusMul: number; heightMul: number; colorHot: string; colorCool: string };
@@ -27,15 +28,19 @@ export const HORDE6 = [
 export const HORDE6_MOANS = ['/monster-sounds/zombie_moan_3p1.mp3', '/monster-sounds/zombie_moan_3p2.mp3', '/monster-sounds/zombie_moan_6p1.mp3'];
 export function makeHordeMember(): Ov {
   const k = HORDE6[(Math.random() * HORDE6.length) | 0];
-  const height = 0.5 + Math.random() * 2.5;            // 0.5–3 m (wide range)
+  // Admin-tunable min/max ranges (defaults reproduce the original 0.5–3 m / 1.25–3.75 m/s / 10–100 hp).
+  const cs = effectiveComponentStats(6);
+  const lerp = (a: number, b: number) => a + Math.random() * (b - a);
+  const height = lerp(cs.heightMin, cs.heightMax);
   return {
     url: k.url, modelHeight: k.modelHeight, height,
-    speed: 2.5 * (0.5 + Math.random()),                // ±50% (0.5×–1.5× of 2.5)
-    health: (10 + Math.random() * 90) * k.healthMul,   // 10–100 × type multiplier
+    speed: lerp(cs.speedMin, cs.speedMax),
+    health: lerp(cs.healthMin, cs.healthMax) * k.healthMul,   // range × per-variant multiplier
     desat: 1 - (0.1 + Math.random() * 0.9),            // saturation 10–100% → desat 0–0.9
     hueShift: (Math.random() * 2 - 1) * 0.628,         // ±10% of the spectrum (±0.1·2π rad)
     tintRed: 0.125 + Math.random() * 0.225,            // 12.5–35% red tint
-    animSpeed: 4 - ((height - 0.5) / 2.5) * 2,          // shamble 4× at 0.5m → 2× at 3m
+    // shamble faster when small, slower when large (clamped so custom ranges stay sane).
+    animSpeed: 4 - Math.max(0, Math.min(1, (height - 0.5) / 2.5)) * 2,
   };
 }
 
