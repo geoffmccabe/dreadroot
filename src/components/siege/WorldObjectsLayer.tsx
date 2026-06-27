@@ -33,7 +33,7 @@ const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx
 // Chunky props that should ALSO be solid + laser-pickable even though they miss SOLID_RE / are
 // foliage-named: the giant mushrooms (mushroom*tree* etc.), tents, stalagmites, camp clutter,
 // columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
-const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump/i;
+const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump|tree_giant|tree_large|tree_medium|tree_trunk|tree_house|tree_portal|env_log|env_roots/i;
 
 // Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
 // flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't
