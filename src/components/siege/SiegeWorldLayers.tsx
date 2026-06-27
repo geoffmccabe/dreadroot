@@ -193,7 +193,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               {/* Perf: structural objects (trees/rocks) visible to 130 m; the ~8.6k alpha leaf/fern
                   cards (the overdraw cost) culled at 55 m. Fog hides the pop-in. maxInstances high so
                   nothing is starved in the near field. */}
-              <WorldObjectsLayer meshColliders trustMaterials dataDir="/siege/enchanted-forest" renderDist={130} foliageDist={55} maxGroups={130} maxInstances={20000} />
+              <WorldObjectsLayer meshColliders trustMaterials noMonsterColliders emissiveBoost={3} dataDir="/siege/enchanted-forest" renderDist={130} foliageDist={55} maxGroups={130} maxInstances={20000} />
               <MeshColliderPlayer />
               <EnchantedFireflies />
             </Suspense>

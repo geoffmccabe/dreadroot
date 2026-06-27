@@ -114,8 +114,8 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
   return [wb];
 }
 
-function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials }:
-  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean }) {
+function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1 }:
+  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number }) {
   const gltf = useGLTF(url, '/draco/');   // '/draco/' so sampler glbs (e.g. the warpgate) decode; plain world glbs ignore it
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
@@ -185,7 +185,25 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         // (KHR_materials_emissive_strength) — keep them verbatim. Skip the DreadRoot/old-SW-export
         // munging below (tree-flatten, PP-palette, flat-emissive-zero, atlas override) which would
         // strip the glow and replace textures with flat colours. Only force non-metal.
-        if (trustMaterials) { if ('metalness' in m) m.metalness = 0; return; }
+        if (trustMaterials) {
+          if ('metalness' in m) m.metalness = 0;
+          // Boost the Synty emissive glow so it crosses the AgX bloom threshold (~0.9). The glow
+          // maps survive export at KHR strength ~2.2, but AgX tone-mapping compresses that below
+          // threshold → the "enchanted" glow reads flat. Multiply intensity ONLY where there's a
+          // real glow map (a flat factor with no map would just wash the surface out).
+          if (emissiveBoost !== 1 && 'emissiveIntensity' in m && m.emissiveMap) {
+            m.emissiveIntensity *= emissiveBoost;
+          }
+          // Crystals / geodes / water exported as opaque (alphaMode MASK) — they're meant to be
+          // translucent glowing gems / transparent water. Honour the baseColor alpha and let the
+          // glow bleed through (no depth-write so they don't occlude the swarm/world behind them).
+          if (/crystal|geode|gem|shard|water/i.test(fbx) && 'opacity' in m) {
+            m.transparent = true; m.depthWrite = false;
+            if (m.alphaTest) m.alphaTest = 0;
+            if (m.opacity >= 1) m.opacity = 0.7;
+          }
+          return;
+        }
         // Kill baked flat self-illumination artifacts. Many world objects ship with a constant
         // emissiveFactor and NO emissiveMap, so the WHOLE surface self-illuminates a solid colour
         // and washes out the texture: green (0.23,0.39,0.25) on PP_ rocks/caves, and WHITE (1,1,1)
@@ -249,9 +267,12 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           meshInputs.push({ key: src.geometry.uuid, matrix: m.clone(), geoBox });
           // Monsters: greedy boxes in their OWN grid (the player/bullets never read it,
           // so these can't become invisible walls). Denser than the old single box.
-          if (monsterBoxes.length < 4000 && !managedRocks.has(ikey) && !isTerrain) {
+          if (!noMonsterColliders && monsterBoxes.length < 4000 && !managedRocks.has(ikey) && !isTerrain) {
             // Terrain: monsters ground on the baked heightfield (MeshHeightmapBaker), NOT voxel boxes
             // (voxelizing a 150 m ground mesh would produce a runaway box count).
+            // noMonsterColliders: dense ambient worlds (Enchanted Forest, 18.7k objects) skip the
+            // per-instance voxelize entirely — it was the main GC-freeze + retained-Box3 heap source,
+            // and these worlds have no monsters (player + bullets still use the mesh BVH).
             for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell, organicFine)) monsterBoxes.push(b);
           }
         } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
@@ -274,7 +295,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       out.add(inst);
     }
     return { node: out, colliders, meshInputs, meshGeos, monsterBoxes };
-  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell]);
+  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
     if (!colliders.length) return;
@@ -299,7 +320,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; onReady?: () => void } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, noMonsterColliders = false, emissiveBoost = 1, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; onReady?: () => void } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -349,10 +370,11 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   useEffect(() => {
     const p = camera.position; lastCenter.current = [p.x, p.z]; setCenter([p.x, p.z]);
   }, [camera]);
-  // Re-center the streaming window after the player travels ~half the tightest render radius, so the
-  // near field (esp. the short foliage bubble) keeps up. Scales per-map: a tight foliageDist re-centers
-  // more often. Min 30 m so it never thrashes (each re-center rebuilds the near groups = a small hitch).
-  const recenterD = Math.max(30, 0.5 * Math.min(renderDist, foliageDist > 0 ? foliageDist : renderDist));
+  // Re-center the streaming window after the player travels ~half the render radius. Based on
+  // renderDist ONLY (NOT the tight foliage bubble): coupling it to a small foliageDist made dense
+  // worlds (Enchanted Forest, 18.7k objects) re-center every 30 m, and each re-center rebuilds the
+  // near groups — that frequent rebuild was the source of the multi-hundred-ms GC freezes. Min 40 m.
+  const recenterD = Math.max(40, 0.5 * renderDist);
   useFrame((_, dt) => {
     windTime.value += dt;                            // drives the leaf-flutter vertex sway
     const dx = camera.position.x - lastCenter.current[0];
@@ -403,7 +425,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       {nearGroups.map((g) => (
         <Boundary key={g._k}>
           <Suspense fallback={null}>
-            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} />
+            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} noMonsterColliders={noMonsterColliders} emissiveBoost={emissiveBoost} />
           </Suspense>
         </Boundary>
       ))}
