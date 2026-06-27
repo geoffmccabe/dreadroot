@@ -399,13 +399,20 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
     const scored: { g: Group & { _k: number }; near: number[][]; d: number }[] = [];
     for (const g of allGroups) {
       const lim = FOLIAGE_RE.test(g.fbx) ? FR2 : R2;
-      let best = Infinity;
-      const near = g.matrices.filter((mx) => {
+      let best = Infinity, anyIn = false, allIn = true;
+      const near: number[][] = [];
+      for (const mx of g.matrices) {
         const dx = mx[12] - CX, dz = mx[14] - CZ; const dd = dx * dx + dz * dz;
         if (dd < best) best = dd;
-        return dd < lim;
-      });
-      if (near.length) scored.push({ g, near, d: best });
+        if (dd < lim) { near.push(mx); anyIn = true; } else allIn = false;
+      }
+      if (!anyIn) continue;
+      // STABLE REFERENCE when the whole group is in range: reuse the original g.matrices array
+      // (identity preserved across re-centers) so GroupInstances' useMemo SKIPS its expensive rebuild
+      // (InstancedMesh build + mesh-collider BVH register) for groups whose instances didn't change.
+      // The CPU trace showed that per-group rebuild dominating each streaming re-center. Only groups
+      // straddling the range boundary (a fresh filtered array) actually rebuild.
+      scored.push({ g, near: allIn ? g.matrices : near, d: best });
     }
     scored.sort((a, b) => a.d - b.d);
     // HARD SAFETY BUDGET: cap the number of groups (= simultaneous glTF/draco loads) AND total
