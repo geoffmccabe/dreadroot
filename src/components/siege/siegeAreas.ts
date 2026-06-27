@@ -85,6 +85,8 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyT', key: 'T', name: 'Fantasy Kingdom', mapId: 'kingdom-grid',   pos: [0, 3, 0] },
   { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
   { code: 'KeyV', key: 'V', name: 'Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
+  // The ASSEMBLED Enchanted Forest demo scene (vs 'enchanted-grid' on S = loose pieces).
+  { code: 'KeyX', key: 'X', name: 'Enchanted Forest (Demo)', mapId: 'enchanted-forest', pos: [0, 15, 0] },
 ];
 
 // Worlds a CHALLENGE can be set in (the Challenge Creator's World dropdown). '' = the default
@@ -97,6 +99,7 @@ export const CHALLENGE_WORLDS: ChallengeWorld[] = [
   { mapId: 'space-demo', label: 'SciFi Space' },
   { mapId: 'adventure-demo', label: 'Adventure Town' },
   { mapId: 'yeti-time', label: 'Snowy Cabin' },
+  { mapId: 'enchanted-forest', label: 'Enchanted Forest' },
 ];
 /** Arrival pos + facing for a challenge world — from its SIEGE_DEMOS (asset demo) entry OR its
  *  SIEGE_TELEPORTS (Jump-To) entry, e.g. Snowy Cabin. null = open world / unknown map. */

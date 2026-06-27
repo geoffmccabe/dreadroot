@@ -114,8 +114,8 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
   return [wb];
 }
 
-function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders }:
-  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean }) {
+function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials }:
+  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean }) {
   const gltf = useGLTF(url, '/draco/');   // '/draco/' so sampler glbs (e.g. the warpgate) decode; plain world glbs ignore it
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
@@ -180,6 +180,11 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
         m.side = THREE.DoubleSide;
+        // trustMaterials: this glTF was baked with correct Synty textures + emissive glow maps
+        // (KHR_materials_emissive_strength) — keep them verbatim. Skip the DreadRoot/old-SW-export
+        // munging below (tree-flatten, PP-palette, flat-emissive-zero, atlas override) which would
+        // strip the glow and replace textures with flat colours. Only force non-metal.
+        if (trustMaterials) { if ('metalness' in m) m.metalness = 0; return; }
         // Kill baked flat self-illumination artifacts. Many world objects ship with a constant
         // emissiveFactor and NO emissiveMap, so the WHOLE surface self-illuminates a solid colour
         // and washes out the texture: green (0.23,0.39,0.25) on PP_ rocks/caves, and WHITE (1,1,1)
@@ -291,7 +296,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number; onReady?: () => void } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; onReady?: () => void } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -386,7 +391,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       {nearGroups.map((g) => (
         <Boundary key={g._k}>
           <Suspense fallback={null}>
-            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} />
+            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} />
           </Suspense>
         </Boundary>
       ))}

@@ -377,9 +377,33 @@ export const APOC_CITY_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/** Enchanted Forest — the faithfully-reconstructed Synty NatureBiomes "Demo_01" scene (~18.7k
+ *  placed objects across 112 models, resolved from the Unity demo scene's prefab GUIDs), rendered
+ *  as instanced objects from /siege/enchanted-forest/placements.json on top of the demo's real baked
+ *  150x150m terrain mesh. Dusk/foggy/night atmosphere + bloom so the Synty emissive glow maps
+ *  (mushrooms, magic plants, crystals) read like the promo. Player walks the terrain via BVH. */
+export const ENCHANTED_FOREST_WORLD: WorldDefinition = {
+  id: 'enchanted-forest',
+  name: 'Enchanted Forest',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 32,
+  kind: 'siege',
+  meshColliders: true,
+  bounds: { min: [-200, -200], max: [200, 200] },
+  // Editable heightmap floor sits below the baked terrain mesh; the sculpted terrain mesh (BVH) is
+  // the real walkable surface, and MeshHeightmapBaker derives the heightfield from it.
+  ground: { kind: 'heightmap', surfaceY: -20 },
+  fill: { ambient: 0.42, hemi: 0.34 }, // dim dusk fill so the emissive glow pops (not pitch black)
+  night: true,
+  spawn: { position: [0, 15, 0], yaw: 0 },
+  props: undefined,
+};
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [APOC_CITY_WORLD.id]: APOC_CITY_WORLD,
+  [ENCHANTED_FOREST_WORLD.id]: ENCHANTED_FOREST_WORLD,
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,

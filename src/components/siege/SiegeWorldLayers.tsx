@@ -29,6 +29,7 @@ import { NightDimmer } from './NightDimmer';
 import { useSiegeLighting } from './siegeLighting';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
+import { EnchantedFireflies } from './EnchantedFireflies';
 import { MonsterEnemy } from './MonsterEnemy';
 import { SiegeMonsterParade } from './SiegeMonsterParade';
 import { SiegeItemGrid } from './SiegeItemGrid';
@@ -101,6 +102,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Night maps (SciFi City) OR the Admin/Weather "Night Mood" preview toggle on any world:
           dim the shared sun/sky so emissive signs/windows glow against a dark scene. */}
       {(world.night || lightingMode === 'night') && <NightDimmer />}
+      {/* Enchanted Forest — the Synty demo's dusk-blue exponential fog (FogMode Exp2, blue tint)
+          so the scene reads moody and the emissive glow + fireflies pop against the haze. */}
+      {world.id === 'enchanted-forest' && <fogExp2 attach="fog" args={['#445f8f', 0.012]} />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}
@@ -149,7 +153,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           <WorldBoundsWall />
           {/* Bake a real heightmap from the glTF collider mesh so the player + monsters sit on the true
               surface (these baked-mesh maps have no real heightfield — only a flat Y=0 fallback plane). */}
-          <MeshHeightmapBaker active={world.id === 'yeti-time' || world.id === 'adventure-demo'} />
+          <MeshHeightmapBaker active={world.id === 'yeti-time' || world.id === 'adventure-demo' || world.id === 'enchanted-forest'} />
           {/* Elemental Golem boulder projectiles (simulated + drawn in-game, not just the lineup). */}
           <SiegeBoulders />
           {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
@@ -176,6 +180,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             <Suspense fallback={null}>
               <WorldObjectsLayer meshColliders dataDir="/siege/apoc" renderDist={70} maxGroups={45} maxInstances={1200} />
               <MeshColliderPlayer />
+            </Suspense>
+          )}
+          {/* Enchanted Forest — instanced reconstruction of the Synty Demo_01 scene on its baked
+              terrain mesh. trustMaterials keeps the baked emissive glow maps; per-instance streaming
+              + budgets keep the ~18.7k objects (mostly leaf/fern cards) performant. */}
+          {world.id === 'enchanted-forest' && (
+            <Suspense fallback={null}>
+              <WorldObjectsLayer meshColliders trustMaterials dataDir="/siege/enchanted-forest" renderDist={150} maxGroups={130} maxInstances={9000} />
+              <MeshColliderPlayer />
+              <EnchantedFireflies />
             </Suspense>
           )}
           {world.id === 'space-demo' && (
