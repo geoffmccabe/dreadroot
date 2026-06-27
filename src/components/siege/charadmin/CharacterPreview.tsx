@@ -15,6 +15,9 @@ const BOX_BG = 'radial-gradient(120% 100% at 50% 10%, hsla(220,30%,24%,0.96), hs
 // Shared idle library: one Draco + rotation-only glb holding each character's hand-picked idle clip
 // (idle_ash, idle_dago, …). Loaded once for the whole panel; each card plays its own clip by name.
 const IDLE_LIBRARY = '/siege/characters/character_idles.glb';
+// scratch for the procedural tail swish (no per-frame allocation)
+const _tailEuler = new THREE.Euler();
+const _tailQ = new THREE.Quaternion();
 
 useGLTF.preload(charGlbUrl(IDLE_LIBRARY), '/draco/');
 
@@ -28,6 +31,15 @@ function CharModel({ file, rawH, name }: { file: string; rawH: number; name: str
   }, [scene]);
   const root = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, root);
+  // Procedural tail (Rajax): the idle clips don't touch the grafted Tail_01..08 bones, so they'd sit
+  // stiff. Drive the same travelling-wave swish the &&& lineup uses. Auto-gated: only Rajax has Tail
+  // bones, so this is a no-op for everyone else.
+  const tailBones = useMemo(() => {
+    const bs: THREE.Object3D[] = [];
+    cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
+    return bs.sort((a, b) => a.name.localeCompare(b.name));
+  }, [cloned]);
+  const tailRest = useMemo(() => tailBones.map((b) => b.quaternion.clone()), [tailBones]);
   useEffect(() => {
     const want = `idle_${name.toLowerCase()}`;
     const clip = names.find((n) => n.toLowerCase() === want) ?? names[0];
@@ -35,6 +47,19 @@ function CharModel({ file, rawH, name }: { file: string; rawH: number; name: str
     if (a) a.reset().fadeIn(0.3).play();
     return () => { a?.fadeOut(0.2); };
   }, [actions, names, name]);
+  useFrame((state) => {
+    if (!tailBones.length) return;
+    const t = state.clock.elapsedTime;
+    const N = tailBones.length;
+    for (let i = 0; i < N; i++) {
+      const frac = i / (N - 1);
+      const amp = 0.22 + 0.42 * frac;             // base → tip whip
+      const ph = t * 1.6 - i * 0.7;               // travelling wave
+      _tailEuler.set(Math.sin(ph) * amp, 0, Math.sin(ph * 0.5 + 1.2) * amp * 0.3);
+      _tailQ.setFromEuler(_tailEuler);
+      tailBones[i].quaternion.copy(tailRest[i]).multiply(_tailQ);  // compose onto rest, keep the droop
+    }
+  });
   const scale = TARGET / (rawH || 1.8);
   return (
     <group ref={root}>
