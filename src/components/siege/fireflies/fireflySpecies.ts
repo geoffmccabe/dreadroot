@@ -1,11 +1,18 @@
 // FireflySpecies — the data model for a "species" of firefly (one card in the world-builder
-// Firefly panel). Everything the panel exposes lives here; the renderer (EnchantedFireflies)
-// turns a list of species into GPU points. Defaults are the randomized "standard" look Geoff
-// specced. A world's ambience = an array of species (like the Challenge Creator's wave cards).
+// Firefly panel, opened with "@FF"). Everything the panel exposes lives here; the renderer
+// (EnchantedFireflies) turns a list of species into GPU points. Defaults are the randomized
+// "standard" look Geoff specced. A world's ambience = an array of species (like the Challenge
+// Creator's wave cards).
+//
+// Spawn codes:  "@FF" opens this panel.  "@F<code>" spawns one species by its GLOBAL code
+// (starting at #1 for the built-ins). A player may only spawn their OWN species; admins and
+// superadmins may spawn any.
 import { create } from 'zustand';
 
 export interface FireflySpecies {
   id: string;
+  code: number;           // GLOBAL spawn code → "@F<code>" (0 = not yet assigned)
+  ownerId: string;        // who authored it ('' = built-in/system); gates "@F<code>" spawning
   name: string;
   enabled: boolean;
   // ── density / size ───────────────────────────────────────────────
@@ -43,6 +50,8 @@ export const newSpeciesId = () => `ff${Date.now().toString(36)}_${_n++}`;
 export function defaultSpecies(over: Partial<FireflySpecies> = {}): FireflySpecies {
   return {
     id: newSpeciesId(),
+    code: 0,
+    ownerId: '',
     name: 'Wisp',
     enabled: true,
     count: 80,
@@ -72,20 +81,48 @@ export function defaultSpecies(over: Partial<FireflySpecies> = {}): FireflySpeci
 // ── store (drives the live renderer + the panel) ───────────────────
 interface FireflyState {
   species: FireflySpecies[];
+  nextCode: number;        // next global code to hand out (built-ins start at 1)
   panelOpen: boolean;
   setPanelOpen: (b: boolean) => void;
-  addSpecies: () => void;
+  togglePanel: () => void;
+  addSpecies: (ownerId: string) => void;
+  duplicateSpecies: (id: string, ownerId: string) => void;
   removeSpecies: (id: string) => void;
   updateSpecies: (id: string, patch: Partial<FireflySpecies>) => void;
   setSpecies: (s: FireflySpecies[]) => void;
+  /** "@F<code>": enable the species with that global code if the caller may spawn it.
+   *  Returns 'ok' | 'denied' | 'missing' for the on-screen toast. */
+  spawnByCode: (code: number, perm: { userId: string; isAdmin: boolean }) => 'ok' | 'denied' | 'missing';
 }
 
-export const useFireflyStore = create<FireflyState>((set) => ({
-  species: [defaultSpecies()],
+export const useFireflyStore = create<FireflyState>((set, get) => ({
+  species: [defaultSpecies({ code: 1, name: 'Wisp' })],
+  nextCode: 2,
   panelOpen: false,
   setPanelOpen: (b) => set({ panelOpen: b }),
-  addSpecies: () => set((st) => ({ species: [...st.species, defaultSpecies({ name: `Species ${st.species.length + 1}` })] })),
+  togglePanel: () => set((st) => ({ panelOpen: !st.panelOpen })),
+  addSpecies: (ownerId) => set((st) => ({
+    species: [...st.species, defaultSpecies({ name: `Species ${st.species.length + 1}`, code: st.nextCode, ownerId, enabled: true })],
+    nextCode: st.nextCode + 1,
+  })),
+  duplicateSpecies: (id, ownerId) => set((st) => {
+    const src = st.species.find((s) => s.id === id);
+    if (!src) return st;
+    return {
+      species: [...st.species, { ...src, id: newSpeciesId(), code: st.nextCode, ownerId, name: `${src.name} copy` }],
+      nextCode: st.nextCode + 1,
+    };
+  }),
   removeSpecies: (id) => set((st) => ({ species: st.species.filter((s) => s.id !== id) })),
   updateSpecies: (id, patch) => set((st) => ({ species: st.species.map((s) => (s.id === id ? { ...s, ...patch } : s)) })),
   setSpecies: (s) => set({ species: s }),
+  spawnByCode: (code, perm) => {
+    const sp = get().species.find((s) => s.code === code);
+    if (!sp) return 'missing';
+    // built-ins (ownerId '') are spawnable by anyone; otherwise must own it, unless admin/superadmin.
+    const mayUse = perm.isAdmin || sp.ownerId === '' || sp.ownerId === perm.userId;
+    if (!mayUse) return 'denied';
+    if (!sp.enabled) set((st) => ({ species: st.species.map((s) => (s.id === sp.id ? { ...s, enabled: true } : s)) }));
+    return 'ok';
+  },
 }));

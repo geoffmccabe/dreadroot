@@ -18,10 +18,25 @@ combat wave). Authors mix species to set a world's "vibe."
   - **LOD**: distance-cull fade beyond ~95 m; all animation is GPU, so high counts stay cheap.
 - It reads the store live, so the panel just needs to mutate species → instant visual update.
 
-## The panel UI (to build)
-HTML panel rendered **outside the Canvas**, styled with the game's `waterfall-card`/`Card` + theme
-classes (per the panel-CSS rule), reading/writing `useFireflyStore`. Open via a world-builder
-toolbar button (build-mode only) — NOT shown in normal play.
+## The panel UI (BUILT — v4.204.0)
+`src/components/siege/fireflies/FireflyPanel.tsx` — HTML panel rendered **outside the Canvas**
+(portal to `<body>`), styled to match the Challenge Creator's dark-HUD chrome + card look,
+reading/writing `useFireflyStore`. Mounted in `Fortress.tsx` next to `ChallengeCreatorPanel`.
+
+**Spawn codes** (self-contained `@F` keyboard parser inside the panel component):
+- `@FF` → toggle the panel.
+- `@F<code>` → spawn (enable) the species with that GLOBAL code. Each card shows its `@F<code>`
+  badge; codes start at #1 for the built-ins, `addSpecies` hands out the next code. Permission:
+  a player may only spawn their OWN species (`ownerId`); admin/superadmin may spawn any
+  (`spawnByCode` enforces it; an on-screen toast reports ok / not-yours / no-such-firefly).
+
+Each species card: code badge, name, enable/duplicate/delete, collapse, and grouped sliders —
+Density &amp; Colour (count, size, base swatch, fuchsia/blue/random drift), Motion, High-flyers,
+Pulse/Blink, Area. Live: every edit hits the store → the GPU swarm updates instantly.
+
+### Still to build
+- Per-map persistence (save the species array into the world record) — see below.
+- A build-mode toolbar button as an alternative to the `@FF` command.
 
 Layout (mirrors Challenge Creator):
 - **Header**: "Fireflies" + an `+ Add Species` card button (like `+ Spawn`).

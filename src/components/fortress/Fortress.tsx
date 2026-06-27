@@ -27,6 +27,7 @@ import { getActiveGame, useActiveGame } from '@/config/activeGame';
 import { setActiveWorldId } from '@/config/activeWorld';
 import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
+import { FireflyPanel } from '@/components/siege/fireflies/FireflyPanel';
 import { ChallengeEditorGallery } from '@/components/siege/challenge/ChallengeEditorGallery';
 import { ChallengeBrowser } from '@/components/siege/challenge/ChallengeBrowser';
 import { ChallengeResultPanel } from '@/components/siege/challenge/ChallengeResultPanel';
@@ -2465,6 +2466,7 @@ export function Fortress() {
       <ChallengeCreatorPanel />
       <ChallengeBrowser />
       <ChallengeResultPanel />
+      <FireflyPanel />
       <ScopeOverlay />
       <CenterFlash />
       <FortressHUD
