@@ -75,6 +75,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const kind = world.ground.kind;
   const isHeightmap = kind === 'heightmap';
   const isBlank = kind === 'flat' || isHeightmap;
+  // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
+  // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
+  const isBuilderMap = isHeightmap && world.id !== 'enchanted-forest';
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   // Finish the World-Initialization overlay once the LOBBY is actually on screen: terrain up AND
@@ -108,11 +111,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {world.id === 'enchanted-forest' && <EnchantedLighting />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
-      {isHeightmap && <TerrainBrushController />}
+      {isBuilderMap && <TerrainBrushController />}
       {/* Drop-in object builder: render placed objects always (so saved maps show them in play),
           and the placement controller (no-ops unless build mode is on). */}
-      {isHeightmap && <BuilderObjectsLayer />}
-      {isHeightmap && <BuilderController />}
+      {isBuilderMap && <BuilderObjectsLayer />}
+      {isBuilderMap && <BuilderController />}
       {/* Magic-portal VFX inside the lobby warp gate (SWW world only). */}
       {!isBlank && <Suspense fallback={null}><SiegePortalEffect /></Suspense>}
       {/* (Magic Chest model removed — the lobby already has a chest at the spot; the open/spin

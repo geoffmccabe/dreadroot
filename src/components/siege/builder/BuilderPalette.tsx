@@ -62,7 +62,8 @@ export function BuilderPalette() {
 
   // Hide during a challenge (open-world build tool, not a gameplay panel).
   const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
-  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || inChallenge) return null;
+  // Enchanted Forest is a finished, reconstructed map (not a build canvas) — no terrain/builder tools.
+  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || world.id === 'enchanted-forest' || inChallenge) return null;
 
   const onSave = async () => {
     await saveMap({
