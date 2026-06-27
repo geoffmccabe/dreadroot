@@ -85,10 +85,10 @@
 	"accessors":[
 		{
 			"componentType":5126,
-			"count":66049,
+			"count":263169,
 			"max":[
 				75,
-				8.968168258666992,
+				9.004791259765625,
 				75
 			],
 			"min":[
@@ -100,24 +100,24 @@
 		},
 		{
 			"componentType":5126,
-			"count":66049,
+			"count":263169,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":66049,
+			"count":263169,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5125,
-			"count":393216,
+			"count":1572864,
 			"type":"SCALAR"
 		}
 	],
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":174762,
+			"byteLength":606424,
 			"byteOffset":0
 		}
 	],
@@ -129,7 +129,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":174764,
+			"byteLength":606424,
 			"uri":"EF_Terrain.bin"
 		}
 	]

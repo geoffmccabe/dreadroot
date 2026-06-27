@@ -5,7 +5,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const COUNT = 320;
+const COUNT = 80;   // 25% of the original 320 (Geoff: far too many)
 const AREA = 130;   // spread (m) across the forest, centred on origin
 const Y_MIN = 0.5, Y_MAX = 22;
 

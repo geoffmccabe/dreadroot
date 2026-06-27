@@ -104,7 +104,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {(world.night || lightingMode === 'night') && <NightDimmer />}
       {/* Enchanted Forest — the Synty demo's dusk-blue exponential fog (FogMode Exp2, blue tint)
           so the scene reads moody and the emissive glow + fireflies pop against the haze. */}
-      {world.id === 'enchanted-forest' && <fogExp2 attach="fog" args={['#445f8f', 0.012]} />}
+      {world.id === 'enchanted-forest' && <fogExp2 attach="fog" args={['#6a7da6', 0.005]} />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}
