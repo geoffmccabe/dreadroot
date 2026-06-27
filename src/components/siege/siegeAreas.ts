@@ -86,7 +86,7 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
   { code: 'KeyV', key: 'V', name: 'Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
   // The ASSEMBLED Enchanted Forest demo scene (vs 'enchanted-grid' on S = loose pieces).
-  { code: 'KeyX', key: 'X', name: 'Enchanted Forest (Demo)', mapId: 'enchanted-forest', pos: [0, 15, 0] },
+  { code: 'KeyX', key: 'X', name: 'Enchanted Forest (Demo)', mapId: 'enchanted-forest', pos: [20.773, 9.693, -14.36], yaw: 2.499, pitch: -0.006 }, // inside the central hollow tree trunk
 ];
 
 // Worlds a CHALLENGE can be set in (the Challenge Creator's World dropdown). '' = the default

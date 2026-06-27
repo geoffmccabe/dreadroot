@@ -398,7 +398,9 @@ export const ENCHANTED_FOREST_WORLD: WorldDefinition = {
   // off (it went pitch black); the dim fill + dense fog below carry the dusk; bloom = emissive glow.
   fill: { ambient: 0.4, hemi: 0.32 },
   night: false,
-  spawn: { position: [0, 15, 0], yaw: 0 },
+  // Geoff's chosen spawn: inside the large central hollow tree trunk (yaw/pitch from his forward
+  // vector [-0.599,-0.006,0.801] via the verified atan2(-x,-z)/asin(y) convention).
+  spawn: { position: [20.773, 9.693, -14.36], yaw: 2.499, pitch: -0.006 },
   props: undefined,
 };
 
