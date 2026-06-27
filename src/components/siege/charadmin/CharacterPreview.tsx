@@ -8,6 +8,7 @@ import { useGLTF, useAnimations, View, PerspectiveCamera } from '@react-three/dr
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { charGlbUrl } from './characterStats';
+import { AshCigaretteFx } from './AshCigaretteFx';
 
 const TARGET = 1.4;   // normalized model height in the hex (all characters appear the same size)
 const HEX = 'polygon(50% 1%, 93% 25%, 93% 75%, 50% 99%, 7% 75%, 7% 25%)';
@@ -67,6 +68,8 @@ function CharModel({ file, rawH, name }: { file: string; rawH: number; name: str
       <group position={[0, -TARGET / 2, 0]} scale={scale}>
         <primitive object={cloned} />
       </group>
+      {/* Ash's cigarette glow + smoke (no-op for other characters) */}
+      <AshCigaretteFx group={cloned} />
     </group>
   );
 }

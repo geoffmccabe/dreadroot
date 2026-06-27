@@ -18,6 +18,7 @@ import {
 } from './charlineup/siegeCharLineupState';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
+import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -120,6 +121,8 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
   return (
     <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
       <primitive object={cloned} />
+      {/* Ash's cigarette glow + smoke (no-op for other characters) */}
+      <AshCigaretteFx group={cloned} />
     </group>
   );
 }
