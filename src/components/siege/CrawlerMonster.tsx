@@ -177,6 +177,10 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
   const st = useRef({
     cx: spawn[0], cy: spawn[1], cz: spawn[2], nx: 0, ny: 1, nz: 0, tx: 0, ty: 0, tz: 1, vy: 0,
     nextBite: 0, deathT: 0, lastX: spawn[0], lastY: spawn[1], lastZ: spawn[2], stuckT: 0, detourUntil: 0, detourSgn: 1,
+    // ORBIT-BREAK: closest we've gotten to the player while attached to a steep surface, and when. Used to
+    // detect circling a thin trunk forever (moving, but never gaining ground). noClimbUntil = refuse to
+    // re-grab a wall for a moment after dropping off, so it routes AROUND the trunk on the ground.
+    pdRef: 1e9, pdRefAt: 0, noClimbUntil: 0,
   }).current;
   const box = useMemo(() => new THREE.Box3(), []);
   const boxInfo = useRef({ pri: 0, supported: false });
@@ -234,8 +238,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     const spd = SPEED * V.current!.speed * (mods?.speedMul ?? 1);
     let moving = false;
     if (pdist > ATTACK_R * 0.7) {
-      // WALL CHECK — climb a surface that's in the path to the player.
-      if (castSurface(st.cx, st.cy, st.cz, st.tx, st.ty, st.tz, WALL_AHEAD, self, sp)) {
+      // WALL CHECK — climb a surface that's in the path to the player (suppressed briefly after an
+      // orbit-break drop-off so it walks around the obstacle on the ground instead of re-climbing it).
+      if (now >= st.noClimbUntil && castSurface(st.cx, st.cy, st.cz, st.tx, st.ty, st.tz, WALL_AHEAD, self, sp)) {
         const dotn = _cast.nx * st.nx + _cast.ny * st.ny + _cast.nz * st.nz;
         if (dotn < CLIMB_DOT) {                                  // a real wall (angled away) → transition onto it
           st.nx = _cast.nx; st.ny = _cast.ny; st.nz = _cast.nz;
@@ -283,6 +288,21 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       st.cy = ty + HOVER; st.vy = 0; boxInfo.current.supported = true;
       st.ny += (1 - st.ny) * Math.min(1, dt * 8); st.nx -= st.nx * Math.min(1, dt * 8); st.nz -= st.nz * Math.min(1, dt * 8);
       const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
+    }
+
+    // ORBIT-BREAK — a thin vertical obstacle (a tree trunk) makes the wall-walker circle it forever: it
+    // keeps MOVING (so the stuck-detour above never fires) yet never gains ground on the player. Detect
+    // "attached to a steep surface AND no closer to the player for ~2.5s" → drop to the ground and refuse
+    // to re-climb briefly, so it walks AROUND the trunk instead of spinning on it. A genuine climb toward
+    // an elevated player keeps shrinking pdist, which resets the timer, so real wall-walking is untouched.
+    const steep = st.ny < 0.65;                           // surface normal far from straight-up = a wall
+    if (!steep || pdist < st.pdRef - 0.5) { st.pdRef = pdist; st.pdRefAt = now; }
+    else if (now - st.pdRefAt > 2500) {
+      st.nx = 0; st.ny = 1; st.nz = 0;                    // detach: feet back under us, fall to terrain
+      const gy = sampleHeight(st.cx, st.cz);
+      if (gy != null) { st.cy = gy + HOVER; st.vy = 0; }
+      st.pdRef = pdist; st.pdRefAt = now; st.noClimbUntil = now + 2500;
+      projTangent();
     }
 
     // STUCK → DETOUR (heading change only; never detaches → can't drop through the floor).
