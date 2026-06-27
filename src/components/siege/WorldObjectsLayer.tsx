@@ -299,7 +299,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; onReady?: () => void } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; onReady?: () => void } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -349,11 +349,15 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   useEffect(() => {
     const p = camera.position; lastCenter.current = [p.x, p.z]; setCenter([p.x, p.z]);
   }, [camera]);
+  // Re-center the streaming window after the player travels ~half the tightest render radius, so the
+  // near field (esp. the short foliage bubble) keeps up. Scales per-map: a tight foliageDist re-centers
+  // more often. Min 30 m so it never thrashes (each re-center rebuilds the near groups = a small hitch).
+  const recenterD = Math.max(30, 0.5 * Math.min(renderDist, foliageDist > 0 ? foliageDist : renderDist));
   useFrame((_, dt) => {
     windTime.value += dt;                            // drives the leaf-flutter vertex sway
     const dx = camera.position.x - lastCenter.current[0];
     const dz = camera.position.z - lastCenter.current[1];
-    if (dx * dx + dz * dz > 150 * 150) {            // re-center only after ~150m of travel
+    if (dx * dx + dz * dz > recenterD * recenterD) {
       lastCenter.current = [camera.position.x, camera.position.z];
       setCenter([camera.position.x, camera.position.z]);
     }
@@ -361,14 +365,19 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   const allGroups = useMemo(() => (data?.groups ?? []).map((g, i) => ({ ...g, url: resolveModelUrl(g.url), _k: i })), [data]);
   const nearGroups = useMemo(() => {
     const [CX, CZ] = center, R2 = renderDist * renderDist;   // render distance (m), per-map.
+    // Foliage (leaves/ferns/grass/undergrowth) is the overdraw killer — cull it at a SHORTER
+    // distance than structural objects (trees/rocks/buildings stay visible far off, hidden by fog
+    // on pop-in). foliageDist=0 disables the split (uniform renderDist, old behaviour).
+    const FR2 = foliageDist > 0 ? foliageDist * foliageDist : R2;
     // Filter instances to within range; track each group's NEAREST instance for prioritising.
     const scored: { g: Group & { _k: number }; near: number[][]; d: number }[] = [];
     for (const g of allGroups) {
+      const lim = FOLIAGE_RE.test(g.fbx) ? FR2 : R2;
       let best = Infinity;
       const near = g.matrices.filter((mx) => {
         const dx = mx[12] - CX, dz = mx[14] - CZ; const dd = dx * dx + dz * dz;
         if (dd < best) best = dd;
-        return dd < R2;
+        return dd < lim;
       });
       if (near.length) scored.push({ g, near, d: best });
     }
@@ -386,7 +395,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       budget -= take.length;
     }
     return out;
-  }, [allGroups, center, renderDist, maxGroups, maxInstances]);
+  }, [allGroups, center, renderDist, foliageDist, maxGroups, maxInstances]);
 
   if (!data) return null;
   return (
