@@ -35,6 +35,10 @@ const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx
 // foliage-named: the giant mushrooms (mushroom*tree* etc.), tents, stalagmites, camp clutter,
 // columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
 const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump|tree_giant|tree_large|tree_medium|tree_trunk|tree_house|tree_portal|env_log|env_roots/i;
+// Decorative scatter the player should walk THROUGH — so it never gets a player-collision mesh BVH.
+// EF has hundreds of mushrooms; each one's canopy triangles in the merged BVH is pure heap + build
+// cost for zero gameplay value (you don't stand on a mushroom). Trees/rocks/logs/stumps keep colliders.
+const NO_PLAYER_COLLIDE_RE = /mushroom|toadstool|stalag/i;
 
 // Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
 // flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't
@@ -204,8 +208,8 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
             if (m.opacity >= 1) m.opacity = 0.7;
           }
           // Trees: the trunk shares the green leaf atlas (Synty bark texture was dropped in export);
-          // recolor only the low-V (trunk) fragments to bark-brown in-shader. Real trees only.
-          if (TRUNK_TREE_RE.test(fbx)) applyTrunkBark(m);
+          // recolor the low + central (trunk-column) fragments to bark-brown in-shader. Real trees only.
+          if (TRUNK_TREE_RE.test(fbx)) applyTrunkBark(m, src.geometry);
           return;
         }
         // Kill baked flat self-illumination artifacts. Many world objects ship with a constant
@@ -250,7 +254,8 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         }
       });
       let geoBox: THREE.Box3 | null = null;
-      if (solid || isRock || isTerrain) {  // rocks/terrain weren't in the solid list → had NO collider; include them
+      // Skip player-collision geometry for walk-through scatter (mushrooms etc.) — saves BVH heap + build.
+      if ((solid || isRock || isTerrain) && !NO_PLAYER_COLLIDE_RE.test(fbx)) {  // rocks/terrain weren't in the solid list → had NO collider; include them
         if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
         geoBox = src.geometry.boundingBox;
       }

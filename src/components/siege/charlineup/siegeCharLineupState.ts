@@ -23,8 +23,7 @@ export const LINEUP_CHARS: LineupChar[] = [
   { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.298, minY: -0.0590 },  // improved model (Dago5) — correct head + hands, 2.2m
   { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', scale: 0.965, minY: -0.0038 },
   { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 },  // animated stance reads short; bumped to look 1.75m
-  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', scale: 1.179, minY: -0.0139 }, // 2.4m; v3 — rigged + textured (rig-normalized correctly)
-  { name: 'Monster', file: '/siege/characters/pilot_monster.glb', scale: 1.179, minY: -0.0139 }, // Fluffer-monster: grey/brown, spiked spine+arms, stretches when animated
+  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', scale: 1.130, minY: -0.0139 }, // 2.3m; v3 — rigged + textured (rig-normalized correctly)
 ];
 
 export interface LineupAnchor { x: number; z: number; yaw: number; groundY: number }
