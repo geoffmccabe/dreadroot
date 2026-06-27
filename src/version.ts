@@ -10,4 +10,8 @@
 //                     redesigns, paradigm changes)
 //
 // Do NOT touch this manually — the AI bumps it on every push.
+<<<<<<< Updated upstream
 export const APP_VERSION = '4.209.0';
+=======
+export const APP_VERSION = '4.208.2';
+>>>>>>> Stashed changes
