@@ -7,9 +7,9 @@ import { createPortal } from 'react-dom';
 import { isGalleryOpen, subscribeGallery, setGalleryOpen, openCreatorWith } from './challengeCreatorStore';
 import { listMyChallenges, type ChallengeRow } from './challengeStorage';
 import { useAuth } from '@/contexts/AuthContext';
-import { getActiveGame } from '@/config/activeGame';
+import { useGlowPanel } from '@/hooks/useGlowPanel';
+import { panelSurface } from '@/theme/panelSurface';
 
-const PANEL_BG = 'hsla(222, 32%, 10%, 0.97)';
 const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.85)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
 const btn: React.CSSProperties = { background: 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' };
 
@@ -20,6 +20,9 @@ export function ChallengeEditorGallery() {
   const open = useSyncExternalStore(subscribeGallery, isGalleryOpen, isGalleryOpen);
   const { user } = useAuth();
   const [rows, setRows] = useState<ChallengeRow[] | null>(null);
+  const glow = useGlowPanel();   // same interactive panel glow as the Admin/User panels
+
+  useEffect(() => { if (open) glow.trigger(); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +51,7 @@ export function ChallengeEditorGallery() {
         .ceg-card { transition: border-color 0.12s, transform 0.12s; }
         .ceg-card:hover { border-color: hsl(var(--panel-glow, 205 70% 55%) / 0.8); transform: translateY(-2px); }
       `}</style>
-      <div style={{ width: '92vw', height: '90vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
+      <div style={{ width: '92vw', height: '90vh', ...panelSurface('admin'), boxShadow: glow.boxShadow, transition: glow.glowTransition, display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 1 }}>Challenge Editor</div>

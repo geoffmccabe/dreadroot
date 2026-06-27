@@ -13,6 +13,8 @@ import { useActiveGame } from '@/config/activeGame';
 import { getGameDef } from '@/config/gameRegistry';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from '../siegeAreas';
 import { siegeJump } from '../teleportStore';
+import { useGlowPanel } from '@/hooks/useGlowPanel';
+import { panelSurface } from '@/theme/panelSurface';
 // Bundled (content-hashed) so a redeploy busts the cache — public/ assets at
 // stable URLs were serving the old placeholder from the browser/CDN cache.
 import imgLobby from './world_cards/lobby.webp';
@@ -23,7 +25,6 @@ import imgNero from './world_cards/nero.webp';
 import imgScifiCity from './world_cards/scifi_city.webp';
 import imgAdventureTown from './world_cards/adventure_town.webp';
 
-const PANEL_BG = 'hsla(222, 32%, 10%, 0.97)';
 const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.85)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' };
 const btn = (active = false): React.CSSProperties => ({ background: active ? '#2e8b57' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '7px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
 const sectionTitle: React.CSSProperties = { fontSize: 18, fontWeight: 900, letterSpacing: 1, marginBottom: 10 };
@@ -68,6 +69,9 @@ export function ChallengeBrowser() {
   const [loading, setLoading] = useState(false);
   const game = useActiveGame();
   const gameLabel = getGameDef(game).label;
+  const glow = useGlowPanel();
+
+  useEffect(() => { if (open) glow.trigger(); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return;
@@ -102,7 +106,7 @@ export function ChallengeBrowser() {
         .chal-scroll::-webkit-scrollbar-thumb { background:hsla(210,30%,42%,0.8); border-radius:5px; }
         .chal-scroll::-webkit-scrollbar-thumb:hover { background:hsla(210,35%,52%,0.9); }
       `}</style>
-      <div className="chal-scroll" style={{ width: '92vw', height: '90vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
+      <div className="chal-scroll" style={{ width: '92vw', height: '90vh', ...panelSurface('admin'), boxShadow: glow.boxShadow, transition: glow.glowTransition, display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>

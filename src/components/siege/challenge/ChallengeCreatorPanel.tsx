@@ -14,6 +14,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { saveChallenge, listMyChallenges, listAllChallenges, deleteChallenge, fetchRoles, type ChallengeRow } from './challengeStorage';
 import { SpecialsModal } from './SpecialsModal';
 import { listLiveSpecials, type SpecialRow } from './specialsStorage';
+import { useGlowPanel } from '@/hooks/useGlowPanel';
+import { panelSurface } from '@/theme/panelSurface';
 import { SIEGE_TELEPORTS, CHALLENGE_WORLDS } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
@@ -43,7 +45,6 @@ const blankChallenge = (game: string, creator: string): Challenge => ({
 });
 
 // HUD-themed styles.
-const PANEL_BG = 'hsla(222, 32%, 10%, 0.96)';
 // Opaque variant for the fixed top chrome (header / general-info / wave-nav). The shared thumbnail
 // canvas (MonsterPortCanvas) renders at z90 over the whole panel; lifting the chrome above it with a
 // SOLID bg makes cards that scroll up vanish UNDER the header instead of drawing on top of it.
@@ -160,6 +161,7 @@ function NumField({ value, onChange, min, allowEmpty, placeholder, style }: {
 export function ChallengeCreatorPanel() {
   const open = useSyncExternalStore(subscribeCreator, isCreatorOpen, isCreatorOpen);
   const { user } = useAuth();
+  const glow = useGlowPanel();   // same interactive panel glow as the Admin/User panels
   const [ch, setCh] = useState<Challenge>(() => blankChallenge(getActiveGame(), 'anon'));
   const [roles, setRoles] = useState<string[]>([]);
   const [saveMsg, setSaveMsg] = useState('');
@@ -179,6 +181,8 @@ export function ChallengeCreatorPanel() {
   const [specialsOpen, setSpecialsOpen] = useState(false);                                                      // SPECIAL manager modal (superadmin)
   const [liveSpecials, setLiveSpecials] = useState<SpecialRow[]>([]);                                           // LIVE specials for the +Special menu
   const [specialMenu, setSpecialMenu] = useState<{ wave: number; left: number; top: number } | null>(null);     // open +Special dropdown
+
+  useEffect(() => { if (open) glow.trigger(); }, [open]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
@@ -520,7 +524,7 @@ export function ChallengeCreatorPanel() {
         @keyframes chalSavePulse { 0%,100% { box-shadow: 0 0 0 0 hsla(140,75%,55%,0); } 50% { box-shadow: 0 0 13px 3px hsla(140,75%,55%,0.8); } }
         .chal-save-pulse { animation: chalSavePulse 1.15s ease-in-out infinite; }
       `}</style>
-      <div style={{ width: '95vw', height: '95vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
+      <div style={{ width: '95vw', height: '95vh', ...panelSurface('admin'), boxShadow: glow.boxShadow, transition: glow.glowTransition, display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ ...CHROME, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Challenge Creator</div>
