@@ -21,6 +21,7 @@ export interface ChallengeResult {
   wave: number;          // wave reached (1-based)
   totalWaves: number;
   challenge: Challenge;  // the played challenge, for "Play Again"
+  killedBy?: string;     // on a loss: the monster's name, for "Killed by a …"
 }
 
 export interface ChallengeState {

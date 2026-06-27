@@ -60,6 +60,7 @@ export interface SpinConfig {
 
 export interface MonsterConfig {
   url: string;
+  name?: string;              // display name (for the "Killed by a …" death screen)
   modelHeight: number;        // intrinsic glb height (m), from the converter
   height: number;             // desired in-world height (m)
   speed?: number;
@@ -938,7 +939,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // Within swipe reach (its attack range, where it stops + swings) and overlapping vertically.
       if (s.y < pTop && s.y + H > pFeet && dist < c.attackRange + 0.6 && now > s.meleeNext && clearLOS) {
         s.meleeNext = now + (c.meleeContact.cooldownMs ?? 1100);
-        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound);
+        dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound, c.name);
         s.swingHit = true;   // this swing connected → no whiff sound
       }
     }
@@ -952,7 +953,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (vertOverlap && dist < inst.radius + 0.35 && now > s.contactNext && clearLOS) {
         s.contactNext = now + 1000;
         if (Math.random() < 0.30) {
-          dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H, c.hitSound);
+          dealPlayerDamage(c.contactDamage * H * (c.damageMul ?? 1), dx / dist, 0, dz / dist, (1 + Math.random()) * H, c.hitSound, c.name);
           s.swingHit = true;
         }
       }
@@ -979,7 +980,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (Math.random() < 0.5) {
           // HIT (50%): impact sound + damage + knockback + 0-90° view-spin.
           emitMonster3D(camera, c.hitSound ?? '/punched.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.85 });
-          dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '');
+          dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), '', c.name);
           (window as { __applyPlayerSpin?: (r: number, d: number) => void }).__applyPlayerSpin?.(Math.random() * 0.38, -1);
         } else {
           // AUTO-DODGE (50%): you slip back ~1m out of reach — no damage, NO view-spin — + swoosh.
@@ -1107,7 +1108,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         play(clips.idle);                        // far retreat: rest in place, no shamble
       } else if (s.behindUntil && now > s.behindUntil && !s.bossAttacked && dist <= c.attackRange + 0.6) {
         s.bossAttacked = true; s.swipeUntil = now + c.attackClipMs; play(clips.attack, true);
-        dealPlayerDamage((20 + Math.random() * 80) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, 6);   // 20-100 dmg back-strike
+        dealPlayerDamage((20 + Math.random() * 80) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, 6, '/punched.mp3', c.name);   // 20-100 dmg back-strike
       } else if (s.behindUntil && now <= s.behindUntil) {
         play(clips.idle);                        // wind-up: the player's dodge window
       } else if (dist > 2.0) {                   // slow shamble toward the player while corporeal
@@ -1178,7 +1179,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // Spintroll's own impact sound on the working 3D path; '' skips dealPlayerDamage's own.
         emitMonster3D(camera, '/hit_by_spintroll.mp3', s.x, s.y + 1, s.z, dist, { baseVolume: 0.9 });
         // Big player knockback — scaled way up so it clearly flings you (the ×2 was too small).
-        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 6, '');
+        dealPlayerDamage(rnd(c.spin.contactDmg) * mul * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.spin.contactKb) * mul * 6, '', c.name);
         // Spin the player's view OPPOSITE the troll's spin — on EVERY hit now (was a rare zoom-only
         // fling). __applyPlayerSpin SETS + decays, so a short re-trigger gap keeps it recoverable.
         if (now > s.spinHitNext) {
@@ -1619,7 +1620,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           const vOverlap = s.y < camera.position.y && s.y + H > camera.position.y - 1.6;
           if (sdist < (c.attackRange ?? 1.8) && vOverlap && c.meleeContact && clearLOS) {
             dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), sdx / sdist, 0, sdz / sdist,
-                             rnd(c.meleeContact.kb), c.hitSound);
+                             rnd(c.meleeContact.kb), c.hitSound, c.name);
           } else if (c.missSound) {
             emitMonster3D(camera, c.missSound, s.x, s.y + 1, s.z, dist, { baseVolume: 0.6, playbackRate: 0.9 + Math.random() * 0.2 });
           }

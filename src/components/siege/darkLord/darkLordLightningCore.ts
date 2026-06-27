@@ -69,7 +69,7 @@ export function tickDarkLordLightning(
         s.liteTick = now;
         const fall = Math.max(0, 1 - dist / LIGHTNING_RANGE);         // 100%→0% over 15 m
         const dmg = (10 + Math.random() * 40) * fall * (damageMul || 1);
-        if (dmg > 0) dealPlayerDamage(dmg, ddx / dist, 0, ddz / dist, 0, '');   // no zap sound asset yet
+        if (dmg > 0) dealPlayerDamage(dmg, ddx / dist, 0, ddz / dist, 0, '', 'Dark Lord');   // no zap sound asset yet
       }
     } else {
       s.liteOnSince = 0;                                              // broke LOS / out of range → reset the grace

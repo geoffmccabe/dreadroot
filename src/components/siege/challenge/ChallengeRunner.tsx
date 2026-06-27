@@ -11,6 +11,7 @@ import { siegeDemons, setSiegeScoreHook } from '../siegeHorde';
 import { sampleHeight } from '../terrainHeight';
 import { groundAt } from '../siegeGround';
 import { raycastMesh, meshGroundHeight } from '../meshColliderSystem';
+import { getLastPlayerAttacker, clearLastPlayerAttacker } from '../spray/sprayAttackSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, setChallengeExit, fireChallengeRevive } from './challengeControl';
@@ -221,6 +222,7 @@ export function ChallengeRunner() {
     setMobs([]);
     setSiegePlayerDead(false);   // a ghost from a prior death comes back to life for the new run
     fireChallengeRevive();       // restore full health (no-op if already alive)
+    clearLastPlayerAttacker();   // fresh run → forget who killed them last time
     resetChallengeScore();
     prePos.current = camera.position.clone();   // remember where to put the player back
     preMap.current = getActiveMapId();
@@ -286,6 +288,7 @@ export function ChallengeRunner() {
     setChallengeState({ result: {
       outcome, name: ch.name, score: Math.round(getChallengeScore()),
       timeMs: Math.round(now - r.startedAt), wave: r.waveIdx + 1, totalWaves: ch.waves.length, challenge: ch,
+      killedBy: outcome === 'lose' ? (getLastPlayerAttacker() || undefined) : undefined,
     } });
   };
 

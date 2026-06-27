@@ -42,11 +42,19 @@ type DamageFn = (dmg: number, dir: THREE.Vector3, knockback: number) => void;
 let damageFn: DamageFn | null = null;
 export function setSprayDamage(fn: DamageFn | null) { damageFn = fn; }
 
+// The most recent thing to damage the player (a monster's clean name), so the DEFEATED screen can
+// say "Killed by a …". Set on each tagged hit; read once on death; cleared at challenge start.
+let lastAttacker = '';
+export function getLastPlayerAttacker(): string { return lastAttacker; }
+export function clearLastPlayerAttacker() { lastAttacker = ''; }
+
 // Direct hit on the player from a melee monster (e.g. the Dark Lord's teleport-strike),
-// routed through the same registered player-damage sink as the spray.
+// routed through the same registered player-damage sink as the spray. `attacker` (a monster name)
+// tags who dealt it, for the death screen.
 const _dmgDir = new THREE.Vector3();
-export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0, hitSound = '/punched.mp3') {
+export function dealPlayerDamage(dmg: number, dirX: number, dirY: number, dirZ: number, knockback = 0, hitSound = '/punched.mp3', attacker = '') {
   if (!damageFn) return;
+  if (attacker) lastAttacker = attacker;
   _dmgDir.set(dirX, dirY, dirZ).normalize();
   // Impact feedback FIRST so it always fires, even if the damage pipeline below throws.
   // (Default = punched; monsters can override, e.g. little_slap; '' = caller plays its own.)
@@ -143,7 +151,7 @@ export function updateSpray(
     p.ttl -= dt;
     const ddx = p.x - px, ddy = p.y - py, ddz = p.z - pz;
     if (ddx * ddx + ddy * ddy + ddz * ddz < p.cfg.hitRadius * p.cfg.hitRadius) {
-      if (damageFn) { _hitDir.set(p.vx, p.vy, p.vz).normalize(); damageFn(p.cfg.damage, _hitDir, 0); }
+      if (damageFn) { if (p.cfg.owner) lastAttacker = p.cfg.owner; _hitDir.set(p.vx, p.vy, p.vz).normalize(); damageFn(p.cfg.damage, _hitDir, 0); }
       _lastSprayHitAt = performance.now();   // so a sprayer can tell its breath connected (→ wide-arc retry)
       onHit(p.cfg);
       particles.splice(i, 1); continue;

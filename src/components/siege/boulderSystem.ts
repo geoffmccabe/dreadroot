@@ -109,7 +109,7 @@ export function updateBoulders(dt: number, px: number, py: number, pz: number) {
         const dmg = (b.rolling ? 0.5 : 1) * (b.dmgMin + Math.random() * (b.dmgMax - b.dmgMin));
         const kb = (b.rolling ? 0.5 : 1) * (b.kbMin + Math.random() * (b.kbMax - b.kbMin));
         const kx = dirx || (px - b.x), kz = dirz || (pz - b.z); const kl = Math.hypot(kx, kz) || 1;
-        dealPlayerDamage(dmg, kx / kl, 0.15, kz / kl, kb, '/punched.mp3');
+        dealPlayerDamage(dmg, kx / kl, 0.15, kz / kl, kb, '/punched.mp3', 'boulder');
         b.lastPlayerHit = now;
       }
     }

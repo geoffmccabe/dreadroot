@@ -74,6 +74,7 @@ export function ChallengeResultPanel() {
         {res.challenge.banner && <img src={res.challenge.banner} alt="" style={{ width: '100%', aspectRatio: '4 / 1', objectFit: 'cover', display: 'block' }} />}
         <div style={{ padding: 24, paddingTop: res.challenge.banner ? 16 : 24 }}>
         <div style={{ fontSize: 34, fontWeight: 900, letterSpacing: 1, color: win ? '#8fe6a0' : '#ff9b9b' }}>{win ? 'VICTORY!' : 'DEFEATED'}</div>
+        {!win && res.killedBy && <div style={{ fontSize: 15, fontWeight: 700, color: '#5cc8ff', marginTop: 2 }}>Killed by a {res.killedBy}</div>}
         <div style={{ fontSize: 15, fontWeight: 700, color: '#cfe3ff', marginTop: 4 }}>{res.name}</div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 18, marginTop: 16 }}>
           <div><div style={{ fontSize: 11, color: '#9fb4d0', fontWeight: 600 }}>SCORE</div><div style={{ fontSize: 22, fontWeight: 900, color: '#ffd27f' }}>{res.score.toLocaleString()}</div></div>

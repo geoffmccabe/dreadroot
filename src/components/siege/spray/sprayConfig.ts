@@ -28,6 +28,7 @@ export interface SprayConfig {
   damage: number;            // HP per particle hit
   lifetime: number;          // s before a particle expires
   hitRadius: number;         // m — distance to player that counts as a hit
+  owner?: string;            // monster name that fired this (for the "Killed by a …" death screen)
 }
 
 // km/h → m/s

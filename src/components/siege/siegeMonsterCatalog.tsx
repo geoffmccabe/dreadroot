@@ -154,8 +154,10 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
   const o = ov;
   if (!m && !o) return null;
   const sz = mods?.sizeMul ?? 1, sp = mods?.speedMul ?? 1, hp = mods?.healthMul ?? 1;
+  // Clean display name (no "(boss)"/"(horde)") for the "Killed by a …" death screen.
+  const monsterName = (MONSTER_CATALOG.find((x) => x.id === type)?.name ?? '').replace(/\s*\(.*\)\s*/, '').trim();
   return (
-    <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
+    <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} name={monsterName} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
       modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={m?.aggro ?? 400}
       speed={(o?.speed ?? m!.speed) * sp} wanderRadius={m?.wanderRadius ?? 6} health={(o?.health ?? m!.health) * hp}
       animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
@@ -174,7 +176,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
       callSound={m?.callSound} annoyedSound={m?.annoyedSound}
       bulletTumble={m?.bulletTumble} deathStyle={m?.deathStyle} enrageOnHit={m?.enrageOnHit}
       onRangedAttack={
-        m?.spray ? (x, y, z, dx, dy, dz, wide) => fireSpray(x, y, z, dx, dy, dz, wide ? { ...m!.spray!, coneDeg: 90 } : m!.spray!)
+        m?.spray ? (x, y, z, dx, dy, dz, wide) => fireSpray(x, y, z, dx, dy, dz, { ...m!.spray!, owner: monsterName, ...(wide ? { coneDeg: 90 } : {}) })
         : m?.boulder ? (x, y, z) => throwBoulder(x, y, z, camera.position.x, camera.position.y - 1.6, camera.position.z, 28 + Math.random() * 26, { color: ballColor })
         : undefined} />
   );

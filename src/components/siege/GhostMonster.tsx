@@ -193,7 +193,7 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
           m.hitDone = true;
           if (Math.hypot(px - m.dtx, pz - m.dtz) < HIT_R) {
             const ddx = px - cx.current, ddy = py - cy.current, ddz = pz - cz.current, dd = Math.max(0.001, Math.hypot(ddx, ddy, ddz));
-            dealPlayerDamage(rnd([1, 50]) * (mods?.damageMul ?? 1), ddx / dd, ddy / dd, ddz / dd, rnd([2, 5]) * 6);
+            dealPlayerDamage(rnd([1, 50]) * (mods?.damageMul ?? 1), ddx / dd, ddy / dd, ddz / dd, rnd([2, 5]) * 6, '/punched.mp3', 'Ghost');
           }
         }
         m.mode = 'back';

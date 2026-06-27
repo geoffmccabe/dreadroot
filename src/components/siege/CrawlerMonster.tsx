@@ -391,7 +391,7 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     // BITE.
     if (pdist <= ATTACK_R && now >= st.nextBite) {
       st.nextBite = now + ATTACK_MS;
-      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -gx, -gy, -gz, rnd([1, 3]) * 4);
+      dealPlayerDamage(rnd([10, 25]) * (mods?.damageMul ?? 1), -gx, -gy, -gz, rnd([1, 3]) * 4, '/punched.mp3', 'Crawlie');
       camera.getWorldDirection(camDir);
       void play3DPositionalSound(BITE, aSrc.set(st.cx, st.cy, st.cz), camera.position, camDir, { baseVolume: 0.7 });
     }
