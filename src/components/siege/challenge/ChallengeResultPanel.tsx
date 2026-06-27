@@ -5,7 +5,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { getChallengeState, subscribeChallenge, setChallengeState } from './challengeStore';
-import { fireChallengeStart } from './challengeControl';
+import { fireChallengeStart, fireChallengeExit } from './challengeControl';
 import { setBrowserOpen } from './challengeBrowserStore';
 import { challengeResultBoard, type LeaderboardEntry } from './challengeStorage';
 
@@ -43,9 +43,13 @@ export function ChallengeResultPanel() {
 
   if (!res) return null;
   const win = res.outcome === 'win';
-  const close = () => setChallengeState({ result: null });
-  const playAgain = () => { const ch = res.challenge; close(); fireChallengeStart(ch); };
-  const browse = () => { close(); setBrowserOpen(true); };
+  // Play Again just dismisses the panel — fireChallengeStart revives + teleports into the new run.
+  const dismiss = () => setChallengeState({ result: null });
+  const playAgain = () => { const ch = res.challenge; dismiss(); fireChallengeStart(ch); };
+  // Close / Choose Another LEAVE the challenge: a lost player is a ghost, so revive them to free-roam
+  // (clears the wandering monsters + returns them to where they were before the challenge).
+  const close = () => fireChallengeExit();
+  const browse = () => { fireChallengeExit(); setBrowserOpen(true); };
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 124, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}>

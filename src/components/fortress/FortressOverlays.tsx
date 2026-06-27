@@ -10,6 +10,7 @@ import { HeartbeatPanel } from '@/components/HeartbeatPanel';
 import { FungalTreeDiagnostics } from '@/components/FungalTreeDiagnostics';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { DeathOverlay } from '@/features/shwarm';
+import { isSiegePlayerDead } from '@/components/siege/siegePlayerState';
 import { inspectorModeEnabled } from '@/components/FPSCounter';
 
 import { PentabulletCrosshair } from './PentabulletCrosshair';
@@ -115,9 +116,10 @@ export function FortressOverlays(props: FortressOverlaysProps) {
       {/* Egg-ready throw crosshair (black star + "S") */}
       <EggReadyCrosshair visible={!!eggReady && !isInspectorMode} />
 
-      {/* Death Overlay */}
+      {/* Death Overlay — NOT during a challenge loss: there the player is a ghost and the
+          ChallengeResultPanel (Play Again / Choose Another / Close) handles it, so no Respawn option. */}
       <DeathOverlay
-        isDead={isDead}
+        isDead={isDead && !isSiegePlayerDead()}
         respawnTimer={respawnTimer}
         onRespawn={() => {
           const spawnPos = respawn?.();

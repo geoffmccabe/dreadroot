@@ -23,3 +23,9 @@ export function fireChallengeSkip() { skip?.(); }   // START NOW — end the pre
 let revive: (() => void) | null = null;
 export function setChallengeRevive(fn: (() => void) | null) { revive = fn; }
 export function fireChallengeRevive() { revive?.(); }
+
+// Leave a finished challenge for free-roam: revive the player, clear the leftover monsters, and put
+// them back where they were before the challenge (the result panel's Close / Choose Another).
+let exit: (() => void) | null = null;
+export function setChallengeExit(fn: (() => void) | null) { exit = fn; }
+export function fireChallengeExit() { exit?.(); }

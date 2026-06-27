@@ -13,7 +13,7 @@ import { groundAt } from '../siegeGround';
 import { raycastMesh, meshGroundHeight } from '../meshColliderSystem';
 import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
-import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, fireChallengeRevive } from './challengeControl';
+import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, setChallengeExit, fireChallengeRevive } from './challengeControl';
 import { setSiegePlayerDead, setSiegeSpawnPin } from '../siegePlayerState';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { recordChallengeRun } from './challengeStorage';
@@ -263,6 +263,11 @@ export function ChallengeRunner() {
     setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
   };
 
+  // Leave a finished challenge for free-roam (result panel Close / Choose Another): a lost player is a
+  // ghost, so revive them to full health first, THEN tear the challenge down (clears the YOU LOSE panel,
+  // the wandering monsters, and returns them to where they were before the challenge).
+  const exit = () => { fireChallengeRevive(); stop(); };
+
   // Record one play to the leaderboard. Only SAVED challenges (with an id) have a board — the
   // built-in test challenge is skipped. Fire-and-forget; a failed insert never disrupts gameplay.
   const record = (completed: boolean, now: number) => {
@@ -306,7 +311,8 @@ export function ChallengeRunner() {
     setChallengeLose(() => lose());
     setChallengeStart((ch) => { if (r.active) stop(); start(ch); });   // play an authored challenge
     setChallengeSkip(() => { if (r.active && r.countdownUntil) r.countdownUntil = performance.now(); });  // START NOW
-    return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); setChallengeSkip(null); };
+    setChallengeExit(() => exit());   // result panel Close / Choose Another → revive + free-roam
+    return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); setChallengeSkip(null); setChallengeExit(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
