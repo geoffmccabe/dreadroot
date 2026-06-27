@@ -178,7 +178,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               (placements + colliders + laser-taggable), with the editable heightmap ground under it. */}
           {world.id === 'apoc-city' && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders dataDir="/siege/apoc" renderDist={70} maxGroups={45} maxInstances={1200} />
+              {/* noMonsterColliders: apoc is explore-only (no monsters) AND has world-scale scenery
+                  (mountains span ~1290m) — voxelizing those into monster collision boxes was a
+                  multi-second hang / OOM that crashed the tab. Player floor-collision (BVH) stays on. */}
+              <WorldObjectsLayer meshColliders noMonsterColliders dataDir="/siege/apoc" renderDist={70} maxGroups={45} maxInstances={1200} />
               <MeshColliderPlayer />
             </Suspense>
           )}
