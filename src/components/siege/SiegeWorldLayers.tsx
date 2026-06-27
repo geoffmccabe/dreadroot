@@ -30,6 +30,7 @@ import { useSiegeLighting } from './siegeLighting';
 import { WaterLayer } from './WaterLayer';
 import { WorldObjectsLayer } from './WorldObjectsLayer';
 import { EnchantedFireflies } from './EnchantedFireflies';
+import { EnchantedLighting } from './EnchantedLighting';
 import { MonsterEnemy } from './MonsterEnemy';
 import { SiegeMonsterParade } from './SiegeMonsterParade';
 import { SiegeItemGrid } from './SiegeItemGrid';
@@ -102,9 +103,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Night maps (SciFi City) OR the Admin/Weather "Night Mood" preview toggle on any world:
           dim the shared sun/sky so emissive signs/windows glow against a dark scene. */}
       {(world.night || lightingMode === 'night') && <NightDimmer />}
-      {/* Enchanted Forest — the Synty demo's dusk-blue exponential fog (FogMode Exp2, blue tint)
-          so the scene reads moody and the emissive glow + fireflies pop against the haze. */}
-      {world.id === 'enchanted-forest' && <fogExp2 attach="fog" args={['#2e436b', 0.016]} />}
+      {/* Enchanted Forest — dusk-blue fog + dark background, re-asserted each frame so the global
+          day/night system (which drives scene.fog/background from the sky) can't strip the mood. */}
+      {world.id === 'enchanted-forest' && <EnchantedLighting />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isHeightmap && <TerrainBrushController />}

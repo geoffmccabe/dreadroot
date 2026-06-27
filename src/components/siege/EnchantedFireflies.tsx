@@ -114,7 +114,10 @@ function SpeciesPoints({ sp }: { sp: FireflySpecies }) {
     return g;
   }, [sp]);
 
-  useFrame((st) => { if (matRef.current) matRef.current.uniforms.uTime.value = st.clock.elapsedTime; });
+  // STABLE uniforms object (created once) so the drift animation never resets: an inline {uTime:{value:0}}
+  // prop is a fresh object each render, and any re-render would reset uTime to 0 → fireflies freeze.
+  const uniforms = useRef({ uTime: { value: 0 }, uCull: { value: CULL_DIST } }).current;
+  useFrame((st) => { uniforms.uTime.value = st.clock.elapsedTime; });
   if (!sp.enabled || sp.count <= 0) return null;
   return (
     <points geometry={geom} frustumCulled={false}>
@@ -122,7 +125,7 @@ function SpeciesPoints({ sp }: { sp: FireflySpecies }) {
         ref={matRef}
         vertexShader={VERT}
         fragmentShader={FRAG}
-        uniforms={{ uTime: { value: 0 }, uCull: { value: CULL_DIST } }}
+        uniforms={uniforms}
         transparent
         depthWrite={false}
         blending={THREE.AdditiveBlending}

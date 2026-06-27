@@ -54,8 +54,8 @@ export function defaultSpecies(over: Partial<FireflySpecies> = {}): FireflySpeci
     ownerId: '',
     name: 'Wisp',
     enabled: true,
-    count: 80,
-    size: 1.1,
+    count: 450,             // dense enough to read as a swarm; GPU points so cost is trivial
+    size: 1.7,
     baseColor: '#b9a3ff',  // soft purple
     towardFuchsia: 0.5,
     towardBlue: 0.5,
@@ -71,9 +71,9 @@ export function defaultSpecies(over: Partial<FireflySpecies> = {}): FireflySpeci
     pulseOnFracMax: 1.0,
     fadeMinSec: 0,
     fadeMaxSec: 2,
-    area: 130,
+    area: 70,               // tighter swarm around the player area (was 130 = far too sparse)
     yMin: 0.5,
-    yMax: 22,
+    yMax: 18,
     ...over,
   };
 }
