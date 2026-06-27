@@ -57,7 +57,8 @@ function NumField({ m, fkey, label }: { m: SwMonster; fkey: keyof SwMonster; lab
 
 function MonsterCard({ m }: { m: SwMonster }) {
   return (
-    <Card>
+    // 20% darker than the surrounding panel so each monster card stands out.
+    <Card className="relative" style={{ boxShadow: 'inset 0 0 0 100vmax rgba(0,0,0,0.2)' }}>
      <div className="flex items-stretch gap-1">
       {/* Live rotating model in a hexagon, popping out over the frame (left rail). */}
       <div className="flex items-center justify-center pl-3 pr-1 shrink-0">

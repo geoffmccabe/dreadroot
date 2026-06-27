@@ -46,6 +46,9 @@ const WALL_AHEAD = BODY_R + 0.3;
 const STICK_UP = 0.25;        // stick-cast starts this far above the body
 const STICK_DOWN = 0.7;       // ...and reaches this far below (step-down tolerance)
 const CLIMB_DOT = 0.55;       // a forward hit whose normal differs from ours by > ~57° = a wall to climb
+const HEAD_DEADZONE = 0.15;   // if the goal projects to a tangent shorter than this (player ~along our
+                              // surface normal) the heading is numerically unstable → HOLD it, don't spin
+const TURN_RATE = 4.0;        // max heading turn (rad/s) → body can never pinwheel; also de-snaps transitions
 const GRAV = 22;
 const ATTACK_R = 1.3;
 const ATTACK_MS = 1100;
@@ -184,6 +187,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     // PINWHEEL GUARD: count frames where the surface normal flipped ~180° (a thin trunk's far face got
     // grabbed). A burst of these = the body whipping around in place → bail to the ground.
     flipT: 0, flips: 0,
+    // TRUE-PROGRESS WATCHDOG: last position we'd actually relocated to, and when. Surface-agnostic net-move
+    // check that catches an in-place spin on ANY surface (steep or not), which the steep-only orbit-break misses.
+    wRefX: spawn[0], wRefY: spawn[1], wRefZ: spawn[2], wRefAt: 0,
   }).current;
   const box = useMemo(() => new THREE.Box3(), []);
   const boxInfo = useRef({ pri: 0, supported: false });
@@ -230,11 +236,29 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       gy = gy * c + cry * s + st.ny * dotn * (1 - c);
       gz = gz * c + crz * s + st.nz * dotn * (1 - c);
     }
+    // Aim the surface tangent at the player, but (a) DEADZONE: if the player is nearly along our surface
+    // normal the projected tangent is tiny + its direction is noise → keep the current heading instead of
+    // chasing it (this is the in-place SPIN); (b) TURN CLAMP: rotate toward the target by at most
+    // TURN_RATE·dt this frame, so facing can never whip around and surface transitions ease instead of snap.
     const projTangent = () => {
       const d = gx * st.nx + gy * st.ny + gz * st.nz;
       let tx = gx - d * st.nx, ty = gy - d * st.ny, tz = gz - d * st.nz;
       const tl = Math.hypot(tx, ty, tz);
-      if (tl > 1e-3) { st.tx = tx / tl; st.ty = ty / tl; st.tz = tz / tl; }   // else keep last tangent
+      if (tl < HEAD_DEADZONE) return;                                         // unstable → hold heading
+      tx /= tl; ty /= tl; tz /= tl;                                           // target tangent (unit)
+      // current heading, re-projected onto the (possibly just-changed) surface plane
+      let cx = st.tx, cy = st.ty, cz = st.tz;
+      const cd = cx * st.nx + cy * st.ny + cz * st.nz; cx -= cd * st.nx; cy -= cd * st.ny; cz -= cd * st.nz;
+      const cl = Math.hypot(cx, cy, cz);
+      if (cl < 1e-4) { st.tx = tx; st.ty = ty; st.tz = tz; return; }          // no valid heading yet → snap
+      cx /= cl; cy /= cl; cz /= cl;
+      const dot = Math.max(-1, Math.min(1, cx * tx + cy * ty + cz * tz));
+      const ang = Math.acos(dot), maxStep = TURN_RATE * dt;
+      if (ang <= maxStep || ang < 1e-3) { st.tx = tx; st.ty = ty; st.tz = tz; return; }
+      const f = maxStep / ang;                                               // step a fraction toward target
+      let rx = cx + (tx - cx) * f, ry = cy + (ty - cy) * f, rz = cz + (tz - cz) * f;
+      const rd = rx * st.nx + ry * st.ny + rz * st.nz; rx -= rd * st.nx; ry -= rd * st.ny; rz -= rd * st.nz;
+      const rl = Math.hypot(rx, ry, rz) || 1; st.tx = rx / rl; st.ty = ry / rl; st.tz = rz / rl;
     };
     projTangent();
 
@@ -330,6 +354,23 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       st.pdRef = pdist; st.pdRefAt = now; st.noClimbUntil = now + 2500;
       projTangent();
     }
+
+    // TRUE-PROGRESS WATCHDOG (surface-agnostic) — net displacement, not per-frame motion. Catches the
+    // in-place SPIN (degenerate heading when the player is ~along our surface normal) that the steep-only
+    // orbit-break and the goal-rotating detour can't: if we've barely relocated for ~1.5s while we're meant
+    // to be travelling, detach to the ground and refuse to re-climb briefly so we physically walk away.
+    if (st.wRefAt === 0) st.wRefAt = now;
+    if (pdist > ATTACK_R + 0.5) {
+      const wnet = Math.hypot(st.cx - st.wRefX, st.cy - st.wRefY, st.cz - st.wRefZ);
+      if (wnet > 0.4) { st.wRefX = st.cx; st.wRefY = st.cy; st.wRefZ = st.cz; st.wRefAt = now; }
+      else if (now - st.wRefAt > 1500) {
+        st.nx = 0; st.ny = 1; st.nz = 0;                  // detach to terrain, feet down
+        const gyw = sampleHeight(st.cx, st.cz);
+        if (gyw != null) { st.cy = gyw + HOVER; st.vy = 0; }
+        st.noClimbUntil = now + 2000;
+        st.wRefX = st.cx; st.wRefY = st.cy; st.wRefZ = st.cz; st.wRefAt = now;
+      }
+    } else { st.wRefX = st.cx; st.wRefY = st.cy; st.wRefZ = st.cz; st.wRefAt = now; }
 
     // STUCK → DETOUR (heading change only; never detaches → can't drop through the floor).
     if (moving) {

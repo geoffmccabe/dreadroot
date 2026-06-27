@@ -197,11 +197,13 @@ export function AdminPanel({
           onMouseDown={handleCornerResizeStart}
         />
         <PanelGrabBar onMouseDown={drag.onHeaderMouseDown} />
-        <DialogHeader style={{ cursor: 'move' }} onMouseDown={drag.onHeaderMouseDown}>
+        {/* Header chrome sits ABOVE the shared 3D port canvas (z-90, contained by this dialog's
+            transform) with the panel's own bg + blur, so list models scroll UNDER it, not over. */}
+        <DialogHeader className="relative z-[95]" style={{ cursor: 'move', background: 'var(--pt-admin-bg)', backdropFilter: 'var(--pt-admin-blur)', WebkitBackdropFilter: 'var(--pt-admin-blur)' } as React.CSSProperties} onMouseDown={drag.onHeaderMouseDown}>
           <DialogTitle>Admin Panel</DialogTitle>
         </DialogHeader>
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-[repeat(13,minmax(0,1fr))] flex-shrink-0">
+          <TabsList className="grid w-full grid-cols-[repeat(13,minmax(0,1fr))] flex-shrink-0 relative z-[95]" style={{ background: 'var(--pt-admin-bg)', backdropFilter: 'var(--pt-admin-blur)', WebkitBackdropFilter: 'var(--pt-admin-blur)' } as React.CSSProperties}>
             <TabsTrigger value="characters">Characters</TabsTrigger>
             <TabsTrigger value="coins">Coins</TabsTrigger>
             <TabsTrigger value="billboards">Billboards</TabsTrigger>
@@ -363,7 +365,8 @@ export function AdminPanel({
 
           <TabsContent value="npcs" className="mt-4 flex-1 overflow-hidden">
             <Tabs value={npcSubtab} onValueChange={(v) => setNpcSubtab(v as NPCSubtab)} className="flex flex-col h-full">
-              <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4">
+              {/* Above the shared port canvas so Enemies-SW model thumbs scroll UNDER this sub-tab bar. */}
+              <TabsList className="grid w-full grid-cols-4 flex-shrink-0 mb-4 relative z-[95]" style={{ background: 'var(--pt-admin-bg)', backdropFilter: 'var(--pt-admin-blur)', WebkitBackdropFilter: 'var(--pt-admin-blur)' } as React.CSSProperties}>
                 <TabsTrigger value="enemies">Enemies EMS</TabsTrigger>
                 <TabsTrigger value="enemies-sw">Enemies SW</TabsTrigger>
                 <TabsTrigger value="friends">Friends</TabsTrigger>

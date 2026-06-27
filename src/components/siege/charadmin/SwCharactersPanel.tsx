@@ -44,10 +44,12 @@ function CharacterCard({ def }: { def: CharacterDef }) {
   useCharacterData();                       // re-render on any stat/ability change
   const data = getCharData(def.name);
   return (
-    <Card>
+    // 20% darker than the surrounding panel so each character card stands out (inset tint over the
+    // card's own background, behind the content).
+    <Card className="relative" style={{ boxShadow: 'inset 0 0 0 100vmax rgba(0,0,0,0.2)' }}>
       <div className="flex items-stretch gap-2">
         <div className="flex items-center justify-center pl-3 pr-1 shrink-0">
-          <CharHexThumb file={def.file} rawH={def.rawH} size={220} />
+          <CharHexThumb file={def.file} rawH={def.rawH} name={def.name} size={220} />
         </div>
         <div className="flex-1 min-w-0">
           <CardHeader className="pb-2">
