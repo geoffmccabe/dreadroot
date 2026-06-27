@@ -7,7 +7,7 @@
 // Spawn codes:  "@FF" opens this panel.  "@F<code>" spawns one species by its GLOBAL code
 // (starting at #1 for the built-ins). A player may only spawn their OWN species; admins and
 // superadmins may spawn any.
-import { create } from 'zustand';
+import create from 'zustand';   // zustand v3 → default export (no named { create })
 
 export interface FireflySpecies {
   id: string;
