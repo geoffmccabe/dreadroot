@@ -118,7 +118,7 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
     <div style={panelStyle}>
       {/* Header */}
       <div style={headerStyle}>
-        <span style={{ fontSize: '11px', fontWeight: 600 }}>Lightning Panel</span>
+        <span style={{ fontSize: '11px', fontWeight: 600 }}>LIGHTING &amp; RENDERING</span>
         <span
           onClick={onClose}
           style={{ cursor: 'pointer', fontSize: '13px', lineHeight: 1, opacity: 0.6 }}
