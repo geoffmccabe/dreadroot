@@ -138,6 +138,26 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
 
 export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
 
+// Every monster type that has a row in the registry (whether CFG-driven or component-driven). Use
+// this to validate challenge/spawn data BEFORE it reaches CatalogMonster, so a bad id surfaces as a
+// clear message instead of a silently-empty spawn.
+const KNOWN_TYPES = new Set<number>(MONSTER_CATALOG.map((c) => c.id));
+export const isKnownMonsterType = (type: number): type is MType => KNOWN_TYPES.has(type);
+
+// One warning per unknown/unspawnable type (not per frame) so misconfigured challenge data is
+// visible in the console without spamming it.
+const _warnedTypes = new Set<number>();
+function warnUnspawnable(type: number): void {
+  if (_warnedTypes.has(type)) return;
+  _warnedTypes.add(type);
+  console.warn(
+    `[siege] CatalogMonster: nothing to spawn for monster type ${type} — skipped. ` +
+    (KNOWN_TYPES.has(type)
+      ? 'Type is in the catalog but has no CFG/override (e.g. horde type spawned without its override).'
+      : 'Type is not in MONSTER_CATALOG (bad challenge/spawn data?).'),
+  );
+}
+
 /** Render one monster of a catalog type at a spawn position. ov = a horde-member override
  *  (type 6); mods = boss size/speed/health multipliers; riseFromGround = rise out of the floor. */
 export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ballColor, riseFromGround }: {
@@ -152,7 +172,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
   if (type === 18) return <CrawlerMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} color={color} />;
   const m = effectiveCfg(type);   // CFG + admin base-stat overrides
   const o = ov;
-  if (!m && !o) return null;
+  if (!m && !o) { warnUnspawnable(type); return null; }
   const sz = mods?.sizeMul ?? 1, sp = mods?.speedMul ?? 1, hp = mods?.healthMul ?? 1;
   // Clean display name (no "(boss)"/"(horde)") for the "Killed by a …" death screen.
   const monsterName = (MONSTER_CATALOG.find((x) => x.id === type)?.name ?? '').replace(/\s*\(.*\)\s*/, '').trim();
