@@ -23,11 +23,11 @@ function smokeTexture(): THREE.Texture {
   return SMOKE_TEX;
 }
 
-const N = 16;            // smoke sprite pool
-const DRAG_PERIOD = 5;   // s between drags
-const DRAG_LEN = 1.3;    // s the tip glows
+const N = 22;            // smoke sprite pool (bigger so longer-lived puffs don't starve)
+const DRAG_MIN = 6, DRAG_MAX = 10;   // s between drags (random)
+const DRAG_LEN = 2.6;    // s the tip glows (up then back to grey)
 const RISE = 0.05;       // m/s the smoke floats up (miniature)
-const LIFE = 2.4;        // s smoke lifetime
+const LIFE = 4.8;        // s smoke lifetime
 const SPAWN = 0.22;      // s between puffs (faster during a drag)
 
 interface Puff { s: THREE.Sprite; age: number; life: number; vx: number; vz: number }
@@ -37,6 +37,8 @@ export function AshCigaretteFx({ group }: { group: THREE.Group }) {
   const tipRef = useRef<THREE.Object3D | null>(null);
   const puffsRef = useRef<Puff[]>([]);
   const spawnAcc = useRef(0);
+  const dragStart = useRef(-1);   // time the current drag began (-1 = idle)
+  const nextDrag = useRef(-1);    // time the next drag fires (random 6–10s apart)
   const scratch = useMemo(() => new THREE.Vector3(), []);
 
   useEffect(() => {
@@ -84,8 +86,15 @@ export function AshCigaretteFx({ group }: { group: THREE.Group }) {
   useFrame((state, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
     const t = state.clock.elapsedTime;
-    const phase = t % DRAG_PERIOD;
-    const glow = phase < DRAG_LEN ? Math.sin((phase / DRAG_LEN) * Math.PI) : 0;   // 0→1→0 over a drag
+    // Drags fire at random 6–10s intervals; each glows over DRAG_LEN (smooth grey→orange→grey).
+    if (nextDrag.current < 0) nextDrag.current = t + DRAG_MIN + Math.random() * (DRAG_MAX - DRAG_MIN);
+    if (dragStart.current < 0 && t >= nextDrag.current) dragStart.current = t;
+    let glow = 0;
+    if (dragStart.current >= 0) {
+      const e = t - dragStart.current;
+      if (e < DRAG_LEN) glow = Math.sin((e / DRAG_LEN) * Math.PI);   // 0→1→0
+      else { dragStart.current = -1; nextDrag.current = t + DRAG_MIN + Math.random() * (DRAG_MAX - DRAG_MIN); }
+    }
 
     const mat = matRef.current;
     if (mat) {
@@ -104,8 +113,8 @@ export function AshCigaretteFx({ group }: { group: THREE.Group }) {
       const p = puffs.find((q) => q.age >= q.life);
       if (p) {
         p.age = 0; p.life = LIFE * (0.8 + Math.random() * 0.4);
-        p.vx = (Math.random() - 0.5) * 0.012; p.vz = (Math.random() - 0.5) * 0.012;
-        p.s.position.set(scratch.x + (Math.random() - 0.5) * 0.004, scratch.y, scratch.z + (Math.random() - 0.5) * 0.004);
+        p.vx = (Math.random() - 0.5) * 0.018; p.vz = (Math.random() - 0.5) * 0.018;
+        p.s.position.set(scratch.x + (Math.random() - 0.5) * 0.006, scratch.y, scratch.z + (Math.random() - 0.5) * 0.006);
         p.s.visible = true;
       }
     }
@@ -113,7 +122,7 @@ export function AshCigaretteFx({ group }: { group: THREE.Group }) {
       if (p.age >= p.life) { if (p.s.visible) p.s.visible = false; continue; }
       p.age += dt; const f = p.age / p.life;
       p.s.position.y += RISE * dt; p.s.position.x += p.vx * dt; p.s.position.z += p.vz * dt;
-      p.s.scale.setScalar(0.007 + f * 0.03);                      // grow as it rises
+      p.s.scale.setScalar(0.0105 + f * 0.045);                    // 50% larger; grows as it rises
       (p.s.material as THREE.SpriteMaterial).opacity = Math.min(1, f * 8) * (1 - f) * 0.5;  // fade in then out
     }
   });
