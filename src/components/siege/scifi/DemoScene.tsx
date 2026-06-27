@@ -18,7 +18,9 @@ import {
 // inward, leaving seam GAPS you fall through (the render mesh stays full-res so no visible
 // hole). Full-res BVH costs more triangles but is built in the background; correctness wins.
 const COLLIDER_RATIO = 1.0;
-const PER_JOB = 40;           // meshes registered per budgeted tick
+const PER_JOB = 4;            // meshes per budgeted batch — small so the 2ms/frame budget (checked
+                             // BETWEEN batches) actually bounds the work; 40 let one full-res city
+                             // batch blow past 100ms and freeze the frame (part of the start freeze).
 const SKIP = /planet|background|bkgrnd|sky|hologram|billboard|neon|glass|emissive/;
 
 export function DemoScene({ file, group, scale = 1, lowerY = 0, hidePlanet = false, tintWhite = 0, tintMatch }: { file: string; group: string; scale?: number; lowerY?: number; hidePlanet?: boolean; tintWhite?: number; tintMatch?: string }) {

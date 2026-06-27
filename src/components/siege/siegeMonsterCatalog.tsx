@@ -2,6 +2,7 @@
 // that renders one. Both the !N# test-spawner AND the Challenge runner spawn through this, so a
 // monster's definition lives in a single place. Type 6 is the "bloody skeleton horde": it has no
 // fixed CFG entry — each mob is a random per-individual override (Ov) from makeHordeMember().
+import { useGLTF } from '@react-three/drei';
 import { MonsterEnemy, type SpinConfig } from './MonsterEnemy';
 import { GhostMonster } from './GhostMonster';
 import { CrawlerMonster } from './CrawlerMonster';
@@ -175,4 +176,13 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
         : m?.boulder ? (x, y, z) => throwBoulder(x, y, z, playerState.x, playerState.y - 1.6, playerState.z, 28 + Math.random() * 26, { color: ballColor })
         : undefined} />
   );
+}
+
+// Preload every monster glb at module load (siege entry) so a challenge wave never decodes/suspends on
+// the frame it spawns — that synchronous glb decode was a chunk of the Death Dark City start-up freeze.
+{
+  const urls = new Set<string>();
+  for (const k in CFG) { const u = (CFG as Record<string, { url?: string }>)[k]?.url; if (u) urls.add(u); }
+  for (const h of HORDE6) urls.add(h.url);
+  urls.forEach((u) => useGLTF.preload(u));
 }
