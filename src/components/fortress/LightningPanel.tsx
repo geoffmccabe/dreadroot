@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { LightningSettings, CycleState } from './FortressTypes';
+import { LookControls } from '@/features/look/LookControls';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface LightningPanelProps {
@@ -243,6 +244,9 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
             className="w-full"
           />
         </div>
+
+        {/* RENDER (LOOK) — tone mapping, bloom, IBL (lookStore) */}
+        <LookControls />
 
         {/* DIAGNOSTICS */}
         <div style={sectionStyle}>

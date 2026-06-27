@@ -10,21 +10,21 @@ import { useEffect } from 'react';
 import { useThree } from '@react-three/fiber';
 import { PMREMGenerator } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { LOOK } from './lookConfig';
+import { useLook } from './lookStore';
 
 export function EnvironmentIBL() {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
+  const iblIntensity = useLook().iblIntensity;
 
+  // Build the pre-filtered env map once.
   useEffect(() => {
     const pmrem = new PMREMGenerator(gl);
     const room = new RoomEnvironment();
     const envRT = pmrem.fromScene(room, 0.04);
 
     const prevEnv = scene.environment;
-    const prevIntensity = scene.environmentIntensity;
     scene.environment = envRT.texture;
-    scene.environmentIntensity = LOOK.ibl.intensity;
 
     // RoomEnvironment's source meshes are no longer needed once pre-filtered.
     room.dispose?.();
@@ -32,10 +32,16 @@ export function EnvironmentIBL() {
 
     return () => {
       scene.environment = prevEnv;
-      scene.environmentIntensity = prevIntensity;
       envRT.dispose();
     };
   }, [gl, scene]);
+
+  // Intensity is a per-frame renderer read → set it live, no rebuild.
+  useEffect(() => {
+    const prev = scene.environmentIntensity;
+    scene.environmentIntensity = iblIntensity;
+    return () => { scene.environmentIntensity = prev; };
+  }, [scene, iblIntensity]);
 
   return null;
 }

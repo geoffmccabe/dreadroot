@@ -1,24 +1,19 @@
-// Global post-processing "look" pass: selective Bloom + AgX tone mapping.
+// Desktop bloom pass (mobile skips it entirely — see tier check). Tone mapping now lives
+// on the renderer (LookSync), so this composer does Bloom ONLY.
 //
-// TIERED (Phase 1 = two tiers):
-//  * LOW (mobile / coarse-pointer / small screens): renders NOTHING here. The base
-//    renderer keeps AgX tone mapping (set in Fortress onCreated), so phones get the
-//    improved tone curve with zero extra full-screen passes. This is also the safe
-//    path away from the float-target bloom bugs that bite hardest on mobile GPUs.
-//  * HIGH (desktop): full composer — kernel Bloom (flash-proof, NOT mipmapBlur) then
-//    AgX tone mapping LAST so the final image is clamped. While this is mounted the
-//    base renderer is switched to NoToneMapping (the composer owns tone mapping now),
-//    and restored to AgX on unmount.
+// TIERED:
+//  * LOW (mobile / coarse-pointer / small screens): renders NOTHING. The renderer's AgX
+//    tone mapping still applies — phones get the improved curve with no extra passes.
+//  * HIGH (desktop): kernel Bloom so emissives/sun glints bleed light.
 //
-// Flash safety: the old pipeline used mipmapBlur, which smears a single shader NaN
-// across the entire screen → full-screen black flashing while moving. A fixed kernel
-// keeps a bad pixel local, and the final ToneMapping clamps the HDR buffer.
-import { useEffect, useMemo } from 'react';
-import { useThree } from '@react-three/fiber';
-import { EffectComposer, Bloom, ToneMapping } from '@react-three/postprocessing';
-import { ToneMappingMode, KernelSize } from 'postprocessing';
-import { NoToneMapping } from 'three';
+// Flash safety: kernel blur, NOT mipmapBlur. mipmapBlur smeared a single shader NaN
+// across the whole screen (the old black-flash-while-moving bug); a fixed kernel keeps a
+// bad pixel local. All params are live from lookStore (Lightning Panel → Render section).
+import { useMemo } from 'react';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
+import { KernelSize } from 'postprocessing';
 import { LOOK } from './lookConfig';
+import { useLook } from './lookStore';
 
 function useIsLowTier() {
   return useMemo(
@@ -32,31 +27,19 @@ function useIsLowTier() {
 
 export function LookComposer() {
   const isLowTier = useIsLowTier();
-  const gl = useThree((s) => s.gl);
+  const { bloomEnabled, bloomIntensity, bloomThreshold, bloomRadius } = useLook();
 
-  // While the composer owns tone mapping, the base renderer must NOT also tone-map
-  // (double mapping). Restore AgX on unmount so the no-composer path stays correct.
-  useEffect(() => {
-    if (isLowTier) return;
-    const prev = gl.toneMapping;
-    gl.toneMapping = NoToneMapping;
-    return () => {
-      gl.toneMapping = prev;
-    };
-  }, [gl, isLowTier]);
-
-  if (isLowTier) return null;
+  if (isLowTier || !bloomEnabled) return null;
 
   return (
     <EffectComposer multisampling={0}>
       <Bloom
         kernelSize={KernelSize.MEDIUM}
-        intensity={LOOK.bloom.intensity}
-        luminanceThreshold={LOOK.bloom.luminanceThreshold}
+        intensity={bloomIntensity}
+        luminanceThreshold={bloomThreshold}
         luminanceSmoothing={LOOK.bloom.luminanceSmoothing}
-        radius={LOOK.bloom.radius}
+        radius={bloomRadius}
       />
-      <ToneMapping mode={ToneMappingMode.AGX} />
     </EffectComposer>
   );
 }

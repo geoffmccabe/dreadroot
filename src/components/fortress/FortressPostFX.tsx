@@ -10,10 +10,12 @@
 // src/features/look/lookConfig.ts.
 import { EnvironmentIBL } from '../../features/look/EnvironmentIBL';
 import { LookComposer } from '../../features/look/LookComposer';
+import { LookSync } from '../../features/look/LookSync';
 
 export function FortressPostFX() {
   return (
     <>
+      <LookSync />
       <EnvironmentIBL />
       <LookComposer />
     </>
