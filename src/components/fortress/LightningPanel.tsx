@@ -3,7 +3,6 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { LightningSettings, CycleState } from './FortressTypes';
 import { LookControls } from '@/features/look/LookControls';
-import { diagnostics } from '@/lib/diagnosticsLogger';
 
 interface LightningPanelProps {
   open: boolean;
@@ -105,18 +104,12 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
   }, [settings, cycleState, fps]);
 
   const handleResetDefaults = useCallback(() => {
-    onSettingsChange('fogStartPct', 50);
-    onSettingsChange('fogEndPct', 95);
-    onSettingsChange('fogDayColor', '#cccccc');
-    onSettingsChange('fogNightColor', '#222233');
     onSettingsChange('fogEnabled', true);
     onSettingsChange('lightingOverride', null);
     onSettingsChange('freezeCycle', false);
   }, [onSettingsChange]);
 
   const renderDistBlocks = useMemo(() => settings.visualDistance * 16, [settings.visualDistance]);
-  const fogStartBlocks = useMemo(() => Math.round(renderDistBlocks * settings.fogStartPct / 100), [renderDistBlocks, settings.fogStartPct]);
-  const fogEndBlocks = useMemo(() => Math.round(renderDistBlocks * settings.fogEndPct / 100), [renderDistBlocks, settings.fogEndPct]);
   const currentLighting = settings.lightingOverride !== null ? settings.lightingOverride : cycleState.lightingPercentage;
 
   if (!open) return null;
@@ -137,7 +130,9 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
       {/* Scrollable body */}
       <div style={bodyStyle}>
 
-        {/* FOG */}
+        {/* FOG — only Enabled is live. Density is auto (height-aware) and colour is
+            derived from the sky every frame, so the old Start/End/Day/Night controls
+            were dead (read but never applied) and were removed. See FOG_PLAN.md. */}
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>Fog</div>
           <div style={rowStyle}>
@@ -148,55 +143,11 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
               style={{ transform: 'scale(0.7)', transformOrigin: 'right center' }}
             />
           </div>
-          <div style={{ marginBottom: '4px' }}>
-            <div style={rowStyle}>
-              <span style={labelStyle}>Start</span>
-              <span style={valueStyle}>{settings.fogStartPct}% ({fogStartBlocks}b)</span>
-            </div>
-            <Slider
-              value={[settings.fogStartPct]}
-              onValueChange={([v]) => onSettingsChange('fogStartPct', v)}
-              min={0} max={100} step={1}
-              className="w-full"
-            />
-          </div>
-          <div style={{ marginBottom: '4px' }}>
-            <div style={rowStyle}>
-              <span style={labelStyle}>End</span>
-              <span style={valueStyle}>{settings.fogEndPct}% ({fogEndBlocks}b)</span>
-            </div>
-            <Slider
-              value={[settings.fogEndPct]}
-              onValueChange={([v]) => onSettingsChange('fogEndPct', v)}
-              min={0} max={100} step={1}
-              className="w-full"
-            />
-          </div>
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '2px' }}>
-            <div style={{ flex: 1 }}>
-              <span style={{ ...labelStyle, fontSize: '9px' }}>Day</span>
-              <input
-                type="color"
-                value={settings.fogDayColor}
-                onChange={(e) => onSettingsChange('fogDayColor', e.target.value)}
-                style={{ width: '100%', height: '18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <span style={{ ...labelStyle, fontSize: '9px' }}>Night</span>
-              <input
-                type="color"
-                value={settings.fogNightColor}
-                onChange={(e) => onSettingsChange('fogNightColor', e.target.value)}
-                style={{ width: '100%', height: '18px', border: 'none', cursor: 'pointer', borderRadius: '2px' }}
-              />
-            </div>
-          </div>
         </div>
 
         {/* RENDER DISTANCE */}
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Render</div>
+          <div style={sectionTitleStyle}>Render Dist</div>
           <div style={rowStyle}>
             <span style={labelStyle}>Chunks</span>
             <span style={valueStyle}>{settings.visualDistance} ({renderDistBlocks}b)</span>
@@ -255,7 +206,6 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
             <div style={rowStyle}><span style={{ opacity: 0.5 }}>FPS</span><span>{fps ?? '—'}</span></div>
             <div style={rowStyle}><span style={{ opacity: 0.5 }}>Lighting</span><span>{currentLighting.toFixed(1)}%</span></div>
             <div style={rowStyle}><span style={{ opacity: 0.5 }}>Night</span><span>{cycleState.isNight ? 'Y' : 'N'}</span></div>
-            <div style={rowStyle}><span style={{ opacity: 0.5 }}>Fog</span><span>{fogStartBlocks}–{fogEndBlocks}b</span></div>
             <div style={rowStyle}><span style={{ opacity: 0.5 }}>Dist</span><span>{settings.visualDistance}ch / {renderDistBlocks}b</span></div>
           </div>
         </div>

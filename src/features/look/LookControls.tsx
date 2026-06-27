@@ -54,7 +54,7 @@ export function LookControls() {
 
   return (
     <div style={sectionStyle}>
-      <div style={sectionTitleStyle}>Render (Look)</div>
+      <div style={sectionTitleStyle}>Look</div>
 
       {/* Tone mapping mode */}
       <div style={{ ...rowStyle, marginBottom: '4px' }}>
