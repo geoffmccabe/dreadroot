@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber';
 import { Perf } from 'r3f-perf';
 import * as THREE from 'three';
+import { LOOK } from '@/features/look/lookConfig';
 import { Button } from '@/components/ui/button';
 import { Eye } from 'lucide-react';
 import { BlockPreview } from '@/components/BlockPreview';
@@ -2115,6 +2116,13 @@ export function Fortress() {
           // Real-world trace 2026-May-19: ~1.6s/48s of main-thread stalls came
           // from getProgramInfoLog. Disabling shader-error checks skips it.
           gl.debug.checkShaderErrors = false;
+          // Base tone mapping = AgX (replaces R3F's default ACES): cleaner bright
+          // emissives/sun, less hue shift. On desktop LookComposer flips this to
+          // NoToneMapping and tone-maps in the bloom pass instead; mobile keeps AgX
+          // here. Set in onCreated (not the gl prop) so React re-renders can't clobber
+          // the composer's NoToneMapping override. Tunables: features/look/lookConfig.
+          gl.toneMapping = LOOK.toneMapping;
+          gl.toneMappingExposure = LOOK.exposure;
         }}
       >
         {showPerfMonitor && <Perf position="top-left" minimal={true} />}
