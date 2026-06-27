@@ -181,6 +181,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     // detect circling a thin trunk forever (moving, but never gaining ground). noClimbUntil = refuse to
     // re-grab a wall for a moment after dropping off, so it routes AROUND the trunk on the ground.
     pdRef: 1e9, pdRefAt: 0, noClimbUntil: 0,
+    // PINWHEEL GUARD: count frames where the surface normal flipped ~180° (a thin trunk's far face got
+    // grabbed). A burst of these = the body whipping around in place → bail to the ground.
+    flipT: 0, flips: 0,
   }).current;
   const box = useMemo(() => new THREE.Box3(), []);
   const boxInfo = useRef({ pri: 0, supported: false });
@@ -235,6 +238,9 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
     };
     projTangent();
 
+    // Normal at the START of the frame — the pinwheel guard below compares the final normal to this.
+    const nbx = st.nx, nby = st.ny, nbz = st.nz;
+
     const spd = SPEED * V.current!.speed * (mods?.speedMul ?? 1);
     let moving = false;
     if (pdist > ATTACK_R * 0.7) {
@@ -254,17 +260,23 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       moving = true;
     }
 
-    // STICK — re-snap to the surface beneath us (follow curvature, step down).
+    // STICK — re-snap to the surface beneath us (follow curvature, step down). On a THIN trunk the
+    // -normal ray can pass through and hit the FAR inner face (normal pointing back at us); accepting
+    // that flips our up-vector 180° and whips the body around. Reject a near-opposite hit so it falls
+    // off the trunk instead (a convex step-down only turns the normal a little, never reverses it).
     const ox = st.cx + st.nx * STICK_UP, oy = st.cy + st.ny * STICK_UP, oz = st.cz + st.nz * STICK_UP;
-    if (castSurface(ox, oy, oz, -st.nx, -st.ny, -st.nz, STICK_UP + STICK_DOWN, self, sp)) {
+    const stickHit = castSurface(ox, oy, oz, -st.nx, -st.ny, -st.nz, STICK_UP + STICK_DOWN, self, sp);
+    if (stickHit && (_cast.nx * st.nx + _cast.ny * st.ny + _cast.nz * st.nz) > -0.3) {
       st.nx += (_cast.nx - st.nx) * Math.min(1, dt * 12); st.ny += (_cast.ny - st.ny) * Math.min(1, dt * 12); st.nz += (_cast.nz - st.nz) * Math.min(1, dt * 12);
       const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
       st.cx = _cast.px + st.nx * HOVER; st.cy = _cast.py + st.ny * HOVER; st.cz = _cast.pz + st.nz * HOVER;
       st.vy = 0; boxInfo.current.supported = true;
     } else {
       // EDGE WRAP — went past a convex edge: probe forward-and-down to grab the surface around it.
+      // Same far-face guard: a wrap that reverses the normal is the trunk's other side, not an edge.
       const wx = st.tx - st.nx, wy = st.ty - st.ny, wz = st.tz - st.nz, wl = Math.hypot(wx, wy, wz) || 1;
-      if (castSurface(st.cx, st.cy, st.cz, wx / wl, wy / wl, wz / wl, STICK_DOWN + 0.5, self, sp)) {
+      const wrapHit = castSurface(st.cx, st.cy, st.cz, wx / wl, wy / wl, wz / wl, STICK_DOWN + 0.5, self, sp);
+      if (wrapHit && (_cast.nx * st.nx + _cast.ny * st.ny + _cast.nz * st.nz) > -0.3) {
         st.nx = _cast.nx; st.ny = _cast.ny; st.nz = _cast.nz;
         st.cx = _cast.px + st.nx * HOVER; st.cy = _cast.py + st.ny * HOVER; st.cz = _cast.pz + st.nz * HOVER;
         st.vy = 0; boxInfo.current.supported = true; projTangent();
@@ -288,6 +300,20 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       st.cy = ty + HOVER; st.vy = 0; boxInfo.current.supported = true;
       st.ny += (1 - st.ny) * Math.min(1, dt * 8); st.nx -= st.nx * Math.min(1, dt * 8); st.nz -= st.nz * Math.min(1, dt * 8);
       const nl = Math.hypot(st.nx, st.ny, st.nz) || 1; st.nx /= nl; st.ny /= nl; st.nz /= nl;
+    }
+
+    // PINWHEEL GUARD (backstop) — if despite the far-face rejections the up-normal still reversed this
+    // frame (>~115°), it's the body whipping around on a thin trunk. A single big flip can be a real
+    // ceiling transition, so only bail after a short BURST of them: drop to the ground + don't re-climb
+    // briefly. Resets when a frame doesn't flip, so normal wall/ceiling crawling is left alone.
+    if ((st.nx * nbx + st.ny * nby + st.nz * nbz) < -0.4) {
+      if (now - st.flipT > 500) { st.flipT = now; st.flips = 1; } else st.flips++;
+      if (st.flips >= 2) {
+        st.nx = 0; st.ny = 1; st.nz = 0;
+        const gy2 = sampleHeight(st.cx, st.cz);
+        if (gy2 != null) { st.cy = gy2 + HOVER; st.vy = 0; }
+        st.noClimbUntil = now + 3000; st.flips = 0; projTangent();
+      }
     }
 
     // ORBIT-BREAK — a thin vertical obstacle (a tree trunk) makes the wall-walker circle it forever: it
