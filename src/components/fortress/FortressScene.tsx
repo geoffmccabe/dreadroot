@@ -1262,10 +1262,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const lsFogDayColor = lightningSettings?.fogDayColor ?? '#cccccc';
   const lsFogNightColor = lightningSettings?.fogNightColor ?? '#222233';
   const lsFreezeCycle = lightningSettings?.freezeCycle ?? false;
-  // Day/night cycle locked to fixed bright daytime (100): a shifting sky makes the fog
-  // colour impossible to keep matched. Static sky → fog colour matches exactly. (Ported
-  // from Pinkland — see docs/FOG_LOD_SOLUTION.md.)
-  const lsLightingOverride = 100;
+  // Day/night driven by the Lightning Panel (manual Light override / Freeze) or the auto
+  // cycle when neither is set. The old hard lock to 100 existed because a shifting sky
+  // made the fog colour hard to keep matched — but the fog now derives its colour from
+  // the live sky every frame (sky-branch below), so it tracks as lighting shifts and the
+  // lock is no longer needed. (See docs/FOG_LOD_SOLUTION.md.)
+  const lsLightingOverride = lightningSettings?.lightingOverride ?? null;
 
   const fogColorDay = useMemo(() => new THREE.Color(lsFogDayColor), [lsFogDayColor]);
   const fogColorNight = useMemo(() => new THREE.Color(lsFogNightColor), [lsFogNightColor]);
