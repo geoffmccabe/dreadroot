@@ -187,7 +187,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               + budgets keep the ~18.7k objects (mostly leaf/fern cards) performant. */}
           {world.id === 'enchanted-forest' && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders trustMaterials dataDir="/siege/enchanted-forest" renderDist={150} maxGroups={130} maxInstances={9000} />
+              {/* Render the WHOLE forest: maxInstances must exceed the ~18.7k total or the closest-first
+                  budget gets eaten by the ~8.6k canopy leaf cards and starves the trees/mushrooms/ferns
+                  (which leaves the leaves floating with no trunks under them). renderDist covers the map. */}
+              <WorldObjectsLayer meshColliders trustMaterials dataDir="/siege/enchanted-forest" renderDist={220} maxGroups={130} maxInstances={20000} />
               <MeshColliderPlayer />
               <EnchantedFireflies />
             </Suspense>
