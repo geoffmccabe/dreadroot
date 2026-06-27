@@ -4,7 +4,7 @@
 // nav buttons scroll the stack to a wave. Persistence/leaderboards/banner/mini-map = later phases.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { isCreatorOpen, subscribeCreator, setCreatorOpen } from './challengeCreatorStore';
+import { isCreatorOpen, subscribeCreator, setCreatorOpen, setGalleryOpen, consumePendingEdit } from './challengeCreatorStore';
 import { fireChallengeStart } from './challengeControl';
 import { MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { MonsterThumb, MonsterPortCanvas, MonsterPreviewBox, defaultColor } from './MonsterPreview';
@@ -182,7 +182,7 @@ export function ChallengeCreatorPanel() {
 
   useEffect(() => {
     if (open) document.exitPointerLock?.();                       // free the cursor while editing
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isCreatorOpen()) { e.stopPropagation(); setCreatorOpen(false); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && isCreatorOpen()) { e.stopPropagation(); setCreatorOpen(false); setGalleryOpen(true); } };
     if (open) window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [open]);
@@ -237,6 +237,14 @@ export function ChallengeCreatorPanel() {
     setCh(loaded); markSaved(loaded);
     setPicker(null); setSaveMsg(`Loaded "${r.name}"`);
   };
+  // Opened from the gallery: load the chosen challenge (or a fresh blank for ＋ New). Consumed once.
+  useEffect(() => {
+    if (!open) return;
+    const p = consumePendingEdit();
+    if (p === 'new') newChallenge();
+    else if (p) loadRow(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   // Delete the challenge currently loaded in the editor, then reset to a fresh one.
   const deleteCurrentChallenge = async () => {
     if (!ch.id) { setConfirmDelCh(false); return; }
@@ -516,7 +524,7 @@ export function ChallengeCreatorPanel() {
         {/* Header */}
         <div style={{ ...CHROME, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>Challenge Creator</div>
-          <button style={btn()} onClick={() => setCreatorOpen(false)}>✕ Close</button>
+          <button style={btn()} onClick={() => { setCreatorOpen(false); setGalleryOpen(true); }}>✕ Close</button>
         </div>
 
         {/* General info — challenge-level (cost/pool live here, NOT per wave) */}

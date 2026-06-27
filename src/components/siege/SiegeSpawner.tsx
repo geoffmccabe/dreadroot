@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
-import { toggleCreator } from './challenge/challengeCreatorStore';
+import { toggleEditor } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused, toggleBullseyeAnyHead } from './siegeDebugToggles';
@@ -123,7 +123,7 @@ export function SiegeSpawner() {
       if (stage.current === 'type') {
         e.preventDefault(); e.stopPropagation();
         if (k === 'c' || k === 'C') { toggleBrowser(); clearStage(); }         // !c → open the Challenge Browser (pick one)
-        else if (k === 'e' || k === 'E') { toggleCreator(); clearStage(); }    // !e → open the Challenge Creator
+        else if (k === 'e' || k === 'E') { toggleEditor(); clearStage(); }    // !e → open the Challenge Editor gallery
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
