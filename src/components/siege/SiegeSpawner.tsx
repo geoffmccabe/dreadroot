@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { CatalogMonster, makeHordeMember, type MType, type Ov } from './siegeMonsterCatalog';
+import { CatalogMonster, makeHordeMember, isKnownMonsterType, type MType, type Ov } from './siegeMonsterCatalog';
 import { toggleEditor } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
@@ -137,7 +137,9 @@ export function SiegeSpawner() {
         e.preventDefault(); e.stopPropagation();
         if (k >= '0' && k <= '9') {
           const t = parseInt(firstDigit.current + k, 10);
-          if (t >= 1 && t <= 18) { pendingType.current = t as MType; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`); }
+          // Accept any id that's actually in the catalog (single source of truth) — was hard-capped at
+          // 18, which silently excluded the DF Demon (type 19) from the test-spawner.
+          if (isKnownMonsterType(t)) { pendingType.current = t; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`); }
           else clearStage();
         } else clearStage();
         return;
