@@ -54,10 +54,15 @@ export function SetSampler({ set }: { set: string }) {
   const [manifest, setManifest] = useState<SamplerManifest | null>(null);
   useEffect(() => {
     let alive = true;
-    fetch(scifiData(`_sampler_${set}.json`))
-      .then((r) => r.json())
+    // Manifest lookup: try the Pages copy first (small JSON committed to public/siege/scifi — e.g. the
+    // "Various 2" grids like mining, whose manifests aren't on R2), then fall back to R2 where the
+    // sci-fi/nature set manifests live. Pages serves the SPA index.html for a missing file, so .json()
+    // throws on the HTML and we fall through to R2. Models still load from R2 regardless.
+    const getJson = (url: string) => fetch(url).then((r) => r.json());
+    getJson(`/siege/scifi/_sampler_${set}.json`)
+      .catch(() => getJson(scifiData(`_sampler_${set}.json`)))
       .then((m) => { if (alive) setManifest(m); })
-      .catch(() => { /* manifest missing */ });
+      .catch(() => { /* manifest missing on both */ });
     return () => { alive = false; };
   }, [set]);
 

@@ -16,7 +16,7 @@ import type { WorldDefinition } from '@/config/worldDefinition';
 import { sampleHeight } from './terrainHeight';
 import { playerState } from './playerState';
 import { clampToWorldBounds } from './worldBoundsClamp';
-import { getSiegeSpawnPin } from './siegePlayerState';
+import { getSiegeSpawnPin, consumeSiegePendingSpawn } from './siegePlayerState';
 
 // Movement constants — chosen to match Dreadroot's controls.
 const WALK_SPEED = 5.5;   // m/s
@@ -49,11 +49,24 @@ export function SiegeFlyController({ world }: Props) {
   const right = useRef(new THREE.Vector3());
   const move = useRef(new THREE.Vector3());
 
-  // Spawn the camera at the world's spawn point.
+  // Spawn the camera. A Cmd-J jump (or a challenge Worlds card) leaves a pending spawn — use THAT
+  // exact camera spot/facing so the teleport's assigned spawn point wins over the map's own
+  // spawn.position (which is often a placeholder). Otherwise fall back to the world's spawn (feet
+  // position → add eye height).
   useEffect(() => {
-    const [sx, sy, sz] = world.spawn.position;
-    camera.position.set(sx, Math.max(sy + EYE_HEIGHT, groundAt(sx, sz) + EYE_HEIGHT), sz);
-    camera.rotation.set(0, world.spawn.yaw ?? 0, 0);
+    const pending = consumeSiegePendingSpawn();
+    if (pending) {
+      camera.position.set(pending.pos[0], pending.pos[1], pending.pos[2]);   // camera (eye) pos, as-is
+      if (pending.yaw != null) {
+        const setView = (window as unknown as { __siegeSetView?: (y: number, p?: number) => void }).__siegeSetView;
+        if (setView) setView(pending.yaw, pending.pitch ?? 0);
+        else camera.quaternion.setFromEuler(new THREE.Euler(pending.pitch ?? 0, pending.yaw, 0, 'YXZ'));
+      }
+    } else {
+      const [sx, sy, sz] = world.spawn.position;
+      camera.position.set(sx, Math.max(sy + EYE_HEIGHT, groundAt(sx, sz) + EYE_HEIGHT), sz);
+      camera.rotation.set(0, world.spawn.yaw ?? 0, 0);
+    }
     onGround.current = true;
     velY.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
