@@ -98,8 +98,8 @@ export function AshCigaretteFx({ group }: { group: THREE.Group }) {
 
     const mat = matRef.current;
     if (mat) {
-      mat.color.setRGB(0.62 + glow * 0.38, 0.60 - glow * 0.42, 0.58 - glow * 0.53);  // grey → orange-red
-      mat.emissive.setRGB(glow * 1.0, glow * 0.18, glow * 0.03);
+      mat.color.setRGB(0.62 + glow * 0.38, 0.60 - glow * 0.52, 0.58 - glow * 0.55);  // grey → redder ember (less green/yellow)
+      mat.emissive.setRGB(glow * 1.0, glow * 0.08, glow * 0.02);
       mat.emissiveIntensity = 0.15 + glow * 2.6;
     }
 
