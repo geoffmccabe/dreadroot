@@ -1371,7 +1371,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Ground-snap reach = ONE STEP only. The old 3 m reach let a monster's "ground" jump up to a low
     // roof/overhang at a cave mouth → it levitated onto the roof and hit the player through the ceiling.
     // Taller things are handled as walls by the climb/hop gait, not by snapping the floor up to them.
-    let groundY = groundAt(s.x, s.z, feet + STEP_UP) ?? feet;
+    // Step-over reach SCALES with the monster's height: STEP_UP (0.45 m) is knee-high for a 4 m demon
+    // but a 20 m boss should stride over multi-metre obstacles, not treat every bump as a wall to climb
+    // in place (which left giant bosses trapped). Small monsters stay ~unchanged; giants step over more.
+    const stepUp = Math.max(STEP_UP, H * 0.30);
+    let groundY = groundAt(s.x, s.z, feet + stepUp) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
     // for demons near the camera; distant horde members just walk the terrain. Keeps a 1000-
@@ -1393,7 +1397,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           // Stacking on ANOTHER MONSTER: sink the feet by stackSink so they nest INSIDE the
           // body below (terrain/objects are unaffected — only monster boxes get lowered).
           const top = (c.stackSink && monsterBoxes.has(b)) ? b.max.y - c.stackSink * (b.max.y - b.min.y) : b.max.y;
-          if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }            // standable / step-up
+          if (top <= feet + stepUp) { if (top > groundY) groundY = top; }            // standable / step-up
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = monsterBoxes.has(b); } // too tall → wall
         }
       }
@@ -1407,7 +1411,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (!b || !b.max) continue;
         if (s.x >= b.min.x - fr && s.x <= b.max.x + fr && s.z >= b.min.z - fr && s.z <= b.max.z + fr) {
           const top = b.max.y;
-          if (top <= feet + STEP_UP) { if (top > groundY) groundY = top; }                         // standable / step-up
+          if (top <= feet + stepUp) { if (top > groundY) groundY = top; }                         // standable / step-up
           else if (b.min.y < feet + H && top > wallTop) { wallTop = top; wallIsMonster = false; }   // too tall → wall
         }
       }

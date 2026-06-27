@@ -9,7 +9,7 @@ import { CrawlerMonster } from './CrawlerMonster';
 import type { ColorMods } from './challenge/challengeTypes';
 import { fireSpray } from './spray/sprayAttackSystem';
 import { throwBoulder } from './boulderSystem';
-import { playerState } from './playerState';
+import { useThree } from '@react-three/fiber';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 import { getMonsterOverride } from './monsterStats';
 
@@ -80,7 +80,7 @@ export const CFG: Partial<Record<MType, {
   12: { url: '/siege/monsters/mutant.glb',          modelHeight: 2.0, height: 2.6,  speed: 3.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 130, animSpeed: 1.0,  zombie: false, enrageOnHit: true, attackRange: 2.1, attackMs: 1100, meleeContact: { dmg: [9, 21],  kb: [2, 6],  cooldownMs: 1100 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   13: { url: '/siege/monsters/forestguardian.glb',  modelHeight: 2.0, height: 3.5,  speed: 2.5, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 175, animSpeed: 0.85, zombie: false, enrageOnHit: true, attackRange: 2.6, attackMs: 1500, meleeContact: { dmg: [14, 30], kb: [3, 7],  cooldownMs: 1500 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   14: { url: '/siege/monsters/barbariangiant.glb',  modelHeight: 2.0, height: 6.0,  speed: 2.6, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 300, animSpeed: 0.65, zombie: false, enrageOnHit: true, attackRange: 3.8, attackMs: 1800, meleeContact: { dmg: [22, 48], kb: [4, 9],  cooldownMs: 1800 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
-  15: { url: '/siege/monsters/elementalgolem.glb',  modelHeight: 2.0, height: 8.0,  speed: 2.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 400, animSpeed: 0.55, zombie: false, enrageOnHit: true, attackRange: 4.6, attackMs: 2000, rangedRange: 45, rangedCooldownMs: 2500, rangedCooldownMaxMs: 5000, boulder: true, meleeContact: { dmg: [30, 60], kb: [5, 11], cooldownMs: 2000 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
+  15: { url: '/siege/monsters/elementalgolem.glb',  modelHeight: 2.0, height: 8.0,  speed: 2.2, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 400, animSpeed: 0.55, zombie: false, enrageOnHit: true, attackRange: 4.6, attackMs: 2000, rangedRange: 45, rangedCooldownMs: 5000, rangedCooldownMaxMs: 10000, boulder: true, meleeContact: { dmg: [30, 60], kb: [5, 11], cooldownMs: 2000 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   16: { url: '/siege/monsters/mechanicalgolem.glb', modelHeight: 2.0, height: 10.0, speed: 2.4, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 500, animSpeed: 0.5,  zombie: false, enrageOnHit: true, attackRange: 5.4, attackMs: 2000, meleeContact: { dmg: [38, 72], kb: [6, 12], cooldownMs: 2000 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   17: { url: '/siege/monsters/fortgolem.glb',       modelHeight: 2.0, height: 12.0, speed: 2.0, gait: 'climb', sizeJitter: 0, speedJitter: 0, health: 600, animSpeed: 0.45, zombie: false, enrageOnHit: true, attackRange: 6.4, attackMs: 2200, meleeContact: { dmg: [48, 92], kb: [7, 14], cooldownMs: 2200 }, attackSound: '/swoosh_miss_low.mp3', missSound: '/swoosh_miss_low.mp3', lungeOnSwing: true, deathStyle: 'topple', clips: { attack: 'swipe' } },
   // DF Demon — the Fantasy Rivals demon seen dancing in the SciFi City. Same FR melee style as 10-17,
@@ -144,6 +144,8 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
   type: MType; spawn: [number, number, number]; id?: string;
   onDespawn?: (id: string) => void; ov?: Ov; mods?: MonsterMods; color?: ColorMods; ballColor?: string; riseFromGround?: boolean;
 }) {
+  // The live player camera — the golem must throw at where the player IS NOW, not a stale module value.
+  const camera = useThree((s) => s.camera);
   // Type 9 = the Ghost — its own self-contained flying/upside-down/transparent component (not CFG-driven).
   if (type === 9) return <GhostMonster spawn={spawn} id={id} onDespawn={onDespawn} mods={mods} />;
   // Type 18 = the Crawler — self-contained surface-crawl locomotion (walls + undersides), not CFG-driven.
@@ -173,7 +175,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
       bulletTumble={m?.bulletTumble} deathStyle={m?.deathStyle} enrageOnHit={m?.enrageOnHit}
       onRangedAttack={
         m?.spray ? (x, y, z, dx, dy, dz, wide) => fireSpray(x, y, z, dx, dy, dz, wide ? { ...m!.spray!, coneDeg: 90 } : m!.spray!)
-        : m?.boulder ? (x, y, z) => throwBoulder(x, y, z, playerState.x, playerState.y - 1.6, playerState.z, 28 + Math.random() * 26, { color: ballColor })
+        : m?.boulder ? (x, y, z) => throwBoulder(x, y, z, camera.position.x, camera.position.y - 1.6, camera.position.z, 28 + Math.random() * 26, { color: ballColor })
         : undefined} />
   );
 }
