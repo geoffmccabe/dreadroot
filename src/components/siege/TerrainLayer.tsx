@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { setTiles, type HeightTile } from './terrainHeight';
-import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
+import { siegeLoadStart, siegeLoadFinish, siegeLoadNote } from './siegeInitLoad';
 import { loadTerrainTex, makeTerrainBlendMaterial } from './terrain/terrainBlend';
 
 interface TileMeta {
@@ -87,11 +87,17 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
         const manifest = await fetch('/siege/terrain/manifest.json').then((r) => r.json());
         const tiles = manifest.tiles as TileMeta[];
         siegeLoadFinish(mStep, tiles.length);
-        // Download every tile in PARALLEL. Previously each tile was awaited one-at-a-time (16 serial
-        // round-trips) — the main reason terrain took so long, since nothing else can render until
-        // terrain is ready. 16 tiles × ~258KB.
+        // Download every tile in PARALLEL (was one-at-a-time = 16 serial round-trips, the main reason
+        // terrain took so long — nothing else can render until terrain is ready). Report EACH tile as
+        // it arrives so the user sees steady progress. 16 tiles × ~258KB.
         const dStep = siegeLoadStart('Terrain', `Downloading ${tiles.length} terrain tiles...`);
-        const bufs = await Promise.all(tiles.map((m) => fetch(`/siege/terrain/${m.file}`).then((r) => r.arrayBuffer())));
+        let got = 0;
+        const bufs = await Promise.all(tiles.map((m) =>
+          fetch(`/siege/terrain/${m.file}`).then((r) => r.arrayBuffer()).then((buf) => {
+            siegeLoadNote('Terrain', `Tile ${++got}/${tiles.length} received`);
+            return buf;
+          })
+        ));
         siegeLoadFinish(dStep, tiles.length);
         if (!alive) return;
         const bStep = siegeLoadStart('Terrain', 'Building terrain meshes...');

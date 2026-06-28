@@ -341,7 +341,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   const [cutout, setCutout] = useState<Set<string>>(new Set());
   useEffect(() => {
     let alive = true;
-    const oStep = siegeLoadStart('World Objects', 'Loading object placements + textures...');
+    const oStep = siegeLoadStart('World Objects', 'Loading object placements...');
     const finishObjects = (count?: number) => { siegeLoadFinish(oStep, count); onReady?.(); };
     fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
     fetch(`${dataDir}/material_map.json`).then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});

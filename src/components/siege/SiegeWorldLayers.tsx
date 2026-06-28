@@ -51,6 +51,7 @@ import { DamageNumbers } from './DamageNumbersLayer';
 import { GhostExplosions } from './GhostExplosion';
 import { SiegeExplosions } from './SiegeExplosion';
 import { isSiegeLoadActive, completeSiegeWorldLoad } from './siegeInitLoad';
+import { SiegeAssetProgress } from './SiegeAssetProgress';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
 
@@ -143,13 +144,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <GhostExplosions />
       {/* Siege rocket-blast pool (dancing-demon landings + other fireSiegeExplosion callers). */}
       <SiegeExplosions />
+      {/* Tracks real model/texture loading (useProgress) → marks objects ready when ALL have loaded,
+          so the overlay's "Lobby ready" is honest (not fired the instant placements.json arrives). */}
+      <SiegeAssetProgress onAllLoaded={() => setObjReadyWorld(world.id)} />
 
       {terrainReady && (
         <>
           {/* SWW scenery + colliders — only on the real terrain map, not flat canvases. */}
           {!isBlank && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders={world.meshColliders} onReady={() => setObjReadyWorld(world.id)} />
+              <WorldObjectsLayer meshColliders={world.meshColliders} />
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
