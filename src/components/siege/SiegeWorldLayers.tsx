@@ -48,7 +48,7 @@ import { BloodRenderer } from './BloodRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
-import { SiegeSpawnIntro } from './spawnintro/SpawnIntroCinematic';
+import { SiegeSpawnIntro, SiegeSpawnIntroLiveTriggers } from './spawnintro/SpawnIntroCinematic';
 import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
@@ -148,6 +148,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           the head → FPS. ChallengeRunner.start() fires it; a no-op until then. Owns the camera while
           it plays (FortressControls stands down via isSiegeIntroActive). */}
       <SiegeSpawnIntro />
+      {/* Real-game triggers: auto-fire on the open-world spawn + Space/Enter countdown bypass. */}
+      <SiegeSpawnIntroLiveTriggers />
       {/* Combat recorder probe — feeds player position to the telemetry every frame. */}
       <CombatTelemetryProbe />
       {/* Floating combat damage numbers (Unity FloatingDamageText port). */}

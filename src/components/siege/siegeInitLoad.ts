@@ -15,6 +15,11 @@ import { initLogStartStep, initLogFinishStep, initLogStep, initLogFinish } from 
 let armed = false;     // SWW startup has handed overlay completion to the canvas
 let done = false;      // already completed (one-shot)
 let watchdog: ReturnType<typeof setTimeout> | null = null;
+const readySubs = new Set<() => void>();   // fired once when the lobby finishes loading (spawn-intro hook)
+
+/** Subscribe to the one-shot "open world is loaded + on screen" moment (the genuine initial spawn,
+ *  NOT a Cmd-J dev jump, which never re-arms the load). Returns an unsubscribe. */
+export function onSiegeLobbyReady(cb: () => void): () => void { readySubs.add(cb); return () => { readySubs.delete(cb); }; }
 const STALL_MS = 20000;   // finish only if NOTHING new loads for this long (a true stall, not slowness)
 
 function kickWatchdog() {
@@ -52,4 +57,5 @@ export function completeSiegeWorldLoad(note = '') {
   if (watchdog) { clearTimeout(watchdog); watchdog = null; }
   initLogStep('SiegeWorld', `Lobby ready${note ? ' ' + note : ''}`);
   initLogFinish();
+  readySubs.forEach((f) => { try { f(); } catch { /* a listener throwing must not break load completion */ } });
 }

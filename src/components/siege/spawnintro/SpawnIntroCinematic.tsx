@@ -11,6 +11,8 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from '../terrainHeight';
 import { CHAR_ASSET_VERSION } from '../charlineup/siegeCharLineupState';
+import { onSiegeLobbyReady } from '../siegeInitLoad';
+import { getChallengeState } from '../challenge/challengeStore';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import {
   useSiegeIntro, getIntroPhase, getIntroTarget, setIntroPhase, endSiegeIntro,
@@ -184,6 +186,40 @@ export function SiegeSpawnIntroTestKey() {
     return () => window.removeEventListener('keydown', onKey);
   }, [camera]);
   return null;
+}
+
+// Open-world spawn: fire the cinematic the instant the lobby finishes loading — the genuine spawn
+// into the open world (NOT a Cmd-J dev jump, which never re-arms the load). Final pose = where the
+// player just spawned (current camera); a shorter self-timed countdown. Skipped if a challenge is
+// running (that path fires its own clock-aligned intro).
+function OpenWorldSpawnIntro() {
+  const camera = useThree((s) => s.camera);
+  useEffect(() => onSiegeLobbyReady(() => {
+    if (isSiegeIntroActive() || getChallengeState().active) return;
+    const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+    startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 5 });
+  }), [camera]);
+  return null;
+}
+
+// Live bypass: Space/Enter during ANY active intro skips the countdown. Safe to listen always — the
+// controller is stood down while an intro plays, so these keys aren't doing anything else then.
+function IntroLiveBypassKey() {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return;
+      if (isSiegeIntroActive() && (e.code === 'Space' || e.code === 'Enter')) requestIntroBypass();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return null;
+}
+
+// Real-game-only live triggers: open-world auto-fire + live countdown bypass. Mounted in
+// SiegeWorldLayers (NOT the editor scene, which auto-fires nothing and uses the 'I' test key).
+export function SiegeSpawnIntroLiveTriggers() {
+  return (<><OpenWorldSpawnIntro /><IntroLiveBypassKey /></>);
 }
 
 // The cinematic itself — mount it anywhere inside the Canvas (it's a no-op until startSpawnIntro
