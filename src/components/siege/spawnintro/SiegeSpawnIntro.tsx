@@ -13,7 +13,7 @@ import { CHAR_ASSET_VERSION } from '../charlineup/siegeCharLineupState';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import {
   useSiegeIntro, getIntroPhase, getIntroTarget, setIntroPhase, endSiegeIntro,
-  consumeIntroBypass, isSiegeIntroActive, startSiegeIntro, type IntroTarget,
+  consumeIntroBypass, requestIntroBypass, isSiegeIntroActive, startSiegeIntro, type IntroTarget,
 } from './siegeSpawnIntro';
 
 // V1 spawn character (a character-select panel will set this later).
@@ -111,9 +111,9 @@ function IntroDriver({ target }: { target: IntroTarget }) {
     return { eye, F, avatarY, camHigh, camStart, lookHead, yawFace, holdQuat, finalQuat };
   }, [target]);
 
-  useEffect(() => {
-    if (avatarRef.current) avatarRef.current.position.set(target.pos[0], g.avatarY, target.pos[2]);
-  }, [g, target]);
+  // Free the cursor for the intro (inventory / triple-click equip). Unmounting PointerLockControls
+  // doesn't reliably release the lock, so do it explicitly when the intro starts.
+  useEffect(() => { document.exitPointerLock?.(); }, []);
 
   useFrame((state) => {
     const phase = getIntroPhase();
@@ -121,6 +121,9 @@ function IntroDriver({ target }: { target: IntroTarget }) {
     if (phase !== prevPhase.current) { prevPhase.current = phase; t0.current = state.clock.elapsedTime; }
     const e = state.clock.elapsedTime - t0.current;
     const av = avatarRef.current;
+    // Place the avatar every frame (the ref is null until the glb resolves — see the isolated
+    // Suspense in the return, which lets THIS useFrame run immediately so the camera never freezes).
+    if (av) { av.position.set(target.pos[0], g.avatarY, target.pos[2]); av.visible = true; }
 
     if (phase === 'arrive') {
       camera.position.lerpVectors(g.camStart, g.camHigh, smooth(Math.min(1, e / ARRIVE_DUR)));
@@ -156,7 +159,8 @@ function IntroDriver({ target }: { target: IntroTarget }) {
     }
   });
 
-  return <IntroAvatar target={target} groupRef={avatarRef} />;
+  // Avatar in its OWN Suspense so its glb load never blocks the camera-driving useFrame above.
+  return <Suspense fallback={null}><IntroAvatar target={target} groupRef={avatarRef} /></Suspense>;
 }
 
 // DEBUG: press I (the bypass key during the countdown is also I) to run the intro from the current
@@ -166,8 +170,13 @@ function IntroTestKey() {
   const camera = useThree((s) => s.camera);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e) || e.code !== 'KeyI') return;
-      if (isSiegeIntroActive()) return;   // (bypass during countdown is handled in the driver)
+      if (isTypingTarget(e)) return;
+      if (isSiegeIntroActive()) {
+        // Space/Enter = bypass the countdown → jump straight to the turn-and-inhabit.
+        if (e.code === 'Space' || e.code === 'Enter') requestIntroBypass();
+        return;
+      }
+      if (e.code !== 'KeyI') return;
       const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
       startSiegeIntro({
         ...RAJAX,
@@ -188,9 +197,9 @@ export function SiegeSpawnIntro() {
   return (
     <>
       <IntroTestKey />
-      {getIntroPhase() !== 'off' && target && (
-        <Suspense fallback={null}><IntroDriver target={target} /></Suspense>
-      )}
+      {/* No Suspense here — IntroDriver must NOT suspend (it owns the camera). The avatar's own
+          Suspense lives inside IntroDriver. */}
+      {getIntroPhase() !== 'off' && target && <IntroDriver target={target} />}
     </>
   );
 }
