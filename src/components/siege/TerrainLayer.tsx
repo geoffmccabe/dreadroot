@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { setTiles, type HeightTile } from './terrainHeight';
 import { siegeLoadStart, siegeLoadFinish, siegeLoadNote } from './siegeInitLoad';
 import { loadTerrainTex, makeTerrainBlendMaterial } from './terrain/terrainBlend';
+import { swwCacheGet, swwCachePut } from './siegeWorldCache';
 
 interface TileMeta {
   file: string; res: number; sizeX: number; sizeZ: number;
@@ -87,18 +88,30 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
         const manifest = await fetch('/siege/terrain/manifest.json').then((r) => r.json());
         const tiles = manifest.tiles as TileMeta[];
         siegeLoadFinish(mStep, tiles.length);
-        // Download every tile in PARALLEL (was one-at-a-time = 16 serial round-trips, the main reason
-        // terrain took so long — nothing else can render until terrain is ready). Report EACH tile as
-        // it arrives so the user sees steady progress. 16 tiles × ~258KB.
-        const dStep = siegeLoadStart('Terrain', `Downloading ${tiles.length} terrain tiles...`);
-        let got = 0;
-        const bufs = await Promise.all(tiles.map((m) =>
-          fetch(`/siege/terrain/${m.file}`).then((r) => r.arrayBuffer()).then((buf) => {
-            siegeLoadNote('Terrain', `Tile ${++got}/${tiles.length} received`);
-            return buf;
-          })
-        ));
-        siegeLoadFinish(dStep, tiles.length);
+        const sig = JSON.stringify(tiles);   // changes if any tile is re-exported → cache auto-misses
+
+        // Reuse cached tile bytes (skip the ~4MB re-download on repeat visits). The mesh BUILD below
+        // still runs — it's only ~1s and not the bottleneck — so we cache the raw bytes, not the much
+        // larger built geometry. Bytes are validated against the manifest signature.
+        let bufs: ArrayBuffer[];
+        const cachedBytes = await swwCacheGet<{ sig: string; buffers: ArrayBuffer[] }>('bytes', 'terrain');
+        if (cachedBytes && cachedBytes.sig === sig && cachedBytes.buffers.length === tiles.length) {
+          siegeLoadNote('Terrain', `Tiles from cache (${tiles.length})`);
+          bufs = cachedBytes.buffers;
+        } else {
+          // Download every tile in PARALLEL (was one-at-a-time = 16 serial round-trips). Report EACH
+          // tile as it arrives so the user sees steady progress. 16 tiles × ~258KB.
+          const dStep = siegeLoadStart('Terrain', `Downloading ${tiles.length} terrain tiles...`);
+          let got = 0;
+          bufs = await Promise.all(tiles.map((m) =>
+            fetch(`/siege/terrain/${m.file}`).then((r) => r.arrayBuffer()).then((buf) => {
+              siegeLoadNote('Terrain', `Tile ${++got}/${tiles.length} received`);
+              return buf;
+            })
+          ));
+          siegeLoadFinish(dStep, tiles.length);
+          void swwCachePut('bytes', 'terrain', { sig, buffers: bufs });
+        }
         if (!alive) return;
         const bStep = siegeLoadStart('Terrain', 'Building terrain meshes...');
         const g = new THREE.Group();
