@@ -64,8 +64,9 @@ export async function slotClick(
   const { location, occupant, button, shift, doubleClick } = input;
 
   // ── SHIFT + LEFT: instant transfer to opposite region ──────────
-  // All via the unified transferSlot.
-  if (shift && button === 'left' && !doubleClick) {
+  // Only for a shift-TAP (click). A shift-DRAG falls through to the pickup below, where it
+  // grabs the WHOLE vault stack (vs one unit for a plain drag).
+  if (shift && button === 'left' && !doubleClick && input.intent !== 'drag') {
     if (!occupant) return { cursorAfter: cursor, status: 'shift-click: slot empty' };
 
     if (location.region === 'vault') {
@@ -144,9 +145,19 @@ export async function slotClick(
     // Both empty: no-op
     if (!cursor && !occupant) return { cursorAfter: null, status: '' };
 
-    // Cursor empty, slot has stack → pick up WHOLE stack
+    // A WHOLE stack carried out of the vault (a non-stackable item, qty > 1) can only be put
+    // back into a vault slot — inv/QA/equip hold one unit each, so they'd lose the rest.
+    if (cursor && cursor.nonStackable && cursor.quantity > 1 && location.region !== 'vault') {
+      return { cursorAfter: cursor, status: 'whole stack → vault only' };
+    }
+
+    // Cursor empty, slot has stack → pick up. From a VAULT stack, a plain drag picks up ONE
+    // unit (the rest stays in the vault); SHIFT+drag picks up the WHOLE stack (which can then
+    // only be dropped back into a vault slot, enforced below). Inv/QA are 1-per-slot so the
+    // occupant is already a single unit there.
     if (!cursor && occupant) {
-      return { cursorAfter: occupantToCursor(occupant, location, occupant.quantity), status: `cursor: picked up x${occupant.quantity}` };
+      const qty = (location.region === 'vault' && occupant.quantity > 1 && !shift) ? 1 : occupant.quantity;
+      return { cursorAfter: occupantToCursor(occupant, location, qty), status: `cursor: picked up x${qty}` };
     }
 
     // Cursor has item, slot empty → drop into the slot. Vault slots
@@ -164,12 +175,13 @@ export async function slotClick(
       };
     }
 
-    // Cursor + slot have SAME item → merge cursor into slot only when
-    // the destination is the vault (vault stacks; inv/qs don't).
-    // For inv/qs, treat the collision as a swap-via-cursor so the
-    // user can rearrange tiles.
-    if (cursor && occupant && occupant.itemId === cursor.itemId && !cursor.nonStackable
-        && location.region === 'vault') {
+    // Cursor + slot have SAME item → merge cursor into slot when the destination is the VAULT.
+    // The vault stacks EVERYTHING (its whole purpose) — even items that are non-stackable in
+    // inv/QA (weapons, grenades, eggs…). The server (transfer_slot) already sums same-item into
+    // a vault slot regardless of the stackable flag; we just must not block it client-side.
+    // (Inv/QA stay 1-per-slot — enforced by the DB region trigger — so a same-item collision
+    // there falls through to the swap below for tile rearranging.)
+    if (cursor && occupant && occupant.itemId === cursor.itemId && location.region === 'vault') {
       const dropped = await performDrop(cursor, cursor.quantity, location, handlers);
       if (!dropped.ok) return { cursorAfter: cursor, status: `merge FAIL: ${dropped.reason}` };
       return { cursorAfter: null, status: `merged x${cursor.quantity} into ${location.region}` };
