@@ -38,8 +38,12 @@ export const COMPONENT_DEFS: Record<number, ComponentDef> = {
       { key: 'speedMax', label: 'Speed max (m/s)', group: 'Ranges' },
       { key: 'heightMin', label: 'Height min (m)', group: 'Ranges' },
       { key: 'heightMax', label: 'Height max (m)', group: 'Ranges' },
+      // Seek→wander: pursue the player within `aggro` m, else wander within `wanderRadius` m of home.
+      // (aggro is today's crude detection range — the senses window will later refine it.)
+      { key: 'aggro', label: 'Aggro / seek (m)', group: 'AI' },
+      { key: 'wanderRadius', label: 'Wander radius (m)', group: 'AI' },
     ],
-    defaults: { healthMin: 10, healthMax: 100, speedMin: 1.25, speedMax: 3.75, heightMin: 0.5, heightMax: 3 },
+    defaults: { healthMin: 10, healthMax: 100, speedMin: 1.25, speedMax: 3.75, heightMin: 0.5, heightMax: 3, aggro: 400, wanderRadius: 6 },
   },
 
   // Ghost — flying upside-down diver. "Everything incl. exotic" exposes the meaningful knobs; the

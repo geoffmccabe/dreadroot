@@ -178,13 +178,15 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
   const m = effectiveCfg(type);   // CFG + admin base-stat overrides
   const o = ov;
   if (!m && !o) { warnUnspawnable(type); return null; }
+  // Horde (component type 6) has no CFG row, so its seek/wander come from the component stat set.
+  const compAI = o ? effectiveComponentStats(type) : null;
   const sz = mods?.sizeMul ?? 1, sp = mods?.speedMul ?? 1, hp = mods?.healthMul ?? 1;
   // Clean display name (no "(boss)"/"(horde)") for the "Killed by a …" death screen.
   const monsterName = (MONSTER_CATALOG.find((x) => x.id === type)?.name ?? '').replace(/\s*\(.*\)\s*/, '').trim();
   return (
     <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} name={monsterName} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
-      modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={m?.aggro ?? 400}
-      speed={(o?.speed ?? m!.speed) * sp} wanderRadius={m?.wanderRadius ?? 6} health={(o?.health ?? m!.health) * hp}
+      modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={compAI?.aggro ?? m?.aggro ?? 400}
+      speed={(o?.speed ?? m!.speed) * sp} wanderRadius={compAI?.wanderRadius ?? m?.wanderRadius ?? 6} health={(o?.health ?? m!.health) * hp}
       animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
       clips={m?.clips}
       sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
