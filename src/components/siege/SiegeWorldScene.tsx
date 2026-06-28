@@ -8,6 +8,7 @@ import { Suspense, useState } from 'react';
 import { Sky } from '@react-three/drei';
 import type { WorldDefinition } from '@/config/worldDefinition';
 import { SiegeFlyController } from './SiegeFlyController';
+import { SiegeSpawnIntro } from './spawnintro/SiegeSpawnIntro';
 import { TerrainLayer } from './TerrainLayer';
 import { WaterLayer } from './WaterLayer';
 import { PlacementEditor } from './PlacementEditor';
@@ -84,6 +85,9 @@ export function SiegeWorldScene({ world, editorMode, transformMode, charAnim }: 
       <LaserProbe />
 
       {!editorMode && <SiegeFlyController world={world} />}
+      {/* Cinematic spawn intro (press I to test): character arrives → world loads → countdown →
+          camera dollies into the head → FPS. Owns the camera while it plays. */}
+      {!editorMode && <SiegeSpawnIntro />}
     </>
   );
 }

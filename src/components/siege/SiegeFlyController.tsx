@@ -17,6 +17,7 @@ import { sampleHeight } from './terrainHeight';
 import { playerState } from './playerState';
 import { clampToWorldBounds } from './worldBoundsClamp';
 import { getSiegeSpawnPin, consumeSiegePendingSpawn } from './siegePlayerState';
+import { isSiegeIntroActive, useSiegeIntro } from './spawnintro/siegeSpawnIntro';
 
 // Movement constants — chosen to match Dreadroot's controls.
 const WALK_SPEED = 5.5;   // m/s
@@ -34,6 +35,7 @@ interface Props {
 
 export function SiegeFlyController({ world }: Props) {
   const camera = useThree((s) => s.camera);
+  useSiegeIntro();   // re-render when the spawn intro toggles (so PointerLockControls mounts/unmounts)
 
   const keys = useRef<Set<string>>(new Set());
   const flying = useRef(false);
@@ -89,6 +91,8 @@ export function SiegeFlyController({ world }: Props) {
   }, []);
 
   useFrame((_, rawDt) => {
+    // The spawn-intro cinematic owns the camera while it plays — stand down (no move/look/gravity).
+    if (isSiegeIntroActive()) { keys.current.clear(); return; }
     const dt = Math.min(rawDt, 0.05); // clamp big frame gaps
     const k = keys.current;
 
@@ -164,5 +168,6 @@ export function SiegeFlyController({ world }: Props) {
     playerState.fz = forward.current.z;
   });
 
-  return <PointerLockControls />;
+  // No pointer-lock during the intro → cursor is free for inventory / triple-click equip.
+  return isSiegeIntroActive() ? null : <PointerLockControls />;
 }
