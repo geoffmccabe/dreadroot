@@ -614,14 +614,40 @@ export function FortressHUD(props: FortressHUDProps) {
     if (!def) return;
     void (async () => {
       let target: number | null = null;
-      const isGlove = def.key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
-      if (isGlove) {
-        target = 1;
-      } else if (def.item_number != null) {
-        const { data } = await supabase.from('weapon_stats').select('is_gun').eq('item_number', def.item_number).maybeSingle();
-        if (data?.is_gun) target = 1;
+      const key = def.key ?? '';
+      const isGlove = key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
+      const isGrenade = key === 'grenade' || key.startsWith('grenade_t');
+      // Classify a gun: one-handed (pistol) vs two-handed (rifle).
+      let isGun = false, isTwoHanded = false;
+      if (!isGlove && !isGrenade && def.item_number != null) {
+        const { data } = await supabase.from('weapon_stats').select('is_gun, is_two_handed').eq('item_number', def.item_number).maybeSingle();
+        isGun = !!data?.is_gun; isTwoHanded = isGun && !!(data as { is_two_handed?: boolean } | null)?.is_two_handed;
       }
+      const gear = (equippedGear as Array<{ slot: number; itemId: string }>);
+      const slot1Occ = gear.some((e) => e.slot === 1);
+      const slot5Occ = gear.some((e) => e.slot === 5);
+      // Hand assignment (Geoff's spec): grenade → LEFT(1), pistol → RIGHT(5), glove → first FREE
+      // hand else RIGHT(5), rifle (two-handed) → LEFT(1) centered.
+      if (isGrenade) target = 1;
+      else if (isGlove) target = !slot1Occ ? 1 : 5;
+      else if (isGun && isTwoHanded) target = 1;
+      else if (isGun) target = 5;
       if (target == null) { setDebugStatus('quick-equip: not a weapon'); return; }
+      // If a CENTERED two-handed item (rifle/pickaxe) owns the hands, a one-hander headed to the
+      // RIGHT (slot 5) would collide — route it to slot 1 so equip_transfer SWAPS the two-hander
+      // out in a single move (no rejection). Detect slot 1 two-handed by weapon_stats / pickaxe name.
+      if (target === 5 && slot1Occ) {
+        const d1 = itemDefs.get(gear.find((e) => e.slot === 1)!.itemId);
+        let s1TwoHanded = false;
+        if (d1) {
+          if ((d1.name ?? '').toLowerCase().includes('pickaxe')) s1TwoHanded = true;
+          else if (d1.item_number != null) {
+            const { data: w1 } = await supabase.from('weapon_stats').select('is_two_handed').eq('item_number', d1.item_number).maybeSingle();
+            s1TwoHanded = !!(w1 as { is_two_handed?: boolean } | null)?.is_two_handed;
+          }
+        }
+        if (s1TwoHanded) target = 1;
+      }
       try {
         const ok = await slotClickHandlers.equipTransfer(
           { region, page: 0, slot },

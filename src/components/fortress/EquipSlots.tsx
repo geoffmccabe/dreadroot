@@ -284,7 +284,11 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         if (occ1 || occ5) { revert(def.num); toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
       } else if (def.hand && !r.isRifle && (leftKind === 'rifle' || leftIsPickaxe) && fromEquipSlot !== 1) {
-        revert(def.num); toast({ title: `${leftIsPickaxe ? 'Pickaxe' : 'Rifle'} uses both hands — unequip it first`, duration: 2400 }); return;
+        // A one-handed item (pistol/grenade/glove) dropped while a TWO-HANDED item (rifle/pickaxe)
+        // owns both hands → SWAP it out (give the player what they want), no rejection. The
+        // one-hander takes the canonical hand (slot 1); equip_transfer swaps the two-hander back
+        // to the dragged item's source slot. Slot 5 is empty here (the two-hander owns both hands).
+        targetNum = 1;
       }
       // Refine: replace the instant tile with the FULL item (item_number → active weapon fires),
       // moving it to the final target slot (a rifle migrates from the dropped hand to slot 1).
