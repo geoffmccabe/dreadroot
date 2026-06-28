@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
+import { loadColliderCache, getCachedBoxes, recordBoxes, groupColliderSig } from './siegeColliderCache';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
 import { applyTrunkBark, TRUNK_TREE_RE } from './siegeTreeBark';
@@ -119,8 +120,8 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
   return [wb];
 }
 
-function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1 }:
-  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number }) {
+function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1, colliderKey }:
+  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; colliderKey?: string }) {
   const gltf = useGLTF(url, '/draco/');   // '/draco/' so sampler glbs (e.g. the warpgate) decode; plain world glbs ignore it
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
@@ -135,6 +136,10 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const meshInputs: MeshInstanceInput[] = [];
     const meshGeos = new Map<string, THREE.BufferGeometry>();
     const monsterBoxes: THREE.Box3[] = [];
+    // Monster-climb boxes are the per-instance VOXELIZE cost (main-thread). On a repeat visit they're
+    // restored from IndexedDB (keyed by this group's matrices), skipping the rebuild entirely.
+    const collSig = colliderKey ? groupColliderSig(fbx, meshName, matrices) : null;
+    const cachedBoxes = collSig ? getCachedBoxes(collSig) : null;
     const solid = isSolidGroup(fbx);
     // Mesh-AABBs run loose; shrink toward the real object size. Rocks are the worst (organic
     // shapes in a big box) → 60%; everything else → 80%.
@@ -280,12 +285,13 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
           meshInputs.push({ key: src.geometry.uuid, matrix: m.clone(), geoBox });
           // Monsters: greedy boxes in their OWN grid (the player/bullets never read it,
           // so these can't become invisible walls). Denser than the old single box.
-          if (!noMonsterColliders && monsterBoxes.length < 4000 && !managedRocks.has(ikey) && !isTerrain) {
+          if (!cachedBoxes && !noMonsterColliders && monsterBoxes.length < 4000 && !managedRocks.has(ikey) && !isTerrain) {
             // Terrain: monsters ground on the baked heightfield (MeshHeightmapBaker), NOT voxel boxes
             // (voxelizing a 150 m ground mesh would produce a runaway box count).
             // noMonsterColliders: dense ambient worlds (Enchanted Forest, 18.7k objects) skip the
             // per-instance voxelize entirely — it was the main GC-freeze + retained-Box3 heap source,
             // and these worlds have no monsters (player + bullets still use the mesh BVH).
+            // cachedBoxes: a warm load already has this group's boxes — skip the voxelize, apply below.
             for (const b of monsterBoxesFor(src.geometry, m, geoBox, ovCell, organicFine)) monsterBoxes.push(b);
           }
         } else if (geoBox && colliders.length < 2000 && !managedRocks.has(ikey)) {
@@ -307,8 +313,11 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
       inst.computeBoundingSphere();
       out.add(inst);
     }
-    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes };
-  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials]);
+    // Warm load → use the cached boxes; cold load → record what we just built (debounced save).
+    const finalMonsterBoxes = cachedBoxes ?? monsterBoxes;
+    if (!cachedBoxes && colliderKey && collSig) recordBoxes(colliderKey, collSig, finalMonsterBoxes);
+    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes };
+  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials, colliderKey]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
     if (!colliders.length) return;
@@ -369,6 +378,14 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       });
     return () => { alive = false; };
   }, [dataDir, placementsFile]);
+  // Load this world's cached monster-climb boxes into memory BEFORE any group renders, so each
+  // group's synchronous build can read them. Gating the groups on this adds only one quick IDB read.
+  const [collReady, setCollReady] = useState(false);
+  useEffect(() => {
+    let alive = true; setCollReady(false);
+    loadColliderCache(dataDir).then(() => { if (alive) setCollReady(true); });
+    return () => { alive = false; };
+  }, [dataDir]);
   // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared
   // rock/grass types don't drag their far-island copies into the beach — that full-map parse was
   // the real fps killer). The load center FOLLOWS the camera, so flying to another island loads
@@ -439,13 +456,13 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
     return out;
   }, [allGroups, center, renderDist, foliageDist, maxGroups, maxInstances]);
 
-  if (!data) return null;
+  if (!data || !collReady) return null;
   return (
     <>
       {nearGroups.map((g) => (
         <Boundary key={g._k}>
           <Suspense fallback={null}>
-            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} noMonsterColliders={noMonsterColliders} emissiveBoost={emissiveBoost} />
+            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} noMonsterColliders={noMonsterColliders} emissiveBoost={emissiveBoost} colliderKey={dataDir} />
           </Suspense>
         </Boundary>
       ))}
