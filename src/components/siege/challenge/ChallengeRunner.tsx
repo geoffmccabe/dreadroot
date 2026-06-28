@@ -27,6 +27,9 @@ import type { Challenge, MonsterDrop, ColorMods } from './challengeTypes';
 
 interface Spawned { id: string; type: MType; spawn: [number, number, number]; ov?: Ov; mods?: MonsterMods; color?: ColorMods; ballColor?: string; rise: boolean; }
 
+// How often to recompute the run's alive-monster count (wave-clear detection isn't frame-sensitive).
+const ALIVE_SCAN_MS = 160;
+
 export function ChallengeRunner() {
   const camera = useThree((s) => s.camera);
   const { user } = useAuth();
@@ -208,6 +211,7 @@ export function ChallengeRunner() {
     });
     r.dropsDone = r.pending.length === 0;
     r.sawAlive = false;
+    r.aliveCount = 0; r.lastAliveAt = 0;   // force a fresh scan this wave (no stale carry-over)
     r.waveEndsAt = now + wave.timeSec * 1000;
     const n = r.waveIdx + 1;
     const faint = r.faintNext;
@@ -373,7 +377,7 @@ export function ChallengeRunner() {
 
     // 2. Count this run's still-alive monsters (across all waves — carry-overs included). Wave
     // transitions aren't frame-sensitive, so throttle this O(n) scan to ~6×/s instead of every frame.
-    if (now - r.lastAliveAt >= 160) {
+    if (now - r.lastAliveAt >= ALIVE_SCAN_MS) {
       const prefix = `chal${r.runId}_`;
       let a = 0;
       for (let i = 0; i < siegeDemons.length; i++) {

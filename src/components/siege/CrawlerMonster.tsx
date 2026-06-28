@@ -115,18 +115,25 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
   const { scene, animations } = useGLTF(URL);
   const group = useRef<THREE.Group>(null);
   const inner = useRef<THREE.Group>(null);
-  // Admin-tunable base stats (read once per instance). Destructure to the names the loop below uses;
-  // defaults reproduce the originals (hp 40, height 1.4, speed 3.4, hover .06, bodyR .28, grav 22…).
-  const cs = useRef(effectiveComponentStats(18)).current;
+  // Admin-tunable base stats (read once per instance, lazy). Destructure to the names the loop below
+  // uses; defaults reproduce the originals (hp 40, height 1.4, speed 3.4, hover .06, bodyR .28, grav 22…).
+  const csRef = useRef<Record<string, number> | null>(null);
+  if (!csRef.current) csRef.current = effectiveComponentStats(18);
+  const cs = csRef.current;
   const HP = cs.health, SPEED = cs.speed, HOVER = cs.hover, BODY_R = cs.bodyR, GRAV = cs.gravity;
   const TURN_RATE = cs.turnRate, ATTACK_R = cs.attackRange, ATTACK_MS = cs.attackMs;
   const WALL_AHEAD = BODY_R + 0.3;
 
   // Per-Crawlie variety derived from a UNIQUE index (golden-ratio hash → well spread, guaranteed
   // distinct per spawn — so no two crawl identically). size ± sizeJitter, speed ± speedJitter.
+  // Jitter clamped to [0,1] and size floored so a bad admin value can't flip/zero the model.
   const V = useRef<{ size: number; speed: number; idx: number } | null>(null);
-  if (!V.current) { const idx = ++_pri; V.current = { idx, size: (1 - cs.sizeJitter) + ((idx * 0.7548776662) % 1) * (2 * cs.sizeJitter), speed: (1 - cs.speedJitter) + ((idx * 0.6180339887) % 1) * (2 * cs.speedJitter) }; }
-  const CH = cs.height * V.current.size * (mods?.sizeMul ?? 1);
+  if (!V.current) {
+    const idx = ++_pri;
+    const sj = Math.max(0, Math.min(1, cs.sizeJitter)), vj = Math.max(0, Math.min(1, cs.speedJitter));
+    V.current = { idx, size: Math.max(0.05, (1 - sj) + ((idx * 0.7548776662) % 1) * (2 * sj)), speed: Math.max(0.05, (1 - vj) + ((idx * 0.6180339887) % 1) * (2 * vj)) };
+  }
+  const CH = Math.max(0.05, cs.height * V.current.size * (mods?.sizeMul ?? 1));
   const scale = CH / MODEL_H;
   const priRef = useRef(0);
   if (priRef.current === 0) priRef.current = V.current.speed * 1000 + V.current.idx;   // faster ⇒ higher climb priority

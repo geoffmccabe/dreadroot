@@ -21,12 +21,15 @@
 import { useEffect } from 'react';
 import type * as THREE from 'three';
 
-const KEY = '__instanceMats';
+// Keyed off the clone root (not stored on userData) so we never pollute the object graph or risk
+// THREE's userData JSON-serialization choking on live Material objects. WeakMap → entries vanish
+// when the clone is GC'd, so this can't leak on its own.
+const tracked = new WeakMap<THREE.Object3D, THREE.Material[]>();
 
-/** Remember the per-instance (cloned) materials on a clone root so they can be disposed later.
+/** Remember the per-instance (cloned) materials for a clone root so they can be disposed later.
  *  Pass ONLY materials you cloned for this instance — never shared/cached glb materials. */
 export function trackInstanceMaterials(root: THREE.Object3D, mats: THREE.Material[]): void {
-  (root.userData as Record<string, unknown>)[KEY] = mats;
+  tracked.set(root, mats);
 }
 
 /** Dispose a clone's tracked per-instance materials when it changes identity or the component
@@ -36,8 +39,8 @@ export function useDisposeInstanceMaterials(root: THREE.Object3D | null | undefi
   useEffect(() => {
     if (!root) return;
     return () => {
-      const mats = (root.userData as Record<string, unknown>)[KEY] as THREE.Material[] | undefined;
-      if (mats) for (const m of mats) m.dispose();
+      const mats = tracked.get(root);
+      if (mats) { for (const m of mats) m.dispose(); tracked.delete(root); }
     };
   }, [root]);
 }

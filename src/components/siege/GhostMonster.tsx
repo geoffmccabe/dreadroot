@@ -37,13 +37,20 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
   const camera = useThree((s) => s.camera);
   const { scene, animations } = useGLTF(URL);
   const group = useRef<THREE.Group>(null);
-  // Admin-tunable base stats (read once per instance so it stays stable).
-  const cs = useRef(effectiveComponentStats(9)).current;
+  // Admin-tunable base stats (read once per instance so it stays stable; lazy so we don't recompute
+  // on every render).
+  const csRef = useRef<Record<string, number> | null>(null);
+  if (!csRef.current) csRef.current = effectiveComponentStats(9);
+  const cs = csRef.current;
 
-  // Per-ghost variation (stable for this instance): ± size & speed jitter.
+  // Per-ghost variation (stable for this instance): ± size & speed jitter. Jitter is clamped to
+  // [0,1] and the final size floored so a bad admin value can't flip/zero the model.
   const V = useRef<{ size: number; speed: number } | null>(null);
-  if (!V.current) V.current = { size: 1 + (Math.random() * 2 - 1) * cs.sizeJitter, speed: 1 + (Math.random() * 2 - 1) * cs.speedJitter };
-  const GH = cs.height * V.current.size * (mods?.sizeMul ?? 1);
+  if (!V.current) {
+    const sj = Math.max(0, Math.min(1, cs.sizeJitter)), vj = Math.max(0, Math.min(1, cs.speedJitter));
+    V.current = { size: Math.max(0.05, 1 + (Math.random() * 2 - 1) * sj), speed: Math.max(0.05, 1 + (Math.random() * 2 - 1) * vj) };
+  }
+  const GH = Math.max(0.05, cs.height * V.current.size * (mods?.sizeMul ?? 1));
   const scale = GH / MODEL_H;
 
   // Clone the rig (own skeleton) + give it the ghost look via a FRESNEL rim: the silhouette edges
