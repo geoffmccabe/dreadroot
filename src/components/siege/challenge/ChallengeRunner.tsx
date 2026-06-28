@@ -254,9 +254,12 @@ export function ChallengeRunner() {
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null, wave: 0, waveEndsAt: 0, countdownUntil: r.countdownUntil, announce: null });
     // Cinematic spawn: the character arrives facing the camera, the world loads, then on the final
     // beat it turns away + the camera dollies into its head → FPS, timed to finish exactly when the
-    // countdown hits zero. Owns the camera while it plays (FortressControls stands down).
-    const spawnPos = arr?.pos ?? ch.spawn;
-    if (spawnPos) startSpawnIntro(spawnPos, arr?.yaw ?? 0, { countdownEndsAt: r.countdownUntil });
+    // countdown hits zero. Owns the camera while it plays (FortressControls stands down). ALWAYS fire:
+    // arena arrival, else the challenge's own spawn, else wherever the player now is (in-place runs).
+    const introPos: [number, number, number] = arr?.pos ?? ch.spawn ?? [camera.position.x, camera.position.y, camera.position.z];
+    const introYaw = arr?.yaw ?? new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').y;
+    console.log('[spawn-intro] challenge start → firing at', introPos, 'yaw', introYaw.toFixed(2), 'countdownEndsAt', Math.round(r.countdownUntil));
+    startSpawnIntro(introPos, introYaw, { countdownEndsAt: r.countdownUntil });
   };
 
   const revert = () => {

@@ -194,11 +194,15 @@ export function SiegeSpawnIntroTestKey() {
 // running (that path fires its own clock-aligned intro).
 function OpenWorldSpawnIntro() {
   const camera = useThree((s) => s.camera);
-  useEffect(() => onSiegeLobbyReady(() => {
-    if (isSiegeIntroActive() || getChallengeState().active) return;
-    const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-    startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 5 });
-  }), [camera]);
+  useEffect(() => {
+    console.log('[spawn-intro] OpenWorldSpawnIntro subscribed to lobby-ready');
+    return onSiegeLobbyReady(() => {
+      console.log('[spawn-intro] lobby-ready event received — intro active?', isSiegeIntroActive(), 'challenge?', getChallengeState().active);
+      if (isSiegeIntroActive() || getChallengeState().active) return;
+      const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+      startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 5 });
+    });
+  }, [camera]);
   return null;
 }
 
