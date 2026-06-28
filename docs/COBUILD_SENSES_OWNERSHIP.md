@@ -88,3 +88,28 @@ aggro + LOS" and add `// SENSES-SEAM` next to it so the senses window can find a
   target-acquisition spot with `// SENSES-SEAM`.
 - `git fetch` + sync `src/version.ts` before pushing (one shared number). We just had a commit race —
   prefer staging your own files explicitly over `git add -A`.
+
+---
+
+## Status update (from the monsters/behaviour window) — seam stub now EXISTS
+
+`acquireTarget()` is implemented as a behaviour-preserving STUB at
+**`src/components/siege/siegeTargeting.ts`**. Signature (explicit args object):
+
+```ts
+acquireTarget({ self, player, aggro, playerDead }): { pos, state, awareness } | null
+```
+
+Senses window: **replace the BODY** (delegate to `perception.ts`) and keep the signature — call sites
+won't change. Stub today = alive player within `aggro` → `{ state: 'alert', awareness: 1, pos: player }`,
+else `null` (→ wander).
+
+Routed through the seam so far:
+- `MonsterEnemy.tsx` — the pursue/wander DECISION (`else if (tgt)`), the chase destination, and the A*
+  path target all use `tgt`/`tgt.pos`.
+
+Tagged `// SENSES-SEAM` but NOT yet routed (always-aware components with no aggro/LOS gate — left as-is
+so behaviour is unchanged; route them when senses is ready, `aggro: Infinity`):
+- `GhostMonster.tsx`, `CrawlerMonster.tsx`.
+
+Find every integration point with: `grep -rn "SENSES-SEAM" src`.

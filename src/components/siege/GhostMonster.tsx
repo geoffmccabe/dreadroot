@@ -178,6 +178,8 @@ export function GhostMonster({ spawn, id, onDespawn, mods }: {
       }
     }
 
+    // SENSES-SEAM — the ghost is an always-aware component (no aggro/LOS gate today). When the senses
+    // window is ready, route this through acquireTarget (aggro: Infinity) so it can gate/last-know too.
     const px = camera.position.x, py = camera.position.y, pz = camera.position.z;
 
     // Decide the target the ghost is moving toward + the speed to chase it at.

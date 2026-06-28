@@ -233,6 +233,8 @@ export function CrawlerMonster({ spawn, id, onDespawn, mods, color }: {
       return;
     }
 
+    // SENSES-SEAM — the crawler is an always-aware component (no aggro/LOS gate today). When the senses
+    // window is ready, route this through acquireTarget (aggro: Infinity) so it can gate/last-know too.
     const px = camera.position.x, py = camera.position.y - 0.4, pz = camera.position.z;
     const self = box, sp = priRef.current;
 

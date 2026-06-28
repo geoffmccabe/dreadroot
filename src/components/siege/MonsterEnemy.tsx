@@ -15,6 +15,7 @@ import { sampleHeight, bakedFloorAt } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { raycastMesh } from './meshColliderSystem';
+import { acquireTarget } from './siegeTargeting';
 import { getNavProfile } from './siegeNavProfile';
 import { getActiveMapId } from '@/config/activeMap';
 import { addCorpseZone, removeCorpseZone, corpseSlow } from './siegeCorpses';
@@ -703,6 +704,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Player died mid-challenge → they're a ghost; every monster loses its target and wanders off
     // (the engagement branches below are gated on this, so they all fall through to wander/search).
     const playerDead = isSiegePlayerDead();
+    // SENSES-SEAM — the one "do I have a target / where is it" decision. Owned by the senses window;
+    // today the stub = alive player within aggro. tgt!=null → engage and head to tgt.pos; null → wander.
+    const tgt = acquireTarget({ self: { x: s.x, y: s.y, z: s.z }, player: camera.position, aggro: c.aggro, playerDead });
     const nav = getNavProfile(getActiveMapId());   // per-MAP pursuit traits (climb-to-roof, A*, crawl)
 
     // ── Line-of-sight to the player (3D, torso→torso) ──
@@ -1197,12 +1201,15 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             rnd(c.spin.playerSpinRev), s.spinVel > 0 ? -1 : 1);   // player spins OPPOSITE the troll
         }
       }
-    } else if (!playerDead && dist < c.aggro) {             // found a player -> pursue/attack
+    } else if (tgt) {                                       // SENSES-SEAM: have a target -> pursue/attack
+      // Head toward the SENSED target position (live player today; last-known when the senses window
+      // adds 'suspicious'). With the stub tgt.pos === the player, so this is identical to the old chase.
+      const tgx = tgt.pos.x - s.x, tgz = tgt.pos.z - s.z, tgdist = Math.hypot(tgx, tgz) || 1;
       // ── Stuck → pathfind around obstacles (player hiding in a building/garage) ──
-      // Track progress toward the player; if a melee monster can't get closer for ~1.5s while still
+      // Track progress toward the target; if a melee monster can't get closer for ~1.5s while still
       // out of reach, it's blocked — route AROUND the wall with grid A* and steer toward the next
       // waypoint (recomputed every ~0.8s). Switches to the crawl anim where the rig has one.
-      let cdx = dx, cdz = dz, cdist = dist, pathLoco = false;
+      let cdx = tgx, cdz = tgz, cdist = tgdist, pathLoco = false;
       if (c.meleeContact && nav.pathfindAround && dist > c.attackRange + 0.6) {
         if (s.progressAt === 0 || dist < s.bestDist - 0.25) { s.bestDist = dist; s.progressAt = now; }
         if (now - s.progressAt > 1500) {                                   // not getting closer → stuck
@@ -1219,7 +1226,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             // handles. Keeps A* (and its raycasts) off the hot path except at a genuine obstacle.
             const losHit = raycastMesh(s.x, s.y + 1.1, s.z, dx / dist, 0, dz / dist, Math.min(dist, 64));
             const walled = losHit != null && losHit < dist - 1.0;
-            s.path = walled ? findPath(s.x, s.z, camera.position.x, camera.position.z, s.y) : null;
+            s.path = walled ? findPath(s.x, s.z, tgt.pos.x, tgt.pos.z, s.y) : null;   // SENSES-SEAM: path to the sensed target
             s.pathIdx = 0;
             // Success → recompute in ~0.8s. FAILURE → back off hard (3–5s) so an unreachable player
             // doesn't make us re-run A* every 0.8s.
