@@ -79,6 +79,7 @@ export const COMPONENT_DEFS: Record<number, ComponentDef> = {
       { key: 'turnRate', label: 'Turn rate (rad/s)', group: 'Movement' },
     ],
     defaults: { health: 40, height: 1.4, speed: 3.4, sizeJitter: 0.15, speedJitter: 0.25, attackRange: 1.3, attackMs: 1100, dmgMin: 10, dmgMax: 25, hover: 0.06, bodyR: 0.28, gravity: 22, turnRate: 4.0 },
+  },
 };
 
 export const isComponentMonster = (type: number): boolean => type in COMPONENT_DEFS;
