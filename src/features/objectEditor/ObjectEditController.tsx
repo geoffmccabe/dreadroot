@@ -16,7 +16,7 @@ import { useEffect, useMemo } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isTypingTarget } from '@/lib/isTypingTarget';
-import type { TRS } from './types';
+import { IDENTITY_QUAT, type TRS } from './types';
 import {
   getCanEdit, getEditMode, toggleEditMode, setSelected, current,
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
@@ -51,7 +51,7 @@ export function ObjectEditController() {
       const hits = ray.intersectObjects(scene.children, true);
       const p = hits.length ? hits[0].point.clone() : ro.clone().addScaledVector(rd, 5);
       p.y += 0.5;
-      addObject({ id: crypto.randomUUID(), modelUrl: 'builtin:box', pos: [p.x, p.y, p.z], quat: [0, 0, 0, 1], scale: [1, 1, 1] });
+      addObject({ id: crypto.randomUUID(), modelUrl: 'builtin:box', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [1, 1, 1] });
     };
 
     const move = (dx: number, dy: number, dz: number) => {

@@ -12,9 +12,7 @@ import * as THREE from 'three';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { voxelizeGeometry } from './voxelize';
 import { managedRocks, keyFor, setColliderOverride, colliderOverrides, exportColliderOverrides, saveColliderOverrideToDB } from './voxelOverrides';
-import { setModelDecimation, meshModelTriCount, meshModelInstanceCount } from './meshColliderSystem';
-import { colliderDebugStats } from './colliderDebugStats';
-import { DEFAULT_MESH_MODELS } from './meshColliderDefaults';
+import { setModelDecimation } from './meshColliderSystem';
 import { probeState } from './probeState';
 
 const _inst = new THREE.Matrix4();
