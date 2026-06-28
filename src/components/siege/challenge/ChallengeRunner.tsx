@@ -39,6 +39,7 @@ export function ChallengeRunner() {
     active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0, countdownUntil: 0,
     pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
     faintNext: false, idc: 0,
+    aliveCount: 0, lastAliveAt: 0,   // throttled alive-count (recomputed ~6×/s, not every frame)
   }).current;
 
   // Leaving the arena (Cmd-J / teleport to another world) must END the challenge and clear its mobs —
@@ -370,13 +371,18 @@ export function ChallengeRunner() {
       if (!r.pending.length) r.dropsDone = true;
     }
 
-    // 2. Count this run's still-alive monsters (across all waves — carry-overs included).
-    const prefix = `chal${r.runId}_`;
-    let alive = 0;
-    for (let i = 0; i < siegeDemons.length; i++) {
-      const d = siegeDemons[i];
-      if (!d.dead && d.id.indexOf(prefix) === 0) alive++;
+    // 2. Count this run's still-alive monsters (across all waves — carry-overs included). Wave
+    // transitions aren't frame-sensitive, so throttle this O(n) scan to ~6×/s instead of every frame.
+    if (now - r.lastAliveAt >= 160) {
+      const prefix = `chal${r.runId}_`;
+      let a = 0;
+      for (let i = 0; i < siegeDemons.length; i++) {
+        const d = siegeDemons[i];
+        if (!d.dead && d.id.indexOf(prefix) === 0) a++;
+      }
+      r.aliveCount = a; r.lastAliveAt = now;
     }
+    const alive = r.aliveCount;
     if (alive > 0) r.sawAlive = true;   // guard: don't "clear" before the mobs have registered
 
     // 3. Wave transitions.
