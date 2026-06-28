@@ -5,7 +5,7 @@ import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { setRocketBelt } from '@/config/rocketBelt';
 import { rocketBeltTierFromItemNumber } from '@/features/rocketBelt/rocketBelt';
-import { useHandGrenades, handKind } from '@/config/handGrenade';
+import { useHandGrenades, handKind, setHandGrenade } from '@/config/handGrenade';
 import { setFlameGlove } from '@/config/flameGlove';
 import { setEquippedPickaxe, isPickaxe } from '@/components/siege/mining/equippedPickaxe';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
@@ -256,6 +256,17 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
     console.error('[equip]', title, err);
   };
 
+  // First empty inventory slot (for auto-evicting a hand item when a rifle takes both hands).
+  const firstEmptyInventorySlot = async (): Promise<number | null> => {
+    if (!user?.id) return null;
+    const { data } = await (supabase as unknown as {
+      from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: Array<{ slot: number }> | null }> } } };
+    }).from('user_slots').select('slot').eq('user_id', user.id).eq('region', 'inventory');
+    const used = new Set<number>((data ?? []).map((rr) => rr.slot));
+    for (let i = 0; i < 60; i++) { if (!used.has(i)) return i; }
+    return null;
+  };
+
   const handlePointerUp = async (def: SlotDef) => {
     const cur = cursorStackApi.getCursor();
     if (cur) {
@@ -271,18 +282,24 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       cursorStackApi.setCursor(null);   // consume the cursor
 
       const r = await resolveDrop(def, cur.itemId);
-      if (!r.ok) { revert(def.num); toast({ title: `That can't go in the ${def.label} slot`, duration: 2200 }); return; }
-      // Hand rules. A RIFLE is two-handed → it always lands in the canonical LEFT slot (1)
-      // so it renders CENTERED across both hands, and needs BOTH hands free. A hand counts as
-      // occupied by a real equip item OR a hand GRENADE (handGren). A pistol/glove can't share
-      // a hand with a rifle. EXCLUDE the slot being dragged FROM (it's being vacated).
+      if (!r.ok) { revert(def.num); return; }   // wrong slot → silently snap back (no modal)
+      // Hand rules. A RIFLE is two-handed → it lands in the canonical LEFT slot (1) and renders
+      // CENTERED across both hands. EXCLUDE the slot being dragged FROM (it's being vacated).
       let targetNum = def.num;
       const fromEquipSlot = cur.origin.region === 'equip' ? cur.origin.slot : null;
       if (def.hand && r.isRifle) {
-        const occ1 = (!!equip[1] || !!handGren.L) && fromEquipSlot !== 1;
-        const occ5 = (!!equip[5] || !!handGren.R) && fromEquipSlot !== 5;
-        if (occ1 || occ5) { revert(def.num); toast({ title: 'Free both hands for a rifle (drop the grenade/weapon first)', duration: 2600 }); return; }
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
+        // AUTO-EVICT both hands so the rifle can take them — no "free both hands" rejection.
+        // Slot 1's item is swapped to the rifle's source by the equip_transfer below; the RIGHT
+        // hand (slot 5) item goes back to inventory; any hand grenades are cleared (stay in QA).
+        if (!!equip[5] && fromEquipSlot !== 5) {
+          const dst = await firstEmptyInventorySlot();
+          if (dst != null) {
+            try { await equipTransfer({ region: 'equip', page: 0, slot: 5 }, { region: 'inventory', page: 0, slot: dst }); }
+            catch (e) { console.error('[equip] evict right hand for rifle failed', e); }
+          }
+        }
+        setHandGrenade('L', null); setHandGrenade('R', null);
       } else if (def.hand && !r.isRifle && (leftKind === 'rifle' || leftIsPickaxe) && fromEquipSlot !== 1) {
         // A one-handed item (pistol/grenade/glove) dropped while a TWO-HANDED item (rifle/pickaxe)
         // owns both hands → SWAP it out (give the player what they want), no rejection. The

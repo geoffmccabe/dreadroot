@@ -633,26 +633,32 @@ export function FortressHUD(props: FortressHUDProps) {
       else if (isGun && isTwoHanded) target = 1;
       else if (isGun) target = 5;
       if (target == null) { setDebugStatus('quick-equip: not a weapon'); return; }
-      // If a CENTERED two-handed item (rifle/pickaxe) owns the hands, a one-hander headed to the
-      // RIGHT (slot 5) would collide — route it to slot 1 so equip_transfer SWAPS the two-hander
-      // out in a single move (no rejection). Detect slot 1 two-handed by weapon_stats / pickaxe name.
+      // If a CENTERED two-handed item (rifle/pickaxe) owns the hands and a pistol is headed RIGHT
+      // (slot 5), keep the pistol in the RIGHT hand and EVICT the rifle afterward: move the pistol
+      // to slot 5, then send the rifle (slot 1) back to the pistol's now-empty source slot.
+      let evictRifleAfter = false;
       if (target === 5 && slot1Occ) {
         const d1 = itemDefs.get(gear.find((e) => e.slot === 1)!.itemId);
-        let s1TwoHanded = false;
         if (d1) {
-          if ((d1.name ?? '').toLowerCase().includes('pickaxe')) s1TwoHanded = true;
+          if ((d1.name ?? '').toLowerCase().includes('pickaxe')) evictRifleAfter = true;
           else if (d1.item_number != null) {
             const { data: w1 } = await supabase.from('weapon_stats').select('is_two_handed').eq('item_number', d1.item_number).maybeSingle();
-            s1TwoHanded = !!(w1 as { is_two_handed?: boolean } | null)?.is_two_handed;
+            evictRifleAfter = !!(w1 as { is_two_handed?: boolean } | null)?.is_two_handed;
           }
         }
-        if (s1TwoHanded) target = 1;
       }
       try {
         const ok = await slotClickHandlers.equipTransfer(
           { region, page: 0, slot },
           { region: 'equip', page: 0, slot: target },
         );
+        if (ok && evictRifleAfter) {
+          // Pistol is now in slot 5; the source slot is free → send the centered rifle there.
+          await slotClickHandlers.equipTransfer(
+            { region: 'equip', page: 0, slot: 1 },
+            { region, page: 0, slot },
+          );
+        }
         setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
       } catch (e) {
         setDebugStatus('quick-equip: ' + ((e as Error)?.message ?? String(e)));
