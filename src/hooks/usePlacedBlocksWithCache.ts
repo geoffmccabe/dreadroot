@@ -147,13 +147,19 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
     // Start initialization overlay
     initLogStart();
-    
-    const initStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Starting world initialization...');
+
+    // Siege Worlds streams its world (terrain + objects) in the canvas AFTER the player clicks START.
+    // Arm the load coordinator NOW — not at the end of this pre-work — so those canvas-side steps are
+    // captured even when the canvas mounts before this orchestrator finishes (the terrain step was
+    // being lost because we armed too late, leaving a long unreported gap).
+    if (!needsVoxels) armSiegeWorldLoad();
+
+    const initStepId = initLogStartStep('WorldInit', 'Starting world initialization...');
     
     try {
       setIsLoading(true);
       
-      initLogStep('usePlacedBlocksWithCache.ts', `User authenticated, world: ${worldId.slice(0, 8)}...`);
+      initLogStep('WorldInit', `User authenticated, world: ${worldId.slice(0, 8)}...`);
 
       // Preload block definitions FIRST (parallel with IndexedDB init) so PlacedBlocks
       // can render immediately when chunks load. Voxel worlds only — Siege Worlds renders
@@ -164,7 +170,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       const soundsCachePromise = initializeSoundsCache();
 
       // C7: IndexedDB initialization with start/finish
-      const dbStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing IndexedDB...');
+      const dbStepId = initLogStartStep('WorldInit', 'Initializing IndexedDB...');
       await initDB();
       initLogFinishStep(dbStepId!);
 
@@ -213,7 +219,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         // Guarded by atlasInitedRef so a Siege→Dreadroot switch-back doesn't redo
         // the ~11s atlas build (the atlas isn't torn down when entering siege).
         console.log('[Init] Starting texture atlas initialization...');
-        const atlasStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Initializing texture atlas...');
+        const atlasStepId = initLogStartStep('WorldInit', 'Initializing texture atlas...');
         const { initializeAtlasTexture } = await import('@/hooks/useTextureAtlas');
         await initializeAtlasTexture();
         initLogFinishStep(atlasStepId!);
@@ -236,7 +242,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
 
       // Load ambient audio (parallel with chunk loader)
       const ambientAudioPromise = (async () => {
-        const ambientStepId = initLogStartStep('FortressAudio.ts', 'Loading ambient audio...');
+        const ambientStepId = initLogStartStep('Audio', 'Loading ambient audio...');
         setAmbientVolume(ambientVolume);
         const loaded = await preloadAmbientAudio(ambientUrl);
         initLogFinishStep(ambientStepId!, loaded ? 1 : 0);
@@ -248,16 +254,16 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // ONLY in Siege Worlds — never block a Dreadroot load with a SWW-only query (the admin panel
       // loads it lazily on mount for other games).
       if (!needsVoxels) {
-        const npcStepId = initLogStartStep('siegeMonsterStats', 'Checking for NPC model updates...');
+        const npcStepId = initLogStartStep('Monsters', 'Checking for NPC model updates...');
         const npcSync = await syncMonsterStats();
         initLogFinishStep(npcStepId!);
-        initLogStep('siegeMonsterStats', `${npcSync.updated} models updated since last login`);
+        initLogStep('Monsters', `${npcSync.updated} models updated since last login`);
       }
 
       // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk
       // loader (it was loading ~290k Dreadroot blocks into the world + collision grid in siege).
       if (needsVoxels && voxelsLoadedRef.current !== worldId) {
-        const chunkStepId = initLogStartStep('usePlacedBlocksWithCache.ts', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
+        const chunkStepId = initLogStartStep('WorldInit', `Starting chunk loader at (${CAMERA_START_X}, ${CAMERA_START_Z})...`);
         await chunkLoaderRef.current.initializeForWorld(CAMERA_START_X, CAMERA_START_Z);
         voxelsLoadedRef.current = worldId;
         initLogFinishStep(chunkStepId!);
@@ -267,7 +273,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       await ambientAudioPromise;
 
       // C7: Realtime subscription setup
-      const realtimeStepId = initLogStartStep('usePlacedBlocksWithCache.ts', 'Setting up realtime subscription...');
+      const realtimeStepId = initLogStartStep('WorldInit', 'Setting up realtime subscription...');
       initLogFinishStep(realtimeStepId!);
 
       // Sync missing tree blocks in the background (fire-and-forget) — voxel (Dreadroot) only.
@@ -287,14 +293,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       }
 
       // Signal that React rendering will begin
-      initLogStep('usePlacedBlocksWithCache.ts', 'Queuing React re-render...');
+      initLogStep('WorldInit', 'Queuing React re-render...');
 
       // Complete the main init step
       if (initStepId) initLogFinishStep(initStepId);
 
       // Wait for React to render the blocks before dismissing overlay
       // Use setTimeout as primary (works even when tab hidden) with RAF as optimization
-      initLogStep('usePlacedBlocksWithCache.ts', 'Waiting for render...');
+      initLogStep('WorldInit', 'Waiting for render...');
       await new Promise<void>(resolve => {
         // 150ms is enough for 3 frames at 60fps + GPU upload buffer
         // This completes quickly even when tab is hidden (RAF would block indefinitely)
@@ -305,7 +311,7 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // mid-game doesn't freeze ~0.5-1s while macOS compiles. Voxel (Dreadroot) only — Siege
       // Worlds has no block atlas.
       if (needsVoxels) {
-        const warmStep = initLogStartStep('usePlacedBlocksWithCache.ts', 'Pre-compiling shaders...');
+        const warmStep = initLogStartStep('WorldInit', 'Pre-compiling shaders...');
         warmUpShaders(getGlobalAtlasTexture());
         if (warmStep) initLogFinishStep(warmStep);
       }
@@ -315,11 +321,11 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // START, so hand completion to the lobby loaders (they keep the overlay up with real
       // progress until the world is actually on screen — see siegeInitLoad).
       if (needsVoxels) {
-        initLogStep('usePlacedBlocksWithCache.ts', 'World initialization complete!');
+        initLogStep('WorldInit', 'World initialization complete!');
         initLogFinish();
       } else {
-        initLogStep('usePlacedBlocksWithCache.ts', 'Pre-load complete — loading game world...');
-        armSiegeWorldLoad();
+        // Already armed at the top; the lobby loaders (terrain → objects) finish the overlay.
+        initLogStep('WorldInit', 'Pre-load done — streaming the game world...');
       }
 
       // Start ambient audio (will handle autoplay restrictions automatically)

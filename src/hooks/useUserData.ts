@@ -8,6 +8,10 @@ import { worldStore } from '@/services/worldStore';
 import { getLevelForPoints } from '@/lib/levelSystem';
 import { initLogStep } from '@/contexts/InitializationContext';
 
+// Log the player summary to the init overlay only once per page load (loadUserData re-runs on every
+// auth `user` identity change, which spams the overlay during a long world load).
+let _userInitLogged = false;
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -194,19 +198,18 @@ export const useUserData = () => {
           });
       }
       
-      // Log player data for initialization overlay
-      initLogStep('useUserData.ts', `Player Level: ${correctLevel}`);
-      initLogStep('useUserData.ts', `Player Points: ${existingProfile.total_points || 0}`);
-      initLogStep('useUserData.ts', `Player Coins: ${tokenBalanceData?.coins || 100}`);
-      
-      // Count inventory items
+      // Log player data for the init overlay — ONCE per page load. loadUserData re-runs whenever the
+      // auth `user` object identity changes (which happens repeatedly during a long world load), and
+      // it was spamming these 5 lines every time. The first run's values are what the overlay shows.
       const totalItems = (inventoryData || []).reduce((sum, item) => sum + item.quantity, 0);
       const uniqueTypes = new Set((inventoryData || []).map(item => item.item_type)).size;
-      initLogStep('useUserData.ts', `Inventory: ${totalItems} items (${uniqueTypes} types)`);
-      
-      // Log roles
       const roles = rolesData?.map(r => r.role) || [];
-      initLogStep('useUserData.ts', `Roles: ${roles.length > 0 ? roles.join(', ') : 'user'}`);
+      if (!_userInitLogged) {
+        _userInitLogged = true;
+        initLogStep('Player', `Level ${correctLevel} · ${existingProfile.total_points || 0} pts · ${tokenBalanceData?.coins || 100} coins`);
+        initLogStep('Player', `Inventory: ${totalItems} items (${uniqueTypes} types)`);
+        initLogStep('Player', `Roles: ${roles.length > 0 ? roles.join(', ') : 'user'}`);
+      }
       
       setProfile(existingProfile);
       // v4.11.0: merged inventory = items (from user_slots) + blocks/seeds (from user_inventory).

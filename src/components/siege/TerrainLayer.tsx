@@ -81,21 +81,33 @@ export function TerrainLayer({ onReady }: { onReady?: () => void } = {}) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const tStep = siegeLoadStart('TerrainLayer.tsx', 'Loading lobby terrain...');
+      const tStep = siegeLoadStart('Terrain', 'Loading lobby terrain...');
       try {
+        const mStep = siegeLoadStart('Terrain', 'Fetching terrain manifest...');
         const manifest = await fetch('/siege/terrain/manifest.json').then((r) => r.json());
+        const tiles = manifest.tiles as TileMeta[];
+        siegeLoadFinish(mStep, tiles.length);
+        // Download every tile in PARALLEL. Previously each tile was awaited one-at-a-time (16 serial
+        // round-trips) — the main reason terrain took so long, since nothing else can render until
+        // terrain is ready. 16 tiles × ~258KB.
+        const dStep = siegeLoadStart('Terrain', `Downloading ${tiles.length} terrain tiles...`);
+        const bufs = await Promise.all(tiles.map((m) => fetch(`/siege/terrain/${m.file}`).then((r) => r.arrayBuffer())));
+        siegeLoadFinish(dStep, tiles.length);
+        if (!alive) return;
+        const bStep = siegeLoadStart('Terrain', 'Building terrain meshes...');
         const g = new THREE.Group();
         const sampleTiles: HeightTile[] = [];
-        for (const meta of manifest.tiles as TileMeta[]) {
-          const buf = await fetch(`/siege/terrain/${meta.file}`).then((r) => r.arrayBuffer());
-          const heights = new Float32Array(buf);
+        for (let i = 0; i < tiles.length; i++) {
+          const meta = tiles[i];
+          const heights = new Float32Array(bufs[i]);
           g.add(buildTileMesh(meta, heights, mat));
           sampleTiles.push({ posX: meta.pos[0], posZ: meta.pos[2], sizeX: meta.sizeX, sizeZ: meta.sizeZ, res: meta.res, heights });
         }
+        siegeLoadFinish(bStep, tiles.length);
         if (!alive) return;
         setTiles(sampleTiles);
         setGroup(g);
-        siegeLoadFinish(tStep, (manifest.tiles as TileMeta[]).length);
+        siegeLoadFinish(tStep, tiles.length);
         onReady?.();          // terrain is ready -> let everything else mount on top of it
       } catch { siegeLoadFinish(tStep); /* manifest not present */ }
     })();
