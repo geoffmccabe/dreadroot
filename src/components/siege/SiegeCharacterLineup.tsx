@@ -12,7 +12,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
-  LINEUP_CHARS, ANIM_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
+  LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode,
 } from './charlineup/siegeCharLineupState';
@@ -32,13 +32,17 @@ const _tailQ = new THREE.Quaternion();
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
+useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
-  // Animations come from ONE shared library (deduped across all characters); useGLTF caches it so
-  // it's fetched once and reused. Bind its clips to this character by bone name (all mixamorig).
-  const { animations } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
+  // Animations come from the shared category libraries (deduped across all characters); useGLTF
+  // caches each so they're fetched once and reused. Merge their clips and bind to this character by
+  // bone name (all mixamorig). Clip names are unique across libraries, so the merge is collision-free.
+  const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
+  const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
+  const animations = useMemo(() => [...baseAnims, ...rifleAnims], [baseAnims, rifleAnims]);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
