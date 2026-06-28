@@ -41,15 +41,15 @@ function DamageItem({ d }: { d: DamageNumber }) {
     if (!outlineSet.current && txt.current) {
       outlineSet.current = true;
       const camDist = state.camera.position.distanceTo(g.position);
-      txt.current.outlineWidth = Math.min(0.28, Math.max(0.05, 0.012 * camDist));
+      txt.current.outlineWidth = Math.min(0.14, Math.max(0.025, 0.006 * camDist));
       txt.current.sync?.();
     }
   });
   return (
     <Billboard ref={group} position={[d.x, d.y, d.z]}>
       <Text ref={txt as never} visible={ready} onSync={() => setReady(true)}
-            font="/AVENGEANCE.ttf" fontSize={0.8} color={d.color}
-            anchorX="center" anchorY="middle" outlineWidth={0.06} outlineColor="#000000">
+            font="/AVENGEANCE.ttf" fontSize={0.4} color={d.color}
+            anchorX="center" anchorY="middle" outlineWidth={0.03} outlineColor="#000000">
         {d.text}
       </Text>
     </Billboard>
