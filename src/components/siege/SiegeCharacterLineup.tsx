@@ -19,6 +19,8 @@ import {
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
+import { WEAPONS, type LineupWeaponDef } from './charlineup/lineupWeapons';
+import { LineupWeapon } from './charlineup/LineupWeapon';
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -34,8 +36,9 @@ const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
+WEAPONS.forEach((w) => useGLTF.preload(`${w.url}?a=${CHAR_ASSET_VERSION}`, '/draco/'));
 
-function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number }) {
+function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
   // Animations come from the shared category libraries (deduped across all characters); useGLTF
   // caches each so they're fetched once and reused. Merge their clips and bind to this character by
@@ -122,11 +125,18 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex }: { fi
     }
   });
 
+  // Show the held gun only during the rifle clips (hidden during dance/climb/flight, where a gun
+  // stuck to the hand would look broken). Clip names from the rifle library all contain 'Rifle'.
+  const currentName = names.length ? names[animIndex % names.length] : '';
+  const showWeapon = currentName.includes('Rifle');
+
   return (
     <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
       <primitive object={cloned} />
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
+      {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
+      {showWeapon && <Suspense fallback={null}><LineupWeapon root={cloned} weapon={weapon} /></Suspense>}
     </group>
   );
 }
@@ -187,7 +197,7 @@ export function SiegeCharacterLineup() {
         const off = (i - (n - 1) / 2) * SPACING;
         return (
           <Suspense key={c.name} fallback={null}>
-            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} />
+            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={WEAPONS[i % WEAPONS.length]} />
           </Suspense>
         );
       })}
