@@ -45,6 +45,8 @@ import { anyArmedHandGrenade } from '@/config/handGrenade';
 import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
 import { useFlameTierOverride, setFlameTierOverride } from '@/config/flameTierOverride';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
+import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
+import { ObjectEditController } from '@/features/objectEditor/ObjectEditController';
 import { DamageNumbers } from '@/components/siege/DamageNumbersLayer';
 import { spawnDamageNumber, fireDamageColor } from '@/components/siege/damageNumbers';
 import { ColliderDebugView } from '@/components/siege/ColliderDebugView';
@@ -1918,6 +1920,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           viewSettings={viewSettings}
         />
       )}
+      {/* Universal placed-objects system for DreadRoot (alongside voxels). Renders objects
+          from the shared world_objects table; controller is a no-op until edit mode (backtick). */}
+      {!isSiege && currentWorldId && <PlacedObjectsLayer worldId={currentWorldId} />}
+      {!isSiege && currentWorldId && <ObjectEditController />}
       {!isSiege && (
         <>
           <Waterfall

@@ -195,36 +195,12 @@ export function VoxelizeTool() {
     };
     window.addEventListener('keydown', onKey, true);
 
-    // Persistent menu: while the laser is on a MESH-flagged model, show its live
-    // polygon count + the < / > hint in the bottom-left readout.
-    const poll = window.setInterval(() => {
-      if (!probeState.on || !probeState.mesh) return;
-      const fbx = ((probeState.mesh as THREE.Mesh).userData as { fbx?: string })?.fbx;
-      if (!fbx) return;
-      const ov = colliderOverrides.get(fbx);
-      const dbg = colliderDebugStats.on
-        ? `\noverlay: green ${colliderDebugStats.green}, blue ${colliderDebugStats.blue}`
-        : `\noverlay OFF (Ctrl/Cmd+\\ to show)`;
-      let state: string;
-      const isMesh = !!ov?.mesh || DEFAULT_MESH_MODELS.has(fbx);
-      if (isMesh) {
-        const tris = meshModelTriCount(fbx);
-        const inst = meshModelInstanceCount(fbx);
-        const def = DEFAULT_MESH_MODELS.has(fbx) ? ' (default)' : '';
-        state = inst > 0
-          ? `MESH${def} — ${tris} polys, ${inst} copies\n<  simpler  /  >  finer`
-          : `MESH${def} (reload to apply)\n<  simpler  /  >  finer`;
-      } else if (ov?.voxel) {
-        state = `VOXEL boxes @ ${(ov.cell || 1).toFixed(2)}m`;
-      } else {
-        state = `no override (default single box)`;
-      }
-      info(`${fbx}\n${state}${dbg}`);
-    }, 300);
+    // (Removed) the persistent laser readout that repainted every 300ms — it duplicated
+    // the Laser Inspector panel. The authoring keys above still flash momentary feedback
+    // via info(); we just no longer pop a second panel merely for aiming the laser.
 
     return () => {
       window.removeEventListener('keydown', onKey, true);
-      window.clearInterval(poll);
       document.getElementById('sw-voxel-info')?.remove();
       // The collision grid is SHARED with Dreadroot — drop our voxel edits when leaving Siege
       // Worlds so they don't become phantom colliders in the other game.
