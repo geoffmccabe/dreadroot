@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { setChallengeState } from './challengeStore';
 import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSkip, setChallengeExit, fireChallengeRevive } from './challengeControl';
 import { setSiegePlayerDead, setSiegeSpawnPin } from '../siegePlayerState';
+import { startSpawnIntro, requestIntroBypass, endSiegeIntro, isSiegeIntroActive } from '../spawnintro/siegeSpawnIntro';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
 import { recordChallengeRun } from './challengeStorage';
 import { TEST_CHALLENGE } from './testChallenge';
@@ -251,6 +252,11 @@ export function ChallengeRunner() {
     // so these seconds don't eat the wave. START NOW (fireChallengeSkip) jumps straight in.
     r.countdownUntil = now + 10000;
     setChallengeState({ active: true, name: ch.name, totalWaves: ch.waves.length, startedAt: now, completed: false, finishedAt: 0, result: null, wave: 0, waveEndsAt: 0, countdownUntil: r.countdownUntil, announce: null });
+    // Cinematic spawn: the character arrives facing the camera, the world loads, then on the final
+    // beat it turns away + the camera dollies into its head → FPS, timed to finish exactly when the
+    // countdown hits zero. Owns the camera while it plays (FortressControls stands down).
+    const spawnPos = arr?.pos ?? ch.spawn;
+    if (spawnPos) startSpawnIntro(spawnPos, arr?.yaw ?? 0, { countdownEndsAt: r.countdownUntil });
   };
 
   const revert = () => {
@@ -262,6 +268,7 @@ export function ChallengeRunner() {
 
   const stop = () => {
     r.active = false; r.countdownUntil = 0;
+    endSiegeIntro();          // tear down the spawn cinematic if the challenge is stopped mid-intro
     setSiegePlayerDead(false);
     setSiegeSpawnPin(null);   // release any spawn pin so the player isn't frozen after the challenge ends
     groundSnap.current = null;
@@ -318,7 +325,7 @@ export function ChallengeRunner() {
     setChallengeToggle(() => { if (r.active) stop(); else start(TEST_CHALLENGE); });
     setChallengeLose(() => lose());
     setChallengeStart((ch) => { if (r.active) stop(); start(ch); });   // play an authored challenge
-    setChallengeSkip(() => { if (r.active && r.countdownUntil) r.countdownUntil = performance.now(); });  // START NOW
+    setChallengeSkip(() => { if (r.active && r.countdownUntil) { r.countdownUntil = performance.now(); requestIntroBypass(); } });  // START NOW → also skip the cinematic countdown
     setChallengeExit(() => exit());   // result panel Close / Choose Another → revive + free-roam
     return () => { setChallengeToggle(null); setChallengeLose(null); setChallengeStart(null); setChallengeSkip(null); setChallengeExit(null); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -340,7 +347,9 @@ export function ChallengeRunner() {
 
     // Drop the player onto the street once the baked world's BVH ground is available (fixes spawning
     // 20m in the air and hovering there until you move).
-    if (groundSnap.current) {
+    if (groundSnap.current && !isSiegeIntroActive()) {
+      // (Held off while the spawn cinematic owns the camera — it positions Y itself; groundSnap
+      // resumes the instant the intro hands control back, still within its 30s window.)
       // The ground here is the baked MESH (no real heightmap), and 80+ collider meshes build in the
       // BACKGROUND — so the surface isn't ready for a moment after arrival. Cast from a FIXED ceiling
       // just above the intended spawn (NOT the live camera Y, which drops as the player falls — on a

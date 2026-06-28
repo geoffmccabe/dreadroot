@@ -3,6 +3,7 @@ import { useThree } from '@react-three/fiber';
 import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
 import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
+import { isSiegeIntroActive } from '@/components/siege/spawnintro/siegeSpawnIntro'; // SW spawn cinematic owns the camera
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
@@ -2023,8 +2024,12 @@ export function FirstPersonControls({
   // Movement and collision frame loop - register with centralized loop
   useEffect(() => {
     const unregister = frameLoop.register('controls', (delta) => {
+      // SW spawn cinematic owns the camera — stand down completely (no input/move/rotate/gravity).
+      // Siege-only flag (never set in voxel play), so this is a no-op in DreadRoot. Zero velocity so
+      // accumulated gravity doesn't jolt the player on handoff back to the controller.
+      if (isSiegeIntroActive()) { velocity.current.set(0, 0, 0); return; }
       // Note: useFrameCallCount only tracked in master loop now
-      
+
       // Apply camera rotation if needed
       // Phase 2 — recover camera recoil toward zero (frame-rate independent),
       // and keep re-applying the camera while any recoil offset remains.

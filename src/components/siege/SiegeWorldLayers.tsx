@@ -16,6 +16,8 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
+import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
+import { ObjectEditController } from '@/features/objectEditor/ObjectEditController';
 import { SiegePortalEffect } from './SiegePortalEffect';
 import { EditableWaterLayer } from './terrain/EditableWaterLayer';
 import { SciFiShowcase } from './scifi/SciFiShowcase';
@@ -46,6 +48,7 @@ import { BloodRenderer } from './BloodRenderer';
 import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
+import { SiegeSpawnIntro } from './spawnintro/SpawnIntroCinematic';
 import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
@@ -118,6 +121,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           and the placement controller (no-ops unless build mode is on). */}
       {isBuilderMap && <BuilderObjectsLayer />}
       {isBuilderMap && <BuilderController />}
+      {/* Universal placed-objects system (works on every SWW map). Renders objects from the
+          shared world_objects table; the controller is a no-op until edit mode (backtick) is on. */}
+      <PlacedObjectsLayer worldId={world.id} />
+      <ObjectEditController />
       {/* Magic-portal VFX inside the lobby warp gate (SWW world only). */}
       {!isBlank && <Suspense fallback={null}><SiegePortalEffect /></Suspense>}
       {/* (Magic Chest model removed — the lobby already has a chest at the spot; the open/spin
@@ -137,6 +144,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {world.water?.[0]?.surfaceY != null && <UnderwaterEffect level={world.water[0].surfaceY} />}
       {/* Challenge wave engine. Start/stop the test challenge with the "!c" command. */}
       <ChallengeRunner />
+      {/* Cinematic spawn intro: character arrives → world loads → countdown → camera dollies into
+          the head → FPS. ChallengeRunner.start() fires it; a no-op until then. Owns the camera while
+          it plays (FortressControls stands down via isSiegeIntroActive). */}
+      <SiegeSpawnIntro />
       {/* Combat recorder probe — feeds player position to the telemetry every frame. */}
       <CombatTelemetryProbe />
       {/* Floating combat damage numbers (Unity FloatingDamageText port). */}

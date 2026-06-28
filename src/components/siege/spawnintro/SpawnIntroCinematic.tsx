@@ -1,8 +1,9 @@
-// SiegeSpawnIntro — renders + drives the cinematic spawn intro (see siegeSpawnIntro.ts). While an
-// intro is active it owns the camera (SiegeFlyController is suspended via isSiegeIntroActive) and
+// SpawnIntroCinematic — renders + drives the cinematic spawn intro (see siegeSpawnIntro.ts). While an
+// intro is active it owns the camera (the Fortress controller stands down via isSiegeIntroActive) and
 // shows the chosen character idling. Phases: ARRIVE (push-in, char faces camera) → LOADING (hold,
 // wait for ground) → COUNTDOWN (hold, bypassable) → INHABIT (char turns away, camera dollies down
 // into the head) → hand off to FPS at the exact final eye pose/facing.
+// (File named distinctly from siegeSpawnIntro.ts so the two never collide on a case-insensitive FS.)
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
@@ -13,14 +14,8 @@ import { CHAR_ASSET_VERSION } from '../charlineup/siegeCharLineupState';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import {
   useSiegeIntro, getIntroPhase, getIntroTarget, setIntroPhase, endSiegeIntro,
-  consumeIntroBypass, requestIntroBypass, isSiegeIntroActive, startSiegeIntro, type IntroTarget,
+  consumeIntroBypass, requestIntroBypass, isSiegeIntroActive, startSpawnIntro, type IntroTarget,
 } from './siegeSpawnIntro';
-
-// V1 spawn character (a character-select panel will set this later).
-const RAJAX: Omit<IntroTarget, 'pos' | 'yaw' | 'countdownSec'> = {
-  charFile: '/siege/characters/pilot_rajax.glb', idleClip: 'idle_rajax',
-  scale: 1.140, minY: -0.0002, charHeight: 2.0,
-};
 
 const IDLE_LIBRARY = '/siege/characters/character_idles.glb';
 const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
@@ -28,6 +23,7 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 const EYE_HEIGHT = 1.6;
 const ARRIVE_DUR = 0.8;
 const LOAD_MIN = 1.5;
+const LOAD_MAX = 6.0;        // safety: proceed even if the ground sampler never reports ready (never hang)
 const TURN_DUR = 0.5;
 const DOLLY_DUR = 0.7;
 const INHABIT_DUR = TURN_DUR + DOLLY_DUR;   // 1.2s
@@ -134,11 +130,16 @@ function IntroDriver({ target }: { target: IntroTarget }) {
       camera.position.copy(g.camHigh); camera.lookAt(g.lookHead);
       if (av) av.rotation.y = g.yawFace;
       const ready = sampleHeight(g.eye.x, g.eye.z) != null;
-      if (e >= LOAD_MIN && ready) setIntroPhase('countdown');
+      if ((e >= LOAD_MIN && ready) || e >= LOAD_MAX) setIntroPhase('countdown');
     } else if (phase === 'countdown') {
       camera.position.copy(g.camHigh); camera.lookAt(g.lookHead);
       if (av) av.rotation.y = g.yawFace;
-      if (consumeIntroBypass() || e >= Math.max(0, target.countdownSec - 1.0)) setIntroPhase('inhabit');
+      // Start the turn+dolly so it FINISHES at the countdown's end. Challenge: the real clock
+      // (countdownEndsAt). Open-world: a self-timed beat (countdownSec). Bypass jumps in immediately.
+      const endNow = target.countdownEndsAt != null
+        ? performance.now() >= target.countdownEndsAt - INHABIT_DUR * 1000
+        : e >= Math.max(0, target.countdownSec - INHABIT_DUR);
+      if (consumeIntroBypass() || endNow) setIntroPhase('inhabit');
     } else if (phase === 'inhabit') {
       if (e < TURN_DUR) {                                       // 1) character turns 180° away
         if (av) av.rotation.y = g.yawFace + Math.PI * smooth(e / TURN_DUR);
@@ -163,27 +164,21 @@ function IntroDriver({ target }: { target: IntroTarget }) {
   return <Suspense fallback={null}><IntroAvatar target={target} groupRef={avatarRef} /></Suspense>;
 }
 
-// DEBUG: press I (the bypass key during the countdown is also I) to run the intro from the current
-// spot — the player ends up exactly where they are now, facing the same way. Lets us tune the feel
-// before wiring the real challenge / open-world triggers.
-function IntroTestKey() {
+// DEBUG (editor scene only — in the real game "I" is the item grid): press I to run the intro from
+// the current spot with a short self-timed countdown; the player ends up exactly where they are now,
+// facing the same way. Space/Enter during the countdown bypasses it. Mounted only in SiegeWorldScene.
+export function SiegeSpawnIntroTestKey() {
   const camera = useThree((s) => s.camera);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
       if (isSiegeIntroActive()) {
-        // Space/Enter = bypass the countdown → jump straight to the turn-and-inhabit.
         if (e.code === 'Space' || e.code === 'Enter') requestIntroBypass();
         return;
       }
       if (e.code !== 'KeyI') return;
       const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-      startSiegeIntro({
-        ...RAJAX,
-        pos: [camera.position.x, camera.position.y, camera.position.z],
-        yaw: euler.y,
-        countdownSec: 4,
-      });
+      startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 4 });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -191,15 +186,12 @@ function IntroTestKey() {
   return null;
 }
 
+// The cinematic itself — mount it anywhere inside the Canvas (it's a no-op until startSpawnIntro
+// fires). NO key binding here, so it's safe to mount in the real game alongside the item grid's "I".
 export function SiegeSpawnIntro() {
   useSiegeIntro();                       // re-render on phase changes
   const target = getIntroTarget();
-  return (
-    <>
-      <IntroTestKey />
-      {/* No Suspense here — IntroDriver must NOT suspend (it owns the camera). The avatar's own
-          Suspense lives inside IntroDriver. */}
-      {getIntroPhase() !== 'off' && target && <IntroDriver target={target} />}
-    </>
-  );
+  // No Suspense here — IntroDriver must NOT suspend (it owns the camera). The avatar's own Suspense
+  // lives inside IntroDriver.
+  return getIntroPhase() !== 'off' && target ? <IntroDriver target={target} /> : null;
 }

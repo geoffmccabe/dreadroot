@@ -15,7 +15,10 @@ export interface IntroTarget {
   charHeight: number;   // rendered height (m), for camera framing
   pos: [number, number, number];  // FINAL FPS camera (eye) position
   yaw: number;          // FINAL look yaw (the direction the player ends up facing)
-  countdownSec: number; // length of the countdown beat (challenge ~10, open-world shorter)
+  countdownSec: number; // self-timed countdown length (open-world) — used when countdownEndsAt is absent
+  countdownEndsAt?: number;  // absolute performance.now() ms the countdown ends (challenge): the intro
+                             // times its turn+dolly to FINISH exactly then, so the player inhabits the
+                             // body the instant the real countdown hits zero + wave 1 spawns.
 }
 
 let phase: IntroPhase = 'off';
@@ -30,6 +33,22 @@ export const getIntroPhase = (): IntroPhase => phase;
 export const getIntroTarget = (): IntroTarget | null => target;
 
 export function startSiegeIntro(t: IntroTarget): void { target = t; bypassReq = false; phase = 'arrive'; emit(); }
+
+// V1 spawn character (a character-select panel will set this later). Single source of truth for the
+// challenge trigger, the open-world trigger, and the debug key.
+export const V1_SPAWN_CHAR = {
+  charFile: '/siege/characters/pilot_rajax.glb', idleClip: 'idle_rajax',
+  scale: 1.140, minY: -0.0002, charHeight: 2.0,
+} as const;
+
+// Convenience starter: fire the cinematic at a final eye pose. For a challenge pass countdownEndsAt
+// (the real countdown clock); for open-world pass countdownSec (a shorter self-timed beat).
+export function startSpawnIntro(
+  pos: [number, number, number], yaw: number,
+  opts: { countdownSec?: number; countdownEndsAt?: number } = {},
+): void {
+  startSiegeIntro({ ...V1_SPAWN_CHAR, pos, yaw, countdownSec: opts.countdownSec ?? 10, countdownEndsAt: opts.countdownEndsAt });
+}
 export function setIntroPhase(p: IntroPhase): void { if (p !== phase) { phase = p; emit(); } }
 export function endSiegeIntro(): void { if (phase !== 'off') { phase = 'off'; target = null; emit(); } }
 // Player pressed "skip" during the countdown — jump straight to the turn-and-inhabit.
