@@ -207,9 +207,13 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
             if (m.alphaTest) m.alphaTest = 0;
             if (m.opacity >= 1) m.opacity = 0.7;
           }
-          // Trees: the trunk shares the green leaf atlas (Synty bark texture was dropped in export);
-          // recolor the low + central (trunk-column) fragments to bark-brown in-shader. Real trees only.
-          if (TRUNK_TREE_RE.test(fbx)) applyTrunkBark(m, src.geometry);
+          // Trees + fern-trees: trunk shares the green leaf atlas (Synty bark texture dropped on
+          // export). Re-split via the COLOR_1.b vertex mask so trunk fragments sample the bark atlas
+          // (which sits in the same model folder). Big-tree trunks go brown; fern-tree trunks reappear.
+          if (TRUNK_TREE_RE.test(fbx)) {
+            const barkUrl = url.replace(/[^/]+$/, '') + 'PolygonNatureBiomesS2_Texture_01.webp';
+            applyTrunkBark(m, getAtlas(barkUrl));
+          }
           return;
         }
         // Kill baked flat self-illumination artifacts. Many world objects ship with a constant

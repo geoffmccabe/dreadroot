@@ -1,58 +1,42 @@
-// siegeTreeBark — recolor tree TRUNKS brown in-shader, without a re-export.
+// siegeTreeBark — restore brown tree/fern-tree TRUNKS in-shader, without a re-export.
 //
-// The big Enchanted-Forest trees (Giant/Large/Medium/Small) bake trunk + canopy into ONE mesh that
-// shares the green leaf atlas. Synty's separate bark texture (_TrunkTex) was dropped in the FBX→glTF
-// convert, so the trunk renders green like the leaves.
+// Synty's vegetation models (Tree_Giant/Large/Medium/Small + Fern_Tree) bake trunk + canopy into ONE
+// mesh driven by a custom two-texture shader: leaves sample the green leaf atlas, the trunk samples a
+// separate bark atlas (PolygonNatureBiomesS2_Texture_01). The FBX→glTF convert collapsed that to a
+// single PBR material keeping only the leaf atlas, so every trunk fragment samples the leaves —
+// big-tree trunks render GREEN, and fern-tree trunks sample the alpha-cut leaf texture and vanish
+// entirely (the "fern trees with no trunk / floating top" complaint).
 //
-// There is NO clean texture/UV/vertex-color separator left in the exported mesh (the trunk's UV band
-// overlaps the leaves', and the Synty vertex mask was flattened to white on export). So instead we
-// separate by GEOMETRY: a trunk fragment is both LOW (near the base) and CENTRAL (close to the model's
-// vertical axis); canopy leaves splay HIGH and WIDE. We brown fragments that pass both tests, keeping
-// the sampled luminance so the bark still has light/dark relief. This is a heuristic — a stray low,
-// central leaf may tint and a wide low branch may stay green — but it cleanly browns the visible base
-// trunk, which is the whole complaint, with zero geometry/material duplication and color-only risk.
+// The Synty trunk/leaf mask was NOT lost: it survives verbatim in the second vertex-colour set,
+// COLOR_1.b (glTF attribute `color_1`). It is cleanly bimodal — b≈0 = trunk, b≈1 = leaf. So we drive
+// a real split in-shader: trunk fragments sample the bark atlas (opaque), leaf fragments keep the
+// alpha-cut leaf atlas. Verified offline against both a big tree and a fern tree before shipping.
 //
-// Scope to the real trees only (NOT the fern fronds, NOT the already-correct hollow Tree_Trunk model).
+// Scope (caller-gated by TRUNK_TREE_RE): trees + fern-trees only. NOT vines (their COLOR_1 is 100%
+// "trunk" so they'd turn entirely to bark), NOT Tree_Trunk/Tree_Portal/Roots (already bark-textured),
+// NOT Tree_House (its own Branches atlas).
 import * as THREE from 'three';
 
-export const TRUNK_TREE_RE = /Tree_Giant|Tree_Large|Tree_Medium|Tree_Small/i;
+export const TRUNK_TREE_RE = /Tree_Giant|Tree_Large|Tree_Medium|Tree_Small|Fern_Tree/i;
 
-/** Brown the trunk of a tree material, using the geometry's bounds to find the low/central column. */
-export function applyTrunkBark(mat: THREE.Material, geometry: THREE.BufferGeometry): void {
-  if (!geometry.boundingBox) geometry.computeBoundingBox();
-  const bb = geometry.boundingBox!;
-  const cx = (bb.min.x + bb.max.x) * 0.5;
-  const cz = (bb.min.z + bb.max.z) * 0.5;
-  const height = Math.max(0.001, bb.max.y - bb.min.y);
-  const halfXZ = Math.max(bb.max.x - cx, bb.max.z - cz, 0.001);
-  const trunkTopY = bb.min.y + height * 0.34;   // brown the lower ~third (above-base height)
-  const trunkRadius = halfXZ * 0.24;            // …and only near the central axis (a column, not canopy)
-
+/** Re-split a vegetation material so COLOR_1.b<=0.5 fragments sample the bark atlas, opaque. */
+export function applyTrunkBark(mat: THREE.Material, barkTex: THREE.Texture): void {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
     prev?.call(mat, shader, renderer);
-    shader.uniforms.uTrunkCenter = { value: new THREE.Vector3(cx, bb.min.y, cz) };
-    shader.uniforms.uTrunkTopY = { value: trunkTopY };
-    shader.uniforms.uTrunkRadius = { value: trunkRadius };
-    // capture object-space position into a varying
+    shader.uniforms.uBark = { value: barkTex };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vLocalPos;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocalPos = transformed;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 color_1;\nvarying float vTrunk;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTrunk = step(color_1.b, 0.5);');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vLocalPos;\nuniform vec3 uTrunkCenter;\nuniform float uTrunkTopY;\nuniform float uTrunkRadius;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uBark;\nvarying float vTrunk;')
       .replace(
         '#include <map_fragment>',
         `#include <map_fragment>
-        {
-          float _hMask = 1.0 - smoothstep(uTrunkTopY * 0.82, uTrunkTopY, vLocalPos.y);            // 1 low → 0 above
-          float _rad = length(vec2(vLocalPos.x - uTrunkCenter.x, vLocalPos.z - uTrunkCenter.z));
-          float _rMask = 1.0 - smoothstep(uTrunkRadius * 0.7, uTrunkRadius, _rad);                // 1 central → 0 wide
-          float _m = _hMask * _rMask;
-          if (_m > 0.01) {
-            float _l = dot(diffuseColor.rgb, vec3(0.333));
-            vec3 _bark = vec3(0.16, 0.085, 0.04) * (0.55 + 0.9 * _l);
-            diffuseColor.rgb = mix(diffuseColor.rgb, _bark, _m);
-          }
+        if (vTrunk > 0.5) {
+          vec4 _bk = texture2D(uBark, vMapUv);   // bark atlas is sRGB → hardware-decoded to linear
+          diffuseColor.rgb = _bk.rgb;
+          diffuseColor.a = 1.0;                  // trunk is opaque (survives the leaf alpha-cutout)
         }`,
       );
   };
