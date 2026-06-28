@@ -258,7 +258,6 @@ export function ChallengeRunner() {
     // arena arrival, else the challenge's own spawn, else wherever the player now is (in-place runs).
     const introPos: [number, number, number] = arr?.pos ?? ch.spawn ?? [camera.position.x, camera.position.y, camera.position.z];
     const introYaw = arr?.yaw ?? new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ').y;
-    console.log('[spawn-intro] challenge start → firing at', introPos, 'yaw', introYaw.toFixed(2), 'countdownEndsAt', Math.round(r.countdownUntil));
     startSpawnIntro(introPos, introYaw, { countdownEndsAt: r.countdownUntil });
   };
 

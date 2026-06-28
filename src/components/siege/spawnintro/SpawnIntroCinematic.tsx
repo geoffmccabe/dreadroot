@@ -6,7 +6,7 @@
 // (File named distinctly from siegeSpawnIntro.ts so the two never collide on a case-insensitive FS.)
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useGLTF, useAnimations } from '@react-three/drei';
+import { useGLTF, useAnimations, useProgress } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from '../terrainHeight';
@@ -29,6 +29,7 @@ const LOAD_MAX = 6.0;        // safety: proceed even if the ground sampler never
 const TURN_DUR = 0.5;
 const DOLLY_DUR = 0.7;
 const INHABIT_DUR = TURN_DUR + DOLLY_DUR;   // 1.2s
+const COUNTDOWN_MAX = 20.0;  // hard cap: dive in even if the world never reports "done loading" (never hang)
 const CAM_BACK = 4.0;        // metres behind the character
 const CAM_UP_OVER = 1.0;     // metres above the character's full height
 
@@ -86,6 +87,9 @@ function IntroAvatar({ target, groupRef }: { target: IntroTarget; groupRef: Reac
 function IntroDriver({ target }: { target: IntroTarget }) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
+  // Global asset-load activity (drei): true while ANY useGLTF/useLoader is still streaming. We hold
+  // the dive-into-the-head until this goes quiet, so the world finishes building around the character.
+  const { active: sceneLoading } = useProgress();
   const avatarRef = useRef<THREE.Group>(null);
   const prevPhase = useRef<string>('');
   const t0 = useRef(0);
@@ -136,12 +140,16 @@ function IntroDriver({ target }: { target: IntroTarget }) {
     } else if (phase === 'countdown') {
       camera.position.copy(g.camHigh); camera.lookAt(g.lookHead);
       if (av) av.rotation.y = g.yawFace;
-      // Start the turn+dolly so it FINISHES at the countdown's end. Challenge: the real clock
-      // (countdownEndsAt). Open-world: a self-timed beat (countdownSec). Bypass jumps in immediately.
-      const endNow = target.countdownEndsAt != null
+      // Hold the character idling (camera high, facing the player) until the world has finished
+      // loading, THEN dive in when the countdown is about to end — or the moment the world finishes
+      // if that lands AFTER the countdown (slow baked worlds). START/Space/Enter forces it now; a
+      // hard cap means it never waits forever on a world that never reports "done".
+      // clock: challenge uses the real countdown (countdownEndsAt); open-world a self-timed beat.
+      const clockReady = target.countdownEndsAt != null
         ? performance.now() >= target.countdownEndsAt - INHABIT_DUR * 1000
         : e >= Math.max(0, target.countdownSec - INHABIT_DUR);
-      if (consumeIntroBypass() || endNow) setIntroPhase('inhabit');
+      const worldLoaded = !sceneLoading;
+      if (consumeIntroBypass() || e >= COUNTDOWN_MAX || (worldLoaded && clockReady)) setIntroPhase('inhabit');
     } else if (phase === 'inhabit') {
       if (e < TURN_DUR) {                                       // 1) character turns 180° away
         if (av) av.rotation.y = g.yawFace + Math.PI * smooth(e / TURN_DUR);
@@ -195,9 +203,7 @@ export function SiegeSpawnIntroTestKey() {
 function OpenWorldSpawnIntro() {
   const camera = useThree((s) => s.camera);
   useEffect(() => {
-    console.log('[spawn-intro] OpenWorldSpawnIntro subscribed to lobby-ready');
     return onSiegeLobbyReady(() => {
-      console.log('[spawn-intro] lobby-ready event received — intro active?', isSiegeIntroActive(), 'challenge?', getChallengeState().active);
       if (isSiegeIntroActive() || getChallengeState().active) return;
       const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
       startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 5 });

@@ -57,6 +57,5 @@ export function completeSiegeWorldLoad(note = '') {
   if (watchdog) { clearTimeout(watchdog); watchdog = null; }
   initLogStep('SiegeWorld', `Lobby ready${note ? ' ' + note : ''}`);
   initLogFinish();
-  console.log('[spawn-intro] completeSiegeWorldLoad fired — lobby ready listeners:', readySubs.size);
   readySubs.forEach((f) => { try { f(); } catch { /* a listener throwing must not break load completion */ } });
 }

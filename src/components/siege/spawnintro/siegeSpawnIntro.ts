@@ -47,7 +47,6 @@ export function startSpawnIntro(
   pos: [number, number, number], yaw: number,
   opts: { countdownSec?: number; countdownEndsAt?: number } = {},
 ): void {
-  console.log('[spawn-intro] startSpawnIntro called — pos', pos, 'sec', opts.countdownSec, 'endsAt', opts.countdownEndsAt);
   startSiegeIntro({ ...V1_SPAWN_CHAR, pos, yaw, countdownSec: opts.countdownSec ?? 10, countdownEndsAt: opts.countdownEndsAt });
 }
 export function setIntroPhase(p: IntroPhase): void { if (p !== phase) { phase = p; emit(); } }
