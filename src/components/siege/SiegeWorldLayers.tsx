@@ -7,6 +7,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import type { WorldDefinition } from '@/config/worldDefinition';
+import { isEnchantedForest } from '@/config/worldDefinition';
 import { sampleHeight } from './terrainHeight';
 import { setCoinGroundSampler } from '@/features/coinDrops/coinGround';
 import { TerrainLayer } from './TerrainLayer';
@@ -78,7 +79,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const isBlank = kind === 'flat' || isHeightmap;
   // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
   // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
-  const isBuilderMap = isHeightmap && world.id !== 'enchanted-forest';
+  const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   // Finish the World-Initialization overlay once the LOBBY is actually on screen: terrain up AND
@@ -109,7 +110,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {(world.night || lightingMode === 'night') && <NightDimmer />}
       {/* Enchanted Forest — dusk-blue fog + dark background, re-asserted each frame so the global
           day/night system (which drives scene.fog/background from the sky) can't strip the mood. */}
-      {world.id === 'enchanted-forest' && <EnchantedLighting />}
+      {isEnchantedForest(world.id) && <EnchantedLighting />}
       {/* Editable maps get the in-world terrain brush (controller; panel is in the HUD)
           and adjustable flood water; static maps keep the SWW ocean (WaterLayer). */}
       {isBuilderMap && <TerrainBrushController />}
@@ -161,7 +162,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           <WorldBoundsWall />
           {/* Bake a real heightmap from the glTF collider mesh so the player + monsters sit on the true
               surface (these baked-mesh maps have no real heightfield — only a flat Y=0 fallback plane). */}
-          <MeshHeightmapBaker active={world.id === 'yeti-time' || world.id === 'adventure-demo' || world.id === 'enchanted-forest'} />
+          <MeshHeightmapBaker active={world.id === 'yeti-time' || world.id === 'adventure-demo' || isEnchantedForest(world.id)} />
           {/* Elemental Golem boulder projectiles (simulated + drawn in-game, not just the lineup). */}
           <SiegeBoulders />
           {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
@@ -196,15 +197,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* Enchanted Forest — instanced reconstruction of the Synty Demo_01 scene on its baked
               terrain mesh. trustMaterials keeps the baked emissive glow maps; per-instance streaming
               + budgets keep the ~18.7k objects (mostly leaf/fern cards) performant. */}
-          {world.id === 'enchanted-forest' && (
+          {isEnchantedForest(world.id) && (
             <Suspense fallback={null}>
               {/* Render the WHOLE forest: maxInstances must exceed the ~18.7k total or the closest-first
                   budget gets eaten by the ~8.6k canopy leaf cards and starves the trees/mushrooms/ferns
                   (which leaves the leaves floating with no trunks under them). renderDist covers the map. */}
               {/* Perf: structural objects (trees/rocks) visible to 130 m; the ~8.6k alpha leaf/fern
                   cards (the overdraw cost) culled at 55 m. Fog hides the pop-in. maxInstances high so
-                  nothing is starved in the near field. */}
-              <WorldObjectsLayer meshColliders trustMaterials noMonsterColliders emissiveBoost={3} dataDir="/siege/enchanted-forest" renderDist={130} foliageDist={55} maxGroups={130} maxInstances={20000} />
+                  nothing is starved in the near field. Both maps share the model folder; the (Bad)
+                  snapshot just loads its own frozen placements file (rocks still in the grotto). */}
+              <WorldObjectsLayer meshColliders trustMaterials noMonsterColliders emissiveBoost={3} dataDir="/siege/enchanted-forest" placementsFile={world.id === 'enchanted-forest-bad' ? 'placements-bad.json' : 'placements.json'} renderDist={130} foliageDist={55} maxGroups={130} maxInstances={20000} />
               <MeshColliderPlayer />
               <EnchantedFireflies />
             </Suspense>

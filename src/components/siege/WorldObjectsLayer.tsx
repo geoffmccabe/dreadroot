@@ -333,7 +333,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   return <primitive object={node} />;
 }
 
-export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, noMonsterColliders = false, emissiveBoost = 1, onReady }: { meshColliders?: boolean; dataDir?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; onReady?: () => void } = {}) {
+export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', placementsFile = 'placements.json', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, noMonsterColliders = false, emissiveBoost = 1, onReady }: { meshColliders?: boolean; dataDir?: string; placementsFile?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; onReady?: () => void } = {}) {
   const [data, setData] = useState<{ groups: Group[] } | null>(null);
   // Gate the whole mesh-collision system on the world flag (off = fully inert).
   useEffect(() => {
@@ -362,13 +362,13 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
           .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
           .catch(() => {})
           .finally(() => {
-            fetch(`${dataDir}/placements.json`).then((r) => r.json())
+            fetch(`${dataDir}/${placementsFile}`).then((r) => r.json())
               .then((d) => { if (alive) setData(d); finishObjects(d?.groups?.length); })
               .catch(() => finishObjects());
           });
       });
     return () => { alive = false; };
-  }, [dataDir]);
+  }, [dataDir, placementsFile]);
   // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared
   // rock/grass types don't drag their far-island copies into the beach — that full-map parse was
   // the real fps killer). The load center FOLLOWS the camera, so flying to another island loads

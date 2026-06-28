@@ -404,10 +404,25 @@ export const ENCHANTED_FOREST_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/** Frozen snapshot of the FIRST Enchanted Forest reconstruction (grotto stuffed with rocks, spawn
+ *  embedded in a cliff). Kept selectable so we can A/B against the reworked map and revert if needed.
+ *  Reads its own data folder /siege/enchanted-forest-bad; everything else mirrors the live map. */
+export const ENCHANTED_FOREST_BAD_WORLD: WorldDefinition = {
+  ...ENCHANTED_FOREST_WORLD,
+  id: 'enchanted-forest-bad',
+  name: 'Enchanted Forest (Bad)',
+};
+
+/** Both Enchanted Forest maps share the finished-map treatment (no terrain/builder tools, baked
+ *  terrain, enchanted lighting). Each reads its data from /siege/<id>. */
+export const isEnchantedForest = (id: string | null | undefined): boolean =>
+  id === 'enchanted-forest' || id === 'enchanted-forest-bad';
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [APOC_CITY_WORLD.id]: APOC_CITY_WORLD,
   [ENCHANTED_FOREST_WORLD.id]: ENCHANTED_FOREST_WORLD,
+  [ENCHANTED_FOREST_BAD_WORLD.id]: ENCHANTED_FOREST_BAD_WORLD,
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
