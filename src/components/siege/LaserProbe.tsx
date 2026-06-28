@@ -37,6 +37,9 @@ export function LaserProbe() {
   const down = useMemo(() => new THREE.Vector3(), []);
   const start = useMemo(() => new THREE.Vector3(), []);
   const end = useMemo(() => new THREE.Vector3(), []);
+  const b3 = useMemo(() => new THREE.Box3(), []);
+  const bsz = useMemo(() => new THREE.Vector3(), []);
+  const BOX_MAX = 50;   // don't draw the highlight box around map-sized meshes (terrain/combined)
   const WHITE = useMemo(() => new THREE.Color(1, 1, 1), []);
   const RED = useMemo(() => new THREE.Color(1, 0.15, 0.15), []);
   // currently-highlighted instance, so we can restore it when the aim moves
@@ -159,8 +162,15 @@ export function LaserProbe() {
         probeState.hx = h.point.x; probeState.hy = h.point.y; probeState.hz = h.point.z;
         probeState.mesh = h.object as THREE.Mesh;            // for the V voxelize tool
         probeState.instanceId = h.instanceId ?? -1;
-        // highlight box around the pointed-at object (any mesh type)
-        try { box.setFromObject(h.object); box.visible = true; } catch { box.visible = false; }
+        // Highlight box ONLY for a plain, reasonably-sized mesh. Instanced objects use the
+        // red instance-tint below (a box would wrap ALL instances), and terrain / combined
+        // map-spanning meshes would draw a box bigger than the world — skip both so it isn't
+        // a giant box you stand inside.
+        const isInst = (h.object as THREE.InstancedMesh).isInstancedMesh && h.instanceId != null;
+        let showBox = false;
+        if (!isInst) { b3.setFromObject(h.object); b3.getSize(bsz); showBox = Math.max(bsz.x, bsz.y, bsz.z) <= BOX_MAX; }
+        if (showBox) { try { box.setFromObject(h.object); box.visible = true; } catch { box.visible = false; } }
+        else box.visible = false;
         // tint the pointed-at instance red
         const im = h.object as THREE.InstancedMesh;
         if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
