@@ -11,6 +11,7 @@ import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
+import { BuildToolsDock } from '@/features/objectEditor/BuildToolsDock';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
 import { HoverbikePrompt } from '@/components/siege/HoverbikePrompt';
 import { setSiegeAdmin } from '@/components/siege/siegeAdmin';
@@ -921,6 +922,9 @@ export function FortressHUD(props: FortressHUDProps) {
       <TerrainBrushPanel />
       {/* Drop-in object builder palette — same heightmap-map gating. */}
       <BuilderPalette />
+      {/* Build Tools dock (right side) — Arrange panel + future Object Placer; backtick (`)
+          shows it, superadmin-gated. Works in both games. */}
+      <BuildToolsDock />
       {/* Magic Chest HUD (prompt + spin reel) — only in siege. */}
       {isSiege && <MagicChestPanel superadmin={!!userRoles?.includes?.('superadmin')} />}
       {/* Hoverbike "Requires Keycard" proximity prompt — only in siege. */}

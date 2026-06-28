@@ -41,8 +41,8 @@ export interface PanelTheme {
   text: Record<TextRole, PanelText>;
 }
 
-export type PanelClass = 'user' | 'admin' | 'debug';
-export const PANEL_CLASSES: PanelClass[] = ['user', 'admin', 'debug'];
+export type PanelClass = 'user' | 'admin' | 'debug' | 'build';
+export const PANEL_CLASSES: PanelClass[] = ['user', 'admin', 'debug', 'build'];
 export type GamePanelThemes = Record<PanelClass, PanelTheme>;
 
 // ── default value helpers ───────────────────────────────────────────────────
@@ -109,7 +109,29 @@ const DEBUG: PanelTheme = {
   },
 };
 
-export const DEFAULT_PANEL_THEMES: GamePanelThemes = { user: USER, admin: ADMIN, debug: DEBUG };
+// Build Tools panel — a 4th class for the in-world BUILD tools (Terrain, Object Placer,
+// Arrange), used by BOTH users and admins. Defaulted to the current Terrain/waterfall-card
+// look: neutral dark glass, subtle light border, rounded corners, monospace text. Admins
+// retune it in the Admin → Worlds → Settings → CSS "Build" tab.
+const BUILD: PanelTheme = {
+  surface: {
+    bg: { h: 222, s: 14, l: 11 }, bgOpacity: 0.85,
+    border: { h: 210, s: 22, l: 62 }, borderOpacity: 0.5, borderWidth: 1,
+    radius: 16,
+    blur: 12,
+    darken: 0.15,
+    glow: { h: 205, s: 60, l: 55 }, glowOpacity: 0.25, glowSize: 14,
+  },
+  text: {
+    heading:    txt(MONO, 13, 700, { h: 200, s: 55, l: 78 }),
+    subheading: txt(MONO, 12, 600, { h: 0, s: 0, l: 100 }, 0.9),
+    body:       txt(MONO, 12, 400, { h: 0, s: 0, l: 100 }, 0.9),
+    info:       txt(MONO, 11, 400, { h: 0, s: 0, l: 100 }, 0.6),
+    micro:      txt(MONO, 10, 400, { h: 0, s: 0, l: 100 }, 0.55),
+  },
+};
+
+export const DEFAULT_PANEL_THEMES: GamePanelThemes = { user: USER, admin: ADMIN, debug: DEBUG, build: BUILD };
 
 // Deep clone so callers (store, editor) can mutate without touching the frozen defaults.
 export function cloneThemes(t: GamePanelThemes): GamePanelThemes {

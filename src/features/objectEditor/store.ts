@@ -116,5 +116,9 @@ export function current(): WorldObject | null {
 export const useEditorObjects = () => useSyncExternalStore(subscribe, () => state.objects);
 export const useSelectedId = () => useSyncExternalStore(subscribe, () => state.selectedId);
 export const useEditMode = () => useSyncExternalStore(subscribe, () => state.editMode);
+export const useCanEdit = () => useSyncExternalStore(subscribe, () => state.canEdit);
+// Live selected object — re-renders when it's moved/rotated/scaled (each edit replaces
+// the object ref) or when the selection changes. null when nothing is selected.
+export const useCurrent = () => useSyncExternalStore(subscribe, current);
 export const getEditMode = () => state.editMode;
 export const getCanEdit = () => state.canEdit;
