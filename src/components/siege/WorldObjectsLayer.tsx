@@ -9,7 +9,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
-import { siegeLoadStart, siegeLoadFinish } from './siegeInitLoad';
+import { siegeLoadStart, siegeLoadFinish, siegeLoadNote, isSiegeLoadActive } from './siegeInitLoad';
 import { loadColliderCache, getCachedBoxes, recordBoxes, groupColliderSig } from './siegeColliderCache';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
@@ -369,7 +369,9 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   useEffect(() => {
     let alive = true;
     const oStep = siegeLoadStart('World Objects', 'Loading object placements...');
-    const finishObjects = (count?: number) => { siegeLoadFinish(oStep, count); onReady?.(); };
+    // NOTE: onReady is NOT fired here — placements loading is just the data. The world isn't "ready"
+    // until the objects are actually BUILT (the incremental build below fires onReady when done).
+    const finishObjects = (count?: number) => { siegeLoadFinish(oStep, count); };
     fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
     fetch(`${dataDir}/material_map.json`).then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
     fetch(`${dataDir}/cutout_textures.json`).then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
@@ -470,10 +472,36 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
     return out;
   }, [allGroups, center, renderDist, foliageDist, maxGroups, maxInstances]);
 
+  // INCREMENTAL BUILD — reveal groups a few per frame so each one's heavy build (InstancedMesh +
+  // colliders + BVH) is spread across frames instead of freezing the main thread for ~20s all at
+  // once. The player sees objects appear one-by-one, the init log shows honest progress, and "ready"
+  // only fires once everything is actually built. mountCount only grows (capped at the set size), so
+  // an in-game re-center keeps already-built groups instead of rebuilding from scratch.
+  const [mountCount, setMountCount] = useState(0);
+  useFrame((_, dt) => {
+    if (mountCount >= nearGroups.length) return;
+    const batch = dt > 0.04 ? 1 : dt > 0.022 ? 2 : 5;   // back off the frame after a heavy/janky build
+    setMountCount((c) => Math.min(c + batch, nearGroups.length));
+  });
+  const lastReport = useRef(-1);
+  useEffect(() => {
+    if (!isSiegeLoadActive() || nearGroups.length === 0) return;
+    if (mountCount >= nearGroups.length || mountCount - lastReport.current >= 15) {
+      lastReport.current = mountCount;
+      siegeLoadNote('World Objects', `Building world: ${Math.min(mountCount, nearGroups.length)}/${nearGroups.length} objects`);
+    }
+  }, [mountCount, nearGroups.length]);
+  useEffect(() => {
+    if (mountCount > 0 && nearGroups.length > 0 && mountCount >= nearGroups.length) {
+      const t = setTimeout(() => onReady?.(), 600);   // settle for the last few async glb loads
+      return () => clearTimeout(t);
+    }
+  }, [mountCount, nearGroups.length, onReady]);
+
   if (!data || !collReady) return null;
   return (
     <>
-      {nearGroups.map((g) => (
+      {nearGroups.slice(0, mountCount).map((g) => (
         <Boundary key={g._k}>
           <Suspense fallback={null}>
             <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} noMonsterColliders={noMonsterColliders} emissiveBoost={emissiveBoost} colliderKey={dataDir} />

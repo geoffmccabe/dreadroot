@@ -68,13 +68,9 @@ export function SiegeAssetProgress({ onAllLoaded }: { onAllLoaded: () => void })
         lastNote.current = now;
         siegeLoadNote('Assets', `Loading models + textures: ${loaded}/${total}`);
       }
-      // PLAYABLE early-out: the world streams NEAREST-first, so once no new groups have queued for a
-      // few seconds (total settled) and ~88% has loaded, the area around the player is fully in. Drop
-      // them in now and let the farthest ~12% pop in behind — instead of waiting for every last
-      // distant object/texture (which was ~30s of extra loading-screen at the tail).
-      if (total >= 80 && now - totalGrowAt.current > 3000 && loaded >= total * 0.88) {
-        finish(`Near world loaded (${loaded}/${total}) — far objects streaming`);
-      }
+      // (No early-out here anymore — WorldObjectsLayer's incremental build fires the authoritative
+      // "ready" when objects are actually built. This stays as a safety net that only fires on TRUE
+      // loader idle, so it can never declare ready while the world is still building.)
     } else if (wasActive.current) {
       // Idle after having loaded — debounce so a between-batch gap doesn't finish us early.
       if (idleTimer.current) clearTimeout(idleTimer.current);

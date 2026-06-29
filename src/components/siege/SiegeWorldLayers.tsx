@@ -170,7 +170,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* SWW scenery + colliders — only on the real terrain map, not flat canvases. */}
           {!isBlank && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer meshColliders={world.meshColliders} />
+              <WorldObjectsLayer meshColliders={world.meshColliders} onReady={() => setObjReadyWorld(world.id)} />
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
