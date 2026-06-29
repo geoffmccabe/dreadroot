@@ -1258,8 +1258,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // route fits upright, so normal chase. Drives the clip + speed below and the head-up bend later.
       let caveMode: import('./caveCrawl').CaveMode = 'none';
       if (c.caveCrawl && nav.crawlHoles) {
-        const posture = pathLoco ? resolveCavePosture(s.path, s.x, s.z, s.y, inst.radius, H, cc.shrink) : 'walk';
-        caveMode = stepCave(s.cave, posture, pathLoco, now, cc.transitionMs);
+        // The fit test fires raycasts over every path segment, so THROTTLE it (~5/s) and cache the
+        // result; only test the route AHEAD (from the current waypoint) so already-passed segments
+        // behind the monster can't read as blocked.
+        if (!pathLoco) { s.cave.posture = 'walk'; }
+        else if (now - s.cave.postureAt > 200) {
+          const ahead = s.path ? s.path.slice(s.pathIdx) : null;
+          s.cave.posture = resolveCavePosture(ahead, s.x, s.z, s.y, inst.radius, H, cc.shrink);
+          s.cave.postureAt = now;
+        }
+        caveMode = stepCave(s.cave, s.cave.posture, pathLoco, now, cc.transitionMs);
       }
       g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
       // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
@@ -1313,7 +1321,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         if (now - s.cave.lastSwipe > cc.swipeMs) {
           s.cave.lastSwipe = now;
           const reach = H * 0.5 + 1.0;   // arm extended into the hole
-          if (c.meleeContact && dist < reach && Math.random() < 0.6)
+          // Vertical guard: the reach-in bypasses wall-LOS, so without this a wedged monster could
+          // swipe UP through a ceiling at a player standing on the roof. Only connect if the player's
+          // feet are at/below the monster's waist (i.e. they're in the hole on its level, not on top).
+          const pFeetBelow = (camera.position.y - 1.6) < s.y + H * 0.5;
+          if (c.meleeContact && dist < reach && pFeetBelow && Math.random() < 0.6)
             dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound ?? '/punched.mp3', c.name);
         }
       } else if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
@@ -1642,7 +1654,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     }
     // Cave-crawl head-up: the crawl clip faces the floor, so bend the neck back to point the face at the
     // player. Applied AFTER the mixer pose (same timing as the headshot lean), rest-compensated.
-    if (c.caveCrawl && (s.cave.mode === 'crawl' || s.cave.mode === 'wedged') && neckBones.length) {
+    if (c.caveCrawl && (s.cave.mode === 'crawl' || s.cave.mode === 'wedged') && now - s.cave.activeAt < 200 && neckBones.length) {
       applyHeadUp(g, neckBones, cc.neckBendDeg);
     }
 

@@ -24,8 +24,8 @@ export const ccCfg = (c?: CaveCrawlConfig): Required<CaveCrawlConfig> => ({ ...C
 export type CavePosture = 'walk' | 'crawl' | 'wedged';
 export type CaveMode = 'none' | 'enter' | 'crawl' | 'wedged';
 
-export interface CaveState { mode: CaveMode; enterAt: number; lastSwipe: number; }
-export const newCaveState = (): CaveState => ({ mode: 'none', enterAt: 0, lastSwipe: 0 });
+export interface CaveState { mode: CaveMode; enterAt: number; lastSwipe: number; posture: CavePosture; postureAt: number; activeAt: number; }
+export const newCaveState = (): CaveState => ({ mode: 'none', enterAt: 0, lastSwipe: 0, posture: 'walk', postureAt: 0, activeAt: 0 });
 
 /** Can this body WALK the active route, must it CRAWL, or is it WEDGED (even crawling won't pass)?
  *  Posture heights scale with the monster's height H, so the opening must clear its UPRIGHT height to
@@ -48,6 +48,7 @@ export function stepCave(st: CaveState, posture: CavePosture, active: boolean, n
   if (st.mode === 'none') { st.mode = 'enter'; st.enterAt = now; }            // begin: play stand→crouch
   if (st.mode === 'enter' && now - st.enterAt >= transitionMs) st.mode = 'crawl';
   if (st.mode === 'crawl' || st.mode === 'wedged') st.mode = posture === 'wedged' ? 'wedged' : 'crawl';
+  st.activeAt = now;   // stamp: the head-up bend only applies on frames this actually ran (else it sticks ON)
   return st.mode;
 }
 
