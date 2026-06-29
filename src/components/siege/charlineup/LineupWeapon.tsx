@@ -25,8 +25,11 @@ export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: Line
 
   useFrame(() => {
     if (wrapRef.current) return;            // already attached
-    let hand: THREE.Object3D | undefined;   // Mixamo chars: 'mixamorig:RightHand'; Synty: 'Hand_R'
-    root.traverse((o) => { if (o.name === 'mixamorig:RightHand' || o.name === 'Hand_R') hand = o; });
+    let hand: THREE.Object3D | undefined;   // Mixamo chars: 'mixamorig:RightHand'; Synty: 'Hand_R'.
+    // three.js GLTFLoader sanitizes node names (strips reserved chars incl. ':'), so at RUNTIME the
+    // bone is 'mixamorigRightHand' — NOT the file's 'mixamorig:RightHand'. Match by endsWith so it
+    // works either way; finger bones end in Thumb/Index/Ring etc, so they never collide.
+    root.traverse((o) => { if (o.name.endsWith('RightHand') || o.name === 'Hand_R') hand = o; });
     if (!hand) return;                      // bone not ready yet → try again next frame
     root.updateWorldMatrix(true, true);
     hand.getWorldScale(_ws);
