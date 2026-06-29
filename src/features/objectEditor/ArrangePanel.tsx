@@ -12,6 +12,7 @@ const f1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 const yawDeg = (q: [number, number, number, number]) =>
   Math.round((2 * Math.atan2(q[1], q[3]) * 180) / Math.PI);
 function modelName(url: string): string {
+  if (url.startsWith('baked:')) return url.slice(6);   // a baked map object (cliff/tree/…)
   if (url.startsWith('builtin:')) return url.slice(8).replace(/^\w/, (c) => c.toUpperCase());
   return url.split('/').pop()?.replace(/\.(glb|gltf)$/i, '') ?? url;
 }

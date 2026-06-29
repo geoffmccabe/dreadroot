@@ -20,7 +20,9 @@ import { IDENTITY_QUAT, type TRS } from './types';
 import {
   getCanEdit, getEditMode, toggleEditMode, setSelected, current,
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
+  selectBaked, clearBaked,
 } from './store';
+import { placeKey, transformOverrides } from './bakedOverrides';
 
 const MOVE = 0.5;
 const YAW = Math.PI / 12;
@@ -36,14 +38,38 @@ export function ObjectEditController() {
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
+    // Baked map instance (Enchanted Forest cliffs/trees): derive its stable key + model-local
+    // transform so it can be moved in place, and select it as a temporary editable object.
+    const selectBakedHit = (im: THREE.InstancedMesh, instanceId: number): boolean => {
+      const placements = im.userData.placements as number[][] | undefined;
+      const baseArr = placements?.[instanceId]; if (!baseArr) return false;
+      const fbx = im.userData.fbx as string;
+      const key = placeKey(fbx, baseArr[12], baseArr[13], baseArr[14]);
+      const curArr = transformOverrides.get(key)?.matrix ?? baseArr;
+      const curP = new THREE.Matrix4().fromArray(curArr);
+      const cur = new THREE.Matrix4(); im.getMatrixAt(instanceId, cur);
+      const local = new THREE.Matrix4().copy(curP).invert().multiply(cur);
+      const P = new THREE.Vector3(), Q = new THREE.Quaternion(), S = new THREE.Vector3();
+      curP.decompose(P, Q, S);
+      selectBaked(
+        { key, fbx, localArr: local.toArray(), mesh: im, instanceId },
+        { pos: [P.x, P.y, P.z], quat: [Q.x, Q.y, Q.z, Q.w], scale: [S.x, S.y, S.z] },
+      );
+      return true;
+    };
+
     const selectAtCrosshair = () => {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd); ray.set(ro, rd);
       const hits = ray.intersectObjects(scene.children, true);
       for (const h of hits) {
+        // 1) an editor-placed object (world_objects)
         let o: THREE.Object3D | null = h.object;
-        while (o) { if (o.userData?.worldObjectId) { setSelected(o.userData.worldObjectId as string); return; } o = o.parent; }
+        while (o) { if (o.userData?.worldObjectId) { clearBaked(); setSelected(o.userData.worldObjectId as string); return; } o = o.parent; }
+        // 2) a baked map instance
+        const im = h.object as THREE.InstancedMesh;
+        if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null && selectBakedHit(im, h.instanceId)) return;
       }
-      setSelected(null);
+      clearBaked(); setSelected(null);
     };
 
     const spawnAhead = () => {

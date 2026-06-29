@@ -5,16 +5,31 @@
 // Persisted in the shared Supabase `world_objects` table; used by both DreadRoot
 // and Siege Worlds.
 
+import type { InstancedMesh } from 'three';
+
 export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number]; // x, y, z, w
 
+// Reference to a single baked instance (e.g. an Enchanted Forest cliff) so the editor can
+// move it in place: `key` is its stable position-based override key, `localArr` is the
+// model-local transform so the live matrix = placement * local. mesh/instanceId are LIVE and
+// may go stale after a streaming rebuild (the override still persists by key).
+export interface BakedRef {
+  key: string;
+  fbx: string;
+  localArr: number[];        // 16
+  mesh: InstancedMesh;
+  instanceId: number;
+}
+
 export interface WorldObject {
   id: string;          // uuid, shared by the local copy and the DB row
-  modelUrl: string;    // glb/gltf url, or a 'builtin:<shape>' sentinel
+  modelUrl: string;    // glb/gltf url, or a 'builtin:<shape>' / 'baked:<fbx>' sentinel
   pos: Vec3;
   quat: Quat;          // identity = [0,0,0,1]
   scale: Vec3;         // uniform = equal components
   ownerId?: string | null;
+  baked?: BakedRef;    // present ⇒ this is a baked map instance, not a DB-backed object
 }
 
 // The transform triple, the unit every edit command moves between.

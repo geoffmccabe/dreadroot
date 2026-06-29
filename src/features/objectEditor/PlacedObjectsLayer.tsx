@@ -11,6 +11,7 @@ import { scifiAsset } from '@/config/assetBase';
 import type { WorldObject } from './types';
 import { setContext, setCanEdit, useEditorObjects, useSelectedId } from './store';
 import { loadObjects, loadCanEdit } from './persistence';
+import { setWorldOverrides } from './bakedOverrides';
 
 const HILITE = 0x6cf0ff;
 
@@ -50,6 +51,7 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
   useEffect(() => {
     let alive = true;
     const game = getActiveGame();
+    setWorldOverrides(worldId);   // load this world's baked-instance edits before the batch layer builds
     setContext(game, worldId, []);
     loadObjects(game, worldId).then((objs) => { if (alive) setContext(game, worldId, objs); }).catch(() => {});
     loadCanEdit().then((v) => { if (alive) setCanEdit(v); }).catch(() => {});
@@ -58,7 +60,7 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
 
   return (
     <Suspense fallback={null}>
-      {objects.map((o) => (
+      {objects.filter((o) => !o.baked).map((o) => (
         o.modelUrl.startsWith('builtin:')
           ? <BuiltinObject key={o.id} obj={o} selected={o.id === selectedId} />
           : <GltfObject key={o.id} obj={o} selected={o.id === selectedId} />

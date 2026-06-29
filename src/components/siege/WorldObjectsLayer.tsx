@@ -15,6 +15,7 @@ import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEn
 import { windTime, applyLeafWind } from './siegeWind';
 import { applyTrunkBark, TRUNK_TREE_RE } from './siegeTreeBark';
 import { scifiAsset } from '@/config/assetBase';
+import { placeKey, transformOverrides } from '@/features/objectEditor/bakedOverrides';
 
 // The siege/scifi library moved off the Pages build onto R2 (assets.dreadroot.com). Placement
 // `url`s saved as local /siege/scifi/<name>.gltf must resolve to the merged .glb on R2, or the
@@ -269,10 +270,20 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
         geoBox = src.geometry.boundingBox;
       }
       const inst = new THREE.InstancedMesh(src.geometry, src.material, matrices.length);
-      inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined };
+      // `placements` = the original (pre-override) matrices, so the editor can derive a stable
+      // key from a clicked instance even after it's been moved.
+      inst.userData = { fbx, mesh: meshName ?? '(whole)', combined: !!combined, placements: matrices };
+      const hasXform = transformOverrides.size > 0;   // zero cost until something is edited
       for (let i = 0; i < matrices.length; i++) {
-        m.fromArray(matrices[i]).multiply(local);
+        let pArr = matrices[i];
+        let hideInst = false;
+        if (hasXform) {
+          const tov = transformOverrides.get(placeKey(fbx, pArr[12], pArr[13], pArr[14]));
+          if (tov) { if (tov.hide) hideInst = true; else if (tov.matrix) pArr = tov.matrix; }
+        }
+        m.fromArray(pArr).multiply(local);
         if (flipQ) { m.decompose(P, Q, S); Q.premultiply(flipQ); m.compose(P, Q, S); }
+        if (hideInst) { m.makeScale(0, 0, 0); inst.setMatrixAt(i, m); continue; }
         inst.setMatrixAt(i, m);
         // Collider from the SAME instance matrix `m` that positions the rendered object →
         // aligned by construction (axis-aligned box around the rotated mesh). Rocks load as a

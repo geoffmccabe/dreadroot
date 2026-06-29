@@ -5,9 +5,10 @@
 // command is paired with its inverse and pushed onto an undo stack, and mirrored to
 // Supabase via persistence.ts.
 import { useSyncExternalStore } from 'react';
-import type { WorldObject, TRS } from './types';
+import type { WorldObject, TRS, BakedRef } from './types';
 import { trsOf } from './types';
 import { insertObject, persistTransform, deleteObject } from './persistence';
+import { applyBakedTransform, hideBaked } from './bakedOverrides';
 
 interface HistoryEntry { undo: () => void; redo: () => void; }
 
@@ -44,8 +45,25 @@ export function setSelected(id: string | null): void { if (state.selectedId !== 
 export function toggleEditMode(): void {
   if (!state.canEdit) return;
   state.editMode = !state.editMode;
-  if (!state.editMode) state.selectedId = null;
+  if (!state.editMode) { state.selectedId = null; state.objects = state.objects.filter((o) => !o.baked); }
   emit();
+}
+
+// Select a baked map instance (e.g. an Enchanted Forest cliff) as a temporary editable object,
+// so it flows through the SAME panel / transform keys / undo as a normal object. Only one baked
+// selection at a time; it isn't a DB row (its edits persist via the override store).
+export function selectBaked(ref: BakedRef, t: TRS): void {
+  const id = `baked:${ref.key}`;
+  state.objects = [...state.objects.filter((o) => !o.baked), { id, modelUrl: `baked:${ref.fbx}`, pos: t.pos, quat: t.quat, scale: t.scale, baked: ref }];
+  state.selectedId = id;
+  emit();
+}
+export function clearBaked(): void {
+  if (state.objects.some((o) => o.baked)) {
+    state.objects = state.objects.filter((o) => !o.baked);
+    if (state.selectedId?.startsWith('baked:')) state.selectedId = null;
+    emit();
+  }
 }
 
 // --- local mutators (pure list ops, no history, no persistence) ---
@@ -74,6 +92,15 @@ export function addObject(o: WorldObject): void {
 
 export function deleteSelected(): void {
   const o = current(); if (!o) return;
+  if (o.baked) {
+    const baked = o.baked; const trs = trsOf(o);
+    localRemove(o.id); hideBaked(baked);
+    pushHistory({
+      undo: () => { localAdd(o); applyBakedTransform(baked, trs); setSelected(o.id); },
+      redo: () => { localRemove(o.id); hideBaked(baked); },
+    });
+    return;
+  }
   const { game, worldId } = state;
   localRemove(o.id); deleteObject(o.id);
   pushHistory({
@@ -82,21 +109,29 @@ export function deleteSelected(): void {
   });
 }
 
+// Persist a transform: baked map instances go to the override store (+ live update); DB-backed
+// objects go to Supabase. The local list update is the same for both.
+function persistTRS(o: WorldObject, t: TRS): void {
+  if (o.baked) applyBakedTransform(o.baked, t);
+  else persistTransform(o.id, t);
+}
+
 // Move/rotate/scale the selected object. prev is captured before the change so the
 // inverse is exact. Each call is one undo step (fine for Phase 0's keyboard nudges).
 export function transformSelected(next: TRS): void {
   const o = current(); if (!o) return;
   const id = o.id;
   const prev = trsOf(o);
-  localSetTRS(id, next); persistTransform(id, next);
+  localSetTRS(id, next); persistTRS(o, next);
   pushHistory({
-    undo: () => { localSetTRS(id, prev); persistTransform(id, prev); },
-    redo: () => { localSetTRS(id, next); persistTransform(id, next); },
+    undo: () => { localSetTRS(id, prev); persistTRS(o, prev); },
+    redo: () => { localSetTRS(id, next); persistTRS(o, next); },
   });
 }
 
 export function duplicateSelected(offset: [number, number, number]): void {
   const o = current(); if (!o) return;
+  if (o.baked) return;   // duplicating a baked map instance isn't supported yet
   const copy: WorldObject = {
     ...o, id: crypto.randomUUID(),
     pos: [o.pos[0] + offset[0], o.pos[1] + offset[1], o.pos[2] + offset[2]],
