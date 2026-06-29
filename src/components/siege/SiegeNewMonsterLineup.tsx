@@ -143,49 +143,6 @@ const PIG_WEAPONS: WeaponAttach[] = [
   { url: '/siege/world/SM_Item_Hammer_01.glb', scale: 100, rotDeg: [-90, 0, 0] },
 ];
 
-// @ <monster#> # <qty>  staged keyboard parser → spawn active monsters at the camera.
-function useSpawnCommand(add: (mon: Mon, pos: [number, number, number]) => void) {
-  const camera = useThree((s) => s.camera);
-  useEffect(() => {
-    let stage: 'idle' | 'mon' | 'qty' = 'idle';
-    let mon = 0;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const reset = () => { stage = 'idle'; mon = 0; if (timer) { clearTimeout(timer); timer = null; } };
-    const arm = () => { if (timer) clearTimeout(timer); timer = setTimeout(reset, 4000); };
-    const onKey = (e: KeyboardEvent) => {
-      if (isTypingTarget(e)) return;
-      const k = e.key;
-      if (stage === 'idle') { if (k === '@') { stage = 'mon'; arm(); } return; }
-      if (k === '#') { arm(); return; } // optional separator
-      if (stage === 'mon') {
-        const d = parseInt(k, 10);
-        if (d >= 1 && d <= MONSTERS.length) { mon = d; stage = 'qty'; arm(); } else reset();
-        return;
-      }
-      if (stage === 'qty') {
-        const d = parseInt(k, 10);
-        if (!isNaN(d)) {
-          const qty = d === 0 ? 10 : d;
-          const m = MONSTERS.find((mm) => mm.id === mon);
-          if (m) {
-            const fwd = new THREE.Vector3(); camera.getWorldDirection(fwd); fwd.y = 0;
-            if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
-            for (let i = 0; i < qty; i++) {
-              const ox = camera.position.x + fwd.x * 6 + (i - qty / 2) * (m.height * 0.8);
-              const oz = camera.position.z + fwd.z * 6;
-              // Spawn on the street under the player (mesh surface), not the terrain under the city.
-              const oy = groundAt(ox, oz, camera.position.y + 1) ?? (camera.position.y - 1.6);
-              add(m, [ox, oy, oz]);
-            }
-          }
-        }
-        reset();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('keydown', onKey); if (timer) clearTimeout(timer); };
-  }, [camera, add]);
-}
 
 // Renders thrown boulders (2 m grey spheres with the fortress block texture) from a fixed pool,
 // updated each frame. The golem's onRangedAttack pushes boulders into boulderSystem.
@@ -249,7 +206,9 @@ export function SiegeNewMonsterLineup() {
   // Remove a dead @-spawned monster once its death finishes, so the list + its collider
   // don't leak (it's not a challenge, so corpses sink + despawn).
   const removeSpawned = useMemo(() => (id: string) => setSpawned((s) => s.filter((x) => `lu${x.key}` !== id)), []);
-  useSpawnCommand(add);
+  // @-spawn retired: spawning is now ONE system via "!" (SiegeSpawner), which already covers these
+  // monsters (catalog ids 10-17). The review lineup itself still toggles via ⌘-] / @@@.
+  void add;
 
   // Per-monster special behavior + clip overrides.
   const extraProps = (mon: Mon): Partial<MonsterConfig> => {

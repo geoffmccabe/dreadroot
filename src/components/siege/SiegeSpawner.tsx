@@ -1,13 +1,16 @@
-// SiegeSpawner — quick test spawner for Siege Worlds. The TYPE is the monster's CATALOG id (the same
-// id the Challenge Creator + admin panel use — see MONSTER_CATALOG), then a QUANTITY digit (1-9, 0=10):
-//   Two-digit types:  !NN  then qty   e.g. !14 3 = three Barbarian Giants, !18 0 = ten Crawlies.
-//   Single-digit types: put a "#" after the digit  →  !N# then qty   e.g. !2#5 = five Mushroom Grunts.
-//   The "#" is a harmless separator everywhere (so !02#5 also works); it never aborts the command.
-// Catalog ids: 1 Demon Horde · 2 Mushroom Grunt · 3 Giant Skeleton · 4 Vomit Demon · 5 Dark Lord(boss)
-//   6 Bloody Skeleton horde(always 50) · 7 Spintroll · 8 Red Demon · 9 Ghost · 10 Slayer · 11 Pig Butcher
-//   12 Mutant · 13 Forest Guardian · 14 Barbarian Giant · 15 Elemental Golem · 16 Mechanical Golem
-//   17 Fort Golem · 18 Crawlies · 19 DF Demon.
-// After a spawn, spamming "0" within ~4s adds another 10 of the LAST type — for stress-testing hordes.
+// SiegeSpawner — THE single test spawner for Siege Worlds (the "!" system; there is no "@" spawner).
+// Command:  "!"  then the monster's TWO-DIGIT catalog id  then a QUANTITY digit (1-9, or 0 = 10).
+//   !02 5  → five Mushroom Grunts        !14 1 → one Barbarian Giant        !18 0 → ten Crawlies
+// The id is the same one the Challenge Creator + admin panel use (MONSTER_CATALOG), always two digits.
+// After a spawn, spamming "0" within ~4s adds another 10 of the LAST id — for stress-testing hordes.
+// (Monsters have no TIER digit yet; when tiered monsters exist it slots between the id and the quantity.)
+// Catalog ids:
+//   01 Demon Horde · 02 Mushroom Grunt · 03 Giant Skeleton · 04 Vomit Demon · 05 Dark Lord(boss)
+//   06 Bloody Skeleton horde(always 50) · 07 Spintroll · 08 Red Demon · 09 Ghost · 10 Slayer
+//   11 Pig Butcher · 12 Mutant · 13 Forest Guardian · 14 Barbarian Giant · 15 Elemental Golem
+//   16 Mechanical Golem · 17 Fort Golem · 18 Crawlies · 19 DF Demon.
+//   (01 Demon Horde & 08 Red Demon are the SAME monster at different size/colour.)
+// "!" sub-commands (not spawns): !c/!b Challenge Browser · !e Editor gallery · !hb hitboxes · !a bullseye.
 // Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -121,22 +124,19 @@ export function SiegeSpawner() {
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
-        else if (k === '#') { arm(); }                                                              // stray separator → ignore
-        else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // first of !NN, or !N# for single-digit
+        else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // first digit of the two-digit id
         else clearStage();
         return;
       }
-      // Type is ALWAYS two digits (e.g. !01 = Demon Horde, !08 = Red Demon, !18 = Crawlies). No timing,
-      // no ambiguity: first digit armed above, second digit here completes the type → quantity stage.
+      // The monster id is ALWAYS two digits (e.g. !01 = Demon Horde, !08 = Red Demon, !18 = Crawlies).
+      // First digit armed above; this second digit completes the id → quantity stage. No timing, no
+      // ambiguity. (A per-monster TIER digit could slot in here later, before quantity, once tiers exist.)
       if (stage.current === 'type2') {
         e.preventDefault(); e.stopPropagation();
-        // "#" here = the type was SINGLE-digit (!N#) → arm that 1-9 type. A second digit = a two-digit
-        // type (!NN). Either way, accept only ids that are actually in the catalog.
-        const t = k === '#' ? parseInt(firstDigit.current, 10)
-                : (k >= '0' && k <= '9') ? parseInt(firstDigit.current + k, 10) : NaN;
-        if (!Number.isNaN(t) && isKnownMonsterType(t)) {
-          pendingType.current = t; stage.current = 'qty'; arm();
-          console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`);
+        if (k >= '0' && k <= '9') {
+          const t = parseInt(firstDigit.current + k, 10);
+          if (isKnownMonsterType(t)) { pendingType.current = t; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`); }
+          else clearStage();
         } else clearStage();
         return;
       }
@@ -148,7 +148,6 @@ export function SiegeSpawner() {
       }
       if (stage.current === 'qty') {
         e.preventDefault(); e.stopPropagation();
-        if (k === '#') { arm(); return; }   // separator between type and qty (!02#5) — ignore, keep waiting
         if (/^[0-9]$/.test(k)) spawn(k === '0' ? 10 : parseInt(k, 10), pendingType.current);
         clearStage();
         return;
