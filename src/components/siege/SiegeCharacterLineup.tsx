@@ -49,6 +49,17 @@ useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`);
 
+// The rifle clips bake a bad lower-spine curve (in the SOURCE anims, like the broken finger anims).
+// Strip the lower-spine (Spine / Spine1) rotation tracks so those bones rest at their clean bind pose
+// while the chest, arms and head still animate. Rebuild each clip (don't mutate cached useGLTF data).
+// Spine2 (upper chest) is intentionally kept. Real fix = re-export the rifle clips.
+function stripLowerSpine(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+  return clips.map((c) => new THREE.AnimationClip(
+    c.name, c.duration,
+    c.tracks.filter((t) => !/Spine1?\./i.test(t.name)),
+  ));
+}
+
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
   // Animations come from the shared category libraries (deduped across all characters); useGLTF
@@ -57,7 +68,9 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');
-  const animations = useMemo(() => [...baseAnims, ...rifleAnims, ...locoAnims], [baseAnims, rifleAnims, locoAnims]);
+  // Flatten the bad lower-spine curve baked into the rifle clips before binding.
+  const rifleFixed = useMemo(() => stripLowerSpine(rifleAnims), [rifleAnims]);
+  const animations = useMemo(() => [...baseAnims, ...rifleFixed, ...locoAnims], [baseAnims, rifleFixed, locoAnims]);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
