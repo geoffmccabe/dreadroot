@@ -27,11 +27,10 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     itemNumbers: [20, 111, 112, 113, 114, 115, 116],
     url: '/siege/weapons/ak47.glb',
     lengthM: 0.9,
-    // The AK model is authored barrel-along-+Z, "up" along the side axis. [0,-90,0] pointed it
-    // left+rolled; [90,0,0] pointed it straight down. The orientation that points the barrel forward
-    // (toward the character's facing) AND upright is a single 90° roll about Z. If it comes out
-    // upside-down flip to -90; if it points backward it's the [180,0,-90] family instead.
-    rotDeg: [0, 0, 90],
+    // AK model is authored barrel-along-+Z, "up" on the side axis. Calibration path: [0,-90,0]=left+
+    // rolled, [90,0,0]=straight down, [0,0,90]=upright but pointing back at the character. Adding a
+    // 180° yaw (turn the heading away, no side flip) lands here: barrel forward (away), upright.
+    rotDeg: [180, 0, -90],
     gripPos: [0, 0, 0],
     animSet: 'rifle',
   },
