@@ -1436,7 +1436,13 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // Step-over reach SCALES with the monster's height: STEP_UP (0.45 m) is knee-high for a 4 m demon
     // but a 20 m boss should stride over multi-metre obstacles, not treat every bump as a wall to climb
     // in place (which left giant bosses trapped). Small monsters stay ~unchanged; giants step over more.
-    const stepUp = Math.max(STEP_UP, H * 0.30);
+    // Cave-crawl stand-down (computed early — it also CAPS the step-up reach): a hide-hole monster must
+    // not treat the hole's low ROOF as a step-up surface. With stepUp scaled to H*0.30, a 12 m golem's
+    // "step" is ~3.6 m — tall enough to levitate-snap onto a ~3 m garage roof (the bounce-on-top bug,
+    // it never crawled). While the player isn't genuinely on a rooftop ABOVE it, pin step-up to the base
+    // height so the roof reads as a WALL → blocked → stuck → pathfind → crawl IN through the opening.
+    const caveStandDown = !!c.caveCrawl && nav.crawlHoles && (camera.position.y - (s.y + H * 0.5) <= 0.5);
+    const stepUp = caveStandDown ? STEP_UP : Math.max(STEP_UP, H * 0.30);
     let groundY = groundAt(s.x, s.z, feet + stepUp) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
     // World-collision/climb is the per-demon hot path (a grid query every frame). Only run it
@@ -1511,17 +1517,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
 
     // ── Blocked by a wall — two reusable SW gaits ──
     let climbing = false;
+    // caveStandDown (declared above) also suppresses every climb path here — the box CLIMB gait, the HOP
+    // gait, and the BVH roof-climb — so a hide-hole monster stays pinned at the wall, never mounting it.
     if (wallTop > -Infinity && moving) {
       if (gait === 'climb') {
         // Start a climb only from the GROUND (at the wall's base), then keep climbing while
         // already on the face. Without this, a demon flung airborne by a blast would switch to
         // climb-mode mid-flight near a wall — killing its arc and walking it up into the sky.
         climbing = belowTop && (grounded || s.wasClimbing);
-        // Cave-crawl monsters must NOT climb a hide-hole's wall onto its roof — that's the bug where
-        // they end up on top reaching legs through the ceiling. Only climb when the player is genuinely
-        // ABOVE (a real rooftop); otherwise stay blocked at the wall → go stuck → pathfind → crawl in.
-        if (c.caveCrawl && nav.crawlHoles && camera.position.y - (s.y + H * 0.5) <= 0.5) climbing = false;
-      } else if (grounded && belowTop) {
+        if (caveStandDown) climbing = false;
+      } else if (grounded && belowTop && !caveStandDown) {
         // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else crabs
         // sideways to go around. Forward penetration was already undone above.
         const trapped = crowd >= TRAP_COUNT;
@@ -1544,7 +1549,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // allows it, the player is above, and a mesh wall is right in front (toward you), scale that wall
     // up to the roof. Only while still BELOW you, so they don't climb into the sky.
     let bvhClimbing = false;
-    if (nav.climbToRoof && !climbing && moving && camera.position.y - (s.y + H * 0.5) > 0.5 && dist < CLIMB_LOD) {
+    if (nav.climbToRoof && !climbing && !caveStandDown && moving && camera.position.y - (s.y + H * 0.5) > 0.5 && dist < CLIMB_LOD) {
       const fdx = dx / dist, fdz = dz / dist;
       if (raycastMesh(preX, s.y + 1.0, preZ, fdx, 0, fdz, 0.7) != null) {   // a mesh wall just ahead
         bvhClimbing = true;
