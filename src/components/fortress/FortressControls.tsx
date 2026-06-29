@@ -124,6 +124,7 @@ export function FirstPersonControls({
   // happened (controls don't care, the parent will reflect state
   // via grenadeReady prop).
   onGrenadeTogglePress,
+  onGrenadeDisarm,
   // True while a grenade is pin-pulled and waiting for a throw click.
   // Owned by parent. The click handler reads this to know whether
   // to throw instead of fire the equipped weapon.
@@ -1419,13 +1420,21 @@ export function FirstPersonControls({
       keys.current.rightMouse = true;
 
       // ── Dual-wield right-click priority ──
-      // 1. An ARMED grenade → DEACTIVATE it (RIGHT hand first), keep it in hand. Wins
-      //    over firing/aiming/inspect.
+      // 1. An ARMED grenade → DEACTIVATE it. Wins over firing/aiming/inspect. A grenade shown
+      //    in a HAND (overlay) disarms first; otherwise the rifle/QA-armed grenade (grenadeReady)
+      //    is cancelled. (With a rifle equipped this takes right-click from ADS only WHILE a
+      //    grenade is armed — once disarmed, right-click aims normally again.)
       const armedHands = armedHandsRightFirst();
       if (armedHands.length) {
         const h = armedHands[0];
         const cur = getHandGrenades()[h];
         if (cur) setHandGrenade(h, { ...cur, armed: false });
+        event.preventDefault();
+        return;
+      }
+      if (grenadeReadyRef.current) {
+        grenadeReadyRef.current = false;
+        onGrenadeDisarm?.();
         event.preventDefault();
         return;
       }

@@ -2408,6 +2408,7 @@ export function Fortress() {
           grenadeThrowRef={grenadeThrowRef}
           eggThrowRef={eggThrowRef}
           onGrenadeTogglePress={handleGrenadeTogglePress}
+          onGrenadeDisarm={() => setGrenadeReadySlot(null)}
           grenadeReady={grenadeReady}
           consumeEgg={consumeEgg}
           eggReady={eggReadySlot !== null}

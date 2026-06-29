@@ -249,6 +249,7 @@ export function FortressScene({
   grenadeThrowRef,
   eggThrowRef,
   onGrenadeTogglePress,
+  onGrenadeDisarm,
   grenadeReady,
   consumeEgg,
   onEggTogglePress,
@@ -1820,6 +1821,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         onUseHotbarSlot={onUseHotbarSlot}
         onThrowGrenade={handleThrowGrenade}
         onGrenadeTogglePress={onGrenadeTogglePress}
+        onGrenadeDisarm={onGrenadeDisarm}
         grenadeReady={grenadeReady}
         onThrowEgg={handleThrowEgg}
         onEggTogglePress={onEggTogglePress}
