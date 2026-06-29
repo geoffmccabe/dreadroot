@@ -7,7 +7,7 @@
 // SENSES-SEAM: this consumes the target the senses window resolves (acquireTarget) — it only decides
 // the locomotion/attack RESPONSE once a target exists. It does NOT decide detection/awareness.
 import * as THREE from 'three';
-import { pathFits, FIT_STAND, FIT_CRAWL, type PathPt } from './siegePathfinding';
+import { pathFits, type PathPt } from './siegePathfinding';
 
 export interface CaveCrawlConfig {
   shrink?: number;        // fit-test the collider at this fraction of its radius (0.85 = 15% smaller)
@@ -27,13 +27,18 @@ export type CaveMode = 'none' | 'enter' | 'crawl' | 'wedged';
 export interface CaveState { mode: CaveMode; enterAt: number; lastSwipe: number; }
 export const newCaveState = (): CaveState => ({ mode: 'none', enterAt: 0, lastSwipe: 0 });
 
-/** Can this body (half-width = radius·shrink) WALK the active route, must it CRAWL, or is it WEDGED
- *  (even crawling won't pass)? A "duck-in" opening fails the upright test but passes the crawl test. */
-export function resolveCavePosture(path: PathPt[] | null, sx: number, sz: number, refY: number, radius: number, shrink: number): CavePosture {
+/** Can this body WALK the active route, must it CRAWL, or is it WEDGED (even crawling won't pass)?
+ *  Posture heights scale with the monster's height H, so the opening must clear its UPRIGHT height to
+ *  walk, or its CROUCHED height to crawl. This is what makes a small brute crawl into a garage while a
+ *  12 m golem (whose crouched body is still ~3.6 m) can't fit at all → wedged → reach-in swipe.
+ *  Width is the body radius shrunk by `shrink` (colliders run a bit fat). */
+export function resolveCavePosture(path: PathPt[] | null, sx: number, sz: number, refY: number, radius: number, H: number, shrink: number): CavePosture {
   if (!path || !path.length) return 'walk';
   const clear = radius * shrink;
-  if (pathFits(path, sx, sz, refY, clear, FIT_STAND)) return 'walk';
-  if (pathFits(path, sx, sz, refY, clear, FIT_CRAWL)) return 'crawl';
+  const stand = { rayH: Math.max(1.1, H * 0.80), boxH: Math.max(0.9, H * 0.50) };  // opening clears my standing body
+  const crawl = { rayH: Math.max(0.45, H * 0.30), boxH: Math.max(0.4, H * 0.25) }; // …or at least my crouched body
+  if (pathFits(path, sx, sz, refY, clear, stand)) return 'walk';
+  if (pathFits(path, sx, sz, refY, clear, crawl)) return 'crawl';
   return 'wedged';
 }
 

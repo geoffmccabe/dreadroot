@@ -1258,7 +1258,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // route fits upright, so normal chase. Drives the clip + speed below and the head-up bend later.
       let caveMode: import('./caveCrawl').CaveMode = 'none';
       if (c.caveCrawl && nav.crawlHoles) {
-        const posture = pathLoco ? resolveCavePosture(s.path, s.x, s.z, s.y, inst.radius, cc.shrink) : 'walk';
+        const posture = pathLoco ? resolveCavePosture(s.path, s.x, s.z, s.y, inst.radius, H, cc.shrink) : 'walk';
         caveMode = stepCave(s.cave, posture, pathLoco, now, cc.transitionMs);
       }
       g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
@@ -1505,6 +1505,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
         // already on the face. Without this, a demon flung airborne by a blast would switch to
         // climb-mode mid-flight near a wall — killing its arc and walking it up into the sky.
         climbing = belowTop && (grounded || s.wasClimbing);
+        // Cave-crawl monsters must NOT climb a hide-hole's wall onto its roof — that's the bug where
+        // they end up on top reaching legs through the ceiling. Only climb when the player is genuinely
+        // ABOVE (a real rooftop); otherwise stay blocked at the wall → go stuck → pathfind → crawl in.
+        if (c.caveCrawl && nav.crawlHoles && camera.position.y - (s.y + H * 0.5) <= 0.5) climbing = false;
       } else if (grounded && belowTop) {
         // 'hop': climbers (and anyone boxed in by the crowd) hop onto it; everyone else crabs
         // sideways to go around. Forward penetration was already undone above.

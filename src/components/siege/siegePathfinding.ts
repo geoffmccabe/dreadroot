@@ -54,10 +54,6 @@ function edgeBlocked(ax: number, az: number, bx: number, bz: number, refY: numbe
   return false;
 }
 
-/** Posture clearance profiles for the fit test. STAND = upright body; CRAWL = low + on all fours. */
-export const FIT_STAND = { rayH: CHEST, boxH: 0.9 };
-export const FIT_CRAWL = { rayH: 0.4, boxH: 0.4 };
-
 /** Does an existing route fit a body of half-width `clear` at the given posture, end to end? Cheap
  *  re-walk of the waypoints (no A*). Lets a caller ask "I found a path — can I WALK it, or must I
  *  crawl, or does even crawling not fit?" without re-searching. */
