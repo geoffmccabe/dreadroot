@@ -23,6 +23,7 @@ import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
+import { flipWeaponLocal } from './charlineup/weaponEditRegistry';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -206,6 +207,7 @@ export function SiegeCharacterLineup() {
   // lineup's M/N win over any other M handler when the lineup is up.
   useEffect(() => {
     let amp: number[] = [];
+    let awaitFlip = false;   // true after '^' is pressed, waiting for x/y/z to pick the flip axis
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
@@ -221,6 +223,11 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'f' || e.key === 'F') { e.stopImmediatePropagation(); triggerFlight('land'); }
       else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
       else if (e.key === 'j' || e.key === 'J') { e.stopImmediatePropagation(); triggerParkour(); } // cycle obstacle + auto-parkour
+      // Gun orientation: '^' arms a flip, then x/y/z flips the gun 180° about that LOCAL axis
+      // (gun's own frame). Red=X, Green=Y, Blue=Z on the gizmo. Resulting rotDeg logged to bake.
+      else if (e.key === '^') { e.stopImmediatePropagation(); awaitFlip = true; }
+      else if (awaitFlip && /^[xyz]$/i.test(e.key)) { e.stopImmediatePropagation(); awaitFlip = false; flipWeaponLocal(e.key.toLowerCase() as 'x' | 'y' | 'z'); }
+      else if (awaitFlip) { awaitFlip = false; }   // any other key cancels the armed flip
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

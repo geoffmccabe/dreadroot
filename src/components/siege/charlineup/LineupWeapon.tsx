@@ -56,13 +56,22 @@ export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: Line
     wrap.position.set(weapon.gripPos[0] / handScale, weapon.gripPos[1] / handScale, weapon.gripPos[2] / handScale);
     wrap.rotation.set(weapon.rotDeg[0] * D2R, weapon.rotDeg[1] * D2R, weapon.rotDeg[2] * D2R);
     wrap.add(model);
+    // RGB orientation gizmo in the gun's OWN frame: Red = X, Green = Y, Blue = Z. Drawn on top
+    // (depthTest off) so it reads through the gun, sized to the gun's length. Lets us agree on axes
+    // by colour and flip with ^ then x/y/z. Tagged so it can't be mistaken for a selectable child.
+    const gizmo = new THREE.AxesHelper(longest);
+    gizmo.renderOrder = 999;
+    (gizmo.material as THREE.Material).depthTest = false;
+    wrap.add(gizmo);
     hand.add(wrap);
     wrapRef.current = wrap;
     // Make the gun selectable in the Arrange panel (crosshair/L), and register it so one panel edit
     // drives every character's gun. Tag the model children too so any ray hit walks up to this id.
     wrap.userData.worldObjectId = WEAPON_EDIT_ID;
     wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
-    registerWeaponWrap(regId.current, { wrap, hand, handScale });
+    // Register with the weapon's base rotation; registerWeaponWrap re-applies base ∘ weaponTune so
+    // any flips made earlier this session carry onto this freshly-mounted gun too.
+    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg });
   });
 
   useEffect(() => {
