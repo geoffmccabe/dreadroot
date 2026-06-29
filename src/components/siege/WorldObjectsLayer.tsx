@@ -134,7 +134,7 @@ interface GroupParams {
 // Shared assembly: build the instanced render group + colliders from a model SCENE — whether DRACO-
 // decoded (GroupInstancesDecode) or rebuilt from the IndexedDB geometry cache (GroupInstancesCached).
 // Returns the render node, or null until a scene is available.
-function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group | null {
+function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THREE.Group | null; cacheable: boolean } {
   const { url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1, colliderKey } = p;
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
@@ -143,8 +143,12 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group
   // (player + bullets) AND greedy boxes in the monster-only grid (monsters climb).
   // The old per-model M-flag is no longer needed — kept only as a V-tool cell hint.
   const ovCell = colliderOverrides.get(fbx)?.cell;
-  const { node, colliders, meshInputs, meshGeos, monsterBoxes } = useMemo(() => {
-    if (!scene) return { node: null as THREE.Group | null, colliders: [] as THREE.Box3[], meshInputs: [] as MeshInstanceInput[], meshGeos: new Map<string, THREE.BufferGeometry>(), monsterBoxes: [] as THREE.Box3[] };
+  const { node, colliders, meshInputs, meshGeos, monsterBoxes, cacheable } = useMemo(() => {
+    if (!scene) return { node: null as THREE.Group | null, colliders: [] as THREE.Box3[], meshInputs: [] as MeshInstanceInput[], meshGeos: new Map<string, THREE.BufferGeometry>(), monsterBoxes: [] as THREE.Box3[], cacheable: false };
+    // A model is only geometry-cacheable if its textures come from the shared ATLAS (atlasUrl/matMap)
+    // or it's flat — NOT if it relies on its own EMBEDDED glb texture (e.g. the Portal/Gate, Forge).
+    // The cache rebuilds materials by name only, so embedded textures would be lost.
+    let usesEmbedded = false;
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];
     const meshInputs: MeshInstanceInput[] = [];
@@ -204,6 +208,7 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group
       const mats = Array.isArray(src.material) ? src.material : [src.material];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
+        const hadMap = !!m.map;   // did this material ship with its own (embedded) texture?
         m.side = THREE.DoubleSide;
         // trustMaterials: this glTF was baked with correct Synty textures + emissive glow maps
         // (KHR_materials_emissive_strength) — keep them verbatim. Skip the DreadRoot/old-SW-export
@@ -274,6 +279,10 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group
           m.map = getAtlas(tu); m.color.setRGB(1, 1, 1); if ('metalness' in m) m.metalness = 0;
           if (cutout && cutout.has(tu)) { m.alphaTest = 0.5; m.transparent = false; }  // foliage cutout
           m.needsUpdate = true;
+        } else if (hadMap) {
+          // No atlas override AND the material kept its embedded texture → this model is NOT safe to
+          // geometry-cache (the cache can't reproduce the embedded texture). Leave the map as-is.
+          usesEmbedded = true;
         }
       });
       let geoBox: THREE.Box3 | null = null;
@@ -340,7 +349,7 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group
     // Warm load → use the cached boxes; cold load → record what we just built (debounced save).
     const finalMonsterBoxes = cachedBoxes ?? monsterBoxes;
     if (!cachedBoxes && colliderKey && collSig) recordBoxes(colliderKey, collSig, finalMonsterBoxes);
-    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes };
+    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes, cacheable: !usesEmbedded };
   }, [scene, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials, colliderKey, url]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
@@ -363,22 +372,22 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group
     setGroupInstances(groupId, meshInputs);
     return () => clearGroup(groupId);
   }, [meshInputs, meshGeos, groupId, fbx]);
-  return node;
+  return { node, cacheable };
 }
 
 // Cold path: DRACO-decode the model (useGLTF), build it, and cache its decoded geometry so the NEXT
-// visit can skip the decode.
+// visit can skip the decode — UNLESS it uses an embedded texture (then it stays decode-only forever).
 function GroupInstancesDecode(p: GroupParams) {
   const gltf = useGLTF(p.url, '/draco/');   // '/draco/' so sampler glbs (e.g. warpgate) decode
-  const node = useGroupNode(gltf.scene, p);
+  const { node, cacheable } = useGroupNode(gltf.scene, p);
   const cached = useRef(false);
   useEffect(() => {
-    if (cached.current || !gltf.scene) return;
+    if (cached.current || !gltf.scene || !cacheable) return;
     cached.current = true;
     const meshes: THREE.Mesh[] = [];
     gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
     putGeo(p.url, meshes);
-  }, [gltf, p.url]);
+  }, [gltf, p.url, cacheable]);
   return node ? <primitive object={node} /> : null;
 }
 
@@ -390,7 +399,7 @@ function GroupInstancesCached(p: GroupParams) {
     getGeoGroup(p.url).then((g) => { if (alive) setScene(g); });
     return () => { alive = false; };
   }, [p.url]);
-  const node = useGroupNode(scene, p);
+  const { node } = useGroupNode(scene, p);
   return node ? <primitive object={node} /> : null;
 }
 
