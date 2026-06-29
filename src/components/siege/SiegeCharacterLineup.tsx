@@ -12,7 +12,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { sampleHeight } from './terrainHeight';
 import {
-  LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
+  LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode,
 } from './charlineup/siegeCharLineupState';
@@ -40,6 +40,7 @@ const _tailQ = new THREE.Quaternion();
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
+useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`, '/draco/');
 
@@ -50,7 +51,8 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
   // bone name (all mixamorig). Clip names are unique across libraries, so the merge is collision-free.
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
-  const animations = useMemo(() => [...baseAnims, ...rifleAnims], [baseAnims, rifleAnims]);
+  const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');
+  const animations = useMemo(() => [...baseAnims, ...rifleAnims, ...locoAnims], [baseAnims, rifleAnims, locoAnims]);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
