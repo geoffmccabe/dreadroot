@@ -18,7 +18,8 @@ import { setChallengeToggle, setChallengeLose, setChallengeStart, setChallengeSk
 import { setSiegePlayerDead, setSiegeSpawnPin } from '../siegePlayerState';
 import { startSpawnIntro, requestIntroBypass, endSiegeIntro, isSiegeIntroActive } from '../spawnintro/siegeSpawnIntro';
 import { resetChallengeScore, addChallengeScore, getChallengeScore } from './challengeScore';
-import { recordChallengeRun } from './challengeStorage';
+import { recordChallengeRun, saveChallenge } from './challengeStorage';
+import { enterLookContext, exitLookContext, type LookState } from '@/features/look/lookStore';
 import { TEST_CHALLENGE } from './testChallenge';
 import { useAuth } from '@/contexts/AuthContext';
 import { getActiveGame } from '@/config/activeGame';
@@ -39,6 +40,7 @@ export function ChallengeRunner() {
   const groundSnap = useRef<{ until: number; ceil: number; holdY: number } | null>(null);   // drop the player onto the street once its BVH loads
   const prePos = useRef<THREE.Vector3 | null>(null);   // where the player was before the challenge
   const preMap = useRef<string | null>(null);          // which map, so we can jump back on finish
+  const lookSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);   // debounce per-challenge look saves
   const r = useRef({
     active: false, runId: 0, waveIdx: 0, waveEndsAt: 0, startedAt: 0, countdownUntil: 0,
     pending: [] as { drop: MonsterDrop; at: number; seed: number; spread: boolean }[], dropsDone: false, sawAlive: false,
@@ -54,6 +56,7 @@ export function ChallengeRunner() {
     const arenaMap = ch?.mapId || preMap.current || '';
     if (r.active && mapId !== arenaMap) {
       r.active = false; r.countdownUntil = 0; r.pending = [];
+      exitLookContext();   // left the arena → restore the global/world look
       setSiegeSpawnPin(null); groundSnap.current = null;
       setMobs([]);
       setChallengeState({ active: false, completed: false, announce: null, wave: 0, waveEndsAt: 0, countdownUntil: 0, result: null });
@@ -222,9 +225,25 @@ export function ChallengeRunner() {
     });
   };
 
+  // Persist a live-edited challenge look back to its DB row, debounced. Only SAVED challenges (with an
+  // id) and a logged-in user attempt a write; RLS enforces ownership server-side, so a non-owner's live
+  // tweak simply stays session-local (the failed update is ignored). Fire-and-forget — never blocks play.
+  const persistChallengeLook = (ch: Challenge) => (look: LookState) => {
+    ch.look = look;
+    if (!ch.id || !user) return;
+    if (lookSaveTimer.current) clearTimeout(lookSaveTimer.current);
+    lookSaveTimer.current = setTimeout(() => {
+      const creator = ch.creator || user.email?.split('@')[0] || 'unknown';
+      void saveChallenge(ch, user.id, creator).catch(() => { /* RLS rejected (not owner) — keep it local */ });
+    }, 800);
+  };
+
   const start = (ch: Challenge) => {
     const now = performance.now();
     challengeRef.current = ch;
+    // Per-instance lighting: apply THIS challenge's saved look (or inherit the map's current look if it
+    // has none), restoring on exit. Authors tuning the Lighting Panel during the run save back here.
+    enterLookContext(`challenge:${ch.id ?? 'test'}`, ch.look, persistChallengeLook(ch));
     setMobs([]);
     setSiegePlayerDead(false);   // a ghost from a prior death comes back to life for the new run
     fireChallengeRevive();       // restore full health (no-op if already alive)
@@ -270,6 +289,8 @@ export function ChallengeRunner() {
 
   const stop = () => {
     r.active = false; r.countdownUntil = 0;
+    if (lookSaveTimer.current) { clearTimeout(lookSaveTimer.current); lookSaveTimer.current = null; }
+    exitLookContext();        // restore the global/world look — this challenge's mood was per-instance
     endSiegeIntro();          // tear down the spawn cinematic if the challenge is stopped mid-intro
     setSiegePlayerDead(false);
     setSiegeSpawnPin(null);   // release any spawn pin so the player isn't frozen after the challenge ends

@@ -51,28 +51,70 @@ function load(): LookState {
   return { ...LOOK_DEFAULTS };
 }
 
-let state: LookState = load();
+// `base` = the GLOBAL look (free-roam default), persisted to localStorage.
+// `override` = an optional per-INSTANCE look (a challenge or world) that takes over while you're
+// inside it, WITHOUT touching the global. The renderer always reads the effective look = override ?? base,
+// so entering/leaving a challenge swaps the mood and restores it cleanly. Edits made while an override
+// is active go to the override (and an optional persist callback saves them to that instance), never to
+// the global. This is what makes lighting "per-instance" instead of one shared global setting.
+let base: LookState = load();
+let override: LookState | null = null;
+let overrideKey: string | null = null;            // e.g. "challenge:<id>" — guards against stale exits
+let overridePersist: ((look: LookState) => void) | null = null;
 const listeners = new Set<() => void>();
 
-function persist() {
-  try { localStorage.setItem(LOOK_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+const effective = (): LookState => override ?? base;
+
+function persistBase() {
+  try { localStorage.setItem(LOOK_KEY, JSON.stringify(base)); } catch { /* ignore */ }
 }
 
 export const lookStore = {
-  get: (): LookState => state,
+  get: (): LookState => effective(),
+  /** True when a per-instance look is currently overriding the global. */
+  hasOverride: (): boolean => override !== null,
+  getOverrideKey: (): string | null => overrideKey,
   set: <K extends keyof LookState>(key: K, value: LookState[K]) => {
-    if (state[key] === value) return;
-    state = { ...state, [key]: value };
-    persist();
+    const cur = effective();
+    if (cur[key] === value) return;
+    if (override) {
+      override = { ...override, [key]: value };
+      overridePersist?.(override);
+    } else {
+      base = { ...base, [key]: value };
+      persistBase();
+    }
     listeners.forEach((l) => l());
   },
+  // reset always targets the GLOBAL default (the override is per-instance and edited live).
   reset: () => {
-    state = { ...LOOK_DEFAULTS };
-    persist();
-    listeners.forEach((l) => l());
+    base = { ...LOOK_DEFAULTS };
+    persistBase();
+    if (!override) listeners.forEach((l) => l());
   },
   subscribe: (l: () => void) => { listeners.add(l); return () => listeners.delete(l); },
 };
+
+/** Enter a per-instance look. `look` = the instance's saved look (or undefined to inherit the current
+ *  global). `persist` (optional) is called with the full look whenever it's edited, so the owner can
+ *  save it back to that instance. Idempotent-ish: re-entering replaces the active override. */
+export function enterLookContext(key: string, look: Partial<LookState> | undefined, persist?: (look: LookState) => void) {
+  override = { ...base, ...(look ?? {}) };
+  overrideKey = key;
+  overridePersist = persist ?? null;
+  listeners.forEach((l) => l());
+}
+
+/** Leave the per-instance look and restore the global. If `key` is given it must match the active
+ *  context (so a late cleanup from an old challenge can't clobber a newer one). */
+export function exitLookContext(key?: string) {
+  if (override === null) return;
+  if (key && overrideKey !== key) return;
+  override = null;
+  overrideKey = null;
+  overridePersist = null;
+  listeners.forEach((l) => l());
+}
 
 export function useLook(): LookState {
   return useSyncExternalStore(lookStore.subscribe, lookStore.get, lookStore.get);

@@ -4,6 +4,8 @@
 // Authoring UI, persistence, leaderboards and the Divi economy are later phases — this is just the
 // shape the runner plays.
 
+import type { LookState } from '@/features/look/lookStore';
+
 /** Boss size/stat multipliers, as PERCENT of normal (100 = unchanged, 200 = double). */
 export interface BossMods {
   sizePct: number;
@@ -81,6 +83,11 @@ export interface Challenge {
   // spawn point instead of using each drop's x,z. Staggered monsters each get their own point;
   // hordes cluster at one point. (For the test challenge; the creator places exact points later.)
   scatterRadius?: number;
+  // Per-instance LIGHTING. When set, this challenge applies its own look (tone/exposure/bloom/IBL) while
+  // it runs and restores the previous look on exit — so each challenge has its own mood, independent of
+  // the global setting and of other challenges/maps. New challenges inherit the map's current look at
+  // creation; authors tune it live via the Lighting Panel. Undefined = use the global/world look.
+  look?: LookState;
   waves: ChallengeWave[];  // length 10
 }
 

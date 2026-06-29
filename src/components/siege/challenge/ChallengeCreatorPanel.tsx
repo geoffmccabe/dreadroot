@@ -19,6 +19,7 @@ import { panelSurface } from '@/theme/panelSurface';
 import { SIEGE_TELEPORTS, CHALLENGE_WORLDS } from '../siegeAreas';
 import { regionCoords } from './regionDefaults';
 import { getActiveGame } from '@/config/activeGame';
+import { lookStore } from '@/features/look/lookStore';
 import { GAME_LIST } from '@/config/gameRegistry';
 import { playSound } from '@/lib/spatialAudio';
 import { WAVES_PER_CHALLENGE, type Challenge, type ChallengeWave, type MonsterDrop, type BossMods, type SpawnMode } from './challengeTypes';
@@ -41,6 +42,7 @@ const blankChallenge = (game: string, creator: string): Challenge => ({
   name: '',
   creator,
   game,
+  look: { ...lookStore.get() },   // inherit the map's CURRENT look at creation; the author tunes it later
   waves: Array.from({ length: WAVES_PER_CHALLENGE }, (_, i) => ({ name: `Wave ${i + 1}`, timeSec: 60, drops: [] })),
 });
 
