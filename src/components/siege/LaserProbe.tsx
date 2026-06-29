@@ -40,21 +40,10 @@ export function LaserProbe() {
   const b3 = useMemo(() => new THREE.Box3(), []);
   const bsz = useMemo(() => new THREE.Vector3(), []);
   const BOX_MAX = 50;   // don't draw the highlight box around map-sized meshes (terrain/combined)
-  const WHITE = useMemo(() => new THREE.Color(1, 1, 1), []);
-  const RED = useMemo(() => new THREE.Color(1, 0.15, 0.15), []);
-  // currently-highlighted instance, so we can restore it when the aim moves
-  const hl = useMemo(() => ({ mesh: null as THREE.InstancedMesh | null, id: -1 }), []);
   // Raycast throttle: intersectObjects over the whole dense scene is very heavy, so
   // run it ~12x/sec instead of every frame and keep the beam smooth in between by
   // re-projecting along the current aim at the last hit distance.
   const rc = useMemo(() => ({ last: -1, dist: 8000, hit: false }), []);
-  const clearHL = () => {
-    if (hl.mesh && hl.id >= 0) {
-      hl.mesh.setColorAt(hl.id, WHITE);
-      if (hl.mesh.instanceColor) hl.mesh.instanceColor.needsUpdate = true;
-    }
-    hl.mesh = null; hl.id = -1;
-  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -172,21 +161,14 @@ export function LaserProbe() {
         if (!isInst) { b3.setFromObject(h.object); b3.getSize(bsz); showBox = Math.max(bsz.x, bsz.y, bsz.z) <= BOX_MAX; }
         if (showBox) { try { box.setFromObject(h.object); box.visible = true; } catch { box.visible = false; } }
         else box.visible = false;
-        // tint the pointed-at instance red
-        const im = h.object as THREE.InstancedMesh;
-        if (im.isInstancedMesh && h.instanceId != null && (hl.mesh !== im || hl.id !== h.instanceId)) {
-          clearHL();
-          if (!im.instanceColor) { for (let i = 0; i < im.count; i++) im.setColorAt(i, WHITE); }
-          im.setColorAt(h.instanceId, RED);
-          if (im.instanceColor) im.instanceColor.needsUpdate = true;
-          hl.mesh = im; hl.id = h.instanceId;
-        }
+        // (Removed) the red instance-tint highlight: writing instanceColor onto Enchanted
+        // Forest objects (custom bark / leaf-wind shaders) recompiled their materials and made
+        // them VANISH. The beam + dot + readout are the feedback now.
       } else {
         rc.hit = false;
         probeState.hasHit = false; probeState.hit = null;
         probeState.mesh = null; probeState.instanceId = -1;
         box.visible = false;
-        clearHL();
       }
     }
 
