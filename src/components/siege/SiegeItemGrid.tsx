@@ -5,7 +5,7 @@
 //
 // Toggle with the "I" key (Items). Off by default so it doesn't clutter normal play.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 const COLS = 12;          // columns (X)
@@ -34,7 +34,12 @@ export function SiegeItemGrid() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const group = useMemo(() => {
+  // Build (and load all 229 sprite textures) ONLY the first time the grid is opened — not on every
+  // lobby load. It's a hidden Cmd+I debug grid; loading 229 sprites at startup was pure waste +
+  // loading-manager contention during the world load.
+  const [group, setGroup] = useState<THREE.Group | null>(null);
+  useEffect(() => {
+    if (!visible || group) return;
     const g = new THREE.Group();
     const loader = new THREE.TextureLoader();
     for (let id = 0; id < COUNT; id++) {
@@ -60,12 +65,12 @@ export function SiegeItemGrid() {
       );
       g.add(sprite);
     }
-    return g;
-  }, []);
+    setGroup(g);
+  }, [visible, group]);
 
   useEffect(() => {
     return () => {
-      group.traverse((o) => {
+      group?.traverse((o) => {
         const s = o as THREE.Sprite;
         if (s.material) {
           (s.material.map as THREE.Texture | null)?.dispose?.();
@@ -75,6 +80,6 @@ export function SiegeItemGrid() {
     };
   }, [group]);
 
-  if (!visible) return null;
+  if (!visible || !group) return null;
   return <primitive ref={groupRef} object={group} />;
 }

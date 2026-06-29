@@ -8,6 +8,7 @@
 // between batches doesn't fire it early. If nothing ever loads (all cached), it reports ready after a
 // short grace so the overlay doesn't wait on the watchdog.
 import { useEffect, useRef } from 'react';
+import * as THREE from 'three';
 import { useProgress } from '@react-three/drei';
 import { isSiegeLoadActive, siegeLoadNote } from './siegeInitLoad';
 
@@ -27,6 +28,25 @@ export function SiegeAssetProgress({ onAllLoaded }: { onAllLoaded: () => void })
     siegeLoadNote('Assets', msg);
     onAllLoaded();
   };
+
+  // DIAGNOSTIC: the loading manager is processing ~447k items during the SWW load — far more than the
+  // real ~947 assets. Count loads per URL (chaining drei's onStart) and log the top offender, so the
+  // init log names exactly what's hammering the loader.
+  useEffect(() => {
+    if (!isSiegeLoadActive()) return;
+    const mgr = THREE.DefaultLoadingManager;
+    const counts = new Map<string, number>();
+    const prev = mgr.onStart;
+    mgr.onStart = (url, l, t) => { counts.set(url, (counts.get(url) ?? 0) + 1); prev?.(url, l, t); };
+    let lastTop = 0;
+    const iv = setInterval(() => {
+      let topUrl = '', topN = 0;
+      for (const [u, n] of counts) if (n > topN) { topN = n; topUrl = u; }
+      if (topN > 50 && topN !== lastTop) { lastTop = topN; siegeLoadNote('Assets', `top load ×${topN}: ${topUrl.split('/').slice(-2).join('/')}`); }
+    }, 1500);
+    return () => { clearInterval(iv); mgr.onStart = prev; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // All-cached fallback: if nothing has started loading shortly after mount, there's nothing to wait
   // for — report ready (don't sit on the inactivity watchdog).
