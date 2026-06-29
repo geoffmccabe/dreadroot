@@ -10,7 +10,11 @@ import { HeartbeatPanel } from '@/components/HeartbeatPanel';
 import { FungalTreeDiagnostics } from '@/components/FungalTreeDiagnostics';
 import { TreeChopConfirmModal } from '@/features/trees/components/TreeChopConfirmModal';
 import { DeathOverlay } from '@/features/shwarm';
-import { isSiegePlayerDead } from '@/components/siege/siegePlayerState';
+import { isSiegePlayerDead, getSiegeReturnPoint } from '@/components/siege/siegePlayerState';
+import { SiegeDeathOverlay } from '@/components/siege/SiegeDeathOverlay';
+import { siegeJump } from '@/components/siege/teleportStore';
+import { SIEGE_TELEPORTS } from '@/components/siege/siegeAreas';
+import { getActiveGame } from '@/config/activeGame';
 import { inspectorModeEnabled } from '@/components/FPSCounter';
 
 import { PentabulletCrosshair } from './PentabulletCrosshair';
@@ -116,15 +120,28 @@ export function FortressOverlays(props: FortressOverlaysProps) {
       {/* Egg-ready throw crosshair (black star + "S") */}
       <EggReadyCrosshair visible={!!eggReady && !isInspectorMode} />
 
-      {/* Death Overlay — NOT during a challenge loss: there the player is a ghost and the
-          ChallengeResultPanel (Play Again / Choose Another / Close) handles it, so no Respawn option. */}
+      {/* Death Overlay — NOT during a challenge loss (ChallengeResultPanel handles it) and NOT in a
+          siege world (the SiegeDeathOverlay below handles those, keeping the world visible). */}
       <DeathOverlay
-        isDead={isDead && !isSiegePlayerDead()}
+        isDead={isDead && !isSiegePlayerDead() && getActiveGame() !== 'siege-worlds'}
         respawnTimer={respawnTimer}
         onRespawn={() => {
           const spawnPos = respawn?.();
           if (spawnPos && setRespawnPosition) setRespawnPosition(spawnPos);
           if (setRespawnTimer) setRespawnTimer(0);
+        }}
+      />
+
+      {/* Siege open-world / test-map death: keep the world visible (50% darken) + RESPAWN (revive in
+          place to keep testing) / RETURN (revive + go back where you came from). No auto-teleport. */}
+      <SiegeDeathOverlay
+        visible={isDead && !isSiegePlayerDead() && getActiveGame() === 'siege-worlds'}
+        onRespawn={() => { respawn?.(); }}
+        onReturn={() => {
+          respawn?.();
+          const rp = getSiegeReturnPoint();
+          if (rp) siegeJump(rp.mapId, rp.pos, rp.yaw, rp.pitch);
+          else { const lobby = SIEGE_TELEPORTS.find((t) => t.slot === 1); if (lobby) siegeJump('siege-test', lobby.pos, lobby.yaw, lobby.pitch); }
         }}
       />
 

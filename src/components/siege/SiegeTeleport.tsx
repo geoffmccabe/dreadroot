@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
 import { setTeleportArmed, isTeleportArmed } from './teleportStore';
 import { setActiveMapId, getActiveMapId } from '@/config/activeMap';
-import { setSiegePendingSpawn } from './siegePlayerState';
+import { setSiegePendingSpawn, setSiegeReturnPoint } from './siegePlayerState';
 import { getSiegeAdmin } from './siegeAdmin';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 
@@ -60,7 +60,13 @@ export function SiegeTeleport() {
       // Switching maps: hand the controller this exact spawn so its world-change reset doesn't
       // overwrite it with the map's own (often placeholder) spawn.position. Same-map jumps need no
       // pending — the direct set below is final since the controller won't re-spawn.
-      if (mapId !== getActiveMapId()) setSiegePendingSpawn({ pos, yaw, pitch });
+      if (mapId !== getActiveMapId()) {
+        // Remember where we came FROM (this map + current spot/facing) so the death screen's RETURN
+        // can send the player back there.
+        euler.setFromQuaternion(camera.quaternion, 'YXZ');
+        setSiegeReturnPoint({ mapId: getActiveMapId(), pos: [camera.position.x, camera.position.y, camera.position.z], yaw: euler.y, pitch: euler.x });
+        setSiegePendingSpawn({ pos, yaw, pitch });
+      }
       setActiveMapId(mapId);
       camera.position.set(pos[0], pos[1], pos[2]);
       if (yaw != null) {

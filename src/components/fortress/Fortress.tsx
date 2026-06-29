@@ -1302,7 +1302,8 @@ export function Fortress() {
   // as a ghost (no "Respawning…", no teleport to spawn); ChallengeRunner shows YOU LOSE and the
   // monsters wander off, and the player only revives when they start/replay a challenge.
   useEffect(() => {
-    if (isDead && respawnTimer === 0 && !isSiegePlayerDead()) {
+    // Siege worlds handle death via SiegeDeathOverlay (no auto-respawn/teleport — keeps the world up).
+    if (isDead && respawnTimer === 0 && !isSiegePlayerDead() && getActiveGame() !== 'siege-worlds') {
       setRespawnTimer(3);
       // Big centered death message — same overlay/style as the wave announcements.
       setChallengeState({ announce: { title: 'YOU DIED', subtitle: 'Respawning…', faint: false, until: performance.now() + 3000 } });
@@ -1315,7 +1316,7 @@ export function Fortress() {
         setRespawnTimer(prev => prev - 1);
       }, 1000);
       return () => clearTimeout(timer);
-    } else if (respawnTimer === 0 && isDead && !isSiegePlayerDead()) {
+    } else if (respawnTimer === 0 && isDead && !isSiegePlayerDead() && getActiveGame() !== 'siege-worlds') {
       respawn();   // restore health
       // Siege Worlds: respawn back at the Bleakrock start point (not where you died).
       if (getActiveGame() === 'siege-worlds') {

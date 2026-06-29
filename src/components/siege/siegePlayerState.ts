@@ -23,3 +23,11 @@ export interface PendingSpawn { pos: [number, number, number]; yaw?: number; pit
 let pendingSpawn: PendingSpawn | null = null;
 export function setSiegePendingSpawn(s: PendingSpawn | null) { pendingSpawn = s; }
 export function consumeSiegePendingSpawn(): PendingSpawn | null { const s = pendingSpawn; pendingSpawn = null; return s; }
+
+// Return point — WHERE the player was just before teleporting into another map. Recorded by
+// SiegeTeleport on each map-change jump so the death screen's RETURN can send them back where they
+// came from (null = never jumped → RETURN falls back to the open-world Lobby).
+export interface ReturnPoint { mapId: string; pos: [number, number, number]; yaw?: number; pitch?: number }
+let returnPoint: ReturnPoint | null = null;
+export function setSiegeReturnPoint(p: ReturnPoint | null) { returnPoint = p; }
+export function getSiegeReturnPoint(): ReturnPoint | null { return returnPoint; }
