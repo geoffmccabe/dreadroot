@@ -112,6 +112,8 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
       <style>{`
 @keyframes authBlackPulse{0%,100%{opacity:.75}50%{opacity:.60}}
 @keyframes dreadrootCrossfade{0%,100%{opacity:0}50%{opacity:1}}
+@keyframes authFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes authBgIn{from{opacity:0}to{opacity:.5}}
 #bg-yt-host iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;pointer-events:none;}
 `}</style>
 
@@ -127,6 +129,8 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
           minWidth: '177.78vh',
           minHeight: '100vh',
           pointerEvents: 'none',
+          // Reveal LAST in the intro sequence (logos → background → button → video).
+          animation: 'authFadeIn 1.2s ease-out 1.8s both',
         }}
       />
 
@@ -146,8 +150,9 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
-          opacity: 0.5,
           mixBlendMode: 'screen',
+          // Reveal SECOND (after the logos), fading to its 0.5 working opacity.
+          animation: 'authBgIn 1s ease-out .7s both',
         }}
       />
 
@@ -159,17 +164,20 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
 
       {/* 4. Content */}
       <div className="relative z-10 min-h-screen w-full flex flex-col items-center justify-center gap-6 p-6">
-        {/* TOP: Lightningworks + AWC present */}
+        {/* TOP: Lightningworks + AWC present. aspectRatio reserves its height before the image
+            bytes load, so the centred column never reflows (the button no longer "drops"). Fades
+            in FIRST. */}
         <img
           src="/lw_awc_present_1600px.webp"
           alt="Lightningworks + AWC present"
           className="w-[55%] md:w-[40%] h-auto block"
+          style={{ aspectRatio: '1600 / 879', animation: 'authFadeIn .8s ease-out .15s both' }}
         />
         {/* BELOW: Dreadroot wordmark — two color variants crossfading on a
             10s loop (variant fades in over 5s, back out over 5s). The base
             img is in normal flow and sets the box height; the variant is
             absolutely stacked over it at the same size. */}
-        <div className="relative w-[88%] md:w-[66%]">
+        <div className="relative w-[88%] md:w-[66%]" style={{ aspectRatio: '2400 / 600', animation: 'authFadeIn .8s ease-out .15s both' }}>
           <img
             src="/Dreadroot_words_logo_horiz_2400px.webp"
             alt="Dreadroot"
@@ -183,7 +191,7 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
             style={{ animation: 'dreadrootCrossfade 10s ease-in-out infinite' }}
           />
         </div>
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2" style={{ animation: 'authFadeIn .8s ease-out 1.3s both' }}>
           <Button
             type="button"
             onClick={onStart ?? signInWithSSO}
