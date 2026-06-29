@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { sampleHeight, bakedFloorAt } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
+import { APP_VERSION } from '@/version';
 import { raycastMesh } from './meshColliderSystem';
 import { acquireTarget } from './siegeTargeting';
 import { getNavProfile } from './siegeNavProfile';
@@ -296,7 +297,9 @@ function HandWeapon({ root, w }: { root: THREE.Group; w: NonNullable<MonsterConf
 export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number] } & MonsterConfig) {
   const c = { ...DEF, ...cfg };
   const clips = { ...DEFCLIPS, ...(cfg.clips || {}) };
-  const { scene, animations } = useGLTF(c.url);
+  // Version-tag the FETCH so updated monster models (new clips) bypass the CDN/browser cache on deploy.
+  // c.url stays clean everywhere else (hitbox keys, editor) — only the network request carries ?v.
+  const { scene, animations } = useGLTF(`${c.url}?v=${APP_VERSION}`);
   // Clone the rig so MANY instances of the same model (e.g. a horde of red demons) each get
   // their own skeleton — a plain shared scene can only render in one place. SkeletonUtils
   // clones the skinned mesh + skeleton properly (materials stay shared, which is fine).
