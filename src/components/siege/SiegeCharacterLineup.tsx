@@ -49,34 +49,6 @@ useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`);
 
-// Two Mixamo reload clips (#25 Reload_Standing, #26 Reload_Walking) bake a ~30-40° body yaw into the
-// root (Hips) bone, so the character faces off at a strange angle. Re-face them forward at load by
-// pre-multiplying the WHOLE Hips quaternion track by the inverse of its FIRST-frame yaw — this zeroes
-// the starting facing while preserving any in-clip turning. Only clips with a large baked yaw are
-// touched (threshold 15°), so forward clips + turn-around clips (which start forward) are untouched.
-const _q = new THREE.Quaternion();
-const _qCorr = new THREE.Quaternion();
-const _yAxis = new THREE.Vector3(0, 1, 0);
-function faceForwardHips(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
-  return clips.map((c) => {
-    const ti = c.tracks.findIndex((t) => t.name.endsWith('Hips.quaternion'));
-    if (ti < 0) return c;
-    const v = c.tracks[ti].values;
-    const yaw0 = Math.atan2(2 * (v[3] * v[1] + v[2] * v[0]), 1 - 2 * (v[1] * v[1] + v[0] * v[0]));
-    if (Math.abs(yaw0) < 15 * Math.PI / 180) return c;       // already roughly forward — leave it
-    _qCorr.setFromAxisAngle(_yAxis, -yaw0);                   // world-Y spin that cancels the baked yaw
-    const out = new Float32Array(v.length);
-    for (let i = 0; i < v.length; i += 4) {
-      _q.set(v[i], v[i + 1], v[i + 2], v[i + 3]);
-      _q.premultiply(_qCorr);                                // rotate the body about world-Y to face forward
-      out[i] = _q.x; out[i + 1] = _q.y; out[i + 2] = _q.z; out[i + 3] = _q.w;
-    }
-    const tracks = c.tracks.slice();
-    tracks[ti] = new THREE.QuaternionKeyframeTrack(c.tracks[ti].name, Array.from((c.tracks[ti] as THREE.KeyframeTrack).times), Array.from(out));
-    return new THREE.AnimationClip(c.name, c.duration, tracks);
-  });
-}
-
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
   // Animations come from the shared category libraries (deduped across all characters); useGLTF
@@ -88,8 +60,10 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
   // Bind the rifle clips UNMODIFIED. (An earlier band-aid stripped the Spine/Spine1 tracks thinking
   // the clips had a bad lower-spine curve — but the user had confirmed they look good; stripping the
   // spine while the hips still tilt forward folded every character 90° at the waist. Reverted.)
-  const rifleFixed = useMemo(() => faceForwardHips(rifleAnims), [rifleAnims]);   // re-face the 2 reload clips
-  const animations = useMemo(() => [...baseAnims, ...rifleFixed, ...locoAnims], [baseAnims, rifleFixed, locoAnims]);
+  // Bind all clips UNMODIFIED. (Runtime clip-surgery on the rifle clips — spine-strip and Hips-yaw —
+  // both caused worse distortion; the rifle clips' curved lower back is an ASSET flaw, fixed by
+  // rebuilding the rifle library, not by patching tracks at load.)
+  const animations = useMemo(() => [...baseAnims, ...rifleAnims, ...locoAnims], [baseAnims, rifleAnims, locoAnims]);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
