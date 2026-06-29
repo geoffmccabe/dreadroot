@@ -53,12 +53,22 @@ function liveSet(ref: BakedRef, m: THREE.Matrix4): void {
 
 // Move/rotate/scale a baked instance: store the new placement matrix + update it on screen now.
 export function applyBakedTransform(ref: BakedRef, t: TRS): void {
+  bakedTransform(ref, t, true);
+}
+
+// Live (per-frame drag) version: update the in-memory override + the on-screen matrix, but DON'T
+// touch localStorage. The drag's final position is saved once on release via applyBakedTransform.
+export function liveBakedTransform(ref: BakedRef, t: TRS): void {
+  bakedTransform(ref, t, false);
+}
+
+function bakedTransform(ref: BakedRef, t: TRS, persist: boolean): void {
   _p.set(t.pos[0], t.pos[1], t.pos[2]);
   _q.set(t.quat[0], t.quat[1], t.quat[2], t.quat[3]);
   _s.set(t.scale[0], t.scale[1], t.scale[2]);
   _place.compose(_p, _q, _s);
   transformOverrides.set(ref.key, { matrix: _place.toArray() });
-  save();
+  if (persist) save();
   _local.fromArray(ref.localArr);
   _m.multiplyMatrices(_place, _local);
   liveSet(ref, _m);

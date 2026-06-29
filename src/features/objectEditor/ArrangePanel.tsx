@@ -4,9 +4,10 @@
 // Duplicate / Delete / Deselect buttons. Surface AND text are driven by the shared 'build'
 // panel theme tokens (--pt-build-*), the same way the debug panels use --pt-debug-*, so an
 // admin editing the Build style restyles it live. Mounted inside BuildToolsDock.
-import type { CSSProperties } from 'react';
+import { useSyncExternalStore, type CSSProperties } from 'react';
 import { panelSurface } from '@/theme/panelSurface';
 import { useCurrent, duplicateSelected, deleteSelected, setSelected } from './store';
+import { PROFILES, PROFILE_KEYS, getProfile, getProfileKey, setProfileKey, subscribeProfile } from './controlProfiles';
 
 const f1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 const yawDeg = (q: [number, number, number, number]) =>
@@ -24,6 +25,7 @@ const btn = 'rounded px-2 py-0.5 text-[10px] border border-white/25 hover:bg-whi
 
 export function ArrangePanel() {
   const obj = useCurrent();
+  const profileKey = useSyncExternalStore(subscribeProfile, getProfileKey);
   const surface: CSSProperties = {
     ...panelSurface('build'),
     color: 'var(--pt-build-body-color)',
@@ -57,10 +59,24 @@ export function ArrangePanel() {
         </>
       )}
 
+      <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[10px]">
+        <span style={muted}>controls</span>
+        <select
+          value={profileKey}
+          onChange={(e) => setProfileKey(e.target.value)}
+          className="flex-1 rounded border border-white/25 bg-black/30 px-1 py-0.5 text-[10px]"
+          title={getProfile().blurb}
+        >
+          {PROFILE_KEYS.map((k) => <option key={k} value={k}>{PROFILES[k].name}</option>)}
+        </select>
+      </div>
+      <div className="text-[9px]" style={muted}>{getProfile().blurb}</div>
+
       <div className="mt-2 border-t border-white/10 pt-2 text-[10px] leading-relaxed" style={muted}>
-        <div>←→ / ↑↓ move · PgUp/Dn raise</div>
-        <div>[ ] rotate · - = scale</div>
-        <div>⇧D duplicate · Del delete · ⌘Z undo</div>
+        <div>hold L-btn = grab &amp; carry · wheel = raise/lower</div>
+        <div>⇧+wheel rotate · ⌥+wheel scale</div>
+        <div>hold Ctrl = drop onto surface below</div>
+        <div>⇧+click duplicate · Del delete · ⌘Z undo</div>
       </div>
     </div>
   );

@@ -1,31 +1,32 @@
-// Phase-0 input driver. This is ONE driver for the input-agnostic core — it only
-// translates key/mouse events into store commands (select / spawn / transform /
-// duplicate / delete / undo). A future VR driver does the same against the same core.
+// Input driver for the Arrange tool — ONE driver translating mouse/keys into store commands
+// (a future VR driver does the same against the same core). This is a first-person game with a
+// pointer-locked mouse (no free desktop cursor), so "grab and drag" is the physgun model: aim the
+// crosshair at an object, HOLD the left button, and it rides on its height-plane wherever you look;
+// release to drop. The wheel raises/lowers (Shift+wheel rotate · Option+wheel scale); hold Ctrl to
+// ride the surface beneath. Right hand never leaves the mouse; left hand only ever on the modifier
+// row — WASD/S stay free for walking. Locked to admins/superadmins; Shift+` toggles edit mode.
 //
-// Locked to admins/superadmins: backtick (`) toggles edit mode. While edit mode is
-// ON, the editor keys/clicks are captured (capture-phase) so they pre-empt weapon
-// fire / block placement; WASD still walks. Off by default — normal play untouched.
-//
-// Phase-0 controls (edit mode ON):
-//   `        toggle edit mode            click   select object under crosshair
-//   P        spawn a test box ahead      Esc     deselect
-//   ←→ move X · ↑↓ move Z · Shift+↑↓ (or PgUp/Dn / Fn+↑↓ on Mac) move Y   (0.5 m)
-//   [ ]      rotate (yaw)  - =  scale     Shift+D duplicate  Del  delete
-//   Cmd/Ctrl+Z undo        +Shift redo
-import { useEffect, useMemo } from 'react';
-import { useThree } from '@react-three/fiber';
+// Controls (edit mode ON):
+//   Shift+`   toggle edit mode          hold L-btn  grab & carry on the height plane
+//   wheel     raise / lower             Shift+wheel rotate · Option+wheel scale
+//   hold Ctrl ride surface below        Shift+click grab a duplicate
+//   P spawn box · Del delete · Esc cancel/deselect · Cmd-Z undo (+Shift redo)
+import { useEffect, useMemo, useRef } from 'react';
+import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import { IDENTITY_QUAT, type TRS } from './types';
 import {
   getCanEdit, getEditMode, toggleEditMode, setSelected, current,
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
-  selectBaked, clearBaked,
+  selectBaked, clearBaked, dragBegin, dragTo, dragCommit, dragCancel, isDragging,
 } from './store';
 import { placeKey, transformOverrides } from './bakedOverrides';
+import { getProfile, snapAxis } from './controlProfiles';
 
-const MOVE = 0.5;
-const YAW = Math.PI / 12;
+const MIN_REACH = 1.5;     // closest the carried object can sit to the camera (m)
+const MAX_REACH = 150;     // furthest a plane-hit is accepted before falling back to last reach
+const SNAP_UP = 60;        // how far above the carry point the surface down-ray starts (m)
 const clampScale = (s: number) => Math.min(50, Math.max(0.05, s));
 
 export function ObjectEditController() {
@@ -33,13 +34,18 @@ export function ObjectEditController() {
   const ro = useMemo(() => new THREE.Vector3(), []);
   const rd = useMemo(() => new THREE.Vector3(), []);
   const ray = useMemo(() => new THREE.Raycaster(), []);
+  const down = useMemo(() => new THREE.Vector3(0, -1, 0), []);
+  const dray = useMemo(() => new THREE.Raycaster(), []);
   const dq = useMemo(() => new THREE.Quaternion(), []);
   const cq = useMemo(() => new THREE.Quaternion(), []);
+  const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+  // Live grab state (refs so the frame loop reads them without re-subscribing).
+  const grab = useRef({ active: false, planeY: 0, reach: 8 });
+  const ctrlDown = useRef(false);
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
-    // Baked map instance (Enchanted Forest cliffs/trees): derive its stable key + model-local
-    // transform so it can be moved in place, and select it as a temporary editable object.
+
     const selectBakedHit = (im: THREE.InstancedMesh, instanceId: number): boolean => {
       const placements = im.userData.placements as number[][] | undefined;
       const baseArr = placements?.[instanceId]; if (!baseArr) return false;
@@ -58,18 +64,16 @@ export function ObjectEditController() {
       return true;
     };
 
-    const selectAtCrosshair = () => {
+    const selectAtCrosshair = (): boolean => {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd); ray.set(ro, rd);
       const hits = ray.intersectObjects(scene.children, true);
       for (const h of hits) {
-        // 1) an editor-placed object (world_objects)
         let o: THREE.Object3D | null = h.object;
-        while (o) { if (o.userData?.worldObjectId) { clearBaked(); setSelected(o.userData.worldObjectId as string); return; } o = o.parent; }
-        // 2) a baked map instance
+        while (o) { if (o.userData?.worldObjectId) { clearBaked(); setSelected(o.userData.worldObjectId as string); return true; } o = o.parent; }
         const im = h.object as THREE.InstancedMesh;
-        if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null && selectBakedHit(im, h.instanceId)) return;
+        if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null && selectBakedHit(im, h.instanceId)) return true;
       }
-      clearBaked(); setSelected(null);
+      clearBaked(); setSelected(null); return false;
     };
 
     const spawnAhead = () => {
@@ -80,69 +84,114 @@ export function ObjectEditController() {
       addObject({ id: crypto.randomUUID(), modelUrl: 'builtin:box', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [1, 1, 1] });
     };
 
-    const move = (dx: number, dy: number, dz: number) => {
-      const o = current(); if (!o) return;
-      const next: TRS = { pos: [o.pos[0] + dx, o.pos[1] + dy, o.pos[2] + dz], quat: o.quat, scale: o.scale };
-      transformSelected(next);
-    };
-    const yaw = (d: number) => {
-      const o = current(); if (!o) return;
-      cq.set(o.quat[0], o.quat[1], o.quat[2], o.quat[3]);
-      dq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), d);
-      cq.premultiply(dq);
-      transformSelected({ pos: o.pos, quat: [cq.x, cq.y, cq.z, cq.w], scale: o.scale });
-    };
-    const scaleBy = (f: number) => {
-      const o = current(); if (!o) return;
-      transformSelected({ pos: o.pos, quat: o.quat, scale: [clampScale(o.scale[0] * f), clampScale(o.scale[1] * f), clampScale(o.scale[2] * f)] });
-    };
-
-    const onMouse = (e: MouseEvent) => {
+    // ── grab / release (left button) ──
+    const onDown = (e: MouseEvent) => {
       if (!getEditMode() || e.button !== 0) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      selectAtCrosshair();
+      if (!selectAtCrosshair()) return;          // nothing under the crosshair
+      if (e.shiftKey) duplicateSelected([0, 0, 0]); // Shift+click ⇒ grab a copy (no-op for baked)
+      const o = current(); if (!o) return;
+      camera.getWorldPosition(ro);
+      grab.current.active = true;
+      grab.current.planeY = o.pos[1];
+      grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
+      dragBegin();
+    };
+    const onUp = (e: MouseEvent) => {
+      if (e.button !== 0 || !grab.current.active) return;
+      grab.current.active = false;
+      dragCommit();
     };
 
+    // ── wheel: raise/lower · Shift rotate · Option scale ──
+    const onWheel = (e: WheelEvent) => {
+      if (!getEditMode()) return;
+      const o = current(); if (!o) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const dir = e.deltaY < 0 ? 1 : -1;       // wheel up = raise / +rotation / +scale
+      const pf = getProfile();
+      const grabbing = grab.current.active;
+      if (e.shiftKey) {                          // rotate yaw
+        cq.set(o.quat[0], o.quat[1], o.quat[2], o.quat[3]);
+        dq.setFromAxisAngle(yAxis, dir * pf.rotateStep); cq.premultiply(dq);
+        const next: TRS = { pos: o.pos, quat: [cq.x, cq.y, cq.z, cq.w], scale: o.scale };
+        grabbing ? dragTo(next) : transformSelected(next);
+      } else if (e.altKey) {                     // scale (uniform)
+        const f = Math.pow(pf.scaleStep, dir);
+        const next: TRS = { pos: o.pos, quat: o.quat, scale: [clampScale(o.scale[0] * f), clampScale(o.scale[1] * f), clampScale(o.scale[2] * f)] };
+        grabbing ? dragTo(next) : transformSelected(next);
+      } else {                                   // raise / lower
+        if (grabbing) grab.current.planeY += dir * pf.heightStep;  // frame loop applies it
+        else transformSelected({ pos: [o.pos[0], o.pos[1] + dir * pf.heightStep, o.pos[2]], quat: o.quat, scale: o.scale });
+      }
+    };
+
+    // ── keys ──
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Control') ctrlDown.current = true;
       if (isTypingTarget(e)) return;
-      // Toggle works any time (superadmin only); everything else needs edit mode. SHIFT+` so it no
-      // longer rides on the plain-` God Mode toggle (which was auto-opening the Arrange menu).
       if (e.code === 'Backquote' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (getCanEdit()) { toggleEditMode(); e.preventDefault(); }
+        if (getCanEdit()) { toggleEditMode(); if (!getEditMode()) { grab.current.active = false; } e.preventDefault(); }
         return;
       }
       if (!getEditMode()) return;
-
-      const mod = e.metaKey || e.ctrlKey;
-      if (mod && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
-      if (mod) return; // leave other browser/game meta combos alone
-
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
+      if (meta) return;
       let handled = true;
       switch (e.code) {
-        case 'ArrowLeft':  move(-MOVE, 0, 0); break;
-        case 'ArrowRight': move(MOVE, 0, 0); break;
-        // Shift+↑↓ raises/lowers (Mac-friendly: no Page Up/Down key needed); plain ↑↓ = forward/back.
-        case 'ArrowUp':    e.shiftKey ? move(0, MOVE, 0) : move(0, 0, -MOVE); break;
-        case 'ArrowDown':  e.shiftKey ? move(0, -MOVE, 0) : move(0, 0, MOVE); break;
-        case 'PageUp':     move(0, MOVE, 0); break;
-        case 'PageDown':   move(0, -MOVE, 0); break;
-        case 'BracketLeft':  yaw(-YAW); break;
-        case 'BracketRight': yaw(YAW); break;
-        case 'Minus':  scaleBy(0.9); break;
-        case 'Equal':  scaleBy(1.1); break;
-        case 'KeyP':   spawnAhead(); break;
-        case 'KeyD':   if (e.shiftKey) duplicateSelected([1, 0, 0]); else handled = false; break;
+        case 'KeyP': spawnAhead(); break;
         case 'Delete': case 'Backspace': deleteSelected(); break;
-        case 'Escape': setSelected(null); break;
+        case 'Escape': if (isDragging()) { dragCancel(); grab.current.active = false; } else setSelected(null); break;
         default: handled = false;
       }
       if (handled) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
+    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Control') ctrlDown.current = false; };
 
-    window.addEventListener('mousedown', onMouse, true);
+    window.addEventListener('mousedown', onDown, true);
+    window.addEventListener('mouseup', onUp, true);
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
     window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('mousedown', onMouse, true); window.removeEventListener('keydown', onKey, true); };
-  }, [camera, scene, ray, ro, rd, dq, cq]);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown, true);
+      window.removeEventListener('mouseup', onUp, true);
+      window.removeEventListener('wheel', onWheel, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
+  }, [camera, scene, ray, ro, rd, dray, down, dq, cq, yAxis]);
+
+  // ── carry loop: while grabbing, slide the object along its height plane under the aim ──
+  useFrame(() => {
+    if (!grab.current.active || !getEditMode()) return;
+    const o = current(); if (!o) { grab.current.active = false; return; }
+    camera.getWorldPosition(ro); camera.getWorldDirection(rd);
+    // Where the aim ray meets the height plane (y = planeY). When that's invalid (looking up /
+    // near-flat), fall back to the last good reach so the object never shoots to infinity.
+    let reach = grab.current.reach;
+    const t = (grab.current.planeY - ro.y) / rd.y;
+    if (isFinite(t) && t > MIN_REACH && t < MAX_REACH) { reach = t; grab.current.reach = t; }
+    let x = ro.x + rd.x * reach;
+    let z = ro.z + rd.z * reach;
+    let y = grab.current.planeY;
+    x = snapAxis(x); z = snapAxis(z);               // profile grid snap (no-op when off)
+    if (ctrlDown.current) {                          // ride the surface directly beneath the carry point
+      dray.set(new THREE.Vector3(x, grab.current.planeY + SNAP_UP, z), down);
+      const hits = dray.intersectObjects(scene.children, true);
+      const selId = o.id; const selMesh = o.baked?.mesh;
+      for (const h of hits) {
+        const m = h.object as THREE.Mesh; if (!m.isMesh) continue;
+        if (m === selMesh) continue;                 // don't land the baked object on itself
+        let p: THREE.Object3D | null = m; let self = false;
+        while (p) { if (p.userData?.worldObjectId === selId) { self = true; break; } p = p.parent; }
+        if (self) continue;
+        y = h.point.y; break;
+      }
+    }
+    dragTo({ pos: [x, y, z], quat: o.quat, scale: o.scale });
+  });
 
   return null;
 }

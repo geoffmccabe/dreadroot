@@ -8,7 +8,7 @@ import { useSyncExternalStore } from 'react';
 import type { WorldObject, TRS, BakedRef } from './types';
 import { trsOf } from './types';
 import { insertObject, persistTransform, deleteObject } from './persistence';
-import { applyBakedTransform, hideBaked } from './bakedOverrides';
+import { applyBakedTransform, liveBakedTransform, hideBaked } from './bakedOverrides';
 
 interface HistoryEntry { undo: () => void; redo: () => void; }
 
@@ -128,6 +128,53 @@ export function transformSelected(next: TRS): void {
     redo: () => { localSetTRS(id, next); persistTRS(o, next); },
   });
 }
+
+// --- live drag (one undo step + one save per whole drag) ---
+// A grab-and-carry drag calls dragBegin() once, dragTo() every frame (visual only, no DB / no
+// localStorage), and dragCommit() on release (persist once + push a single history entry for the
+// net move). This keeps a continuous drag from spamming Supabase / localStorage 60×/sec.
+let dragId: string | null = null;
+let dragPrev: TRS | null = null;
+
+export function dragBegin(): void {
+  const o = current(); if (!o) { dragId = null; dragPrev = null; return; }
+  dragId = o.id; dragPrev = trsOf(o);
+}
+
+export function dragTo(next: TRS): void {
+  if (!dragId) return;
+  const o = state.objects.find((x) => x.id === dragId); if (!o) return;
+  localSetTRS(dragId, next);
+  if (o.baked) liveBakedTransform(o.baked, next);   // visual only; not saved until commit
+}
+
+export function dragCommit(): void {
+  const id = dragId, prev = dragPrev; dragId = null; dragPrev = null;
+  if (!id || !prev) return;
+  const o = state.objects.find((x) => x.id === id); if (!o) return;
+  const next = trsOf(o);
+  const moved = prev.pos.some((v, i) => v !== next.pos[i]) ||
+    prev.quat.some((v, i) => v !== next.quat[i]) ||
+    prev.scale.some((v, i) => v !== next.scale[i]);
+  if (!moved) return;
+  persistTRS(o, next);
+  pushHistory({
+    undo: () => { localSetTRS(id, prev); persistTRS(o, prev); },
+    redo: () => { localSetTRS(id, next); persistTRS(o, next); },
+  });
+}
+
+// Abort a drag in progress (Esc): snap the object back to where the grab started, no history.
+export function dragCancel(): void {
+  const id = dragId, prev = dragPrev; dragId = null; dragPrev = null;
+  if (!id || !prev) return;
+  const o = state.objects.find((x) => x.id === id); if (!o) return;
+  localSetTRS(id, prev);
+  if (o.baked) liveBakedTransform(o.baked, prev);
+}
+
+// True while a grab-and-carry drag is in progress (used by the controller's frame loop).
+export function isDragging(): boolean { return dragId !== null; }
 
 export function duplicateSelected(offset: [number, number, number]): void {
   const o = current(); if (!o) return;
