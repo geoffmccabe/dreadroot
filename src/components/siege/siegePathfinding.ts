@@ -18,25 +18,57 @@ const cellOf = (v: number) => Math.floor(v / CELL);
 const worldOf = (c: number) => (c + 0.5) * CELL;
 const ckey = (cx: number, cz: number) => (cx + 32768) * 65536 + (cz + 32768);
 
-// Is moving from (ax,az) to (bx,bz) blocked by a wall at floor level refY? Chest-height ray for BVH
+// Is moving from (ax,az) to (bx,bz) blocked at floor level refY? A horizontal ray for BVH walls
 // (city), plus a box-overlap test at the destination for box-collider worlds.
-function edgeBlocked(ax: number, az: number, bx: number, bz: number, refY: number): boolean {
+//   rayH  = height above the floor for the wall ray. Chest (1.1) detects a wall a standing body hits;
+//           a LOW value (~0.4) passes UNDER a low lintel — so a "duck-in" cave entrance (solid above,
+//           open below) blocks the chest ray but not the low ray. That difference = stand vs crawl.
+//   boxH  = height the box-overlap test probes at (defaults 0.6, the original).
+//   clear = body half-width. >0 also casts two parallel rays offset ±clear perpendicular to travel and
+//           inflates the box test, so a gap NARROWER than the body counts as blocked (collider fit test).
+// Defaults reproduce the original behaviour exactly (single chest ray, 0.6 box probe, no width test).
+function edgeBlocked(ax: number, az: number, bx: number, bz: number, refY: number,
+                     rayH = CHEST, boxH = 0.6, clear = 0): boolean {
   const dx = bx - ax, dz = bz - az;
   const d = Math.hypot(dx, dz) || 1;
-  const hit = raycastMesh(ax, refY + CHEST, az, dx / d, 0, dz / d, d + 0.05);
-  if (hit != null && hit <= d + 0.05) return true;
-  const cy = refY + 0.6;
+  const nx = dx / d, nz = dz / d;
+  // Centre ray + (when fit-testing) the two side rays at ±clear, so a too-narrow slot is "blocked".
+  const px = -nz, pz = nx;                          // unit perpendicular to travel
+  const offs = clear > 0 ? [0, clear, -clear] : [0];
+  for (const o of offs) {
+    const ox = px * o, oz = pz * o;
+    const hit = raycastMesh(ax + ox, refY + rayH, az + oz, nx, 0, nz, d + 0.05);
+    if (hit != null && hit <= d + 0.05) return true;
+  }
+  const cy = refY + boxH;
   for (const grid of [worldCollisionGrid, monsterColliderGrid]) {
-    const cnt = grid.getNearby(bx, bz, 0.1);
+    const cnt = grid.getNearby(bx, bz, 0.1 + clear);
     const res = grid.nearbyResult;
     for (let i = 0; i < cnt; i++) {
       const b = res[i];
       if (!b || !b.max) continue;
-      if (bx >= b.min.x && bx <= b.max.x && bz >= b.min.z && bz <= b.max.z &&
+      if (bx >= b.min.x - clear && bx <= b.max.x + clear && bz >= b.min.z - clear && bz <= b.max.z + clear &&
           b.min.y <= cy && b.max.y >= cy && b.max.y - b.min.y > 0.5) return true;
     }
   }
   return false;
+}
+
+/** Posture clearance profiles for the fit test. STAND = upright body; CRAWL = low + on all fours. */
+export const FIT_STAND = { rayH: CHEST, boxH: 0.9 };
+export const FIT_CRAWL = { rayH: 0.4, boxH: 0.4 };
+
+/** Does an existing route fit a body of half-width `clear` at the given posture, end to end? Cheap
+ *  re-walk of the waypoints (no A*). Lets a caller ask "I found a path — can I WALK it, or must I
+ *  crawl, or does even crawling not fit?" without re-searching. */
+export function pathFits(pts: PathPt[], sx: number, sz: number, refY: number,
+                         clear: number, posture: { rayH: number; boxH: number }): boolean {
+  let ax = sx, az = sz;
+  for (const p of pts) {
+    if (edgeBlocked(ax, az, p.x, p.z, refY, posture.rayH, posture.boxH, clear)) return false;
+    ax = p.x; az = p.z;
+  }
+  return true;
 }
 
 // Minimal binary min-heap keyed by f-score.

@@ -15,6 +15,7 @@ import { sampleHeight, bakedFloorAt } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { APP_VERSION } from '@/version';
+import { type CaveCrawlConfig, ccCfg, newCaveState, resolveCavePosture, stepCave, findNeckBones, applyHeadUp } from './caveCrawl';
 import { raycastMesh } from './meshColliderSystem';
 import { acquireTarget } from './siegeTargeting';
 import { getNavProfile } from './siegeNavProfile';
@@ -136,6 +137,8 @@ export interface MonsterConfig {
   // pos/rotDeg seat the grip in the fist.
   weapon?: { url: string; scale?: number; pos?: [number, number, number]; rotDeg?: [number, number, number] };
   enrageOnHit?: boolean;       // once damaged: walk→run clip + 50% faster (charges when shot)
+  caveCrawl?: CaveCrawlConfig; // opt-in: when the player hides in a too-small space, drop to a crawl
+                               // (stand→crouch→crawl, head bent up), thread in, and reach-in swipe when wedged
 }
 
 const DEF = { speed: 2.5, attackRange: 2.8, attackMs: 3000, attackClipMs: 1300, aggro: 60, wanderRadius: 14, faceOffset: 0 };
@@ -342,6 +345,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   // The head bone's rest position in the monster's LOCAL frame (captured once);
   // the residual between the tuned box and this lets the box keep its tuned offset
   // (e.g. forward onto the face) while riding the bone.
+  // Cave-crawl (opt-in): resolved config + the neck chain used for the head-up bend while crawling.
+  const cc = useMemo(() => ccCfg(c.caveCrawl), [c.caveCrawl]);
+  const neckBones = useMemo(() => (c.caveCrawl ? findNeckBones(cloned) : []), [cloned, c.caveCrawl]);
   const headRestLocal = useRef<{ x: number; y: number; z: number } | null>(null);
   // Recapture the head rest offset if the rig is swapped (model hot-reload → new headBone), else the
   // box keeps the previous model's offset and drifts off the skull.
@@ -392,7 +398,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     deathVariant: '',
     // Stuck-detection + pathfinding (kicks in only when blocked from reaching the player).
     bestDist: Infinity, progressAt: 0, pathing: false, pathAt: 0, pathIdx: 0, crouching: false, bvhClimb: false,
-    path: null as import('./siegePathfinding').PathPt[] | null });
+    path: null as import('./siegePathfinding').PathPt[] | null,
+    cave: newCaveState() });
 
   // Body-flame container — shrunk to nothing over the first 2s of death so the flames go out.
   const flamesRef = useRef<THREE.Group>(null);
@@ -1246,6 +1253,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // Larger enemies WITHOUT a crawl clip hunker down while threading into a hiding space (skeletons
       // already play the real crawl clip). Applied to the render scale below.
       s.crouching = pathLoco && !hasCrawl;
+      // Cave-crawl (opt-in): while stuck-pathing, decide if the route is too small to WALK → CRAWL in
+      // (stand→crouch→crawl), or too small to even crawl ahead → WEDGED (reach-in swipe). 'none' = the
+      // route fits upright, so normal chase. Drives the clip + speed below and the head-up bend later.
+      let caveMode: import('./caveCrawl').CaveMode = 'none';
+      if (c.caveCrawl && nav.crawlHoles) {
+        const posture = pathLoco ? resolveCavePosture(s.path, s.x, s.z, s.y, inst.radius, cc.shrink) : 'walk';
+        caveMode = stepCave(s.cave, posture, pathLoco, now, cc.transitionMs);
+      }
       g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
       // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
       // monster keeps WALKING toward you between spits instead of standing still and spraying.
@@ -1287,14 +1302,29 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       const enraged = !!c.enrageOnHit && inst.hp < inst.maxHp;
       const chaseSpd = (enraged ? SPD * 1.5 : SPD) * injMul * corpseSlow(s.x, s.z);   // half speed wading over bodies
       const loco = injured ? 'crawl' : (enraged ? clips.run : clips.walk);
-      if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
+      // Cave-crawl overrides the chase clip + speed: 'enter' = stand→crouch (creep), 'crawl' = crawl in.
+      let caveSpeedMul = 1; let caveClip: string | null = null;
+      if (caveMode === 'enter') { caveClip = 'stand_to_crouch'; caveSpeedMul = 0.2; }
+      else if (caveMode === 'crawl') { caveClip = 'crawl'; caveSpeedMul = cc.crawlSpeedMul; }
+      if (caveMode === 'wedged') {
+        // WEDGED at the opening: the body can't follow but the arm can — reach IN and swipe on a
+        // cadence, connecting THROUGH the gap (bypasses the normal wall-LOS gate). No advance.
+        play('swipe');
+        if (now - s.cave.lastSwipe > cc.swipeMs) {
+          s.cave.lastSwipe = now;
+          const reach = H * 0.5 + 1.0;   // arm extended into the hole
+          if (c.meleeContact && dist < reach && Math.random() < 0.6)
+            dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound ?? '/punched.mp3', c.name);
+        }
+      } else if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
         // holds the vomit pose during the spit (movement continues).
-        const step = Math.min(chaseSpd * delta, pathLoco ? chaseSpd * delta : dist - c.attackRange);
+        const sp = chaseSpd * caveSpeedMul;
+        const step = Math.min(sp * delta, pathLoco ? sp * delta : dist - c.attackRange);
         mvx = cdx / cdist; mvz = cdz / cdist; moving = true;   // toward the player, or the path waypoint when stuck
         s.x += mvx * step; s.z += mvz * step;
-        if (now > s.swipeUntil) play(pathLoco && hasCrawl ? 'crawl' : loco);   // crawl while threading through; walk/run otherwise
+        if (now > s.swipeUntil) play(caveClip ?? (pathLoco && hasCrawl ? 'crawl' : loco));   // crawl while threading through; walk/run otherwise
       } else if (c.rangedRange && !c.kiteMin) { if (now > s.swipeUntil) play(clips.idle); }   // hold the vomit pose mid-spray
       else if (meleeReady) {
         s.lastAttack = now;
@@ -1605,6 +1635,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       } else if (ht >= 1) {
         inst.headshotAt = 0;   // done — mixer restores the bone next frame; re-triggers on the next headshot
       }
+    }
+    // Cave-crawl head-up: the crawl clip faces the floor, so bend the neck back to point the face at the
+    // player. Applied AFTER the mixer pose (same timing as the headshot lean), rest-compensated.
+    if (c.caveCrawl && (s.cave.mode === 'crawl' || s.cave.mode === 'wedged') && neckBones.length) {
+      applyHeadUp(g, neckBones, cc.neckBendDeg);
     }
 
     me.y = s.y;
