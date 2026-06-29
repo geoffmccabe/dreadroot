@@ -12,8 +12,6 @@ export interface LineupWeaponDef {
   lengthM: number;                    // target real-world length of the model's longest axis (metres)
   rotDeg: [number, number, number];   // orientation in the Hand_R local frame (eye-calibrated, shared)
   gripPos: [number, number, number];  // grip offset in Hand_R local metres (eye-calibrated, shared)
-  worldYawDeg?: number;               // extra spin about the TRUE world vertical, applied after rotDeg
-                                      // (the hand frame is tilted, so a world-Y turn can't be an Euler)
 }
 
 // First-pass grip guesses — SIZE is auto-correct; rotation/position need a visual tuning pass.

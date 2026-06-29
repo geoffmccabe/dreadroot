@@ -17,9 +17,10 @@ import type { LineupWeaponDef } from './lineupWeapons';
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _ws = new THREE.Vector3();
-const _hq = new THREE.Quaternion();
-const _yWorld = new THREE.Vector3(0, 1, 0);
+const _charBox = new THREE.Box3();
+const _charSize = new THREE.Vector3();
 const D2R = Math.PI / 180;
+const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; taller chars get bigger guns
 
 export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
@@ -42,21 +43,16 @@ export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: Line
     model.updateMatrixWorld(true);
     _box.setFromObject(model); _box.getSize(_size);
     const longest = Math.max(_size.x, _size.y, _size.z) || 1;
-    const s = (weapon.lengthM / longest) / handScale;
+    // Gun length scales with the CHARACTER's height (taller char → bigger gun): lengthM is the length
+    // at REF_HEIGHT and grows/shrinks from there.
+    _charBox.setFromObject(root); const charH = _charBox.getSize(_charSize).y || REF_HEIGHT;
+    const gunLen = weapon.lengthM * (charH / REF_HEIGHT);
+    const s = (gunLen / longest) / handScale;
 
     const wrap = new THREE.Group();
     wrap.scale.setScalar(s);
     wrap.position.set(weapon.gripPos[0] / handScale, weapon.gripPos[1] / handScale, weapon.gripPos[2] / handScale);
-    wrap.quaternion.setFromEuler(new THREE.Euler(weapon.rotDeg[0] * D2R, weapon.rotDeg[1] * D2R, weapon.rotDeg[2] * D2R));
-    // Optional spin about the TRUE world vertical. The hand bone is tilted, so a world-Y turn is NOT
-    // an Euler in the hand's local frame — apply it as  handWorld⁻¹ · Yaw · handWorld · base, which is
-    // exactly a rotation about the world Y axis no matter how the hand is oriented.
-    if (weapon.worldYawDeg) {
-      hand.getWorldQuaternion(_hq);
-      const yaw = new THREE.Quaternion().setFromAxisAngle(_yWorld, weapon.worldYawDeg * D2R);
-      const local = _hq.clone().invert().multiply(yaw).multiply(_hq).multiply(wrap.quaternion);
-      wrap.quaternion.copy(local);
-    }
+    wrap.rotation.set(weapon.rotDeg[0] * D2R, weapon.rotDeg[1] * D2R, weapon.rotDeg[2] * D2R);
     wrap.add(model);
     hand.add(wrap);
     wrapRef.current = wrap;
