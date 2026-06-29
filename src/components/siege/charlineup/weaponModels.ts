@@ -27,7 +27,10 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     itemNumbers: [20, 111, 112, 113, 114, 115, 116],
     url: '/siege/weapons/ak47.glb',
     lengthM: 0.9,
-    rotDeg: [0, -90, 0],
+    // Was [0,-90,0] but the AK model sits 90° off the X-forward family (barrel pointed left + rolled
+    // sideways). Composing the two corrections (90° yaw to point it forward, which cancels the -90,
+    // then 90° roll about the barrel) lands here. Sign of the roll may need flipping to -90 on review.
+    rotDeg: [90, 0, 0],
     gripPos: [0, 0, 0],
     animSet: 'rifle',
   },
