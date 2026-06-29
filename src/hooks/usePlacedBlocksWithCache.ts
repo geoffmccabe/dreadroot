@@ -14,6 +14,7 @@ import { initLogStep, initLogStart, initLogFinish, initLogStartStep, initLogFini
 import { preloadAmbientAudio, startAmbientAudio, setAmbientVolume } from '@/components/fortress/FortressAudio';
 import { syncMonsterStats } from '@/components/siege/monsterStats';
 import { armSiegeWorldLoad } from '@/components/siege/siegeInitLoad';
+import { preloadSiegeWorld } from '@/components/siege/siegeWorldPreload';
 import { warmUpShaders } from '@/lib/shaderWarmup';
 import { getGlobalAtlasTexture } from '@/hooks/useTextureAtlas';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
@@ -152,7 +153,12 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
     // Arm the load coordinator NOW — not at the end of this pre-work — so those canvas-side steps are
     // captured even when the canvas mounts before this orchestrator finishes (the terrain step was
     // being lost because we armed too late, leaving a long unreported gap).
-    if (!needsVoxels) armSiegeWorldLoad();
+    if (!needsVoxels) {
+      armSiegeWorldLoad();
+      // Warm the SWW world's models + terrain NOW (this runs on the homescreen, before START), so
+      // they're already fetched/decoded when the canvas mounts — instead of all loading post-START.
+      preloadSiegeWorld();
+    }
 
     const initStepId = initLogStartStep('WorldInit', 'Starting world initialization...');
     
