@@ -54,7 +54,7 @@ import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
 import { GhostExplosions } from './GhostExplosion';
 import { SiegeExplosions } from './SiegeExplosion';
-import { isSiegeLoadActive, completeSiegeWorldLoad } from './siegeInitLoad';
+import { isSiegeLoadActive, completeSiegeWorldLoad, siegeLoadNote } from './siegeInitLoad';
 import { SiegeAssetProgress } from './SiegeAssetProgress';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
@@ -85,6 +85,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
+  // Diagnostic: timestamp when the siege scene first mounts, so the init log shows whether the long
+  // pre-terrain gap is BEFORE the scene mounts (canvas/scene gating) or after (terrain effect delay).
+  useEffect(() => { siegeLoadNote('SiegeWorld', 'Scene mounted — building world...'); }, []);
   // Finish the World-Initialization overlay once the LOBBY is actually on screen: terrain up AND
   // objects loaded (blank builder maps have no objects, so terrain alone). Only acts during a SWW
   // startup the orchestrator armed — a no-op for in-game map switches.

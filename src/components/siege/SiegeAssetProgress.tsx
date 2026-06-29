@@ -18,6 +18,8 @@ export function SiegeAssetProgress({ onAllLoaded }: { onAllLoaded: () => void })
   const lastNote = useRef(0);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const graceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const peakTotal = useRef(0);
+  const totalGrowAt = useRef(0);
 
   const finish = (msg: string) => {
     if (fired.current) return;
@@ -37,13 +39,21 @@ export function SiegeAssetProgress({ onAllLoaded }: { onAllLoaded: () => void })
 
   useEffect(() => {
     if (!isSiegeLoadActive() || fired.current) return;
+    const now = performance.now();
+    if (total > peakTotal.current) { peakTotal.current = total; totalGrowAt.current = now; }
     if (active) {
       wasActive.current = true;
       if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null; }
-      const now = performance.now();
       if (now - lastNote.current > 600) {
         lastNote.current = now;
         siegeLoadNote('Assets', `Loading models + textures: ${loaded}/${total}`);
+      }
+      // PLAYABLE early-out: the world streams NEAREST-first, so once no new groups have queued for a
+      // few seconds (total settled) and ~88% has loaded, the area around the player is fully in. Drop
+      // them in now and let the farthest ~12% pop in behind — instead of waiting for every last
+      // distant object/texture (which was ~30s of extra loading-screen at the tail).
+      if (total >= 80 && now - totalGrowAt.current > 3000 && loaded >= total * 0.88) {
+        finish(`Near world loaded (${loaded}/${total}) — far objects streaming`);
       }
     } else if (wasActive.current) {
       // Idle after having loaded — debounce so a between-batch gap doesn't finish us early.

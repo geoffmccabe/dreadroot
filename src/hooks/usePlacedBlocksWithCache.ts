@@ -253,11 +253,14 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
       // cache so challenges + spawns load fast and reflect changes since this device's last login.
       // ONLY in Siege Worlds — never block a Dreadroot load with a SWW-only query (the admin panel
       // loads it lazily on mount for other games).
+      // Fire-and-forget: this is a Supabase round-trip (~3s) whose result only affects monster spawns
+      // (which fall back to code defaults until it lands). Don't block the world load on it.
       if (!needsVoxels) {
         const npcStepId = initLogStartStep('Monsters', 'Checking for NPC model updates...');
-        const npcSync = await syncMonsterStats();
-        initLogFinishStep(npcStepId!);
-        initLogStep('Monsters', `${npcSync.updated} models updated since last login`);
+        void syncMonsterStats().then((npcSync) => {
+          initLogFinishStep(npcStepId!);
+          initLogStep('Monsters', `${npcSync.updated} models updated since last login`);
+        }).catch(() => initLogFinishStep(npcStepId!));
       }
 
       // Siege Worlds renders its own terrain/objects, not voxel chunks → skip the DR chunk
@@ -269,8 +272,9 @@ export const usePlacedBlocksWithCache = (userId: string | null, worldId: string 
         initLogFinishStep(chunkStepId!);
       }
 
-      // Wait for ambient audio to finish loading (should be done by now)
-      await ambientAudioPromise;
+      // Ambient audio loads in the background — don't block the world load on it (startAmbientAudio
+      // below plays it whenever it's ready). Keep a reference so it isn't GC'd / unhandled.
+      void ambientAudioPromise.catch(() => {});
 
       // C7: Realtime subscription setup
       const realtimeStepId = initLogStartStep('WorldInit', 'Setting up realtime subscription...');
