@@ -18,8 +18,9 @@ const D2R = Math.PI / 180;
 export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`, '/draco/');
   useEffect(() => {
+    // Mixamo characters name the bone 'mixamorig:RightHand' (Synty monsters use 'Hand_R' — try both).
     let hand: THREE.Object3D | undefined;
-    root.traverse((o) => { if (o.name === 'Hand_R') hand = o; });
+    root.traverse((o) => { if (o.name === 'mixamorig:RightHand' || o.name === 'Hand_R') hand = o; });
     if (!hand) return;
 
     const model = scene.clone(true);

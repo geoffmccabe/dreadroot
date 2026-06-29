@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
 // browser like an offline store). v2 = Draco meshes + shared animation library.
-export const CHAR_ASSET_VERSION = '31';
+export const CHAR_ASSET_VERSION = '32';
 // Shared Draco/clip libraries holding every animation — loaded once, applied to every character by
 // bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only these.
 // Split by category so each is fetched independently and we can rebuild one without the others'
@@ -60,7 +60,13 @@ export const getFlightSeq = (): number => flightSeq;
 export const getFlightMode = (): 'land' | 'wall' => flightMode;
 export function triggerFlight(mode: 'land' | 'wall'): void { flightMode = mode; flightSeq++; }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null } {
+// Parkour demo (J): one counter that both selects the obstacle preset (seq % presetCount) and, when
+// it changes, tells each character to run at it and auto-parkour. emit() so the obstacle box re-renders.
+let parkourSeq = 0;
+export const getParkourSeq = (): number => parkourSeq;
+export function triggerParkour(): void { parkourSeq++; emit(); }
+
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor };
+  return { enabled, animIndex, animNames, anchor, parkourSeq };
 }

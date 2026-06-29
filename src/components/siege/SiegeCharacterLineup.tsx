@@ -4,7 +4,7 @@
 // character, so one index drives them all). The current animation's number/name shows in the HUD.
 //
 // In-canvas only (renders inside <Canvas>); the HUD readout lives in SiegeCharLineupHud (DOM).
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Fragment, Suspense, useEffect, useMemo, useRef } from 'react';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
@@ -14,7 +14,7 @@ import { sampleHeight } from './terrainHeight';
 import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
-  getFlightSeq, getFlightMode,
+  getFlightSeq, getFlightMode, triggerParkour, getParkourSeq,
 } from './charlineup/siegeCharLineupState';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
@@ -22,6 +22,10 @@ import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
 import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
+import { classifyObstacle } from './charlineup/obstacleDetector';
+import { parkourGraph } from './charlineup/parkourGraphs';
+import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
+import { UNARMED_MALE } from './charlineup/locomotionClips';
 
 // Our first real held rifle: the AK74 (all 7 tiers share this one model + the rifle anims). Every
 // lineup character holds it so we can see the confirmed-good rifle animations on the actual gun.
@@ -89,6 +93,8 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
   // cycled clip when the sequence finishes. Forward axis for a yaw-rotated group is (sin, cos).
   const fsmRef = useRef<AnimFSM | null>(null);
   const seenSeq = useRef(getFlightSeq());
+  const seenParkour = useRef(getParkourSeq());
+  const demoMode = useRef<'flight' | 'parkour' | null>(null);
   useFrame((state, rawDt) => {
     const g = group.current; if (!g) return;
     const dt = Math.min(rawDt, 0.05);
@@ -116,17 +122,39 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
       actions[names[animIndex % names.length]]?.fadeOut(0.15); // drop the cycled clip
       const fsm = new AnimFSM(actions, FLIGHT_GRAPH, (s) => (s === 'glide' ? mode : null));
       fsm.onDone = () => {
-        fsmRef.current = null;
+        fsmRef.current = null; demoMode.current = null;
         g.position.set(x, groundY, z);
         actions[names[animIndex % names.length]]?.reset().fadeIn(0.3).play();
       };
-      fsm.start();
+      demoMode.current = 'flight'; fsm.start();
       fsmRef.current = fsm;
+    }
+    // Parkour demo (J): classify the current obstacle preset and run the matching move on this
+    // character. The detector picks vault/dive/slide/drop/wall-run purely from the obstacle's size.
+    const pseq = getParkourSeq();
+    if (pseq !== seenParkour.current) {
+      seenParkour.current = pseq;
+      const preset = OBSTACLE_PRESETS[pseq % OBSTACLE_PRESETS.length];
+      const action = classifyObstacle(preset.probe);
+      const graph = parkourGraph(action, UNARMED_MALE, pseq);
+      if (graph) {
+        actions[names[animIndex % names.length]]?.fadeOut(0.15);
+        const fsm = new AnimFSM(actions, graph);
+        fsm.onDone = () => {
+          fsmRef.current = null; demoMode.current = null;
+          g.position.set(x, groundY, z);
+          actions[names[animIndex % names.length]]?.reset().fadeIn(0.3).play();
+        };
+        demoMode.current = 'parkour'; fsm.start();
+        fsmRef.current = fsm;
+      }
     }
     const fsm = fsmRef.current;
     if (fsm?.active) {
       fsm.tick(dt);
-      g.position.y = Math.max(groundY, groundY + fsm.offsetY);
+      // Parkour drops off ledges (negative lift), so it must be allowed below groundY; flight is
+      // clamped to the ground so the glide never sinks.
+      g.position.y = demoMode.current === 'parkour' ? groundY + fsm.offsetY : Math.max(groundY, groundY + fsm.offsetY);
       g.position.x = x + Math.sin(yaw) * fsm.offsetZ;
       g.position.z = z + Math.cos(yaw) * fsm.offsetZ;
     }
@@ -148,8 +176,23 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
   );
 }
 
+// A semi-transparent demo obstacle drawn ahead of a character, sized to the current preset, so you
+// can see what it's vaulting / diving / sliding under. The ledge preset has no box (null).
+function ObstacleBox({ x, z, yaw, groundY, preset }: { x: number; z: number; yaw: number; groundY: number; preset: typeof OBSTACLE_PRESETS[number] }) {
+  const b = preset.box;
+  if (!b) return null;
+  const wx = x + Math.sin(yaw) * OBSTACLE_DIST;
+  const wz = z + Math.cos(yaw) * OBSTACLE_DIST;
+  return (
+    <mesh position={[wx, groundY + b.yBottom + b.h / 2, wz]} rotation={[0, yaw, 0]}>
+      <boxGeometry args={[b.w, b.h, b.d]} />
+      <meshStandardMaterial color={preset.color} transparent opacity={0.55} />
+    </mesh>
+  );
+}
+
 export function SiegeCharacterLineup() {
-  const { enabled, animIndex, anchor } = useCharLineup();
+  const { enabled, animIndex, anchor, parkourSeq } = useCharLineup();
   const { camera } = useThree();
 
   // "&&&" toggles the lineup; M / N cycle animations while it's shown. Capture-phase so the
@@ -170,6 +213,7 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'n' || e.key === 'N') { e.stopImmediatePropagation(); cycleCharAnim(-1); }
       else if (e.key === 'f' || e.key === 'F') { e.stopImmediatePropagation(); triggerFlight('land'); }
       else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
+      else if (e.key === 'j' || e.key === 'J') { e.stopImmediatePropagation(); triggerParkour(); } // cycle obstacle + auto-parkour
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -202,10 +246,15 @@ export function SiegeCharacterLineup() {
     <>
       {LINEUP_CHARS.map((c, i) => {
         const off = (i - (n - 1) / 2) * SPACING;
+        const cx = anchor.x + rx * off, cz = anchor.z + rz * off;
         return (
-          <Suspense key={c.name} fallback={null}>
-            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={AK47} />
-          </Suspense>
+          <Fragment key={c.name}>
+            <Suspense fallback={null}>
+              <LineupChar file={c.file} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={AK47} />
+            </Suspense>
+            {/* obstacle for the parkour demo (J) — only after the first trigger so it isn't clutter */}
+            {parkourSeq > 0 && <ObstacleBox x={cx} z={cz} yaw={anchor.yaw} groundY={anchor.groundY} preset={OBSTACLE_PRESETS[parkourSeq % OBSTACLE_PRESETS.length]} />}
+          </Fragment>
         );
       })}
     </>
