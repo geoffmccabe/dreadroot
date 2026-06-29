@@ -76,7 +76,8 @@ export function ArrangePanel() {
         <div>hold L-btn = grab &amp; carry · wheel = raise/lower</div>
         <div>⇧+wheel rotate · ⌥+wheel scale</div>
         <div>hold Ctrl = drop onto surface below</div>
-        <div>⇧+click duplicate · Del delete · ⌘Z undo</div>
+        <div>⇧+click duplicate · ⌘X/Del delete</div>
+        <div>⌘Z undo · ⇧⌘Z redo · Esc cancel</div>
       </div>
     </div>
   );

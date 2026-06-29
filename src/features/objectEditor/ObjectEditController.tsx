@@ -23,6 +23,7 @@ import {
 } from './store';
 import { placeKey, transformOverrides } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
+import { SelectionHighlight } from './SelectionHighlight';
 
 const MIN_REACH = 1.5;     // closest the carried object can sit to the camera (m)
 const MAX_REACH = 150;     // furthest a plane-hit is accepted before falling back to last reach
@@ -115,11 +116,11 @@ export function ObjectEditController() {
         cq.set(o.quat[0], o.quat[1], o.quat[2], o.quat[3]);
         dq.setFromAxisAngle(yAxis, dir * pf.rotateStep); cq.premultiply(dq);
         const next: TRS = { pos: o.pos, quat: [cq.x, cq.y, cq.z, cq.w], scale: o.scale };
-        grabbing ? dragTo(next) : transformSelected(next);
+        if (grabbing) dragTo(next); else transformSelected(next);
       } else if (e.altKey) {                     // scale (uniform)
         const f = Math.pow(pf.scaleStep, dir);
         const next: TRS = { pos: o.pos, quat: o.quat, scale: [clampScale(o.scale[0] * f), clampScale(o.scale[1] * f), clampScale(o.scale[2] * f)] };
-        grabbing ? dragTo(next) : transformSelected(next);
+        if (grabbing) dragTo(next); else transformSelected(next);
       } else {                                   // raise / lower
         if (grabbing) grab.current.planeY += dir * pf.heightStep;  // frame loop applies it
         else transformSelected({ pos: [o.pos[0], o.pos[1] + dir * pf.heightStep, o.pos[2]], quat: o.quat, scale: o.scale });
@@ -137,6 +138,7 @@ export function ObjectEditController() {
       if (!getEditMode()) return;
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
+      if (meta && e.code === 'KeyX') { e.preventDefault(); e.stopImmediatePropagation(); deleteSelected(); return; }
       if (meta) return;
       let handled = true;
       switch (e.code) {
@@ -193,5 +195,5 @@ export function ObjectEditController() {
     dragTo({ pos: [x, y, z], quat: o.quat, scale: o.scale });
   });
 
-  return null;
+  return <SelectionHighlight />;
 }

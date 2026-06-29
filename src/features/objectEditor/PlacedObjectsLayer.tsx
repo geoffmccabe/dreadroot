@@ -3,25 +3,23 @@
 // that world's objects from Supabase into the editor store and renders each one; the
 // selected object gets a cyan bounding-box highlight. A 'builtin:box' url renders a
 // primitive (used by the Phase-0 test object) so the spine needs no art asset.
-import { Suspense, useEffect, useMemo, useRef } from 'react';
-import { useGLTF, useHelper } from '@react-three/drei';
+import { Suspense, useEffect, useMemo } from 'react';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { getActiveGame } from '@/config/activeGame';
 import { scifiAsset } from '@/config/assetBase';
 import type { WorldObject } from './types';
-import { setContext, setCanEdit, useEditorObjects, useSelectedId } from './store';
+import { setContext, setCanEdit, useEditorObjects } from './store';
 import { loadObjects, loadCanEdit } from './persistence';
 import { setWorldOverrides } from './bakedOverrides';
 
-const HILITE = 0x6cf0ff;
-
+// Selection feedback is drawn by SelectionHighlight (a pulsing world-space box), so these just
+// render the model + tag it with its id for picking.
 function tag(o: THREE.Object3D, id: string) { o.traverse((c) => { c.userData.worldObjectId = id; }); }
 
-function BuiltinObject({ obj, selected }: { obj: WorldObject; selected: boolean }) {
-  const grp = useRef<THREE.Group>(null);
-  useHelper(selected ? (grp as React.MutableRefObject<THREE.Object3D>) : null, THREE.BoxHelper, HILITE);
+function BuiltinObject({ obj }: { obj: WorldObject }) {
   return (
-    <group ref={grp} position={obj.pos} quaternion={obj.quat} scale={obj.scale} userData={{ worldObjectId: obj.id }}>
+    <group position={obj.pos} quaternion={obj.quat} scale={obj.scale} userData={{ worldObjectId: obj.id }}>
       <mesh userData={{ worldObjectId: obj.id }}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial color="#ff8c2b" />
@@ -30,15 +28,13 @@ function BuiltinObject({ obj, selected }: { obj: WorldObject; selected: boolean 
   );
 }
 
-function GltfObject({ obj, selected }: { obj: WorldObject; selected: boolean }) {
+function GltfObject({ obj }: { obj: WorldObject }) {
   // Catalog files resolve through scifiAsset; absolute urls pass through.
   const url = obj.modelUrl.startsWith('http') ? obj.modelUrl : scifiAsset(obj.modelUrl);
   const { scene } = useGLTF(url, '/draco/');
-  const grp = useRef<THREE.Group>(null);
-  useHelper(selected ? (grp as React.MutableRefObject<THREE.Object3D>) : null, THREE.BoxHelper, HILITE);
   const cloned = useMemo(() => { const c = scene.clone(true); tag(c, obj.id); return c; }, [scene, obj.id]);
   return (
-    <group ref={grp} position={obj.pos} quaternion={obj.quat} scale={obj.scale} userData={{ worldObjectId: obj.id }}>
+    <group position={obj.pos} quaternion={obj.quat} scale={obj.scale} userData={{ worldObjectId: obj.id }}>
       <primitive object={cloned} />
     </group>
   );
@@ -46,7 +42,6 @@ function GltfObject({ obj, selected }: { obj: WorldObject; selected: boolean }) 
 
 export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
   const objects = useEditorObjects();
-  const selectedId = useSelectedId();
 
   useEffect(() => {
     let alive = true;
@@ -62,8 +57,8 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
     <Suspense fallback={null}>
       {objects.filter((o) => !o.baked).map((o) => (
         o.modelUrl.startsWith('builtin:')
-          ? <BuiltinObject key={o.id} obj={o} selected={o.id === selectedId} />
-          : <GltfObject key={o.id} obj={o} selected={o.id === selectedId} />
+          ? <BuiltinObject key={o.id} obj={o} />
+          : <GltfObject key={o.id} obj={o} />
       ))}
     </Suspense>
   );
