@@ -11,6 +11,7 @@ import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { siegeLoadStart, siegeLoadFinish, siegeLoadNote, isSiegeLoadActive } from './siegeInitLoad';
 import { loadColliderCache, getCachedBoxes, recordBoxes, groupColliderSig } from './siegeColliderCache';
+import { loadGeoIndex, hasGeo, putGeo, getGeoGroup } from './siegeGeoCache';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
 import { windTime, applyLeafWind } from './siegeWind';
 import { applyTrunkBark, TRUNK_TREE_RE } from './siegeTreeBark';
@@ -124,9 +125,17 @@ function monsterBoxesFor(geo: THREE.BufferGeometry, world: THREE.Matrix4, geoBox
   return [wb];
 }
 
-function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1, colliderKey }:
-  { url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string; scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>; meshColliders?: boolean; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; colliderKey?: string }) {
-  const gltf = useGLTF(url, '/draco/');   // '/draco/' so sampler glbs (e.g. the warpgate) decode; plain world glbs ignore it
+interface GroupParams {
+  url: string; matrices: number[][]; rotX?: number; meshName?: string; combined?: boolean; fbx: string;
+  scaleMul?: number; whole?: boolean; atlasUrl?: string; matMap?: Record<string, string>; cutout?: Set<string>;
+  meshColliders?: boolean; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; colliderKey?: string;
+}
+
+// Shared assembly: build the instanced render group + colliders from a model SCENE — whether DRACO-
+// decoded (GroupInstancesDecode) or rebuilt from the IndexedDB geometry cache (GroupInstancesCached).
+// Returns the render node, or null until a scene is available.
+function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): THREE.Group | null {
+  const { url, matrices, rotX, meshName, combined, fbx, scaleMul, whole, atlasUrl, matMap, cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost = 1, colliderKey } = p;
   const gidRef = useRef<string | null>(null);
   if (gidRef.current === null) gidRef.current = `mg${_meshGroupId++}`;
   const groupId = gidRef.current;
@@ -135,6 +144,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
   // The old per-model M-flag is no longer needed — kept only as a V-tool cell hint.
   const ovCell = colliderOverrides.get(fbx)?.cell;
   const { node, colliders, meshInputs, meshGeos, monsterBoxes } = useMemo(() => {
+    if (!scene) return { node: null as THREE.Group | null, colliders: [] as THREE.Box3[], meshInputs: [] as MeshInstanceInput[], meshGeos: new Map<string, THREE.BufferGeometry>(), monsterBoxes: [] as THREE.Box3[] };
     const out = new THREE.Group();
     const colliders: THREE.Box3[] = [];
     const meshInputs: MeshInstanceInput[] = [];
@@ -152,7 +162,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const organicFine = /mushroom|stalag/i.test(fbx);   // overhang shapes → finer monster boxes
     const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
-    gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+    scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
     // Combined bake: render only the named sub-mesh for this group.
     if (combined && meshName) {
       const base = (n: string) => n.replace(/\.\d{3}$/, '');
@@ -331,7 +341,7 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     const finalMonsterBoxes = cachedBoxes ?? monsterBoxes;
     if (!cachedBoxes && colliderKey && collSig) recordBoxes(colliderKey, collSig, finalMonsterBoxes);
     return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes };
-  }, [gltf, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials, colliderKey]);
+  }, [scene, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials, colliderKey, url]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
     if (!colliders.length) return;
@@ -353,7 +363,35 @@ function GroupInstances({ url, matrices, rotX, meshName, combined, fbx, scaleMul
     setGroupInstances(groupId, meshInputs);
     return () => clearGroup(groupId);
   }, [meshInputs, meshGeos, groupId, fbx]);
-  return <primitive object={node} />;
+  return node;
+}
+
+// Cold path: DRACO-decode the model (useGLTF), build it, and cache its decoded geometry so the NEXT
+// visit can skip the decode.
+function GroupInstancesDecode(p: GroupParams) {
+  const gltf = useGLTF(p.url, '/draco/');   // '/draco/' so sampler glbs (e.g. warpgate) decode
+  const node = useGroupNode(gltf.scene, p);
+  const cached = useRef(false);
+  useEffect(() => {
+    if (cached.current || !gltf.scene) return;
+    cached.current = true;
+    const meshes: THREE.Mesh[] = [];
+    gltf.scene.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+    putGeo(p.url, meshes);
+  }, [gltf, p.url]);
+  return node ? <primitive object={node} /> : null;
+}
+
+// Warm path: rebuild the model from the cached decoded geometry — NO fetch, NO DRACO.
+function GroupInstancesCached(p: GroupParams) {
+  const [scene, setScene] = useState<THREE.Group | null>(null);
+  useEffect(() => {
+    let alive = true;
+    getGeoGroup(p.url).then((g) => { if (alive) setScene(g); });
+    return () => { alive = false; };
+  }, [p.url]);
+  const node = useGroupNode(scene, p);
+  return node ? <primitive object={node} /> : null;
 }
 
 export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/world', placementsFile = 'placements.json', renderDist = 320, foliageDist = 0, maxGroups = 100000, maxInstances = 1e9, trustMaterials = false, noMonsterColliders = false, emissiveBoost = 1, onReady }: { meshColliders?: boolean; dataDir?: string; placementsFile?: string; renderDist?: number; foliageDist?: number; maxGroups?: number; maxInstances?: number; trustMaterials?: boolean; noMonsterColliders?: boolean; emissiveBoost?: number; onReady?: () => void } = {}) {
@@ -399,7 +437,9 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   const [collReady, setCollReady] = useState(false);
   useEffect(() => {
     let alive = true; setCollReady(false);
-    loadColliderCache(dataDir).then(() => { if (alive) setCollReady(true); });
+    // Load BOTH the collider cache and the geometry-cache index up front, so each group can decide
+    // synchronously whether to take the cached (no-DRACO) path or decode.
+    Promise.all([loadColliderCache(dataDir), loadGeoIndex(dataDir)]).then(() => { if (alive) setCollReady(true); });
     return () => { alive = false; };
   }, [dataDir]);
   // STREAMING: mount only the object INSTANCES within R of the player (per-instance, so shared
@@ -501,13 +541,19 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   if (!data || !collReady) return null;
   return (
     <>
-      {nearGroups.slice(0, mountCount).map((g) => (
-        <Boundary key={g._k}>
-          <Suspense fallback={null}>
-            <GroupInstances url={g.url} matrices={g.matrices} rotX={g.rotX} meshName={g.mesh} combined={g.combined} fbx={g.fbx} scaleMul={g.scaleMul} whole={g.whole} atlasUrl={atlasMap[g.fbx]} matMap={matMap[g.fbx]} cutout={cutout} meshColliders={meshColliders} trustMaterials={trustMaterials} noMonsterColliders={noMonsterColliders} emissiveBoost={emissiveBoost} colliderKey={dataDir} />
-          </Suspense>
-        </Boundary>
-      ))}
+      {nearGroups.slice(0, mountCount).map((g) => {
+        const p: GroupParams = { url: g.url, matrices: g.matrices, rotX: g.rotX, meshName: g.mesh, combined: g.combined, fbx: g.fbx, scaleMul: g.scaleMul, whole: g.whole, atlasUrl: atlasMap[g.fbx], matMap: matMap[g.fbx], cutout, meshColliders, trustMaterials, noMonsterColliders, emissiveBoost, colliderKey: dataDir };
+        // Cached (no-DRACO) path only on the standard atlas-material worlds; trustMaterials worlds
+        // keep their baked materials, so they decode normally.
+        const Variant = (!trustMaterials && hasGeo(g.url)) ? GroupInstancesCached : GroupInstancesDecode;
+        return (
+          <Boundary key={g._k}>
+            <Suspense fallback={null}>
+              <Variant {...p} />
+            </Suspense>
+          </Boundary>
+        );
+      })}
     </>
   );
 }

@@ -63,6 +63,23 @@ export async function swwCachePut(store: SwwStore, id: string, data: unknown): P
   });
 }
 
+// All current-version ids in a store — used to build a synchronous "is this cached?" index up front.
+export async function swwCacheKeys(store: SwwStore): Promise<string[]> {
+  const db = await open(); if (!db) return [];
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction(store, 'readonly').objectStore(store).getAllKeys();
+      const pfx = `${SWW_CACHE_VERSION}:`;
+      req.onsuccess = () => resolve(
+        (req.result as IDBValidKey[])
+          .filter((k): k is string => typeof k === 'string' && k.startsWith(pfx))
+          .map((k) => k.slice(pfx.length)),
+      );
+      req.onerror = () => resolve([]);
+    } catch { resolve([]); }
+  });
+}
+
 // Background cleanup: drop entries from a previous SWW_CACHE_VERSION so the DB doesn't grow forever.
 function pruneOldVersions(db: IDBDatabase) {
   try {
@@ -86,6 +103,7 @@ function pruneOldVersions(db: IDBDatabase) {
 export interface SerGeo {
   attrs: Record<string, { array: ArrayLike<number>; itemSize: number; normalized: boolean }>;
   index: ArrayLike<number> | null;
+  groups?: { start: number; count: number; materialIndex?: number }[];
 }
 
 export function serializeGeometry(geo: THREE.BufferGeometry): SerGeo {
@@ -94,7 +112,10 @@ export function serializeGeometry(geo: THREE.BufferGeometry): SerGeo {
     const a = geo.attributes[name] as THREE.BufferAttribute;
     attrs[name] = { array: a.array as ArrayLike<number>, itemSize: a.itemSize, normalized: a.normalized };
   }
-  return { attrs, index: geo.index ? (geo.index.array as ArrayLike<number>) : null };
+  // Multi-material meshes map index ranges → materials via groups; preserve them or sub-meshes
+  // would all render with material 0.
+  const groups = geo.groups && geo.groups.length ? geo.groups.map((g) => ({ start: g.start, count: g.count, materialIndex: g.materialIndex })) : undefined;
+  return { attrs, index: geo.index ? (geo.index.array as ArrayLike<number>) : null, groups };
 }
 
 export function deserializeGeometry(s: SerGeo): THREE.BufferGeometry {
@@ -104,6 +125,7 @@ export function deserializeGeometry(s: SerGeo): THREE.BufferGeometry {
     g.setAttribute(name, new THREE.BufferAttribute(a.array as THREE.TypedArray, a.itemSize, a.normalized));
   }
   if (s.index) g.setIndex(new THREE.BufferAttribute(s.index as THREE.TypedArray, 1));
+  if (s.groups) for (const gr of s.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
   g.computeBoundingSphere();
   return g;
 }
