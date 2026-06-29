@@ -59,6 +59,7 @@ export function LaserProbe() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
+      if (e.metaKey || e.ctrlKey || e.altKey) return;   // Cmd/Ctrl+L is the Lighting panel — not the laser
       if (e.code === 'KeyL') setOn((v) => {
         const nv = !v; probeState.on = nv;
         if (!nv) { probeState.mesh = null; probeState.instanceId = -1; probeState.hasHit = false; }

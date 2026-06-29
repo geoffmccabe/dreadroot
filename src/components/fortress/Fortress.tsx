@@ -24,6 +24,7 @@ import { useChat, ChatOverlay } from '@/features/chat';
 import { ChallengeHUD } from '@/components/siege/challenge/ChallengeHUD';
 import { PlayerDamageHealthBar } from '@/components/hud/PlayerDamageHealthBar';
 import { getActiveGame, useActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
 import { setActiveWorldId } from '@/config/activeWorld';
 import { SIEGE_SPAWN_POINT } from '@/components/siege/siegeAreas';
 import { ChallengeCreatorPanel } from '@/components/siege/challenge/ChallengeCreatorPanel';
@@ -1797,7 +1798,11 @@ export function Fortress() {
       setSelectedWideTier(null);
       setCrosshairsEnabled(false);
       setBlockMode(false);
-      toast({ title: "Mode disabled", description: "Press B for blocks, T for trees, T+2 wide, T+3 fungal", duration: 2000 });
+      // Block/tree hint is voxel-only — in Siege Worlds (no blocks/trees) holstering the gun should
+      // not pop a "Press B for blocks, T for trees" toast.
+      if (gameUsesVoxels(getActiveGame())) {
+        toast({ title: "Mode disabled", description: "Press B for blocks, T for trees, T+2 wide, T+3 fungal", duration: 2000 });
+      }
     }
   }, [inventory, setBlockMode, toast, seedDefinitions]);
 

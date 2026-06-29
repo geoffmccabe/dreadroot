@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { LightningSettings, CycleState } from './FortressTypes';
 import { LookControls } from '@/features/look/LookControls';
+import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 
 interface LightningPanelProps {
   open: boolean;
@@ -13,33 +14,34 @@ interface LightningPanelProps {
   fps?: number;
 }
 
+// Readable light surface + very-dark-blue text (the old hud-text white vanished against the bright
+// SWW scene). Position comes from useDraggablePanel (movable); body collapses (expandable).
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
-  right: '8px',
-  top: '50%',
-  transform: 'translateY(-50%)',
   zIndex: 30,
   width: '200px',
   maxHeight: '90vh',
   borderRadius: '6px',
-  border: '1px solid hsla(var(--hud-border))',
-  background: 'hsla(var(--hud-bg))',
+  border: '1px solid rgba(10,26,58,0.25)',
+  background: 'rgba(236,240,248,0.96)',
   backdropFilter: 'blur(8px)',
-  color: 'hsl(var(--hud-text))',
+  color: '#0a1a3a',
   fontFamily: 'Inter, sans-serif',
   fontSize: '10px',
   display: 'flex',
   flexDirection: 'column',
   overflow: 'hidden',
+  boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
 };
 
 const headerStyle: React.CSSProperties = {
   padding: '4px 8px',
-  borderBottom: '1px solid hsla(var(--hud-border-h) / 0.4)',
+  borderBottom: '1px solid rgba(10,26,58,0.18)',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
   flexShrink: 0,
+  userSelect: 'none',
 };
 
 const bodyStyle: React.CSSProperties = {
@@ -83,8 +85,8 @@ const btnStyle: React.CSSProperties = {
   padding: '2px 6px',
   fontSize: '9px',
   borderRadius: '3px',
-  border: '1px solid hsla(var(--hud-border-h) / 0.6)',
-  background: 'hsla(var(--hud-bg-h) / 0.3)',
+  border: '1px solid rgba(10,26,58,0.3)',
+  background: 'rgba(10,26,58,0.06)',
   color: 'inherit',
   cursor: 'pointer',
   flex: 1,
@@ -112,22 +114,37 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
   const renderDistBlocks = useMemo(() => settings.visualDistance * 16, [settings.visualDistance]);
   const currentLighting = settings.lightingOverride !== null ? settings.lightingOverride : cycleState.lightingPercentage;
 
+  // Movable (drag the header) + collapsible (caret in the header), per the panel rules.
+  const { pos, handleProps } = useDraggablePanel({ left: typeof window !== 'undefined' ? window.innerWidth - 216 : 1000, top: 80 });
+  const [collapsed, setCollapsed] = useState(false);
+
   if (!open) return null;
 
   return (
-    <div style={panelStyle}>
-      {/* Header */}
-      <div style={headerStyle}>
-        <span style={{ fontSize: '11px', fontWeight: 600 }}>LIGHTING &amp; RENDERING</span>
+    <div style={{ ...panelStyle, left: pos.left, top: pos.top }}>
+      {/* Header — drag handle (move) + collapse caret (expand/collapse) + close */}
+      <div style={headerStyle} {...handleProps}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700 }}>
+          <span
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => setCollapsed((c) => !c)}
+            style={{ cursor: 'pointer', fontSize: '10px', width: '10px', opacity: 0.8 }}
+          >
+            {collapsed ? '▸' : '▾'}
+          </span>
+          LIGHTING &amp; RENDERING
+        </span>
         <span
+          onPointerDown={(e) => e.stopPropagation()}
           onClick={onClose}
           style={{ cursor: 'pointer', fontSize: '13px', lineHeight: 1, opacity: 0.6 }}
         >
-          x
+          ×
         </span>
       </div>
 
       {/* Scrollable body */}
+      {!collapsed && (
       <div style={bodyStyle}>
 
         {/* FOG — only Enabled is live. Density is auto (height-aware) and colour is
@@ -216,6 +233,7 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
           <button style={btnStyle} onClick={handleCopyDiagnostics}>Copy</button>
         </div>
       </div>
+      )}
     </div>
   );
 }

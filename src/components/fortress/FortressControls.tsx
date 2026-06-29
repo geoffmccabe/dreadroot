@@ -22,6 +22,8 @@ import { getBaseFov } from '@/config/fovSetting';
 import { isQASuppressed } from '@/config/qaGuard';
 import { flashCenter } from '@/config/centerFlash';
 import { canFire, consumeAmmo, resetAmmoForWeapon, canReload, beginReload, finishReload, getAmmo } from '@/config/weaponAmmo';
+import { getActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
 import {
   DEBUG_LOGGING,
   FirstPersonControlsProps
@@ -665,6 +667,9 @@ export function FirstPersonControls({
         }
         break;
       case 'KeyB':
+        // Block building is a voxel (Dreadroot) feature — Siege Worlds has no blocks, so B does
+        // nothing there (it was toggling an irrelevant "block mode" + toast).
+        if (!gameUsesVoxels(getActiveGame())) break;
         // Plain B toggles block-building mode. SHIFT+B opens the Fortress Builder
         // (handled in FortressBuilderPanel) — don't also flip building mode; Ctrl/Cmd+B
         // are browser-reserved.
@@ -746,6 +751,9 @@ export function FirstPersonControls({
         }
         break;
       case 'Backquote': // ` or ~ key for God Mode (admin/superadmin)
+        // Plain ` only — Shift+` is the object-editor (Arrange) toggle, so God Mode no longer
+        // also pops the Arrange menu.
+        if (event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) break;
         // Allow toggling if admin now, ever-was-admin this session (sticky —
         // survives a transient roles clear), OR if God Mode is already ON (you
         // must always be able to turn it OFF).
@@ -2547,7 +2555,7 @@ export function FirstPersonControls({
         setRocketBeltAvailable(beltEquipped ? Math.floor(beltBurstsRef.current) : 0);
       }
       const runSpeed = godModeRef.current
-        ? godSpeed
+        ? (boostActive ? godSpeed * 2.5 : godSpeed)   // Shift+E super-sprint / rocket boost still speeds you up in God Mode
         : (boostActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
       
       // Apply movement
@@ -2589,8 +2597,10 @@ export function FirstPersonControls({
       // God Mode: Q = fly up, Z = fly down, no gravity
       if (godModeRef.current) {
         if (groundHeightFn) { sdbg.isSiege = true; sdbg.playerY = camera.position.y; } // SW debug
-        // Vertical movement with Q/Z
-        if (keys.current.q) {
+        // Vertical movement: Q or JUMP (space) fly up, Z flies down. Space + Shift+E/rocket boost
+        // ascend faster (runSpeed already includes the boost), so jump / rocket boots / super-speed
+        // all do something in God Mode instead of being dead.
+        if (keys.current.q || keys.current.space) {
           deltaMovement.y += runSpeed * delta;
         }
         if (keys.current.z) {

@@ -79,8 +79,9 @@ export function ObjectEditController() {
 
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;
-      // Toggle works any time (superadmin only); everything else needs edit mode.
-      if (e.code === 'Backquote' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Toggle works any time (superadmin only); everything else needs edit mode. SHIFT+` so it no
+      // longer rides on the plain-` God Mode toggle (which was auto-opening the Arrange menu).
+      if (e.code === 'Backquote' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (getCanEdit()) { toggleEditMode(); e.preventDefault(); }
         return;
       }
