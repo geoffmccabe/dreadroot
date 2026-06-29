@@ -40,7 +40,10 @@ const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_
 // Decorative scatter the player should walk THROUGH — so it never gets a player-collision mesh BVH.
 // EF has hundreds of mushrooms; each one's canopy triangles in the merged BVH is pure heap + build
 // cost for zero gameplay value (you don't stand on a mushroom). Trees/rocks/logs/stumps keep colliders.
-const NO_PLAYER_COLLIDE_RE = /mushroom|toadstool|stalag/i;
+// Decorative scatter the player/monsters walk straight through (no collider at all).
+// Includes leaf scatter (SM_Env_Leaves_*, Leaf_Pile, …) — purely visual ground litter.
+// (`leaf_` matches Leaf_Pile etc. but NOT "leafless_tree", which stays solid.)
+const NO_PLAYER_COLLIDE_RE = /mushroom|toadstool|stalag|leaves|leaf_/i;
 
 // Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
 // flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't

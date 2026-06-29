@@ -9,7 +9,7 @@
 // Phase-0 controls (edit mode ON):
 //   `        toggle edit mode            click   select object under crosshair
 //   P        spawn a test box ahead      Esc     deselect
-//   ←→       move X        ↑↓ move Z      PgUp/Dn move Y     (0.5 m steps)
+//   ←→ move X · ↑↓ move Z · Shift+↑↓ (or PgUp/Dn / Fn+↑↓ on Mac) move Y   (0.5 m)
 //   [ ]      rotate (yaw)  - =  scale     Shift+D duplicate  Del  delete
 //   Cmd/Ctrl+Z undo        +Shift redo
 import { useEffect, useMemo } from 'react';
@@ -121,8 +121,9 @@ export function ObjectEditController() {
       switch (e.code) {
         case 'ArrowLeft':  move(-MOVE, 0, 0); break;
         case 'ArrowRight': move(MOVE, 0, 0); break;
-        case 'ArrowUp':    move(0, 0, -MOVE); break;
-        case 'ArrowDown':  move(0, 0, MOVE); break;
+        // Shift+↑↓ raises/lowers (Mac-friendly: no Page Up/Down key needed); plain ↑↓ = forward/back.
+        case 'ArrowUp':    e.shiftKey ? move(0, MOVE, 0) : move(0, 0, -MOVE); break;
+        case 'ArrowDown':  e.shiftKey ? move(0, -MOVE, 0) : move(0, 0, MOVE); break;
         case 'PageUp':     move(0, MOVE, 0); break;
         case 'PageDown':   move(0, -MOVE, 0); break;
         case 'BracketLeft':  yaw(-YAW); break;
