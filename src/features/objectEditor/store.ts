@@ -45,7 +45,22 @@ export function setSelected(id: string | null): void { if (state.selectedId !== 
 export function toggleEditMode(): void {
   if (!state.canEdit) return;
   state.editMode = !state.editMode;
-  if (!state.editMode) { state.selectedId = null; state.objects = state.objects.filter((o) => !o.baked); }
+  if (!state.editMode) { state.selectedId = null; state.objects = state.objects.filter((o) => !o.baked && !o.external); }
+  emit();
+}
+
+// Register a transient "external" editable — a live scene object (e.g. a weapon on a hand bone) that
+// flows through the SAME panel / transform controls / undo, but persists NOWHERE (a bridge applies
+// its transform to the real object and reads back the bakeable numbers). Idempotent by id.
+export function registerExternal(o: WorldObject): void {
+  if (state.objects.some((x) => x.id === o.id)) return;
+  state.objects = [...state.objects, { ...o, external: true }];
+  emit();
+}
+export function removeExternal(id: string): void {
+  if (!state.objects.some((x) => x.id === id)) return;
+  state.objects = state.objects.filter((x) => x.id !== id);
+  if (state.selectedId === id) state.selectedId = null;
   emit();
 }
 
@@ -92,6 +107,7 @@ export function addObject(o: WorldObject): void {
 
 export function deleteSelected(): void {
   const o = current(); if (!o) return;
+  if (o.external) { removeExternal(o.id); return; }   // can't delete a live weapon — just deselect it
   if (o.baked) {
     const baked = o.baked; const trs = trsOf(o);
     localRemove(o.id); hideBaked(baked);
@@ -112,6 +128,7 @@ export function deleteSelected(): void {
 // Persist a transform: baked map instances go to the override store (+ live update); DB-backed
 // objects go to Supabase. The local list update is the same for both.
 function persistTRS(o: WorldObject, t: TRS): void {
+  if (o.external) return;            // transient live editable — the bridge reads its TRS; no DB/override
   if (o.baked) applyBakedTransform(o.baked, t);
   else persistTransform(o.id, t);
 }
@@ -178,7 +195,7 @@ export function isDragging(): boolean { return dragId !== null; }
 
 export function duplicateSelected(offset: [number, number, number]): void {
   const o = current(); if (!o) return;
-  if (o.baked) return;   // duplicating a baked map instance isn't supported yet
+  if (o.baked || o.external) return;   // duplicating a baked instance / live weapon isn't supported
   const copy: WorldObject = {
     ...o, id: crypto.randomUUID(),
     pos: [o.pos[0] + offset[0], o.pos[1] + offset[1], o.pos[2] + offset[2]],

@@ -55,7 +55,7 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
 
   return (
     <Suspense fallback={null}>
-      {objects.filter((o) => !o.baked).map((o) => (
+      {objects.filter((o) => !o.baked && !o.external).map((o) => (
         o.modelUrl.startsWith('builtin:')
           ? <BuiltinObject key={o.id} obj={o} />
           : <GltfObject key={o.id} obj={o} />

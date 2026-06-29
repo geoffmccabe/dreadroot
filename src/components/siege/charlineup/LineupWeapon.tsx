@@ -13,6 +13,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { CHAR_ASSET_VERSION } from './siegeCharLineupState';
 import type { LineupWeaponDef } from './lineupWeapons';
+import { registerWeaponWrap, unregisterWeaponWrap, WEAPON_EDIT_ID } from './weaponEditRegistry';
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
@@ -25,6 +26,7 @@ const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; tal
 export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
   const wrapRef = useRef<THREE.Group | null>(null);
+  const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
 
   useFrame(() => {
     if (wrapRef.current) return;            // already attached
@@ -56,12 +58,21 @@ export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: Line
     wrap.add(model);
     hand.add(wrap);
     wrapRef.current = wrap;
+    // Make the gun selectable in the Arrange panel (crosshair/L), and register it so one panel edit
+    // drives every character's gun. Tag the model children too so any ray hit walks up to this id.
+    wrap.userData.worldObjectId = WEAPON_EDIT_ID;
+    wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
+    registerWeaponWrap(regId.current, { wrap, hand, handScale });
   });
 
-  useEffect(() => () => {
-    const w = wrapRef.current;
-    if (w && w.parent) w.parent.remove(w);
-    wrapRef.current = null;
+  useEffect(() => {
+    const id = regId.current;
+    return () => {
+      unregisterWeaponWrap(id);
+      const w = wrapRef.current;
+      if (w && w.parent) w.parent.remove(w);
+      wrapRef.current = null;
+    };
   }, []);
 
   return null;

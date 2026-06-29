@@ -30,6 +30,9 @@ export interface WorldObject {
   scale: Vec3;         // uniform = equal components
   ownerId?: string | null;
   baked?: BakedRef;    // present ⇒ this is a baked map instance, not a DB-backed object
+  external?: boolean;  // present ⇒ a transient live editable (e.g. a hand-attached weapon): flows
+                       // through the panel + transform controls, but is NOT rendered here and NOT
+                       // persisted — a bridge applies its transform to the real object.
 }
 
 // The transform triple, the unit every edit command moves between.

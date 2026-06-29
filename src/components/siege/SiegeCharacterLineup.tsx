@@ -22,6 +22,7 @@ import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
 import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
+import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -257,6 +258,9 @@ export function SiegeCharacterLineup() {
           </Fragment>
         );
       })}
+      {/* Lets you select a gun in the Arrange panel (Shift+` edit mode, crosshair/L) and orient it;
+          one edit drives every character's gun and logs the bakeable rotDeg/gripPos. */}
+      <WeaponEditBridge />
     </>
   );
 }
