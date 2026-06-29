@@ -531,9 +531,23 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       siegeLoadNote('World Objects', `Building world: ${Math.min(mountCount, nearGroups.length)}/${nearGroups.length} objects`);
     }
   }, [mountCount, nearGroups.length]);
+  // DIAGNOSTIC: how many of the near models will come from the IndexedDB geometry cache (no DRACO,
+  // no download) vs need decoding. On the 2nd+ visit this should be nearly all-cached.
+  const diagDone = useRef(false);
   useEffect(() => {
-    if (mountCount > 0 && nearGroups.length > 0 && mountCount >= nearGroups.length) {
-      const t = setTimeout(() => onReady?.(), 600);   // settle for the last few async glb loads
+    if (diagDone.current || !isSiegeLoadActive() || nearGroups.length === 0) return;
+    diagDone.current = true;
+    const cached = nearGroups.filter((g) => !trustMaterials && hasGeo(g.url)).length;
+    siegeLoadNote('World Objects', `Models: ${cached} from cache, ${nearGroups.length - cached} to download/decode`);
+  }, [nearGroups, trustMaterials]);
+  // PLAYABLE: let the player into the world once the IMMEDIATE spawn area (nearest objects) is built,
+  // instead of waiting for every near object to download. The rest keep streaming in behind them
+  // (mountCount keeps growing). nearGroups is sorted nearest-first, so these ARE the closest objects.
+  const READY_NEAR = 36;
+  useEffect(() => {
+    const need = Math.min(READY_NEAR, nearGroups.length);
+    if (need > 0 && mountCount >= need) {
+      const t = setTimeout(() => onReady?.(), 400);
       return () => clearTimeout(t);
     }
   }, [mountCount, nearGroups.length, onReady]);
