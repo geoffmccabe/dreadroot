@@ -50,36 +50,67 @@ export const RIFLE_LOCOMOTION: LocomotionClipSet = {
 // UNARMED — now backed by the male/female locomotion packs. Ground locomotion is COMPLETE (idle /
 // walk / run / strafe at both speeds / turn / jump). Remaining SPACES = backward walk+run, falling
 // idle, landing, vault, and dedicated parkour clips — see the gap list the user is filling.
+// Falling/landing/backward/crawl are gender-neutral clips shared by both sets. Ground locomotion +
+// air recovery are now COMPLETE; `vault`/`climbUp` here stay null because parkour is its own richer
+// system (see PARKOUR below) rather than a single slot.
 export const UNARMED_MALE: LocomotionClipSet = {
   idle:       'Loco_M_idle',
   walkF:      'Loco_M_walking',
-  walkB:      null,                       // ← SPACE: no backward walk
+  walkB:      'Anim_Walking_Backward_NoSkin',
   runF:       'Loco_M_running',
-  runB:       null,                       // ← SPACE: no backward run
+  runB:       'Anim_Run_Backward_NoSkin',
   strafeL:    'Loco_M_left_strafe_walking',  strafeR:    'Loco_M_right_strafe_walking',
   runStrafeL: 'Loco_M_left_strafe',          runStrafeR: 'Loco_M_right_strafe',
   turnL:      'Loco_M_left_turn',            turnR:      'Loco_M_right_turn',
   jumpUp:     'Loco_M_jump',
-  fall:       null,                       // ← SPACE: no falling idle
-  land:       'Jumping Down',             // base-library stand-in until a real landing exists
-  vault:      null,                       // ← SPACE: no vault
-  climbUp:    'Climbing Up Wall',         // base-library stand-in
-  crawl:      'Low Crawl',                // base-library stand-in
+  fall:       'Anim_Idle_Falling_NoSkin',
+  land:       'Anim_Hit_Falling_To_Landing_NoSkin',
+  vault:      null,                       // parkour handled by PARKOUR (height-aware), not one slot
+  climbUp:    'Climbing Up Wall',
+  crawl:      'Anim_Crawl_Low_Forward_NoSkin',
 };
 
 export const UNARMED_FEMALE: LocomotionClipSet = {
   idle:       'Loco_F_idle',
   walkF:      'Loco_F_walking',
-  walkB:      null,                       // ← SPACE
+  walkB:      'Anim_Walking_Backward_NoSkin',
   runF:       'Loco_F_running',
-  runB:       null,                       // ← SPACE
+  runB:       'Anim_Run_Backward_NoSkin',
   strafeL:    'Loco_F_left_strafe_walk',  strafeR:    'Loco_F_right_strafe_walk',
   runStrafeL: 'Loco_F_left_strafe',       runStrafeR: 'Loco_F_right_strafe',
   turnL:      'Loco_F_left_turn',         turnR:      'Loco_F_right_turn',
   jumpUp:     'Loco_F_jump',
-  fall:       null,                       // ← SPACE
-  land:       'Jumping Down',
-  vault:      null,                       // ← SPACE
+  fall:       'Anim_Idle_Falling_NoSkin',
+  land:       'Anim_Hit_Falling_To_Landing_NoSkin',
+  vault:      null,
   climbUp:    'Climbing Up Wall',
-  crawl:      'Low Crawl',
+  crawl:      'Anim_Crawl_Low_Forward_NoSkin',
+};
+
+// PARKOUR — height/method-aware clip map for the obstacle detector. The detector measures the
+// obstacle ahead (height + depth + whether there's a gap/overhead/ledge) and picks the matching move.
+// Clip names carry their meaning (…_Over_1m_Object, …_Over_2m_Object, …_Under_1m…), so the size
+// thresholds in the detector line up with the clips we actually have.
+export interface ParkourClips {
+  vaultLow: string[];   // clear a ~1m obstacle (pick a variety for flavour)
+  vaultHigh: string;    // dive over a ~2m obstacle
+  slideUnder: string;   // slide under a low overhead (gap below ~1m)
+  dropRoll: string;     // drop off a ledge + roll out
+  wallRun: string;      // run along a tall wall (too high to vault)
+  flourish: string[];   // showy variants (front flips) for open ground
+}
+export const PARKOUR: ParkourClips = {
+  vaultLow: [
+    'Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object_NoSkin',
+    'Anim_Parkour_Side_Jump_Over_1m_Object_NoSkin',
+    'Anim_Parkour_SideFlip_Jump_Over_1m_Object_NoSkin',
+  ],
+  vaultHigh:  'Anim_Parkour_Run_To_Dive_Over_2m_Object_NoSkin',
+  slideUnder: 'Anim_Parkour_Run_To_Backslide_Under_1m_Object_NoSkin',
+  dropRoll:   'Anim_Parkour_Jump_Down_To_Roll_NoSkin',
+  wallRun:    'Anim_Parkour_Wall_Run_With_Right_Turn_NoSkin',
+  flourish: [
+    'Anim_Parkour_Run_To_Front_FlipTuck_NoSkin',
+    'Anim_Parkour_Run_To_Front_FlipWith_Twist_NoSkin',
+  ],
 };
