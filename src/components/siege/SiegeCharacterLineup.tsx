@@ -19,8 +19,13 @@ import {
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
-import { WEAPONS, type LineupWeaponDef } from './charlineup/lineupWeapons';
+import { type LineupWeaponDef } from './charlineup/lineupWeapons';
+import { heldWeaponByKey } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
+
+// Our first real held rifle: the AK74 (all 7 tiers share this one model + the rifle anims). Every
+// lineup character holds it so we can see the confirmed-good rifle animations on the actual gun.
+const AK47 = heldWeaponByKey('ak47')!;
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -36,7 +41,7 @@ const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
-WEAPONS.forEach((w) => useGLTF.preload(`${w.url}?a=${CHAR_ASSET_VERSION}`, '/draco/'));
+useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`, '/draco/');
 
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
@@ -197,7 +202,7 @@ export function SiegeCharacterLineup() {
         const off = (i - (n - 1) / 2) * SPACING;
         return (
           <Suspense key={c.name} fallback={null}>
-            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={WEAPONS[i % WEAPONS.length]} />
+            <LineupChar file={c.file} x={anchor.x + rx * off} z={anchor.z + rz * off} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={AK47} />
           </Suspense>
         );
       })}
