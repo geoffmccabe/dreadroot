@@ -36,7 +36,10 @@ const MONSTERS: Mon[] = [
 const INTRINSIC = 2.0;
 const healthFor = (h: number) => Math.round(50 * h);
 // Only these animations are kept for cycling (the confirmed-good ones).
-const KEEP = ['idle', 'walk', 'run', 'weapon_strike1', 'punch', 'swipe', 'hit', 'death'];
+const KEEP = ['idle', 'walk', 'run', 'weapon_strike1', 'punch', 'swipe', 'hit', 'death',
+  // newly retargeted creature clips (only the brutes that were baked have these; the filter below
+  // skips any a given monster lacks) — lets the review lineup verify them with the M-cycle.
+  'stand_to_crouch', 'crawl', 'roar', 'jumpattack', 'flex', 'breathidle'];
 
 // ── M-cycle state ──
 let clipIdx = 0, clipLabel = '';
