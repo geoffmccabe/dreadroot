@@ -615,8 +615,8 @@ export function ChallengeCreatorPanel() {
           <button style={{ ...btn(true), padding: '4px 10px', fontSize: 12 }} onClick={addWave}>＋ Add Wave</button>
         </div>
 
-        {/* Stacked waves */}
-        <div className="chal-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {/* Stacked waves — its own slightly-transparent black, blurred backdrop so the wave cards read. */}
+        <div className="chal-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
           {ch.waves.map((wave, i) => (
             <div key={i} ref={(el) => { if (el) waveEls.current.set(i, el); else waveEls.current.delete(i); }}
                  style={{ marginBottom: 22, paddingBottom: 16, borderBottom: '1px solid hsla(210,25%,35%,0.25)' }}>
