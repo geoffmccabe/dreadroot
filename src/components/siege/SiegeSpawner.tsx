@@ -1,20 +1,14 @@
-// SiegeSpawner — quick horde-test spawner for Siege Worlds.
-// Command:  "!"  then a TYPE digit  then a QUANTITY digit (1-9, or 0 = 10), all within ~3s:
-//   !1#  → red-demon zombies (npcType 32): CLIMB gait (walk up obstacles, no jump), size ±10%,
-//          wide speed variety, desaturated.
-//   !2#  → mushroom-grunt horde (npcType 6): HOP gait (the bouncy hop/stack), size ±50%,
-//          same grey desaturation.
-//   !3#  → GIANT SKELETON horde: red-demon CLIMB gait (no jump), 500 HP, size ±20%, speed ±10%.
-//   !4#  → VOMIT DEMON (4m): holds at 20-30m, sprays acid over ~1s, recharges 5-10s; no melee.
-//   !5#  → DARK LORD (6m boss): teleports near you every 1-4s (1/3 behind = 20-100 dmg strike,
-//          1s dodge window). Opacity (1→0 between jumps) = its damage resistance. 500 HP.
-//   !6#  → BLOODY SKELETON HORDE: ALWAYS 50, dropped tight (5m) in front. Random mix of
-//          heavy/light/ranger; size 0.5-3m, speed ±50%, HP 10-100 (×2 heavy, ×3 ranger),
-//          desat 0-90% + ±10% hue, 25-70% red tint; climb gait + SW zombie moans.
-//   !7#  → SPINTROLL: spins 3-5 rev/s, green+blue fire, zooms erratically (3-5×) every 1-10s.
-//          Touch = 10-100 dmg + 1-10m kb (×2 + spins your view if hit mid-zoom). 7s smoke trail.
-// After a spawn, spamming "0" within 2s adds another 10 of the LAST type — for stress-testing
-// hordes. Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
+// SiegeSpawner — quick test spawner for Siege Worlds. The TYPE is the monster's CATALOG id (the same
+// id the Challenge Creator + admin panel use — see MONSTER_CATALOG), then a QUANTITY digit (1-9, 0=10):
+//   Two-digit types:  !NN  then qty   e.g. !14 3 = three Barbarian Giants, !18 0 = ten Crawlies.
+//   Single-digit types: put a "#" after the digit  →  !N# then qty   e.g. !2#5 = five Mushroom Grunts.
+//   The "#" is a harmless separator everywhere (so !02#5 also works); it never aborts the command.
+// Catalog ids: 1 Demon Horde · 2 Mushroom Grunt · 3 Giant Skeleton · 4 Vomit Demon · 5 Dark Lord(boss)
+//   6 Bloody Skeleton horde(always 50) · 7 Spintroll · 8 Red Demon · 9 Ghost · 10 Slayer · 11 Pig Butcher
+//   12 Mutant · 13 Forest Guardian · 14 Barbarian Giant · 15 Elemental Golem · 16 Mechanical Golem
+//   17 Fort Golem · 18 Crawlies · 19 DF Demon.
+// After a spawn, spamming "0" within ~4s adds another 10 of the LAST type — for stress-testing hordes.
+// Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -127,7 +121,8 @@ export function SiegeSpawner() {
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
-        else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // ALWAYS two digits: !NN
+        else if (k === '#') { arm(); }                                                              // stray separator → ignore
+        else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // first of !NN, or !N# for single-digit
         else clearStage();
         return;
       }
@@ -135,12 +130,13 @@ export function SiegeSpawner() {
       // no ambiguity: first digit armed above, second digit here completes the type → quantity stage.
       if (stage.current === 'type2') {
         e.preventDefault(); e.stopPropagation();
-        if (k >= '0' && k <= '9') {
-          const t = parseInt(firstDigit.current + k, 10);
-          // Accept any id that's actually in the catalog (single source of truth) — was hard-capped at
-          // 18, which silently excluded the DF Demon (type 19) from the test-spawner.
-          if (isKnownMonsterType(t)) { pendingType.current = t; stage.current = 'qty'; arm(); console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`); }
-          else clearStage();
+        // "#" here = the type was SINGLE-digit (!N#) → arm that 1-9 type. A second digit = a two-digit
+        // type (!NN). Either way, accept only ids that are actually in the catalog.
+        const t = k === '#' ? parseInt(firstDigit.current, 10)
+                : (k >= '0' && k <= '9') ? parseInt(firstDigit.current + k, 10) : NaN;
+        if (!Number.isNaN(t) && isKnownMonsterType(t)) {
+          pendingType.current = t; stage.current = 'qty'; arm();
+          console.log(`[SiegeSpawner] type ${t} armed — press a quantity (0 = 10)`);
         } else clearStage();
         return;
       }
@@ -152,6 +148,7 @@ export function SiegeSpawner() {
       }
       if (stage.current === 'qty') {
         e.preventDefault(); e.stopPropagation();
+        if (k === '#') { arm(); return; }   // separator between type and qty (!02#5) — ignore, keep waiting
         if (/^[0-9]$/.test(k)) spawn(k === '0' ? 10 : parseInt(k, 10), pendingType.current);
         clearStage();
         return;
