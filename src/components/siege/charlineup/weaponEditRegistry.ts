@@ -37,8 +37,14 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // ONCE so the baked values apply cleanly (otherwise base ∘ saved-tune doubles the rotation). Bump
 // BAKE_VERSION + list the newly-baked urls each time we bake; only those are cleared, so other
 // weapons' in-progress tuning survives. (Size isn't cleared — it's a multiplier and never doubles.)
-const BAKE_VERSION = '1';
-const BAKED_URLS = ['/siege/weapons/ak47.glb'];
+const BAKE_VERSION = '2';
+const BAKED_URLS = [
+  '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
+  '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
+  '/siege/weapons/item_12.glb', '/siege/weapons/item_1.glb', '/siege/weapons/item_5.glb',
+  '/siege/weapons/item_208.glb', '/siege/weapons/item_2.glb', '/siege/weapons/item_3.glb',
+  '/siege/weapons/item_6.glb', '/siege/weapons/item_14.glb',
+];
 try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
     for (const url of BAKED_URLS) { localStorage.removeItem(`siege_weapon_tune::${url}`); localStorage.removeItem(`siege_weapon_pos::${url}`); }

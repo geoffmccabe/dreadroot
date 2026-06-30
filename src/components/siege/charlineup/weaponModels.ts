@@ -25,22 +25,27 @@ export interface HeldWeapon {
 // keyed to that exact game item_number. lengthM is a real-world size guess (auto-fit handles per-hand
 // scale); rotDeg/gripPos start as guesses to be tuned ONCE in the lineup (^x/y/z flips + size keys),
 // then baked here. AK74 keeps the hand-cleaned model already accepted; the rest are the SWU models.
-const R: [number, number, number] = [0, 0, 0];   // default raw orientation — flip each in the lineup
+// Baseline orientation/grip carried from the tuned AK74 onto the other (untuned) weapons as a starting
+// point — each SWU model differs, so they still need a per-weapon pass, but this beats raw/floating.
+const R: [number, number, number] = [2, 3, -81];
+const G: [number, number, number] = [0.02, 0.3, 0.04];
 export const HELD_WEAPONS: HeldWeapon[] = [
-  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.9, rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], sizeByChar: { Rajax: 0.85 }, animSet: 'rifle' },
-  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'submgun',       name: 'SubMGun',              itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'plasma_sniper4',name: 'Plasma Sniper',        itemNumbers: [4],   url: '/siege/weapons/item_4.glb',   lengthM: 1.3, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'plasma_sniper12',name: 'Plasma Sniper II',    itemNumbers: [12],  url: '/siege/weapons/item_12.glb',  lengthM: 1.3, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'db_shotgun',    name: 'Double Barrel Shotgun',itemNumbers: [1],   url: '/siege/weapons/item_1.glb',   lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 1.4, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 1.4, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
-  { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  // AK74 tuned + baked. lengthM folds in Rajax's 0.85 (the gun read 15% big) so EVERY character gets
+  // the corrected size, auto-scaled by their own height (0.9 × 0.85 = 0.765).
+  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.765, rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], animSet: 'rifle' },
+  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'submgun',       name: 'SubMGun',              itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'plasma_sniper4',name: 'Plasma Sniper',        itemNumbers: [4],   url: '/siege/weapons/item_4.glb',   lengthM: 1.3, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'plasma_sniper12',name: 'Plasma Sniper II',    itemNumbers: [12],  url: '/siege/weapons/item_12.glb',  lengthM: 1.3, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'db_shotgun',    name: 'Double Barrel Shotgun',itemNumbers: [1],   url: '/siege/weapons/item_1.glb',   lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
 ];
 
 const byItem = new Map<number, HeldWeapon>();
