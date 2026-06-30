@@ -45,6 +45,9 @@ const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_
 // Includes leaf scatter (SM_Env_Leaves_*, Leaf_Pile, …) — purely visual ground litter.
 // (`leaf_` matches Leaf_Pile etc. but NOT "leafless_tree", which stays solid.)
 const NO_PLAYER_COLLIDE_RE = /mushroom|toadstool|stalag|leaves|leaf_/i;
+// Models textured from their OWN embedded glb material (not the shared atlas) — the geometry cache
+// can't reproduce those, so they're never cached and always decode (keeping their textures).
+const EMBEDDED_TEX_RE = /portal|gate|warp|forge|fountain|exchange|crystal|geode|gem|shard|sign/i;
 
 // Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
 // flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't
@@ -349,7 +352,7 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
     // Warm load → use the cached boxes; cold load → record what we just built (debounced save).
     const finalMonsterBoxes = cachedBoxes ?? monsterBoxes;
     if (!cachedBoxes && colliderKey && collSig) recordBoxes(colliderKey, collSig, finalMonsterBoxes);
-    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes, cacheable: !usesEmbedded };
+    return { node: out, colliders, meshInputs, meshGeos, monsterBoxes: finalMonsterBoxes, cacheable: !usesEmbedded && !EMBEDDED_TEX_RE.test(fbx) };
   }, [scene, matrices, rotX, meshName, combined, fbx, atlasUrl, matMap, cutout, meshColliders, ovCell, noMonsterColliders, emissiveBoost, trustMaterials, colliderKey, url]);
   // Register solid colliders in the engine grid; remove on unmount / world swap.
   useEffect(() => {
@@ -419,25 +422,31 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
     // NOTE: onReady is NOT fired here — placements loading is just the data. The world isn't "ready"
     // until the objects are actually BUILT (the incremental build below fires onReady when done).
     const finishObjects = (count?: number) => { siegeLoadFinish(oStep, count); };
-    fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).then((m) => setAtlasMap(m)).catch(() => {});
-    fetch(`${dataDir}/material_map.json`).then((r) => r.json()).then((m) => setMatMap(m)).catch(() => {});
-    fetch(`${dataDir}/cutout_textures.json`).then((r) => r.json()).then((a) => setCutout(new Set(a))).catch(() => {});
-    // Load collider overrides BEFORE placements (so they apply as groups build their
-    // colliders): Supabase shared overrides first (authoritative), then the baked
-    // JSON fills any gaps, then placements. Author's localStorage edits (loaded at
-    // import) and the DB agree (voxelizing writes both).
+    // Load placements + the small material maps IN PARALLEL. Crucially, placements is NO LONGER gated
+    // behind the Supabase collider-override fetch — that chain was delaying the ENTIRE world build to
+    // ~50s. The overrides load alongside (best-effort) and apply to groups that build after they land.
+    Promise.all([
+      fetch(`${dataDir}/atlas_map.json`).then((r) => r.json()).catch(() => ({})),
+      fetch(`${dataDir}/material_map.json`).then((r) => r.json()).catch(() => ({})),
+      fetch(`${dataDir}/cutout_textures.json`).then((r) => r.json()).catch(() => [] as string[]),
+      fetch(`${dataDir}/${placementsFile}`).then((r) => r.json()).catch(() => null),
+    ]).then(([am, mm, ct, d]) => {
+      if (!alive) return;
+      setAtlasMap(am as Record<string, string>);
+      setMatMap(mm as Record<string, Record<string, string>>);
+      setCutout(new Set(ct as string[]));
+      if (d) setData(d as { groups: Group[] });
+      finishObjects((d as { groups?: Group[] } | null)?.groups?.length);
+    });
+    // Collider overrides (V-tool cell tuning) — load alongside; the Supabase round-trip no longer
+    // gates the world build.
     loadColliderOverridesFromDB()
       .catch(() => {})
       .finally(() => {
         fetch(`${dataDir}/collider_overrides.json`)
           .then((r) => (r.ok ? r.json() : []))
           .then((a) => mergeBakedOverrides(a as [string, { voxel: boolean; cell: number }][]))
-          .catch(() => {})
-          .finally(() => {
-            fetch(`${dataDir}/${placementsFile}`).then((r) => r.json())
-              .then((d) => { if (alive) setData(d); finishObjects(d?.groups?.length); })
-              .catch(() => finishObjects());
-          });
+          .catch(() => {});
       });
     return () => { alive = false; };
   }, [dataDir, placementsFile]);
@@ -553,11 +562,13 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
   // instead of waiting for every near object to download. The rest keep streaming in behind them
   // (mountCount keeps growing). nearGroups is sorted nearest-first, so these ARE the closest objects.
   const READY_NEAR = 36;
+  const readyFired = useRef(false);
   useEffect(() => {
-    const need = Math.min(READY_NEAR, nearGroups.length);
+    if (readyFired.current) return;   // fire ONCE — earlier this re-ran every frame and the timer kept
+    const need = Math.min(READY_NEAR, nearGroups.length);   // getting cleared, so it never fired early
     if (need > 0 && mountCount >= need) {
-      const t = setTimeout(() => onReady?.(), 400);
-      return () => clearTimeout(t);
+      readyFired.current = true;
+      onReady?.();
     }
   }, [mountCount, nearGroups.length, onReady]);
 

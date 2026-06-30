@@ -12,7 +12,7 @@ const DB_NAME = 'sww-world-cache';
 const DB_VERSION = 1;
 // Bump to invalidate EVERY cached SWW asset at once (format change / processing change). Distinct
 // from APP_VERSION — only bump when the SHAPE of what we store, or how we build it, changes.
-export const SWW_CACHE_VERSION = 2;   // v2: invalidate v1 geometry caches that wrongly cached embedded-texture models (Portal/Forge)
+export const SWW_CACHE_VERSION = 3;   // v3: wipe caches that still held the embedded-texture models (Portal/Gate, Forge) so they re-decode
 
 const STORES = ['geometry', 'colliders', 'bytes'] as const;
 export type SwwStore = (typeof STORES)[number];
