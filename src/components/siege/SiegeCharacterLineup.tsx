@@ -6,6 +6,7 @@
 // In-canvas only (renders inside <Canvas>); the HUD readout lives in SiegeCharLineupHud (DOM).
 import { Fragment, Suspense, useEffect, useMemo, useRef } from 'react';
 import { isTypingTarget } from '@/lib/isTypingTarget';
+import { deferLobbyPreload } from './siegeDeferredPreload';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
@@ -45,13 +46,18 @@ const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
+// Shared animation libraries stay warmed at boot — the spawn character needs them for its idle the
+// instant the intro avatar mounts, so deferring these would risk a cold-load anim hitch on spawn.
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
-LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
-// Preload only the first gun (AK74); the rest load on demand when cycled to (they total ~13 MB, too
-// much to fetch for every player on entering a world — the lineup is a dev-only '&&&' overlay).
-useGLTF.preload(`${GUNS[0].url}?a=${CHAR_ASSET_VERSION}`);
+// The 6 lineup character meshes + the first gun are NOT visible on spawn (the lineup is a dev-only
+// '&&&' overlay; the spawn character loads on-demand via the intro avatar). Warm them on idle AFTER
+// the lobby is up so they don't fight the lobby's load for bandwidth.
+deferLobbyPreload(() => {
+  LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
+  useGLTF.preload(`${GUNS[0].url}?a=${CHAR_ASSET_VERSION}`);
+});
 
 function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon, showGizmo }: { file: string; charName: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef; showGizmo: boolean }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
