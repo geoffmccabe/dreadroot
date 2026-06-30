@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
 // browser like an offline store). v2 = Draco meshes + shared animation library.
-export const CHAR_ASSET_VERSION = '33';
+export const CHAR_ASSET_VERSION = '34';
 // Shared Draco/clip libraries holding every animation — loaded once, applied to every character by
 // bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only these.
 // Split by category so each is fetched independently and we can rebuild one without the others'
@@ -37,7 +37,7 @@ export const LINEUP_CHARS: LineupChar[] = [
 export interface LineupAnchor { x: number; z: number; yaw: number; groundY: number }
 
 let enabled = false;
-let animIndex = 0;
+let animIndex = 18;   // default to #19 (Rifle Idle-Aiming) — a STILL pose so the held gun is easy to see
 let animNames: string[] = [];
 let anchor: LineupAnchor | null = null;
 let version = 0; // monotonic — getSnapshot returns this so React never misses a change
@@ -77,7 +77,13 @@ export function cycleWeapon(dir: number, count: number): void {
   weaponIndex = (weaponIndex + dir + count) % count; emit();
 }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number } {
+// Which character the gun SIZE keys target AND the only one showing the RGB tuning gizmo. Default 4
+// (character #5, near-average size). -1 = ALL characters. Reactive so the gizmo shows/hides on select.
+let tuneCharIndex = 4;
+export const getTuneCharIndex = (): number => tuneCharIndex;
+export function setTuneCharIndex(i: number): void { tuneCharIndex = i; emit(); }
+
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex };
+  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex };
 }

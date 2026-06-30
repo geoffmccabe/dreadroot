@@ -14,7 +14,7 @@ import { sampleHeight } from './terrainHeight';
 import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
-  getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon,
+  getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon, getTuneCharIndex, setTuneCharIndex,
 } from './charlineup/siegeCharLineupState';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
@@ -23,7 +23,7 @@ import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
-import { flipWeaponLocal, bumpWeaponSize, exportTuning } from './charlineup/weaponEditRegistry';
+import { flipWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos } from './charlineup/weaponEditRegistry';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -53,7 +53,7 @@ LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 // much to fetch for every player on entering a world — the lineup is a dev-only '&&&' overlay).
 useGLTF.preload(`${GUNS[0].url}?a=${CHAR_ASSET_VERSION}`);
 
-function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon }: { file: string; charName: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef }) {
+function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon, showGizmo }: { file: string; charName: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef; showGizmo: boolean }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
   // Animations come from the shared category libraries (deduped across all characters); useGLTF
   // caches each so they're fetched once and reused. Merge their clips and bind to this character by
@@ -182,7 +182,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
       {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
-      {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} charName={charName} /></Suspense>}
+      {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} charName={charName} showGizmo={showGizmo} /></Suspense>}
     </group>
   );
 }
@@ -203,7 +203,7 @@ function ObstacleBox({ x, z, yaw, groundY, preset }: { x: number; z: number; yaw
 }
 
 export function SiegeCharacterLineup() {
-  const { enabled, animIndex, anchor, parkourSeq, weaponIndex } = useCharLineup();
+  const { enabled, animIndex, anchor, parkourSeq, weaponIndex, tuneCharIndex } = useCharLineup();
   const gun = GUNS[weaponIndex % GUNS.length];
   const { camera } = useThree();
 
@@ -212,8 +212,8 @@ export function SiegeCharacterLineup() {
   useEffect(() => {
     let amp: number[] = [];
     let awaitFlip = false;   // true after '^' is pressed, waiting for x/y/z to pick the flip axis
-    let tuneSel = -1;        // which character the size keys target: -1 = ALL, else LINEUP_CHARS index
-    const sizeTarget = () => (tuneSel < 0 ? null : LINEUP_CHARS[tuneSel]?.name ?? null);
+    const POS = 0.02;        // position-nudge step, metres
+    const sizeTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
@@ -230,12 +230,19 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
       else if (e.key === 'j' || e.key === 'J') { e.stopImmediatePropagation(); triggerParkour(); } // cycle obstacle + auto-parkour
       else if (e.key === '*') { e.stopImmediatePropagation(); cycleWeapon(1, GUNS.length); } // next held gun
-      // ── Per-character gun SIZE tuning (lineup-only, captured so it never reaches game/Chrome/macOS) ──
-      // 1-6 select which character the size keys target (1=Ash … 6=Fluffer); 0 = ALL characters.
-      else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); tuneSel = Number(e.key) - 1; console.log('[weapon-size] target:', LINEUP_CHARS[tuneSel]?.name); }
-      else if (e.key === '0') { e.preventDefault(); e.stopImmediatePropagation(); tuneSel = -1; console.log('[weapon-size] target: ALL'); }
+      // ── Gun tuning (lineup-only, captured so it never reaches game/Chrome/macOS) ──
+      // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
+      else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(Number(e.key) - 1); }
+      else if (e.key === '0') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(-1); }
       else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 0.95); } // smaller
       else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 1.0526); } // bigger
+      // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x', -POS); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x',  POS); }
+      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('y',  POS); }
+      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('y', -POS); }
+      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z', -POS); }
+      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Gun orientation: '^' arms a flip, then x/y/z flips the gun 180° about that LOCAL axis
       // (gun's own frame). Red=X, Green=Y, Blue=Z on the gizmo. Resulting rotDeg logged to bake.
@@ -278,7 +285,7 @@ export function SiegeCharacterLineup() {
         return (
           <Fragment key={c.name}>
             <Suspense fallback={null}>
-              <LineupChar file={c.file} charName={c.name} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} heightM={c.heightM} animIndex={animIndex} weapon={gun} />
+              <LineupChar file={c.file} charName={c.name} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} heightM={c.heightM} animIndex={animIndex} weapon={gun} showGizmo={tuneCharIndex < 0 || tuneCharIndex === i} />
             </Suspense>
             {/* obstacle for the parkour demo (J) — only after the first trigger so it isn't clutter */}
             {parkourSeq > 0 && <ObstacleBox x={cx} z={cz} yaw={anchor.yaw} groundY={anchor.groundY} preset={OBSTACLE_PRESETS[parkourSeq % OBSTACLE_PRESETS.length]} />}

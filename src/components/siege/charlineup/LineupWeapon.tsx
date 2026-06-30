@@ -17,16 +17,19 @@ import { registerWeaponWrap, unregisterWeaponWrap, WEAPON_EDIT_ID } from './weap
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
+const _center = new THREE.Vector3();
 const _ws = new THREE.Vector3();
-const D2R = Math.PI / 180;
 const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; taller chars get bigger guns
 
-export function LineupWeapon({ root, weapon, charHeight, charName }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number; charName: string }) {
+export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number; charName: string; showGizmo: boolean }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
   const wrapRef = useRef<THREE.Group | null>(null);
+  const gizmoRef = useRef<THREE.AxesHelper | null>(null);
+  const showGizmoRef = useRef(showGizmo); showGizmoRef.current = showGizmo;   // latest, read in the frame loop
   const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
 
   useFrame(() => {
+    if (gizmoRef.current) gizmoRef.current.visible = showGizmoRef.current;   // gizmo only on the selected char
     if (wrapRef.current) return;            // already attached
     let hand: THREE.Object3D | undefined;   // Mixamo chars: 'mixamorig:RightHand'; Synty: 'Hand_R'.
     // three.js GLTFLoader sanitizes node names (strips reserved chars incl. ':'), so at RUNTIME the
@@ -41,37 +44,35 @@ export function LineupWeapon({ root, weapon, charHeight, charName }: { root: THR
 
     const model = scene.clone(true);
     model.updateMatrixWorld(true);
-    _box.setFromObject(model); _box.getSize(_size);
+    _box.setFromObject(model); _box.getSize(_size); _box.getCenter(_center);
     const longest = Math.max(_size.x, _size.y, _size.z) || 1;
-    // Gun length scales with the CHARACTER's height (taller char → bigger gun): lengthM is the length
-    // at REF_HEIGHT and grows/shrinks from there.
+    // RECENTER the model so its geometric centre sits at the wrap origin. The SWU weapon models have
+    // their pivot far from the geometry, so without this they float off in the air; recentering puts
+    // them in the hand, and gripPos (+ position nudges) fine-tunes from there.
+    model.position.set(-_center.x, -_center.y, -_center.z);
     // Size the gun from the character's KNOWN height (not a live bbox — that includes hats/hair/
     // cigarette smoke/raised arms and made Ash's gun comically large). Taller char → bigger gun.
     const gunLen = weapon.lengthM * ((charHeight || REF_HEIGHT) / REF_HEIGHT);
     const s = (gunLen / longest) / handScale;
 
     const wrap = new THREE.Group();
-    wrap.scale.setScalar(s);
-    wrap.position.set(weapon.gripPos[0] / handScale, weapon.gripPos[1] / handScale, weapon.gripPos[2] / handScale);
-    wrap.rotation.set(weapon.rotDeg[0] * D2R, weapon.rotDeg[1] * D2R, weapon.rotDeg[2] * D2R);
     wrap.add(model);
     // RGB orientation gizmo in the gun's OWN frame: Red = X, Green = Y, Blue = Z. Drawn on top
-    // (depthTest off) so it reads through the gun, sized to the gun's length. Lets us agree on axes
-    // by colour and flip with ^ then x/y/z. Tagged so it can't be mistaken for a selectable child.
+    // (depthTest off) so it reads through the gun, sized to the gun's length. Shown only on the
+    // selected character (showGizmo). Tagged so it can't be mistaken for a selectable child.
     const gizmo = new THREE.AxesHelper(longest);
     gizmo.renderOrder = 999;
     (gizmo.material as THREE.Material).depthTest = false;
+    gizmo.visible = showGizmoRef.current;
     wrap.add(gizmo);
+    gizmoRef.current = gizmo;
     hand.add(wrap);
     wrapRef.current = wrap;
-    // Make the gun selectable in the Arrange panel (crosshair/L), and register it so one panel edit
-    // drives every character's gun. Tag the model children too so any ray hit walks up to this id.
     wrap.userData.worldObjectId = WEAPON_EDIT_ID;
     wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
-    // Register with base rotation + base (auto-fit) scale + the char/weapon keys; registerWeaponWrap
-    // re-applies base ∘ tune(url) and baseScale × size(char,url), so this weapon's saved orientation
-    // AND this character's saved size carry onto every fresh gun.
-    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, baseScale: s, weaponKey: weapon.url, charName });
+    // Register with base rotation/scale/grip + char/weapon keys; registerWeaponWrap applies the saved
+    // orientation, per-character size, and position offset for this weapon onto the wrap.
+    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, baseScale: s, baseGrip: weapon.gripPos, weaponKey: weapon.url, charName });
   });
 
   useEffect(() => {
