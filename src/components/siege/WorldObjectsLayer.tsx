@@ -39,12 +39,12 @@ const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx
 // columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
 const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump|tree_giant|tree_large|tree_medium|tree_trunk|tree_house|tree_portal|env_log|env_roots/i;
 // Decorative scatter the player should walk THROUGH — so it never gets a player-collision mesh BVH.
-// EF has hundreds of mushrooms; each one's canopy triangles in the merged BVH is pure heap + build
-// cost for zero gameplay value (you don't stand on a mushroom). Trees/rocks/logs/stumps keep colliders.
-// Decorative scatter the player/monsters walk straight through (no collider at all).
-// Includes leaf scatter (SM_Env_Leaves_*, Leaf_Pile, …) — purely visual ground litter.
+// SMALL mushrooms (SM_Env_Mushroom_Small_*) are ground litter you walk straight through. The BIG
+// numbered mushrooms (SM_Env_Mushroom_02 / _04 / …) are climbable props and DO get a real mesh-shape
+// BVH collider (their overhanging cap needs the true shape, not a box) — so they are NOT excluded.
+// Also excludes leaf scatter (SM_Env_Leaves_*, Leaf_Pile, …) and toadstools/stalagmites.
 // (`leaf_` matches Leaf_Pile etc. but NOT "leafless_tree", which stays solid.)
-const NO_PLAYER_COLLIDE_RE = /mushroom|toadstool|stalag|leaves|leaf_/i;
+const NO_PLAYER_COLLIDE_RE = /mushroom.*small|small.*mushroom|toadstool|stalag|leaves|leaf_/i;
 // Models textured from their OWN embedded glb material (not the shared atlas) — the geometry cache
 // can't reproduce those, so they're never cached and always decode (keeping their textures).
 const EMBEDDED_TEX_RE = /portal|gate|warp|forge|fountain|exchange|crystal|geode|gem|shard|sign/i;
