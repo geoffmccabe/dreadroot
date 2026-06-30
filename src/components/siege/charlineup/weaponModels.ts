@@ -27,9 +27,9 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     itemNumbers: [20, 111, 112, 113, 114, 115, 116],
     url: '/siege/weapons/ak47.glb',
     lengthM: 0.9,
-    // Upright but pointing back at the character — needs a single turn + a reposition, to be done
-    // visually in the Arrange panel rather than guessed in code.
-    rotDeg: [0, 0, 90],
+    // Baked from the in-lineup flip tool (^x then ^y): two perpendicular 180° flips compose to a
+    // 180° turn on Z, so [0,0,90] → [0,0,-90]. Barrel forward, upright.
+    rotDeg: [0, 0, -90],
     gripPos: [0, 0, 0],
     animSet: 'rifle',
   },

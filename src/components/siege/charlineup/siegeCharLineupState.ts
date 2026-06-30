@@ -68,7 +68,16 @@ let parkourSeq = 0;
 export const getParkourSeq = (): number => parkourSeq;
 export function triggerParkour(): void { parkourSeq++; emit(); }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number } {
+// Held-weapon cycling ('*'): which gun every character holds during rifle clips. The list of guns
+// lives in the component; this just tracks the index. count is passed so wrap-around fits the list.
+let weaponIndex = 0;
+export const getWeaponIndex = (): number => weaponIndex;
+export function cycleWeapon(dir: number, count: number): void {
+  if (count <= 0) return;
+  weaponIndex = (weaponIndex + dir + count) % count; emit();
+}
+
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor, parkourSeq };
+  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex };
 }

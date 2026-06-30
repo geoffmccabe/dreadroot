@@ -68,9 +68,9 @@ export function LineupWeapon({ root, weapon, charHeight }: { root: THREE.Group; 
     // drives every character's gun. Tag the model children too so any ray hit walks up to this id.
     wrap.userData.worldObjectId = WEAPON_EDIT_ID;
     wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
-    // Register with the weapon's base rotation; registerWeaponWrap re-applies base ∘ weaponTune so
-    // any flips made earlier this session carry onto this freshly-mounted gun too.
-    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg });
+    // Register with the weapon's base rotation + its model url as the tune key; registerWeaponWrap
+    // re-applies base ∘ tune(url) so this weapon's saved orientation carries onto every fresh gun.
+    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, weaponKey: weapon.url });
   });
 
   useEffect(() => {

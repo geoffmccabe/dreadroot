@@ -14,12 +14,12 @@ import { sampleHeight } from './terrainHeight';
 import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
-  getFlightSeq, getFlightMode, triggerParkour, getParkourSeq,
+  getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon,
 } from './charlineup/siegeCharLineupState';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
-import { type LineupWeaponDef } from './charlineup/lineupWeapons';
+import { type LineupWeaponDef, WEAPONS } from './charlineup/lineupWeapons';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
@@ -32,6 +32,10 @@ import { UNARMED_MALE } from './charlineup/locomotionClips';
 // Our first real held rifle: the AK74 (all 7 tiers share this one model + the rifle anims). Every
 // lineup character holds it so we can see the confirmed-good rifle animations on the actual gun.
 const AK47 = heldWeaponByKey('ak47')!;
+
+// All held guns the lineup can cycle through with '*' (AK47 first, then the other rifle/heavy models).
+// Each is sized + tuned independently; flip a gun with ^x/y/z to orient it, persisted per model.
+const GUNS: LineupWeaponDef[] = [AK47, ...WEAPONS];
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -48,7 +52,7 @@ useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
-useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`);
+GUNS.forEach((g) => useGLTF.preload(`${g.url}?a=${CHAR_ASSET_VERSION}`));
 
 function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
@@ -179,7 +183,7 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, heightM, animInde
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
       {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
-      {showWeapon && <Suspense fallback={null}><LineupWeapon root={cloned} weapon={weapon} charHeight={heightM} /></Suspense>}
+      {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} /></Suspense>}
     </group>
   );
 }
@@ -200,7 +204,8 @@ function ObstacleBox({ x, z, yaw, groundY, preset }: { x: number; z: number; yaw
 }
 
 export function SiegeCharacterLineup() {
-  const { enabled, animIndex, anchor, parkourSeq } = useCharLineup();
+  const { enabled, animIndex, anchor, parkourSeq, weaponIndex } = useCharLineup();
+  const gun = GUNS[weaponIndex % GUNS.length];
   const { camera } = useThree();
 
   // "&&&" toggles the lineup; M / N cycle animations while it's shown. Capture-phase so the
@@ -223,6 +228,7 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'f' || e.key === 'F') { e.stopImmediatePropagation(); triggerFlight('land'); }
       else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
       else if (e.key === 'j' || e.key === 'J') { e.stopImmediatePropagation(); triggerParkour(); } // cycle obstacle + auto-parkour
+      else if (e.key === '*') { e.stopImmediatePropagation(); cycleWeapon(1, GUNS.length); } // next held gun
       // Gun orientation: '^' arms a flip, then x/y/z flips the gun 180° about that LOCAL axis
       // (gun's own frame). Red=X, Green=Y, Blue=Z on the gizmo. Resulting rotDeg logged to bake.
       else if (e.key === '^') { e.stopImmediatePropagation(); awaitFlip = true; }
@@ -264,7 +270,7 @@ export function SiegeCharacterLineup() {
         return (
           <Fragment key={c.name}>
             <Suspense fallback={null}>
-              <LineupChar file={c.file} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} heightM={c.heightM} animIndex={animIndex} weapon={AK47} />
+              <LineupChar file={c.file} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} heightM={c.heightM} animIndex={animIndex} weapon={gun} />
             </Suspense>
             {/* obstacle for the parkour demo (J) — only after the first trigger so it isn't clutter */}
             {parkourSeq > 0 && <ObstacleBox x={cx} z={cz} yaw={anchor.yaw} groundY={anchor.groundY} preset={OBSTACLE_PRESETS[parkourSeq % OBSTACLE_PRESETS.length]} />}
