@@ -24,6 +24,7 @@ import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hi
 import { exportHitboxes } from './hitboxConfig';
 import { suppressQA } from '@/config/qaGuard';
 import { useActiveMapId } from '@/config/activeMap';
+import { sampleHeight } from './terrainHeight';
 
 let nextId = 0;
 type Demon = { id: number; spawn: [number, number, number]; type: MType; ov?: Ov };
@@ -56,22 +57,27 @@ export function SiegeSpawner() {
     const spawn = (count: number, type: MType) => {
       const { x, y, z } = camera.position;
       const add: Demon[] = [];
-      if (type === 6) {
-        // Always a 50-strong horde, dropped TIGHT (within 5m) around a point ~12m in front.
-        camera.getWorldDirection(fwd); fwd.y = 0;
-        if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
-        const cx = x + fwd.x * 12, cz = z + fwd.z * 12;
-        for (let i = 0; i < 50; i++) {
-          const ang = Math.random() * Math.PI * 2, rad = Math.random() * 5;
-          add.push({ id: nextId++, spawn: [cx + Math.cos(ang) * rad, y, cz + Math.sin(ang) * rad], type, ov: makeHordeMember() });
-        }
-        count = 50;
-      } else {
-        for (let i = 0; i < count; i++) {
-          const ang = Math.random() * Math.PI * 2, rad = 6 + Math.random() * 14;
-          add.push({ id: nextId++, spawn: [x + Math.cos(ang) * rad, y, z + Math.sin(ang) * rad], type });
-        }
+      // Spawn 15 m straight along where the player is LOOKING (full direction, incl. pitch). Looking
+      // level → on the ground 15 m ahead; looking up → 15 m up in the air at the aim point (it then
+      // falls). A group is a tight cluster CENTERED on that point — never the old random ring around
+      // the player, which dropped monsters behind/beside/on top of you.
+      camera.getWorldDirection(fwd);
+      if (fwd.lengthSq() < 1e-4) fwd.set(0, 0, -1); else fwd.normalize();
+      const bx = x + fwd.x * 15, bz = z + fwd.z * 15;
+      let by = y + fwd.y * 15;
+      // Never below ground: looking down clamps the cluster to the terrain at the aim point instead
+      // of burying it. (Looking up keeps it in the air to fall.)
+      const gy = sampleHeight(bx, bz);
+      if (gy != null && by < gy) by = gy;
+      const n = type === 6 ? 50 : count;
+      // Cluster radius: 0 for a single monster (dead-centre, exactly 15 m ahead), widening gently with
+      // crowd size so they don't overlap. sqrt() → uniform fill of the disk, not bunched at the centre.
+      const spread = type === 6 ? 5 : (n <= 1 ? 0 : Math.min(6, n * 0.6));
+      for (let i = 0; i < n; i++) {
+        const ang = Math.random() * Math.PI * 2, rad = Math.sqrt(Math.random()) * spread;
+        add.push({ id: nextId++, spawn: [bx + Math.cos(ang) * rad, by, bz + Math.sin(ang) * rad], type, ov: type === 6 ? makeHordeMember() : undefined });
       }
+      if (type === 6) count = 50;
       setDemons((d) => [...d, ...add]);
       lastType.current = type;
       spamUntil.current = performance.now() + 4000;   // press 0 again within 4s to keep adding +10 (build a horde)
