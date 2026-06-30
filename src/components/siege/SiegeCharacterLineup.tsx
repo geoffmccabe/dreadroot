@@ -19,8 +19,8 @@ import {
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
-import { type LineupWeaponDef, WEAPONS } from './charlineup/lineupWeapons';
-import { heldWeaponByKey } from './charlineup/weaponModels';
+import { type LineupWeaponDef } from './charlineup/lineupWeapons';
+import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { flipWeaponLocal, bumpWeaponSize, exportTuning } from './charlineup/weaponEditRegistry';
@@ -29,13 +29,10 @@ import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
 import { UNARMED_MALE } from './charlineup/locomotionClips';
 
-// Our first real held rifle: the AK74 (all 7 tiers share this one model + the rifle anims). Every
-// lineup character holds it so we can see the confirmed-good rifle animations on the actual gun.
-const AK47 = heldWeaponByKey('ak47')!;
-
-// All held guns the lineup can cycle through with '*' (AK47 first, then the other rifle/heavy models).
-// Each is sized + tuned independently; flip a gun with ^x/y/z to orient it, persisted per model.
-const GUNS: LineupWeaponDef[] = [AK47, ...WEAPONS];
+// All held guns the lineup cycles through with '*' — the REAL SWU weapons by item ID (AK74 first).
+// Each is sized + oriented independently; flip a gun with ^x/y/z and size with the number+−/= keys,
+// persisted per model/character. HeldWeapon is shape-compatible with LineupWeaponDef.
+const GUNS: LineupWeaponDef[] = HELD_WEAPONS;
 
 const SPACING = 2.2; // metres between characters
 const AHEAD = 5;     // metres in front of the player the row appears
@@ -52,7 +49,9 @@ useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
-GUNS.forEach((g) => useGLTF.preload(`${g.url}?a=${CHAR_ASSET_VERSION}`));
+// Preload only the first gun (AK74); the rest load on demand when cycled to (they total ~13 MB, too
+// much to fetch for every player on entering a world — the lineup is a dev-only '&&&' overlay).
+useGLTF.preload(`${GUNS[0].url}?a=${CHAR_ASSET_VERSION}`);
 
 function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon }: { file: string; charName: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');

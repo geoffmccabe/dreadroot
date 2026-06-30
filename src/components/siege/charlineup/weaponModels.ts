@@ -20,19 +20,26 @@ export interface HeldWeapon {
 // one model, the rifle animation set; tiers differ only in stats (damage/fire-rate/clip), so they
 // share this entry. Barrel runs along the model's X axis → rotDeg starts from the X-forward family;
 // grip is a first-pass guess to be tuned once (then correct for every character).
+// Every entry below is a REAL Siege Worlds Unity weapon, converted from its Item_<id> source FBX and
+// keyed to that exact game item_number. lengthM is a real-world size guess (auto-fit handles per-hand
+// scale); rotDeg/gripPos start as guesses to be tuned ONCE in the lineup (^x/y/z flips + size keys),
+// then baked here. AK74 keeps the hand-cleaned model already accepted; the rest are the SWU models.
+const R: [number, number, number] = [0, 0, 0];   // default raw orientation — flip each in the lineup
 export const HELD_WEAPONS: HeldWeapon[] = [
-  {
-    key: 'ak47',
-    name: 'AK74',
-    itemNumbers: [20, 111, 112, 113, 114, 115, 116],
-    url: '/siege/weapons/ak47.glb',
-    lengthM: 0.9,
-    // Baked from the in-lineup flip tool (^x then ^y): two perpendicular 180° flips compose to a
-    // 180° turn on Z, so [0,0,90] → [0,0,-90]. Barrel forward, upright.
-    rotDeg: [0, 0, -90],
-    gripPos: [0, 0, 0],
-    animSet: 'rifle',
-  },
+  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.9, rotDeg: [0, 0, -90], gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'submgun',       name: 'SubMGun',              itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'plasma_sniper4',name: 'Plasma Sniper',        itemNumbers: [4],   url: '/siege/weapons/item_4.glb',   lengthM: 1.3, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'plasma_sniper12',name: 'Plasma Sniper II',    itemNumbers: [12],  url: '/siege/weapons/item_12.glb',  lengthM: 1.3, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'db_shotgun',    name: 'Double Barrel Shotgun',itemNumbers: [1],   url: '/siege/weapons/item_1.glb',   lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 1.4, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 1.4, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
 ];
 
 const byItem = new Map<number, HeldWeapon>();
