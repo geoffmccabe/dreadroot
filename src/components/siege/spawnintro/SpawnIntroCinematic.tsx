@@ -140,16 +140,18 @@ function IntroDriver({ target }: { target: IntroTarget }) {
     } else if (phase === 'countdown') {
       camera.position.copy(g.camHigh); camera.lookAt(g.lookHead);
       if (av) av.rotation.y = g.yawFace;
-      // Hold the character idling (camera high, facing the player) until the world has finished
-      // loading, THEN dive in when the countdown is about to end — or the moment the world finishes
-      // if that lands AFTER the countdown (slow baked worlds). START/Space/Enter forces it now; a
-      // hard cap means it never waits forever on a world that never reports "done".
-      // clock: challenge uses the real countdown (countdownEndsAt); open-world a self-timed beat.
+      // Dive in when the countdown clock is up. START/Space/Enter forces it now; a hard cap means it
+      // never waits forever. clock: challenge uses the real countdown (countdownEndsAt); open-world a
+      // self-timed beat.
       const clockReady = target.countdownEndsAt != null
         ? performance.now() >= target.countdownEndsAt - INHABIT_DUR * 1000
         : e >= Math.max(0, target.countdownSec - INHABIT_DUR);
-      const worldLoaded = !sceneLoading;
-      if (consumeIntroBypass() || e >= COUNTDOWN_MAX || (worldLoaded && clockReady)) setIntroPhase('inhabit');
+      // Open-world spawn: do NOT wait for the whole world to finish streaming — the ground is already
+      // sampled (the 'loading' phase ensured it), so dive on the clock alone and let the rest of the
+      // scenery pop in behind the player. Challenges still hold until the world is loaded so the fight
+      // doesn't start on a half-built arena.
+      const worldGate = target.countdownEndsAt != null ? !sceneLoading : true;
+      if (consumeIntroBypass() || e >= COUNTDOWN_MAX || (worldGate && clockReady)) setIntroPhase('inhabit');
     } else if (phase === 'inhabit') {
       if (e < TURN_DUR) {                                       // 1) character turns 180° away
         if (av) av.rotation.y = g.yawFace + Math.PI * smooth(e / TURN_DUR);
@@ -206,7 +208,7 @@ function OpenWorldSpawnIntro() {
     return onSiegeLobbyReady(() => {
       if (isSiegeIntroActive() || getChallengeState().active) return;
       const euler = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
-      startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 5 });
+      startSpawnIntro([camera.position.x, camera.position.y, camera.position.z], euler.y, { countdownSec: 2 });
     });
   }, [camera]);
   return null;
