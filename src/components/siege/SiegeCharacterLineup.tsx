@@ -23,7 +23,7 @@ import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
-import { flipWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos } from './charlineup/weaponEditRegistry';
+import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos } from './charlineup/weaponEditRegistry';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -211,8 +211,8 @@ export function SiegeCharacterLineup() {
   // lineup's M/N win over any other M handler when the lineup is up.
   useEffect(() => {
     let amp: number[] = [];
-    let awaitFlip = false;   // true after '^' is pressed, waiting for x/y/z to pick the flip axis
     const POS = 0.02;        // position-nudge step, metres
+    const GROW = 1.02;       // size step (2%); shrink is the exact inverse
     const sizeTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
@@ -234,8 +234,8 @@ export function SiegeCharacterLineup() {
       // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
       else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(Number(e.key) - 1); }
       else if (e.key === '0') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(-1); }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 0.95); } // smaller
-      else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 1.0526); } // bigger
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 1 / GROW); } // 2% smaller
+      else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), GROW); }     // 2% bigger
       // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
       else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x', -POS); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x',  POS); }
@@ -244,11 +244,9 @@ export function SiegeCharacterLineup() {
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
-      // Gun orientation: '^' arms a flip, then x/y/z flips the gun 180° about that LOCAL axis
-      // (gun's own frame). Red=X, Green=Y, Blue=Z on the gizmo. Resulting rotDeg logged to bake.
-      else if (e.key === '^') { e.stopImmediatePropagation(); awaitFlip = true; }
-      else if (awaitFlip && /^[xyz]$/i.test(e.key)) { e.stopImmediatePropagation(); awaitFlip = false; flipWeaponLocal(e.key.toLowerCase() as 'x' | 'y' | 'z'); }
-      else if (awaitFlip) { awaitFlip = false; }   // any other key cancels the armed flip
+      // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
+      // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
+      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

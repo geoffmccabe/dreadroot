@@ -64,21 +64,22 @@ export function applyWrapRotation(reg: WeaponWrapReg): void {
   reg.wrap.quaternion.setFromEuler(_baseE).multiply(getTune(reg.weaponKey));
 }
 
-// Flip the CURRENTLY-shown weapon 180° about its own local axis (all mounted wraps share that weapon).
-export function flipWeaponLocal(axis: 'x' | 'y' | 'z'): void {
+// Rotate the CURRENTLY-shown weapon by `degrees` about its own local axis (post-multiply = gun's own
+// frame). All mounted wraps share that weapon. Used for fine (2°) and coarse (45°) orientation tuning.
+export function rotateWeaponLocal(axis: 'x' | 'y' | 'z', degrees: number): void {
   const all = weaponWraps();
   const rep = all[0];
-  if (!rep) { console.log('[weapon-flip] axis', axis, '(no gun mounted — show a Rifle clip first)'); return; }
+  if (!rep) { console.log('[weapon-rot]', axis, '(no gun mounted — show a Rifle clip first)'); return; }
   const tune = getTune(rep.weaponKey);
   _axisV.set(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
-  _flip.setFromAxisAngle(_axisV, Math.PI);
+  _flip.setFromAxisAngle(_axisV, degrees * D2R);
   tune.multiply(_flip);
   try { localStorage.setItem(tuneKeyFor(rep.weaponKey), JSON.stringify(tune.toArray())); } catch { /* ignore */ }
   all.forEach(applyWrapRotation);
   _baseE.set(rep.baseRot[0] * D2R, rep.baseRot[1] * D2R, rep.baseRot[2] * D2R, 'XYZ');
   _out.setFromEuler(_baseE).multiply(tune);
   _outE.setFromQuaternion(_out, 'XYZ');
-  console.log('[weapon-flip]', rep.weaponKey, 'axis', axis, '→ rotDeg',
+  console.log('[weapon-rot]', rep.weaponKey, `${degrees > 0 ? '+' : ''}${degrees}° ${axis}`, '→ rotDeg',
     [Math.round(_outE.x * R2D), Math.round(_outE.y * R2D), Math.round(_outE.z * R2D)]);
 }
 
