@@ -43,7 +43,7 @@ export function ObjectEditController() {
   const cq = useMemo(() => new THREE.Quaternion(), []);
   const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   // Live grab state (refs so the frame loop reads them without re-subscribing).
-  const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0, startX: 0, startZ: 0, moved: false });
+  const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0, startX: 0, startZ: 0, moved: false, hdx: 0, hdz: 1 });
   const ctrlDown = useRef(false);
 
   useEffect(() => {
@@ -109,13 +109,17 @@ export function ObjectEditController() {
       grab.current.planeY = o.pos[1];
       grab.current.startX = o.pos[0]; grab.current.startZ = o.pos[2];
       grab.current.moved = false;
-      // Carry the object at a FIXED reach (distance to its pivot), locked in now and never recomputed
-      // — robust at any viewing angle (no unstable ground-plane projection that explodes when you look
-      // level at a tall tree). The offset makes a plain click a perfect no-op: target = ro+rd·reach −
-      // offset, which equals the pivot exactly until you actually move the mouse.
-      grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
-      grab.current.offsetX = (ro.x + rd.x * grab.current.reach) - o.pos[0];
-      grab.current.offsetZ = (ro.z + rd.z * grab.current.reach) - o.pos[2];
+      // Carry by the HORIZONTAL aim only (yaw + walking move it on the ground; looking up/down does
+      // NOT). This decouples pitch from horizontal position, so wheel-raise is pure vertical and you
+      // can tilt your view to follow a rising object without it drifting sideways. Reach is the fixed
+      // horizontal distance to the pivot, locked now — robust at any angle. The offset makes a plain
+      // click a perfect no-op (target = pivot until you actually move the mouse).
+      let hl = Math.hypot(rd.x, rd.z);
+      if (hl < 1e-3) hl = 1;
+      grab.current.hdx = rd.x / hl; grab.current.hdz = rd.z / hl;
+      grab.current.reach = Math.max(MIN_REACH, Math.hypot(o.pos[0] - ro.x, o.pos[2] - ro.z));
+      grab.current.offsetX = (ro.x + grab.current.hdx * grab.current.reach) - o.pos[0];
+      grab.current.offsetZ = (ro.z + grab.current.hdz * grab.current.reach) - o.pos[2];
       dragBegin();
     };
     const onUp = (e: MouseEvent) => {
@@ -190,9 +194,12 @@ export function ObjectEditController() {
     if (!grab.current.active || !getEditMode()) return;
     const o = current(); if (!o) { grab.current.active = false; return; }
     camera.getWorldPosition(ro); camera.getWorldDirection(rd);
-    // Fixed-reach carry: the point at the locked grab distance, minus the grab offset.
-    const rawX = ro.x + rd.x * grab.current.reach - grab.current.offsetX;
-    const rawZ = ro.z + rd.z * grab.current.reach - grab.current.offsetZ;
+    // Horizontal-aim carry: position from the yaw-only direction at the locked reach, minus the grab
+    // offset. Pitch (looking up/down) is intentionally ignored so it never drags the object sideways.
+    const hl = Math.hypot(rd.x, rd.z);
+    if (hl > 1e-3) { grab.current.hdx = rd.x / hl; grab.current.hdz = rd.z / hl; }  // else keep last (looking straight up/down)
+    const rawX = ro.x + grab.current.hdx * grab.current.reach - grab.current.offsetX;
+    const rawZ = ro.z + grab.current.hdz * grab.current.reach - grab.current.offsetZ;
     // Do NOTHING until the cursor has actually moved the object (>5cm) — a static click never nudges
     // it, and grid-snap never fires on select. Height (wheel) and Ctrl-snap still apply on their own.
     if (!grab.current.moved && Math.hypot(rawX - grab.current.startX, rawZ - grab.current.startZ) > 0.05) grab.current.moved = true;
