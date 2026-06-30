@@ -11,6 +11,7 @@ export interface WeaponWrapReg {
   handScale: number;        // hand world scale (gripPos metres ↔ wrap-local units)
   baseRot: [number, number, number];  // weapon def rotDeg (deg); tune composes onto this
   baseScale: number;        // the auto-fit wrap scale; sizeMult multiplies it
+  bakedSize: number;        // baked per-character size multiplier (weapon.sizeByChar[char]); default 1
   baseGrip: [number, number, number];  // weapon def gripPos (m); pos tune adds onto this
   weaponKey: string;        // weapon MODEL url — selects orientation tune + (with char) size
   charName: string;         // which character holds this wrap — selects the size multiplier
@@ -31,6 +32,19 @@ export function weaponWraps(): WeaponWrapReg[] { return [...regs.values()]; }
 
 // The editor-object id every gun wrap tags itself with, so the crosshair/L selects them all as one.
 export const WEAPON_EDIT_ID = 'weapon:held';
+
+// When a weapon's tuning is baked into code, its in-browser orientation/position tweaks must be cleared
+// ONCE so the baked values apply cleanly (otherwise base ∘ saved-tune doubles the rotation). Bump
+// BAKE_VERSION + list the newly-baked urls each time we bake; only those are cleared, so other
+// weapons' in-progress tuning survives. (Size isn't cleared — it's a multiplier and never doubles.)
+const BAKE_VERSION = '1';
+const BAKED_URLS = ['/siege/weapons/ak47.glb'];
+try {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
+    for (const url of BAKED_URLS) { localStorage.removeItem(`siege_weapon_tune::${url}`); localStorage.removeItem(`siege_weapon_pos::${url}`); }
+    localStorage.setItem('siege_weapon_bake', BAKE_VERSION);
+  }
+} catch { /* localStorage unavailable */ }
 
 const _baseE = new THREE.Euler();
 const _flip = new THREE.Quaternion();
@@ -87,19 +101,19 @@ export function rotateWeaponLocal(axis: 'x' | 'y' | 'z', degrees: number): void 
 const sizes = new Map<string, number>();   // key = `${charName}::${weaponKey}`
 const sizeKey = (charName: string, weaponKey: string) => `siege_weapon_size::${charName}::${weaponKey}`;
 
-export function getWeaponSize(charName: string, weaponKey: string): number {
+export function getWeaponSize(charName: string, weaponKey: string, fallback = 1): number {
   const k = `${charName}::${weaponKey}`;
   let v = sizes.get(k);
   if (v === undefined) {
-    v = 1;
-    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(sizeKey(charName, weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n) && n > 0) v = n; } } catch { /* default 1 */ }
+    v = fallback;   // baked per-character size (weapon.sizeByChar) unless the user has a saved override
+    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(sizeKey(charName, weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n) && n > 0) v = n; } } catch { /* default */ }
     sizes.set(k, v);
   }
   return v;
 }
 
 export function applyWrapScale(reg: WeaponWrapReg): void {
-  reg.wrap.scale.setScalar(reg.baseScale * getWeaponSize(reg.charName, reg.weaponKey));
+  reg.wrap.scale.setScalar(reg.baseScale * getWeaponSize(reg.charName, reg.weaponKey, reg.bakedSize));
 }
 
 // Grow/shrink the current weapon for ONE character (charName) or ALL of them (charName = null).
@@ -108,7 +122,7 @@ export function bumpWeaponSize(charName: string | null, factor: number): void {
   for (const reg of regs.values()) {
     if (charName !== null && reg.charName !== charName) continue;
     const k = `${reg.charName}::${reg.weaponKey}`;
-    const next = clamp(getWeaponSize(reg.charName, reg.weaponKey) * factor, 0.2, 5);
+    const next = clamp(getWeaponSize(reg.charName, reg.weaponKey, reg.bakedSize) * factor, 0.2, 5);
     sizes.set(k, next);
     try { localStorage.setItem(sizeKey(reg.charName, reg.weaponKey), String(next)); } catch { /* ignore */ }
     applyWrapScale(reg);

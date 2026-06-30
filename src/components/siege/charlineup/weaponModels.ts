@@ -13,6 +13,7 @@ export interface HeldWeapon {
   lengthM: number;             // target real-world length of the model's longest axis (metres)
   rotDeg: [number, number, number];   // grip orientation in the Hand_R local frame (shared, eye-tuned)
   gripPos: [number, number, number];  // grip offset in Hand_R local metres (shared, eye-tuned)
+  sizeByChar?: Record<string, number>;  // baked per-character size multiplier (auto-fit × this); default 1
   animSet: 'rifle' | 'pistol';
 }
 
@@ -26,7 +27,7 @@ export interface HeldWeapon {
 // then baked here. AK74 keeps the hand-cleaned model already accepted; the rest are the SWU models.
 const R: [number, number, number] = [0, 0, 0];   // default raw orientation — flip each in the lineup
 export const HELD_WEAPONS: HeldWeapon[] = [
-  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.9, rotDeg: [0, 0, -90], gripPos: [0, 0, 0], animSet: 'rifle' },
+  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.9, rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], sizeByChar: { Rajax: 0.85 }, animSet: 'rifle' },
   { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
   { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
   { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: [0, 0, 0], animSet: 'rifle' },
