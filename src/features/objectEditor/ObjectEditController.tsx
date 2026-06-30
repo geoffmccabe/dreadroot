@@ -21,7 +21,7 @@ import {
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
   selectBaked, clearBaked, dragBegin, dragTo, dragCommit, dragCancel, isDragging,
 } from './store';
-import { placeKey, transformOverrides } from './bakedOverrides';
+import { placeKey, transformOverrides, saveWorldToDb } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
 
@@ -163,6 +163,7 @@ export function ObjectEditController() {
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
       if (meta && e.code === 'KeyX') { e.preventDefault(); e.stopImmediatePropagation(); deleteSelected(); return; }
+      if (meta && e.code === 'KeyS') { e.preventDefault(); e.stopImmediatePropagation(); saveWorldToDb(); return; }
       if (meta) return;
       let handled = true;
       switch (e.code) {

@@ -11,7 +11,7 @@ import { scifiAsset } from '@/config/assetBase';
 import type { WorldObject } from './types';
 import { setContext, setCanEdit, useEditorObjects } from './store';
 import { loadObjects, loadCanEdit } from './persistence';
-import { setWorldOverrides } from './bakedOverrides';
+import { setWorldOverrides, loadWorldFromDb } from './bakedOverrides';
 
 // Selection feedback is drawn by SelectionHighlight (a pulsing world-space box), so these just
 // render the model + tag it with its id for picking.
@@ -46,7 +46,8 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
   useEffect(() => {
     let alive = true;
     const game = getActiveGame();
-    setWorldOverrides(worldId);   // load this world's baked-instance edits before the batch layer builds
+    setWorldOverrides(worldId);   // instant localStorage seed before the batch layer builds
+    loadWorldFromDb(game, worldId).catch(() => {});   // then merge the shared published history
     setContext(game, worldId, []);
     loadObjects(game, worldId).then((objs) => { if (alive) setContext(game, worldId, objs); }).catch(() => {});
     loadCanEdit().then((v) => { if (alive) setCanEdit(v); }).catch(() => {});

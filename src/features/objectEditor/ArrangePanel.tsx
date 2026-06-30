@@ -8,6 +8,7 @@ import { useSyncExternalStore, type CSSProperties } from 'react';
 import { panelSurface } from '@/theme/panelSurface';
 import { useCurrent, duplicateSelected, deleteSelected, setSelected } from './store';
 import { PROFILES, PROFILE_KEYS, getProfile, getProfileKey, setProfileKey, subscribeProfile } from './controlProfiles';
+import { subscribeSave, getSaveState, saveWorldToDb } from './bakedOverrides';
 
 const f1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
 const yawDeg = (q: [number, number, number, number]) =>
@@ -26,14 +27,29 @@ const btn = 'rounded px-2 py-0.5 text-[10px] border border-white/25 hover:bg-whi
 export function ArrangePanel() {
   const obj = useCurrent();
   const profileKey = useSyncExternalStore(subscribeProfile, getProfileKey);
+  const sv = useSyncExternalStore(subscribeSave, getSaveState);
   const surface: CSSProperties = {
     ...panelSurface('build'),
     color: 'var(--pt-build-body-color)',
     fontFamily: 'var(--pt-build-body-family)',
   };
+  const dirty = sv.dirty > 0;
+  const saveLabel = sv.saving ? 'Saving…' : dirty ? `💾 Save (${sv.dirty})` : '💾 Saved';
+  const saveMsg = sv.error ? 'Save failed — retry' : (!dirty && sv.savedAt) ? 'Saved ✓' : '';
   return (
     <div style={surface} className="w-60 p-3 text-xs">
-      <div className="mb-2 font-bold" style={heading}>↔ Arrange</div>
+      {/* Flashing green Save pulse — same as the Challenge Builder's Save button. */}
+      <style>{`@keyframes arrSavePulse { 0%,100% { box-shadow: 0 0 0 0 hsla(140,75%,55%,0); } 50% { box-shadow: 0 0 13px 3px hsla(140,75%,55%,0.8); } } .arr-save-pulse { animation: arrSavePulse 1.15s ease-in-out infinite; }`}</style>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-bold" style={heading}>↔ Arrange</span>
+        <button
+          className={`rounded px-2 py-0.5 text-[10px] font-bold text-white ${dirty ? 'arr-save-pulse' : ''}`}
+          style={{ background: dirty ? '#2e8b57' : 'rgba(255,255,255,0.12)' }}
+          onClick={() => saveWorldToDb()}
+          title="Publish all map edits to the database for everyone (⌘S)"
+        >{saveLabel}</button>
+      </div>
+      {saveMsg && <div className="mb-1 text-[9px]" style={{ color: sv.error ? '#ff9b9b' : '#8fe6a0' }}>{saveMsg}</div>}
 
       {!obj ? (
         <div className="text-[11px]" style={muted}>Click an object to select it.</div>
