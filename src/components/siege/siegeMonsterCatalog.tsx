@@ -13,6 +13,7 @@ import { throwBoulder } from './boulderSystem';
 import { useThree } from '@react-three/fiber';
 import { ACID_VOMIT, type SprayConfig } from './spray/sprayConfig';
 import { getMonsterOverride } from './monsterStats';
+import { deferLobbyPreload } from './siegeDeferredPreload';
 import { effectiveComponentStats } from './componentMonsterStats';
 
 export type MType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19;
@@ -211,11 +212,13 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
   );
 }
 
-// Preload every monster glb at module load (siege entry) so a challenge wave never decodes/suspends on
-// the frame it spawns — that synchronous glb decode was a chunk of the Death Dark City start-up freeze.
+// Warm every monster glb so a challenge wave never decodes/suspends on the frame it spawns — that
+// synchronous glb decode was a chunk of the Death Dark City start-up freeze. DEFERRED to idle AFTER
+// the lobby is on screen: no monster is visible on spawn (beach spawns + lineup load on-demand), so
+// preloading all ~19 at app boot only stole bandwidth from the lobby's own load.
 {
   const urls = new Set<string>();
   for (const k in CFG) { const u = (CFG as Record<string, { url?: string }>)[k]?.url; if (u) urls.add(u); }
   for (const h of HORDE6) urls.add(h.url);
-  urls.forEach((u) => useGLTF.preload(u));
+  deferLobbyPreload(() => urls.forEach((u) => useGLTF.preload(u)));
 }
