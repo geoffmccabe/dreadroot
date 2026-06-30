@@ -97,11 +97,15 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}
+      {/* key={world.id}: force the ground layer to REMOUNT on a world switch so it re-runs its
+          load effect and re-fires onReady. Without this, returning to the lobby left `readyWorld`
+          stale on the previous map's id (TerrainLayer has no world prop / stable deps and never
+          re-signals), so terrainReady stayed false forever → lobby objects never un-hid. */}
       {isHeightmap
-        ? <HeightmapTerrain world={world} onReady={signalReady} />
+        ? <HeightmapTerrain key={world.id} world={world} onReady={signalReady} />
         : kind === 'flat'
-          ? <FlatGroundLayer world={world} onReady={signalReady} />
-          : <TerrainLayer onReady={signalReady} />}
+          ? <FlatGroundLayer key={world.id} world={world} onReady={signalReady} />
+          : <TerrainLayer key={world.id} onReady={signalReady} />}
       {/* Builder/blank maps (Starblink, City Demo) drop the SWW horror fog, so faces away
           from the sun go near-black with only the base ambient. Add bright fill light so
           all object textures read clearly (esp. the tall city buildings). */}
