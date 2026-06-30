@@ -43,7 +43,7 @@ export function ObjectEditController() {
   const cq = useMemo(() => new THREE.Quaternion(), []);
   const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   // Live grab state (refs so the frame loop reads them without re-subscribing).
-  const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0 });
+  const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0, startX: 0, startZ: 0, moved: false });
   const ctrlDown = useRef(false);
 
   useEffect(() => {
@@ -107,18 +107,15 @@ export function ObjectEditController() {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd);
       grab.current.active = true;
       grab.current.planeY = o.pos[1];
-      // Grab OFFSET: the gap between where the crosshair meets the object's height-plane and the
-      // object's actual pivot. Holding this constant while carrying means a plain click (no mouse
-      // move) leaves the object exactly where it was — selecting never nudges it.
-      const t0 = (o.pos[1] - ro.y) / rd.y;
-      if (isFinite(t0) && t0 > MIN_REACH && t0 < MAX_REACH) {
-        grab.current.reach = t0;
-        grab.current.offsetX = (ro.x + rd.x * t0) - o.pos[0];
-        grab.current.offsetZ = (ro.z + rd.z * t0) - o.pos[2];
-      } else {
-        grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
-        grab.current.offsetX = 0; grab.current.offsetZ = 0;
-      }
+      grab.current.startX = o.pos[0]; grab.current.startZ = o.pos[2];
+      grab.current.moved = false;
+      // Carry the object at a FIXED reach (distance to its pivot), locked in now and never recomputed
+      // — robust at any viewing angle (no unstable ground-plane projection that explodes when you look
+      // level at a tall tree). The offset makes a plain click a perfect no-op: target = ro+rd·reach −
+      // offset, which equals the pivot exactly until you actually move the mouse.
+      grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
+      grab.current.offsetX = (ro.x + rd.x * grab.current.reach) - o.pos[0];
+      grab.current.offsetZ = (ro.z + rd.z * grab.current.reach) - o.pos[2];
       dragBegin();
     };
     const onUp = (e: MouseEvent) => {
@@ -193,15 +190,17 @@ export function ObjectEditController() {
     if (!grab.current.active || !getEditMode()) return;
     const o = current(); if (!o) { grab.current.active = false; return; }
     camera.getWorldPosition(ro); camera.getWorldDirection(rd);
-    // Where the aim ray meets the height plane (y = planeY). When that's invalid (looking up /
-    // near-flat), fall back to the last good reach so the object never shoots to infinity.
-    let reach = grab.current.reach;
-    const t = (grab.current.planeY - ro.y) / rd.y;
-    if (isFinite(t) && t > MIN_REACH && t < MAX_REACH) { reach = t; grab.current.reach = t; }
-    let x = ro.x + rd.x * reach - grab.current.offsetX;   // keep the grab offset → no jump on click
-    let z = ro.z + rd.z * reach - grab.current.offsetZ;
+    // Fixed-reach carry: the point at the locked grab distance, minus the grab offset.
+    const rawX = ro.x + rd.x * grab.current.reach - grab.current.offsetX;
+    const rawZ = ro.z + rd.z * grab.current.reach - grab.current.offsetZ;
+    // Do NOTHING until the cursor has actually moved the object (>5cm) — a static click never nudges
+    // it, and grid-snap never fires on select. Height (wheel) and Ctrl-snap still apply on their own.
+    if (!grab.current.moved && Math.hypot(rawX - grab.current.startX, rawZ - grab.current.startZ) > 0.05) grab.current.moved = true;
+    const heightChanged = grab.current.planeY !== o.pos[1];
+    if (!grab.current.moved && !ctrlDown.current && !heightChanged) return;
+    const x = grab.current.moved ? snapAxis(rawX) : o.pos[0];   // grid snap only once truly moving
+    const z = grab.current.moved ? snapAxis(rawZ) : o.pos[2];
     let y = grab.current.planeY;
-    x = snapAxis(x); z = snapAxis(z);               // profile grid snap (no-op when off)
     if (ctrlDown.current) {                          // ride the surface directly beneath the carry point
       dray.set(new THREE.Vector3(x, grab.current.planeY + SNAP_UP, z), down);
       const hits = dray.intersectObjects(scene.children, true);
