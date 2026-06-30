@@ -442,6 +442,7 @@ export function FirstPersonControls({
   useEffect(() => {
     (window as any).__siegeSetView = (yawRad: number, pitchRad = 0) => {
       yaw.current = yawRad; pitch.current = pitchRad; needsCameraUpdate.current = true;
+      console.warn(`[LOOKSNAP] __siegeSetView pitch=${pitchRad?.toFixed?.(3)} yaw=${yawRad?.toFixed?.(3)} (programmatic view set — fired during a spawn = the cause)`);
     };
     return () => { delete (window as any).__siegeSetView; };
   }, []);
@@ -926,6 +927,7 @@ export function FirstPersonControls({
   // Euler for camera rotation
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
   const needsCameraUpdate = useRef(true); // Start true to apply initial rotation on first frame
+  const prevAppliedPitchDbg = useRef(0);  // LOOKSNAP debug: catch sudden vertical-look jumps + attribute them
 
   // Automated perf-test control surface (test-only; gated on ?perftest — no
   // production effect). Lets scripts/perftest.ts drive the camera headlessly.
@@ -1014,7 +1016,8 @@ export function FirstPersonControls({
     const sensitivity = 0.002;
     yaw.current += -movementX * sensitivity;
     pitch.current += -movementY * sensitivity;
-    
+    if (Math.abs(movementY) > 120) console.warn(`[LOOKSNAP] large mouse dY=${movementY} dX=${movementX} (a spike here right when the view jumps = the cause)`);
+
     const maxPitch = Math.PI / 2 - 0.01;
     pitch.current = Math.max(-maxPitch, Math.min(maxPitch, pitch.current));
     needsCameraUpdate.current = true;
@@ -2063,6 +2066,13 @@ export function FirstPersonControls({
         // aiming near vertical can't flip the camera over the pole.
         const PITCH_LIMIT = Math.PI / 2 - 0.01;
         const appliedPitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch.current + recoilPitchRef.current));
+        // LOOKSNAP debug: any big single-frame vertical-look jump → log it + its source so we can tell
+        // mouse vs recoil vs programmatic. (~0.5 rad ≈ 28°; normal looking never jumps that in one frame.)
+        if (Math.abs(appliedPitch - prevAppliedPitchDbg.current) > 0.5) {
+          const lm = lastMovements.current[lastMovements.current.length - 1];
+          console.warn(`[LOOKSNAP] pitch jumped ${(prevAppliedPitchDbg.current).toFixed(2)}→${appliedPitch.toFixed(2)} | base pitch=${pitch.current.toFixed(2)} recoil=${recoilPitchRef.current.toFixed(2)} | last mouse dY=${lm ? lm.y : 'n/a'}  (recoil big=weapon/kick · base+big dY=mouse · base jumped+tiny dY=programmatic)`);
+        }
+        prevAppliedPitchDbg.current = appliedPitch;
         eulerRef.current.set(appliedPitch, yaw.current + recoilYawRef.current, 0);
         camera.quaternion.setFromEuler(eulerRef.current);
         needsCameraUpdate.current = false;
