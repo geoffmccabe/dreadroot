@@ -1510,6 +1510,21 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (hs > IMPACT_MIN && !inst.dead) { hurtDemon(inst, impactDamage(hs)); inst.kvx = 0; inst.kvz = 0; }
     }
 
+    // CAVE-CRAWL MESH BLOCK: in this open-world city the buildings are BAKED MESH with no box colliders
+    // (only placed props get those), so the box-undo above never fires and the giant walks straight
+    // THROUGH a garage — which is why it never got blocked, never went stuck, never crawled. Stop it on
+    // the mesh too: cast a short forward ray at the posture's height — CHEST while upright (a wall blocks,
+    // an open doorway passes) or LOW while crawling (a duck-under opening passes, solid still blocks) —
+    // and undo the step on a hit. Pinned at the wall → no progress → stuck → pathfind to the opening →
+    // crouch + crawl IN. No-op off mesh worlds (raycastMesh returns null). Scoped to the few cave-crawl
+    // giants so the whole horde's movement is unchanged.
+    if (c.caveCrawl && nav.crawlHoles && moving && dist < CLIMB_LOD) {
+      const ml = Math.hypot(mvx, mvz) || 1;
+      const crawling = s.cave.mode === 'crawl' || s.cave.mode === 'enter';
+      const rh = crawling ? 0.5 : Math.min(1.4, Math.max(0.9, H * 0.4));
+      if (raycastMesh(preX, s.y + rh, preZ, mvx / ml, 0, mvz / ml, me.r + 0.35) != null) { s.x = preX; s.z = preZ; }
+    }
+
     // Spintroll bounce: hitting a collider mid-spiral fires it straight into a zoom, away from
     // the wall — reads as bouncing off the object.
     if (c.spin && s.spiraling && wallTop > -Infinity && moving) {
