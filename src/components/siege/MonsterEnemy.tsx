@@ -16,7 +16,7 @@ import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { APP_VERSION } from '@/version';
 import { type CaveCrawlConfig, ccCfg, newCaveState, resolveCavePosture, stepCave, findNeckBones, applyHeadUp } from './caveCrawl';
-import { raycastMesh } from './meshColliderSystem';
+import { raycastMesh, resolvePlayerMeshCollision } from './meshColliderSystem';
 import { acquireTarget } from './siegeTargeting';
 import { getNavProfile } from './siegeNavProfile';
 import { getActiveMapId } from '@/config/activeMap';
@@ -155,6 +155,7 @@ const PATH_GAP_MS = 30;
 const GRAVITY = 22, JUMP_VEL = 9.5, STEP_UP = 0.45;
 const TRAP_RADIUS = 1.3, TRAP_COUNT = 3; // boxed in by this many of its own kind → climb over
 const CLIMB_LOD = 90; // beyond this (m from camera) skip the per-frame world-collision query
+const _capPush = new THREE.Vector3(); // scratch for the cave-crawl mesh capsule push (module-level: useFrame is sync per instance)
 
 // TRUE 3D directional audio for monster-emitted sounds (roar/attack/miss/moan): HRTF panning
 // from the monster's mouth toward the player's ears + natural distance falloff. Skipped past
@@ -1510,19 +1511,18 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (hs > IMPACT_MIN && !inst.dead) { hurtDemon(inst, impactDamage(hs)); inst.kvx = 0; inst.kvz = 0; }
     }
 
-    // CAVE-CRAWL MESH BLOCK: in this open-world city the buildings are BAKED MESH with no box colliders
-    // (only placed props get those), so the box-undo above never fires and the giant walks straight
-    // THROUGH a garage — which is why it never got blocked, never went stuck, never crawled. Stop it on
-    // the mesh too: cast a short forward ray at the posture's height — CHEST while upright (a wall blocks,
-    // an open doorway passes) or LOW while crawling (a duck-under opening passes, solid still blocks) —
-    // and undo the step on a hit. Pinned at the wall → no progress → stuck → pathfind to the opening →
-    // crouch + crawl IN. No-op off mesh worlds (raycastMesh returns null). Scoped to the few cave-crawl
-    // giants so the whole horde's movement is unchanged.
-    if (c.caveCrawl && nav.crawlHoles && moving && dist < CLIMB_LOD) {
-      const ml = Math.hypot(mvx, mvz) || 1;
-      const crawling = s.cave.mode === 'crawl' || s.cave.mode === 'enter';
-      const rh = crawling ? 0.5 : Math.min(1.4, Math.max(0.9, H * 0.4));
-      if (raycastMesh(preX, s.y + rh, preZ, mvx / ml, 0, mvz / ml, me.r + 0.35) != null) { s.x = preX; s.z = preZ; }
+    // CAVE-CRAWL MESH COLLISION: in this open-world city the buildings are BAKED MESH with no box
+    // colliders (only placed props get those), so nothing above stopped the giant — it walked straight
+    // THROUGH a garage and never went stuck/pathfound/crawled. A thin ray slips through the decimated
+    // collision mesh, so use the SAME capsule push the PLAYER uses (resolvePlayerMeshCollision) — it
+    // can't tunnel. UPRIGHT (mode none/enter/wedged): a full-height capsule hits the wall/low lintel →
+    // pushed out → can't advance → stuck → pathfind → crouch. While actually CRAWLING the route is
+    // already proven to fit at crawl height, so RELEASE the push and let it thread the low opening.
+    // No-op off mesh worlds (returns false). Scoped to cave-crawl monsters; whole horde unchanged.
+    if (c.caveCrawl && nav.crawlHoles && dist < CLIMB_LOD && s.cave.mode !== 'crawl') {
+      const capR = Math.min(me.r, 1.2);            // cap so a huge giant isn't shoved across the street
+      const capH = Math.max(1.6, H * 0.6);         // tall while upright: a low garage lintel blocks it
+      if (resolvePlayerMeshCollision(s.x, s.y, s.z, capR, capH, _capPush)) { s.x += _capPush.x; s.z += _capPush.z; }
     }
 
     // Spintroll bounce: hitting a collider mid-spiral fires it straight into a zoom, away from
