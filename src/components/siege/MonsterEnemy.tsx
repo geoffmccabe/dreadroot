@@ -1359,11 +1359,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
             // (the visible swipe); the strike (impact + knockback) is ~0.3s after that.
             s.strikeAt = now + 950;
             s.swingGap = 1000 + Math.random() * 2000;   // next swipe in a random 1-3s
-            if (c.lungeOnSwing) {   // lunge the body 65% toward the camera + up toward its height
+            if (c.lungeOnSwing) {   // lunge the body toward the camera; UP toward its height only
               s.lungeStart = now;
-              s.lungeOX = (camera.position.x - s.x) * 0.65;
-              s.lungeOZ = (camera.position.z - s.z) * 0.65;
-              s.lungeOY = (camera.position.y - (s.y + H * 0.8)) * 0.65;
+              // Horizontal lunge shrinks as the monster gets taller — a giant leaning 65% of the way to
+              // your feet face-plants past you; a small demon still gets the full in-your-face lunge.
+              const reachMul = Math.max(0.18, Math.min(0.65, 0.65 * (2.2 / H)));
+              s.lungeOX = (camera.position.x - s.x) * reachMul;
+              s.lungeOZ = (camera.position.z - s.z) * reachMul;
+              // CLAMP ≥0: only ever lunge UP toward a player above. The raw value is NEGATIVE whenever the
+              // player is below the monster's upper body (always, for a giant on flat ground) — applying it
+              // sank the whole body ~2 m INTO the floor on every swing. Never dip below standing height.
+              s.lungeOY = Math.max(0, (camera.position.y - (s.y + H * 0.8)) * 0.65);
             }
           } else if (c.missSound) {
             // Legacy whiff (monsters with a swoosh but no committed strike).
