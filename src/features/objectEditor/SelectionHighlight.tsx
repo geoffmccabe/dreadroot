@@ -1,48 +1,57 @@
-// Pulsing selection outline for the Arrange tool. Draws a bright additive wireframe box around
-// the selected object's world bounding box and pulses its opacity ~2×/sec (smooth sine). Works for
-// BOTH a placed object (found by its worldObjectId) and a baked map instance (box derived from the
-// instance matrix), so cliffs/leaves finally show selection feedback. It's a wireframe drawn OVER
-// everything (depthTest off, additive) — bright on dark surfaces, and it never hides the object's
-// real colour. Crucially it touches NO material (writing instanceColor recompiled the EF shaders
-// and made objects vanish — see LaserProbe). Added straight to the scene so it lives in world space.
+// Depth-aware pulsing selection outline for the Arrange tool. A wireframe box around the selected
+// object's world bounding box, drawn in TWO passes so it reads with real depth instead of floating
+// flat on top of everything:
+//   • FRONT pass  — depth-TESTED, bright. Edges in front of scene geometry draw at full strength;
+//                   edges genuinely behind other objects fail the depth test and don't draw here.
+//   • BEHIND pass — depth-ignored, faint. The occluded edges still show, but dim — so the further
+//                   back / more occluded a part is, the more transparent it looks.
+// Net effect: bright & solid where the box is close/unoccluded, fading toward transparent where it's
+// behind other objects — giving a true sense of the object's size and where it sits in the scene.
+// (A literal "−40% brightness per occluding object" needs multi-layer depth peeling, which is far
+// too expensive per frame; this two-pass x-ray is the standard editor technique and reads the same.)
+// Both passes pulse together ~2×/sec. Works for placed objects AND baked map instances. Touches NO
+// material (writing instanceColor recompiled the EF shaders and made objects vanish — see LaserProbe).
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useCurrent } from './store';
 
-const COLOR = 0x7df0ff;
+const COLOR = 0x8df4ff;
 
 export function SelectionHighlight() {
   const { scene } = useThree();
   const sel = useCurrent();
 
-  const box = useMemo(() => {
-    const ls = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
-      new THREE.LineBasicMaterial({ color: COLOR, transparent: true, depthTest: false, blending: THREE.AdditiveBlending }),
-    );
-    ls.renderOrder = 1001; ls.frustumCulled = false; ls.visible = false;
-    return ls;
+  const { group, frontMat, behindMat } = useMemo(() => {
+    const geo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+    const frontMat = new THREE.LineBasicMaterial({ color: COLOR, transparent: true, depthTest: true, depthWrite: false });
+    const behindMat = new THREE.LineBasicMaterial({ color: COLOR, transparent: true, depthTest: false, depthWrite: false });
+    const behind = new THREE.LineSegments(geo, behindMat); behind.renderOrder = 1001;  // faint, drawn first
+    const front = new THREE.LineSegments(geo, frontMat); front.renderOrder = 1002;     // bright, on top of behind
+    const group = new THREE.Group(); group.add(behind, front);
+    group.frustumCulled = false; behind.frustumCulled = false; front.frustumCulled = false;
+    group.visible = false;
+    return { group, frontMat, behindMat };
   }, []);
   const b3 = useMemo(() => new THREE.Box3(), []);
   const ctr = useMemo(() => new THREE.Vector3(), []);
   const sz = useMemo(() => new THREE.Vector3(), []);
   const m4 = useMemo(() => new THREE.Matrix4(), []);
 
-  // Add the box to the scene root (world space) for the component's lifetime.
-  useEffect(() => { scene.add(box); return () => { scene.remove(box); box.visible = false; }; }, [scene, box]);
+  // Add to the scene root (world space) for the component's lifetime.
+  useEffect(() => { scene.add(group); return () => { scene.remove(group); group.visible = false; }; }, [scene, group]);
 
-  // Resolved placed Object3D, cached per selected ID. Re-resolved (per frame, until found) only
-  // when the ID changes — so it picks up a just-duplicated object that mounts a frame later,
-  // without traversing the whole scene every drag frame.
+  // Resolved placed Object3D, cached per selected ID. Re-resolved (per frame, until found) only when
+  // the ID changes — so it picks up a just-duplicated object that mounts a frame later, without
+  // traversing the whole scene every drag frame.
   const targetRef = useRef<THREE.Object3D | null>(null);
   const idRef = useRef<string | null>(null);
 
   useFrame((state) => {
-    if (!sel) { box.visible = false; return; }
+    if (!sel) { group.visible = false; return; }
     if (sel.baked) {
       const im = sel.baked.mesh; const g = im?.geometry as THREE.BufferGeometry | undefined;
-      if (!im || !g) { box.visible = false; return; }
+      if (!im || !g) { group.visible = false; return; }
       if (!g.boundingBox) g.computeBoundingBox();
       im.getMatrixAt(sel.baked.instanceId, m4);
       b3.copy(g.boundingBox as THREE.Box3).applyMatrix4(m4);
@@ -52,17 +61,20 @@ export function SelectionHighlight() {
         const id = sel.id;
         scene.traverse((o) => { if (!targetRef.current && o.userData?.worldObjectId === id) targetRef.current = o; });
       }
-      if (!targetRef.current) { box.visible = false; return; }
+      if (!targetRef.current) { group.visible = false; return; }
       b3.setFromObject(targetRef.current);
     }
-    if (b3.isEmpty()) { box.visible = false; return; }
+    if (b3.isEmpty()) { group.visible = false; return; }
     b3.getCenter(ctr); b3.getSize(sz);
-    if (Math.max(sz.x, sz.y, sz.z) > 200) { box.visible = false; return; }  // never draw a map-sized box
-    box.position.copy(ctr);
-    box.scale.set(Math.max(sz.x, 0.05), Math.max(sz.y, 0.05), Math.max(sz.z, 0.05));
-    // 2 Hz smooth pulse; floor at 0.2 so it stays readable but clearly fades on/off.
-    (box.material as THREE.LineBasicMaterial).opacity = 0.2 + 0.8 * (0.5 + 0.5 * Math.sin(state.clock.elapsedTime * Math.PI * 4));
-    box.visible = true;
+    if (Math.max(sz.x, sz.y, sz.z) > 200) { group.visible = false; return; }  // never draw a map-sized box
+    group.position.copy(ctr);
+    group.scale.set(Math.max(sz.x, 0.05), Math.max(sz.y, 0.05), Math.max(sz.z, 0.05));
+    // 2 Hz smooth pulse. Front (unoccluded) stays bold; behind (occluded) floors near the 10% the
+    // user wanted, so heavily-blocked parts read as nearly transparent.
+    const pulse = 0.5 + 0.5 * Math.sin(state.clock.elapsedTime * Math.PI * 4);
+    frontMat.opacity = 0.65 + 0.35 * pulse;     // ~0.65 → 1.0
+    behindMat.opacity = 0.1 + 0.12 * pulse;     // ~0.10 → 0.22
+    group.visible = true;
   });
 
   return null;

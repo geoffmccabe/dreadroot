@@ -25,7 +25,8 @@ import { placeKey, transformOverrides } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
 
-const SELECT_MAX = 50;     // biggest individual object you can grab (m) — skips combined/terrain blobs
+const SELECT_MAX = 150;    // biggest individual object you can grab (m) — tall trees qualify; bigger
+                           // than this is a merged-region blob (also caught by the `combined` flag)
 const MIN_REACH = 1.5;     // closest the carried object can sit to the camera (m)
 const MAX_REACH = 150;     // furthest a plane-hit is accepted before falling back to last reach
 const SNAP_UP = 60;        // how far above the carry point the surface down-ray starts (m)
@@ -42,7 +43,7 @@ export function ObjectEditController() {
   const cq = useMemo(() => new THREE.Quaternion(), []);
   const yAxis = useMemo(() => new THREE.Vector3(0, 1, 0), []);
   // Live grab state (refs so the frame loop reads them without re-subscribing).
-  const grab = useRef({ active: false, planeY: 0, reach: 8 });
+  const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0 });
   const ctrlDown = useRef(false);
 
   useEffect(() => {
@@ -103,10 +104,21 @@ export function ObjectEditController() {
       if (!selectAtCrosshair()) return;          // nothing under the crosshair
       if (e.shiftKey) duplicateSelected([0, 0, 0]); // Shift+click ⇒ grab a copy (no-op for baked)
       const o = current(); if (!o) return;
-      camera.getWorldPosition(ro);
+      camera.getWorldPosition(ro); camera.getWorldDirection(rd);
       grab.current.active = true;
       grab.current.planeY = o.pos[1];
-      grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
+      // Grab OFFSET: the gap between where the crosshair meets the object's height-plane and the
+      // object's actual pivot. Holding this constant while carrying means a plain click (no mouse
+      // move) leaves the object exactly where it was — selecting never nudges it.
+      const t0 = (o.pos[1] - ro.y) / rd.y;
+      if (isFinite(t0) && t0 > MIN_REACH && t0 < MAX_REACH) {
+        grab.current.reach = t0;
+        grab.current.offsetX = (ro.x + rd.x * t0) - o.pos[0];
+        grab.current.offsetZ = (ro.z + rd.z * t0) - o.pos[2];
+      } else {
+        grab.current.reach = Math.max(MIN_REACH, ro.distanceTo(new THREE.Vector3(o.pos[0], o.pos[1], o.pos[2])));
+        grab.current.offsetX = 0; grab.current.offsetZ = 0;
+      }
       dragBegin();
     };
     const onUp = (e: MouseEvent) => {
@@ -186,8 +198,8 @@ export function ObjectEditController() {
     let reach = grab.current.reach;
     const t = (grab.current.planeY - ro.y) / rd.y;
     if (isFinite(t) && t > MIN_REACH && t < MAX_REACH) { reach = t; grab.current.reach = t; }
-    let x = ro.x + rd.x * reach;
-    let z = ro.z + rd.z * reach;
+    let x = ro.x + rd.x * reach - grab.current.offsetX;   // keep the grab offset → no jump on click
+    let z = ro.z + rd.z * reach - grab.current.offsetZ;
     let y = grab.current.planeY;
     x = snapAxis(x); z = snapAxis(z);               // profile grid snap (no-op when off)
     if (ctrlDown.current) {                          // ride the surface directly beneath the carry point
