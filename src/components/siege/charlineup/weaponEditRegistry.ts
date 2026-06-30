@@ -24,6 +24,13 @@ export const WEAPON_EDIT_ID = 'weapon:ak47';
 // baseRot(euler) ∘ weaponTune, so all characters' guns stay identical and the tweak survives clip
 // changes. flipWeaponLocal logs the resulting rotDeg so it can be baked into weaponModels.ts.
 export const weaponTune = new THREE.Quaternion();
+const TUNE_KEY = 'siege_weapon_tune';
+// Persist the tune so manual flips survive a page reload (otherwise every reload starts un-tuned and
+// the gun looks wrong again). Loaded on module init, saved after each flip.
+try {
+  const saved = typeof localStorage !== 'undefined' && localStorage.getItem(TUNE_KEY);
+  if (saved) { const a = JSON.parse(saved); if (Array.isArray(a) && a.length === 4) weaponTune.fromArray(a); }
+} catch { /* localStorage unavailable — fall back to identity */ }
 const _baseE = new THREE.Euler();
 const _flip = new THREE.Quaternion();
 const _axisV = new THREE.Vector3();
@@ -41,6 +48,7 @@ export function flipWeaponLocal(axis: 'x' | 'y' | 'z'): void {
   _axisV.set(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
   _flip.setFromAxisAngle(_axisV, Math.PI);
   weaponTune.multiply(_flip);
+  try { localStorage.setItem(TUNE_KEY, JSON.stringify(weaponTune.toArray())); } catch { /* ignore */ }
   const all = weaponWraps();
   all.forEach(applyWrapRotation);
   const rep = all[0];
