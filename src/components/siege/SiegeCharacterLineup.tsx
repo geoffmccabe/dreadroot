@@ -50,7 +50,7 @@ useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
 LINEUP_CHARS.forEach((c) => useGLTF.preload(glbUrl(c.file), '/draco/'));
 useGLTF.preload(`${AK47.url}?a=${CHAR_ASSET_VERSION}`);
 
-function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; animIndex: number; weapon: LineupWeaponDef }) {
+function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, heightM, animIndex, weapon }: { file: string; x: number; z: number; yaw: number; fallbackY: number; scale: number; minY: number; heightM: number; animIndex: number; weapon: LineupWeaponDef }) {
   const { scene } = useGLTF(glbUrl(file), '/draco/');
   // Animations come from the shared category libraries (deduped across all characters); useGLTF
   // caches each so they're fetched once and reused. Merge their clips and bind to this character by
@@ -179,7 +179,7 @@ function LineupChar({ file, x, z, yaw, fallbackY, scale, minY, animIndex, weapon
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
       {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
-      {showWeapon && <Suspense fallback={null}><LineupWeapon root={cloned} weapon={weapon} /></Suspense>}
+      {showWeapon && <Suspense fallback={null}><LineupWeapon root={cloned} weapon={weapon} charHeight={heightM} /></Suspense>}
     </group>
   );
 }
@@ -264,7 +264,7 @@ export function SiegeCharacterLineup() {
         return (
           <Fragment key={c.name}>
             <Suspense fallback={null}>
-              <LineupChar file={c.file} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} animIndex={animIndex} weapon={AK47} />
+              <LineupChar file={c.file} x={cx} z={cz} yaw={anchor.yaw} fallbackY={anchor.groundY} scale={c.scale} minY={c.minY} heightM={c.heightM} animIndex={animIndex} weapon={AK47} />
             </Suspense>
             {/* obstacle for the parkour demo (J) — only after the first trigger so it isn't clutter */}
             {parkourSeq > 0 && <ObstacleBox x={cx} z={cz} yaw={anchor.yaw} groundY={anchor.groundY} preset={OBSTACLE_PRESETS[parkourSeq % OBSTACLE_PRESETS.length]} />}

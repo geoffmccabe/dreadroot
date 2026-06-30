@@ -18,12 +18,10 @@ import { registerWeaponWrap, unregisterWeaponWrap, WEAPON_EDIT_ID } from './weap
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _ws = new THREE.Vector3();
-const _charBox = new THREE.Box3();
-const _charSize = new THREE.Vector3();
 const D2R = Math.PI / 180;
 const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; taller chars get bigger guns
 
-export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: LineupWeaponDef }) {
+export function LineupWeapon({ root, weapon, charHeight }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
   const wrapRef = useRef<THREE.Group | null>(null);
   const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
@@ -47,8 +45,9 @@ export function LineupWeapon({ root, weapon }: { root: THREE.Group; weapon: Line
     const longest = Math.max(_size.x, _size.y, _size.z) || 1;
     // Gun length scales with the CHARACTER's height (taller char → bigger gun): lengthM is the length
     // at REF_HEIGHT and grows/shrinks from there.
-    _charBox.setFromObject(root); const charH = _charBox.getSize(_charSize).y || REF_HEIGHT;
-    const gunLen = weapon.lengthM * (charH / REF_HEIGHT);
+    // Size the gun from the character's KNOWN height (not a live bbox — that includes hats/hair/
+    // cigarette smoke/raised arms and made Ash's gun comically large). Taller char → bigger gun.
+    const gunLen = weapon.lengthM * ((charHeight || REF_HEIGHT) / REF_HEIGHT);
     const s = (gunLen / longest) / handScale;
 
     const wrap = new THREE.Group();
