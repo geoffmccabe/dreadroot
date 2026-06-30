@@ -8,6 +8,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { probeState } from './probeState';
 import { playerState, heading } from './playerState';
+import { getEditMode } from '@/features/objectEditor/store';
 
 export function LaserProbe() {
   const { camera, scene } = useThree();
@@ -158,7 +159,9 @@ export function LaserProbe() {
         // a giant box you stand inside.
         const isInst = (h.object as THREE.InstancedMesh).isInstancedMesh && h.instanceId != null;
         let showBox = false;
-        if (!isInst) { b3.setFromObject(h.object); b3.getSize(bsz); showBox = Math.max(bsz.x, bsz.y, bsz.z) <= BOX_MAX; }
+        // In Arrange edit mode the pulsing selection box is the source of truth — don't also draw
+        // the laser's red box (the two boxes fighting is what made selection unreadable).
+        if (!isInst && !getEditMode()) { b3.setFromObject(h.object); b3.getSize(bsz); showBox = Math.max(bsz.x, bsz.y, bsz.z) <= BOX_MAX; }
         if (showBox) { try { box.setFromObject(h.object); box.visible = true; } catch { box.visible = false; } }
         else box.visible = false;
         // (Removed) the red instance-tint highlight: writing instanceColor onto Enchanted

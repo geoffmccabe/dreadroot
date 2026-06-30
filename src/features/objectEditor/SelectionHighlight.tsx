@@ -57,6 +57,7 @@ export function SelectionHighlight() {
     }
     if (b3.isEmpty()) { box.visible = false; return; }
     b3.getCenter(ctr); b3.getSize(sz);
+    if (Math.max(sz.x, sz.y, sz.z) > 200) { box.visible = false; return; }  // never draw a map-sized box
     box.position.copy(ctr);
     box.scale.set(Math.max(sz.x, 0.05), Math.max(sz.y, 0.05), Math.max(sz.z, 0.05));
     // 2 Hz smooth pulse; floor at 0.2 so it stays readable but clearly fades on/off.

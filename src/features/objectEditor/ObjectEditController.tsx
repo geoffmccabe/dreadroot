@@ -25,6 +25,7 @@ import { placeKey, transformOverrides } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
 
+const SELECT_MAX = 50;     // biggest individual object you can grab (m) — skips combined/terrain blobs
 const MIN_REACH = 1.5;     // closest the carried object can sit to the camera (m)
 const MAX_REACH = 150;     // furthest a plane-hit is accepted before falling back to last reach
 const SNAP_UP = 60;        // how far above the carry point the surface down-ray starts (m)
@@ -72,7 +73,17 @@ export function ObjectEditController() {
         let o: THREE.Object3D | null = h.object;
         while (o) { if (o.userData?.worldObjectId) { clearBaked(); setSelected(o.userData.worldObjectId as string); return true; } o = o.parent; }
         const im = h.object as THREE.InstancedMesh;
-        if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null && selectBakedHit(im, h.instanceId)) return true;
+        if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null) {
+          // Only individual objects are grabbable: skip merged-region blobs and map-sized / terrain
+          // instances (their bounding box would be the whole map — the giant useless highlight).
+          if (im.userData.combined) continue;
+          const g = im.geometry as THREE.BufferGeometry;
+          if (!g.boundingBox) g.computeBoundingBox();
+          const mm = new THREE.Matrix4(); im.getMatrixAt(h.instanceId, mm);
+          const sz = new THREE.Vector3(); (g.boundingBox as THREE.Box3).clone().applyMatrix4(mm).getSize(sz);
+          if (Math.max(sz.x, sz.y, sz.z) > SELECT_MAX) continue;
+          if (selectBakedHit(im, h.instanceId)) return true;
+        }
       }
       clearBaked(); setSelected(null); return false;
     };
