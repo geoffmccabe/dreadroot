@@ -16,7 +16,7 @@ import { groundAt } from './siegeGround';
 import { findPath } from './siegePathfinding';
 import { APP_VERSION } from '@/version';
 import { type CaveCrawlConfig, ccCfg, newCaveState, resolveCavePosture, stepCave, findNeckBones, applyHeadUp } from './caveCrawl';
-import { raycastMesh, resolvePlayerMeshCollision } from './meshColliderSystem';
+import { raycastMesh, resolvePlayerMeshCollision, meshCollidersEnabled } from './meshColliderSystem';
 import { acquireTarget } from './siegeTargeting';
 import { getNavProfile } from './siegeNavProfile';
 import { getActiveMapId } from '@/config/activeMap';
@@ -1519,11 +1519,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // pushed out → can't advance → stuck → pathfind → crouch. While actually CRAWLING the route is
     // already proven to fit at crawl height, so RELEASE the push and let it thread the low opening.
     // No-op off mesh worlds (returns false). Scoped to cave-crawl monsters; whole horde unchanged.
+    if (c.caveCrawl) {   // TEMP diagnostics for the nearest cave-crawl monster (read via ⌘-] SIEGE DEBUG)
+      sdbg.cc_map = getActiveMapId(); sdbg.cc_mesh = meshCollidersEnabled();
+      sdbg.cc_mode = s.cave.mode; sdbg.cc_feetY = s.y;
+    }
     if (c.caveCrawl && nav.crawlHoles && dist < CLIMB_LOD && s.cave.mode !== 'crawl') {
       const capR = Math.min(me.r, 1.2);            // cap so a huge giant isn't shoved across the street
       const capH = Math.max(1.6, H * 0.6);         // tall while upright: a low garage lintel blocks it
-      if (resolvePlayerMeshCollision(s.x, s.y, s.z, capR, capH, _capPush)) { s.x += _capPush.x; s.z += _capPush.z; }
-    }
+      const hit = resolvePlayerMeshCollision(s.x, s.y, s.z, capR, capH, _capPush);
+      sdbg.cc_on = true; sdbg.cc_hit = hit; sdbg.cc_push = hit ? Math.hypot(_capPush.x, _capPush.z) : 0;
+      if (hit) { s.x += _capPush.x; s.z += _capPush.z; }
+    } else if (c.caveCrawl) { sdbg.cc_on = false; sdbg.cc_hit = false; sdbg.cc_push = 0; }
 
     // Spintroll bounce: hitting a collider mid-spiral fires it straight into a zoom, away from
     // the wall — reads as bouncing off the object.

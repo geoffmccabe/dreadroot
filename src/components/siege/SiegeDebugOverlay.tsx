@@ -71,6 +71,13 @@ export function SiegeDebugOverlay() {
       {row('fwd', `${f3(sdbg.fwdX)}, ${f3(sdbg.fwdY)}, ${f3(sdbg.fwdZ)}`)}
       {row('terrainY', sdbg.terrainY == null ? 'NULL' : sdbg.terrainY.toFixed(1), sdbg.terrainY == null)}
       {row('monsters', sdbg.monsters)}
+      {row('cc_map', sdbg.cc_map || '—', sdbg.cc_map !== 'city-demo')}
+      {row('cc_mesh', sdbg.cc_mesh, !sdbg.cc_mesh)}
+      {row('cc_on', sdbg.cc_on, !sdbg.cc_on)}
+      {row('cc_hit', sdbg.cc_hit, !sdbg.cc_hit)}
+      {row('cc_push', sdbg.cc_push.toFixed(2))}
+      {row('cc_mode', sdbg.cc_mode || '—')}
+      {row('cc_feetY', sdbg.cc_feetY.toFixed(2))}
       <button
         onClick={copy}
         style={{
