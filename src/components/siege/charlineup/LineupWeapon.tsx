@@ -21,7 +21,7 @@ const _ws = new THREE.Vector3();
 const D2R = Math.PI / 180;
 const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; taller chars get bigger guns
 
-export function LineupWeapon({ root, weapon, charHeight }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number }) {
+export function LineupWeapon({ root, weapon, charHeight, charName }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number; charName: string }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
   const wrapRef = useRef<THREE.Group | null>(null);
   const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
@@ -68,9 +68,10 @@ export function LineupWeapon({ root, weapon, charHeight }: { root: THREE.Group; 
     // drives every character's gun. Tag the model children too so any ray hit walks up to this id.
     wrap.userData.worldObjectId = WEAPON_EDIT_ID;
     wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
-    // Register with the weapon's base rotation + its model url as the tune key; registerWeaponWrap
-    // re-applies base ∘ tune(url) so this weapon's saved orientation carries onto every fresh gun.
-    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, weaponKey: weapon.url });
+    // Register with base rotation + base (auto-fit) scale + the char/weapon keys; registerWeaponWrap
+    // re-applies base ∘ tune(url) and baseScale × size(char,url), so this weapon's saved orientation
+    // AND this character's saved size carry onto every fresh gun.
+    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, baseScale: s, weaponKey: weapon.url, charName });
   });
 
   useEffect(() => {
