@@ -48,6 +48,7 @@ export function ObjectEditController() {
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
+    let typedBuf = '';   // rolling buffer for typed spawn codes (e.g. *wa = water)
 
     const selectBakedHit = (im: THREE.InstancedMesh, instanceId: number): boolean => {
       const placements = im.userData.placements as number[][] | undefined;
@@ -95,6 +96,16 @@ export function ObjectEditController() {
       const p = hits.length ? hits[0].point.clone() : ro.clone().addScaledVector(rd, 5);
       p.y += 0.5;
       addObject({ id: crypto.randomUUID(), modelUrl: 'builtin:box', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [1, 1, 1] });
+    };
+
+    // *wa → drop a flat water surface a few metres ahead and auto-select it so it can be carried
+    // immediately. It's a normal placed object (shared via world_objects); default 6×6 footprint.
+    const spawnWater = () => {
+      camera.getWorldPosition(ro); camera.getWorldDirection(rd);
+      const p = ro.clone().addScaledVector(rd, 6);
+      const id = crypto.randomUUID();
+      addObject({ id, modelUrl: 'builtin:water', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [6, 6, 1] });
+      setSelected(id);
     };
 
     // ── grab / release (left button) ──
@@ -160,6 +171,12 @@ export function ObjectEditController() {
         return;
       }
       if (!getEditMode()) return;
+      // Typed spawn codes: *wa = water. Build a rolling buffer of single characters; walking keys
+      // (w/a) still pass through — only the completed code triggers and is swallowed.
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        typedBuf = (typedBuf + e.key.toLowerCase()).slice(-3);
+        if (typedBuf === '*wa') { typedBuf = ''; spawnWater(); e.preventDefault(); e.stopImmediatePropagation(); return; }
+      }
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
       if (meta && e.code === 'KeyX') { e.preventDefault(); e.stopImmediatePropagation(); deleteSelected(); return; }

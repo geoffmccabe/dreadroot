@@ -12,6 +12,7 @@ import type { WorldObject } from './types';
 import { setContext, setCanEdit, useEditorObjects } from './store';
 import { loadObjects, loadCanEdit } from './persistence';
 import { setWorldOverrides, loadWorldFromDb } from './bakedOverrides';
+import { WaterObject } from './WaterObject';
 
 // Selection feedback is drawn by SelectionHighlight (a pulsing world-space box), so these just
 // render the model + tag it with its id for picking.
@@ -57,9 +58,11 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
   return (
     <Suspense fallback={null}>
       {objects.filter((o) => !o.baked && !o.external).map((o) => (
-        o.modelUrl.startsWith('builtin:')
-          ? <BuiltinObject key={o.id} obj={o} />
-          : <GltfObject key={o.id} obj={o} />
+        o.modelUrl === 'builtin:water'
+          ? <WaterObject key={o.id} obj={o} />
+          : o.modelUrl.startsWith('builtin:')
+            ? <BuiltinObject key={o.id} obj={o} />
+            : <GltfObject key={o.id} obj={o} />
       ))}
     </Suspense>
   );

@@ -94,6 +94,7 @@ export function ArrangePanel() {
         <div>hold Ctrl = drop onto surface below</div>
         <div>⇧+click duplicate · ⌘X/Del delete</div>
         <div>⌘Z undo · ⇧⌘Z redo · Esc cancel</div>
+        <div>type *wa = add water · P = test box</div>
       </div>
     </div>
   );
