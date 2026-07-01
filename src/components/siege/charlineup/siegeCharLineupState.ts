@@ -83,7 +83,13 @@ let tuneCharIndex = 4;
 export const getTuneCharIndex = (): number => tuneCharIndex;
 export function setTuneCharIndex(i: number): void { tuneCharIndex = i; emit(); }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number } {
+// Left-arm FK poser: which joint is being adjusted. -1 = off (arrows move the gun); 0/1/2 =
+// shoulder / elbow / wrist. { } cycle it (wrapping through 'off').
+let armJoint = -1;
+export const getArmJoint = (): number => armJoint;
+export function cycleArmJoint(dir: number): void { armJoint = (((armJoint + 1) + dir + 4) % 4) - 1; emit(); }
+
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex };
+  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex, armJoint };
 }

@@ -16,7 +16,9 @@ import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon, getTuneCharIndex, setTuneCharIndex,
+  getArmJoint, cycleArmJoint,
 } from './charlineup/siegeCharLineupState';
+import { getArmFK, hasArmFK, nudgeArmFK, applyArmFK, ARM_JOINTS } from './charlineup/armFK';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
@@ -47,6 +49,7 @@ const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
 const _ikTarget = new THREE.Vector3();   // scratch: left-hand grip point in world space
 const _bakedLeft = new THREE.Vector3();  // scratch: baked left-hand point when there's no saved capture
+const CHAR_NAMES = LINEUP_CHARS.map((c) => c.name);   // for "adjust ALL characters" (tune target = null)
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 // Shared animation libraries stay warmed at boot — the spawn character needs them for its idle the
@@ -112,7 +115,13 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   // character, applying the FSM's vertical lift + forward drift to the root. Resumes the normal
   // cycled clip when the sequence finishes. Forward axis for a yaw-rotated group is (sin, cos).
   const fsmRef = useRef<AnimFSM | null>(null);
-  const leftBonesRef = useRef<ReturnType<typeof findLeftArm>>(null);
+  // Left-arm bones + their BIND (rest) local rotations, captured from the clone BEFORE the mixer runs,
+  // so the FK poser can set each joint = bind ∘ offset. Plus an axes gizmo for the selected joint.
+  const leftArm = useMemo(() => {
+    const b = findLeftArm(cloned);
+    return b ? { bones: b, bind: [b.arm.quaternion.clone(), b.fore.quaternion.clone(), b.hand.quaternion.clone()] as [THREE.Quaternion, THREE.Quaternion, THREE.Quaternion] } : null;
+  }, [cloned]);
+  const armGizmo = useMemo(() => { const a = new THREE.AxesHelper(0.18); (a.material as THREE.Material).depthTest = false; a.renderOrder = 999; return a; }, []);
   const seenSeq = useRef(getFlightSeq());
   const seenParkour = useRef(getParkourSeq());
   const demoMode = useRef<'flight' | 'parkour' | null>(null);
@@ -182,21 +191,30 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
     // Left-hand IK — this useFrame is registered AFTER useAnimations, so it runs after the animation
     // mixer and its result isn't overwritten. Bend the left arm to the captured grip point on the gun.
     const cn = names.length ? names[animIndex % names.length] : '';
-    if (cn.includes('Rifle') && !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(cn)) {
-      // Use the user's captured point if any, else the baked weapon.leftHand default.
-      const bp = weapon.leftHand?.point;
-      const tgt = getLeftTarget(weapon.url) ?? (bp ? _bakedLeft.set(bp[0], bp[1], bp[2]) : null);
-      const reg = tgt ? weaponWraps().find((r) => r.charName === charName && r.weaponKey === weapon.url) : null;
-      if (tgt && reg) {
-        if (!leftBonesRef.current) leftBonesRef.current = findLeftArm(cloned);
-        const b = leftBonesRef.current;
-        if (b) {
+    if (cn.includes('Rifle') && !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(cn) && leftArm) {
+      const b = leftArm.bones;
+      if (hasArmFK(charName, weapon.url)) {
+        // MANUAL FK pose (supersedes IK once any joint is adjusted): hold each joint at bind ∘ offset.
+        g.updateWorldMatrix(true, false);
+        applyArmFK(b, leftArm.bind, getArmFK(charName, weapon.url));
+      } else {
+        // Fallback: two-bone IK to the captured / baked grip point.
+        const bp = weapon.leftHand?.point;
+        const tgt = getLeftTarget(weapon.url) ?? (bp ? _bakedLeft.set(bp[0], bp[1], bp[2]) : null);
+        const reg = tgt ? weaponWraps().find((r) => r.charName === charName && r.weaponKey === weapon.url) : null;
+        if (tgt && reg) {
           g.updateWorldMatrix(true, true);
           _ikTarget.copy(tgt); reg.wrap.localToWorld(_ikTarget);
           solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0));
         }
       }
     }
+    // Arm-joint axes gizmo: while a joint is active ({ } turned it on), attach the coloured X/Y/Z axes
+    // to the SELECTED joint of the gizmo character, so you can see which axis each key rotates.
+    const aj = getArmJoint();
+    const jb = (aj >= 0 && showGizmo && leftArm) ? [leftArm.bones.arm, leftArm.bones.fore, leftArm.bones.hand][aj] : null;
+    if (jb) { if (armGizmo.parent !== jb) { armGizmo.parent?.remove(armGizmo); jb.add(armGizmo); } }
+    else if (armGizmo.parent) { armGizmo.parent.remove(armGizmo); }
   });
 
   // Show the held gun only during the rifle clips (hidden during dance/climb/flight, where a gun
@@ -247,6 +265,15 @@ export function SiegeCharacterLineup() {
     const GROW = 1.02;       // size step (2%); shrink is the exact inverse
     // Every adjuster (rotate/size/position) targets the SELECTED character only (null = ALL when 0).
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
+    const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
+    // Arrows/,. route to the ACTIVE left-arm joint (FK) when one is selected, else move the gun.
+    const armK = (axis: 0 | 1 | 2, deg: number, posAxis: 'x' | 'y' | 'z', pos: number) => {
+      const jointOn = getArmJoint();
+      const url = gunRef.current?.url;
+      if (jointOn >= 0 && url) nudgeArmFK(tuneTarget(), url, jointOn, axis, deg, CHAR_NAMES);
+      else nudgeWeaponPos(tuneTarget(), posAxis, pos);
+    };
+    const logJoint = () => { const aj = getArmJoint(); console.log('[arm-fk] joint →', aj < 0 ? 'OFF (arrows move the gun)' : `${ARM_JOINTS[aj]} — arrows = X/Y, ,/. = Z`); };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
@@ -269,12 +296,16 @@ export function SiegeCharacterLineup() {
       else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), 1 / GROW); } // 2% smaller
       else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), GROW); }     // 2% bigger
       // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
-      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'x', -POS); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'x',  POS); }
-      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'y',  POS); }
-      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'y', -POS); }
-      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
-      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
+      // { } cycle the left-arm joint (off → shoulder → elbow → wrist → off). While a joint is active,
+      // arrows + ,/. rotate THAT joint on its 3 local axes; otherwise they move the gun as before.
+      else if (e.key === '{') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint(-1); logJoint(); }
+      else if (e.key === '}') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint( 1); logJoint(); }
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); armK(0, -ARM_STEP, 'x', -POS); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); armK(0,  ARM_STEP, 'x',  POS); }
+      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); armK(1,  ARM_STEP, 'y',  POS); }
+      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); armK(1, -ARM_STEP, 'y', -POS); }
+      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2, -ARM_STEP, 'z', -POS); }
+      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2,  ARM_STEP, 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
       // (K, not P — the Arrange tool steals P to spawn a box.)
