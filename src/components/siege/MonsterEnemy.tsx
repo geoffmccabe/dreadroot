@@ -1221,7 +1221,17 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // out of reach, it's blocked — route AROUND the wall with grid A* and steer toward the next
       // waypoint (recomputed every ~0.8s). Switches to the crawl anim where the rig has one.
       let cdx = tgx, cdz = tgz, cdist = tgdist, pathLoco = false;
-      if (c.meleeContact && nav.pathfindAround && dist > c.attackRange + 0.6) {
+      // Cave-crawl: pathfind even when the player is CLOSE but behind a wall. A giant belly-pressed at a
+      // garage door has a SHORT straight-line dist, so the normal far-only gate skips pathfinding and it
+      // shoves the wall forever (cc_mode stuck at 'none'). Detect a wall between us and the player (cheap,
+      // cave-crawl only) and treat it as "blocked"; also STAY in the pathfind loop for the whole crawl
+      // (mode !== 'none') so threading the doorway isn't cut off the instant the wall clears.
+      let caveWalled = false;
+      if (c.caveCrawl && nav.crawlHoles && dist <= c.attackRange + 0.6) {
+        const lh = raycastMesh(s.x, s.y + 1.1, s.z, dx / dist, 0, dz / dist, Math.min(dist, 64));
+        caveWalled = lh != null && lh < dist - 0.6;
+      }
+      if (c.meleeContact && nav.pathfindAround && (dist > c.attackRange + 0.6 || caveWalled || (c.caveCrawl && s.cave.mode !== 'none'))) {
         if (s.progressAt === 0 || dist < s.bestDist - 0.25) { s.bestDist = dist; s.progressAt = now; }
         if (now - s.progressAt > 1500) {                                   // not getting closer → stuck
           // Player WAY above us (flew to a roof / hovering): there's no walkable route to a flying
@@ -1306,7 +1316,10 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       // and fires the swing so being in range always attacks.
       const swingDist = Math.max(H * 0.5 + 0.5, c.attackRange);
       const meleeReady = (c.meleeContact || c.attackStyle === 'spin-lunge')
-        && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist;
+        && now - s.lastAttack > (s.swingGap || c.attackMs) && dist <= swingDist
+        // Don't swing at a wall: while a cave-crawl monster is blocked by / crawling through a hide-hole,
+        // suppress the normal melee so it commits to routing + crawling in (wedged does its own reach-in).
+        && !(c.caveCrawl && (caveWalled || caveMode === 'enter' || caveMode === 'crawl'));
       // ENRAGE: once damaged (hp < max), an enrageOnHit monster switches walk→run and +50% speed.
       const enraged = !!c.enrageOnHit && inst.hp < inst.maxHp;
       const chaseSpd = (enraged ? SPD * 1.5 : SPD) * injMul * corpseSlow(s.x, s.z);   // half speed wading over bodies
@@ -1329,7 +1342,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           if (c.meleeContact && dist < reach && pFeetBelow && Math.random() < 0.6)
             dealPlayerDamage(rnd(c.meleeContact.dmg) * (c.damageMul ?? 1), dx / dist, 0, dz / dist, rnd(c.meleeContact.kb), c.hitSound ?? '/punched.mp3', c.name);
         }
-      } else if (!c.kiteMin && dist > c.attackRange && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
+      } else if (!c.kiteMin && (dist > c.attackRange || (pathLoco && c.caveCrawl)) && !(c.attackSound && now < s.swipeUntil) && !meleeReady) {
         // Chase. Only a committed-SWIPE monster plants mid-attack (so knockback can't cancel its
         // swing); a ranged sprayer keeps WALKING toward you even while spitting — only its ANIM
         // holds the vomit pose during the spit (movement continues).
