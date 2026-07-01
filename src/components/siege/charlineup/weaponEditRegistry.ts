@@ -61,6 +61,7 @@ const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const baseRotByKey = new Map<string, [number, number, number]>();   // `${char}::${weapon}` → baseline
 const baseGripByKey = new Map<string, [number, number, number]>();
+const dirty = new Set<string>();   // `${char}::${weapon}` the user actually adjusted — only these export
 
 // ── Orientation tune (x/y/z rotate) — per character per weapon ───────────────────────────────────────
 const tunes = new Map<string, THREE.Quaternion>();
@@ -93,6 +94,7 @@ export function rotateWeaponLocal(charName: string | null, axis: 'x' | 'y' | 'z'
     const tune = getTune(reg.charName, reg.weaponKey);
     tune.multiply(_flip);
     try { localStorage.setItem(tuneKey(reg.charName, reg.weaponKey), JSON.stringify(tune.toArray())); } catch { /* ignore */ }
+    dirty.add(ck(reg.charName, reg.weaponKey));
     applyWrapRotation(reg);
   }
   const rep = targets[0];
@@ -129,6 +131,7 @@ export function bumpWeaponSize(charName: string | null, factor: number): void {
     const next = clamp(getWeaponSize(reg.charName, reg.weaponKey, reg.bakedSize) * factor, 0.2, 5);
     sizes.set(ck(reg.charName, reg.weaponKey), next);
     try { localStorage.setItem(sizeKey(reg.charName, reg.weaponKey), String(next)); } catch { /* ignore */ }
+    dirty.add(ck(reg.charName, reg.weaponKey));
     applyWrapScale(reg);
   }
   console.log('[weapon-size]', charName ?? 'ALL', '×', factor.toFixed(3), `(${targets.length} gun${targets.length === 1 ? '' : 's'})`);
@@ -163,6 +166,7 @@ export function nudgeWeaponPos(charName: string | null, axis: 'x' | 'y' | 'z', d
     const p = getPos(reg.charName, reg.weaponKey);
     p[i] = Math.round((p[i] + delta) * 1000) / 1000;
     try { localStorage.setItem(posKey(reg.charName, reg.weaponKey), JSON.stringify(p)); } catch { /* ignore */ }
+    dirty.add(ck(reg.charName, reg.weaponKey));
     applyWrapPos(reg);
   }
   const rep = targets[0]; const p = getPos(rep.charName, rep.weaponKey);
@@ -172,9 +176,8 @@ export function nudgeWeaponPos(charName: string | null, axis: 'x' | 'y' | 'z', d
 
 // ── Export every tuned (character, weapon): orientation + grip + size, grouped by weapon ───────────────
 export function exportTuning(): void {
-  const keys = new Set<string>([...tunes.keys(), ...posTunes.keys(), ...sizes.keys()]);
   const byWeapon = new Map<string, string[]>();
-  for (const key of keys) {
+  for (const key of dirty) {   // only the (character, weapon) pairs the user actually adjusted
     const sep = key.indexOf('::'); if (sep < 0) continue;
     const charName = key.slice(0, sep), weaponKey = key.slice(sep + 2);
     const baseRot = baseRotByKey.get(key); const baseGrip = baseGripByKey.get(key);
