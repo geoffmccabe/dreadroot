@@ -8,6 +8,8 @@ import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
 import { sampleHeight } from '../terrainHeight';
 import { scifiAsset, scifiData } from '@/config/assetBase';
+import { assetCode, idFromFile, shortName } from './assetCode';
+import { AssetGridLabels, type GridLabel } from './AssetGridLabels';
 
 interface SamplerItem { file: string; w: number; h: number; d: number; category: string; }
 interface SamplerManifest { set: string; cell: number; count: number; items: SamplerItem[]; }
@@ -92,20 +94,24 @@ export function SetSampler({ set }: { set: string }) {
   if (!manifest) return null;
   const cols = Math.ceil(Math.sqrt(manifest.items.length));
   const cell = manifest.cell;
+  // Lay the grid out once: world position + the asset's stable code + short name for the labels.
+  const laid = manifest.items.map((it, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const id = idFromFile(it.file);
+    return { file: it.file, code: assetCode(id), name: shortName(id),
+      x: (col - (cols - 1) / 2) * cell, z: (row - (cols - 1) / 2) * cell };
+  });
+  const labels: GridLabel[] = laid.map((p) => ({ code: p.code, name: p.name, x: p.x, z: p.z }));
   return (
     <>
-      {manifest.items.map((it, i) => {
-        const col = i % cols, row = Math.floor(i / cols);
-        const x = (col - (cols - 1) / 2) * cell;
-        const z = (row - (cols - 1) / 2) * cell;
-        return (
-          <ModelBoundary key={it.file}>
-            <Suspense fallback={null}>
-              <SamplerModel file={it.file} x={x} z={z} />
-            </Suspense>
-          </ModelBoundary>
-        );
-      })}
+      {laid.map((p) => (
+        <ModelBoundary key={p.file}>
+          <Suspense fallback={null}>
+            <SamplerModel file={p.file} x={p.x} z={p.z} />
+          </Suspense>
+        </ModelBoundary>
+      ))}
+      <AssetGridLabels items={labels} />
     </>
   );
 }

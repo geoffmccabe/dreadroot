@@ -13,7 +13,9 @@ import { serializeField } from '../terrain/heightField';
 import { getBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
-import { scifiData } from '@/config/assetBase';
+import { scifiData, ASSET_BASE } from '@/config/assetBase';
+import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
+import { useFavorites, toggleFavorite, isFavorite, removeFavorite } from '../scifi/assetFavorites';
 
 // The converted asset sets (catalogs live at /siege/scifi/_catalog_<set>.json).
 const SETS: { id: string; label: string }[] = [
@@ -41,6 +43,22 @@ export function BuilderPalette() {
   const [items, setItems] = useState<CatItem[]>([]);
   const [q, setQ] = useState('');
   const [saved, setSaved] = useState(false);
+  const [codeQ, setCodeQ] = useState('');
+  const [matches, setMatches] = useState<AssetEntry[]>([]);
+  const favs = useFavorites();
+
+  // Type a stable asset code (any pack) → prefix-resolve against the global index and arm it.
+  useEffect(() => {
+    if (codeQ.trim().length < 3) { setMatches([]); return; }
+    let alive = true;
+    loadAllAssets(ASSET_BASE).then((all) => { if (alive) setMatches(resolveCode(codeQ, all)); });
+    return () => { alive = false; };
+  }, [codeQ]);
+
+  const arm = (a: { set: string; file: string; name: string }) => {
+    setBuilder({ armed: { set: a.set, file: a.file, name: a.name } });
+    setSet(a.set);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -88,6 +106,21 @@ export function BuilderPalette() {
 
       {b.enabled && (
         <>
+          {/* Type an asset CODE (from the ASSETGRID labels) — pulls that exact asset from ANY pack. */}
+          <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="type a code (e.g. 3fa9c…)"
+            className="mb-1 w-full rounded bg-background/60 px-2 py-1 font-mono text-[11px]" />
+          {matches.length > 0 && (
+            <div className="mb-2 max-h-24 overflow-y-auto rounded border border-primary/40">
+              {matches.map((m) => (
+                <div key={m.code} onClick={() => arm(m)}
+                  className="flex cursor-pointer items-center gap-1 px-2 py-0.5 text-[10px] hover:bg-accent">
+                  <span className="font-mono text-primary">{m.code}</span>
+                  <span className="truncate text-muted-foreground">{m.set} · {m.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <select value={set} onChange={(e) => setSet(e.target.value)}
             className="mb-2 w-full rounded bg-background/60 px-1 py-1 text-[11px]">
             {SETS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
@@ -95,15 +128,37 @@ export function BuilderPalette() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search…"
             className="mb-2 w-full rounded bg-background/60 px-2 py-1 text-[11px]" />
           <div className="mb-2 max-h-44 overflow-y-auto rounded border border-border/40">
-            {filtered.map((i) => (
-              <div key={i.id}
-                onClick={() => setBuilder({ armed: { set: i.set, file: i.file, name: i.name } })}
-                className={`cursor-pointer truncate px-2 py-0.5 text-[10px] hover:bg-accent ${b.armed?.file === i.file ? 'bg-primary/30 text-foreground' : 'text-muted-foreground'}`}>
-                {i.name}
-              </div>
-            ))}
+            {filtered.map((i) => {
+              const code = assetCode(i.id ?? idFromFile(i.file));
+              return (
+                <div key={i.id}
+                  onClick={() => arm(i)}
+                  className={`flex cursor-pointer items-center gap-1 px-2 py-0.5 text-[10px] hover:bg-accent ${b.armed?.file === i.file ? 'bg-primary/30 text-foreground' : 'text-muted-foreground'}`}>
+                  <span onClick={(e) => { e.stopPropagation(); toggleFavorite({ code, set: i.set, file: i.file, name: i.name }); }}
+                    className="cursor-pointer" title="Add to staging">{isFavorite(code) ? '★' : '☆'}</span>
+                  <span className="font-mono text-primary/80">{code}</span>
+                  <span className="truncate">{i.name}</span>
+                </div>
+              );
+            })}
             {!filtered.length && <div className="px-2 py-1 text-[10px] text-muted-foreground">no matches</div>}
           </div>
+
+          {/* Staging area — starred assets collected from the grids / lookup, ready to drop. */}
+          {favs.length > 0 && (
+            <div className="mb-2 rounded border border-border/40 p-1">
+              <div className="mb-1 text-[10px] font-bold text-muted-foreground">★ Staging ({favs.length})</div>
+              <div className="flex flex-wrap gap-1">
+                {favs.map((f) => (
+                  <span key={f.code}
+                    className={`flex items-center gap-1 rounded px-1 py-0.5 text-[9px] ${b.armed?.file === f.file ? 'bg-primary/40' : 'bg-accent/40'}`}>
+                    <button onClick={() => arm(f)} className="max-w-24 truncate" title={`${f.code} · ${f.name}`}>{f.name}</button>
+                    <button onClick={() => removeFavorite(f.code)} className="text-muted-foreground hover:text-foreground" title="Remove">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           {b.armed ? (
             <div className="mb-2 rounded bg-primary/15 p-1.5 text-[10px] leading-snug">
