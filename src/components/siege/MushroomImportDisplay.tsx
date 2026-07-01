@@ -27,6 +27,12 @@ const FILES = [
   { url: '/siege/imports/jhay_tree4.glb', name: 'jhay_tree4' },
   { url: '/siege/imports/jhay_tree5.glb', name: 'jhay_tree5' },
   { url: '/siege/imports/jhay_tree6.glb', name: 'jhay_tree6' },
+  // Newly-found distinct models (same-named but different content, plus the tall originals).
+  { url: '/siege/imports/meshes_tree05_tall.glb', name: 'meshes_tree05_tall' },       // ~66 m
+  { url: '/siege/imports/meshes_tree06_tall.glb', name: 'meshes_tree06_tall' },       // ~118 m
+  { url: '/siege/imports/ashley_tree05.glb', name: 'ashley_tree05' },                 // multi-tree cluster
+  { url: '/siege/imports/mushrooms2_tree06.glb', name: 'mushrooms2_tree06' },
+  { url: '/siege/imports/mushroom_line_straight.glb', name: 'mushroom_line_straight' },
   { url: '/siege/imports/Khaured_Tower_1.glb', name: 'Khaured_Tower_1' },
 ];
 const GAP = 20;       // metres of clear space between models
