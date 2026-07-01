@@ -41,8 +41,16 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: { Ash: [-0.04, 0.28, 0.04], Dago: [-0.22, 0.34, -0.06], Fluffer: [0.04, 0.4, 0.04], Jankz: [-0.02, 0.16, 0.04], Rajax: [0.02, 0.3, 0.04], Thorn: [0, 0.16, 0.02] },
     sizeByChar: { Ash: 0.82, Dago: 1.00, Fluffer: 1.15, Jankz: 1.00, Rajax: 0.87, Thorn: 0.79 },
     leftHand: { point: [-0.249, 0.061, 0.074], wrist: 0 } },
-  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
-  { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  // Tuned + baked per character (in-lineup export). Same rotation for all; grip = Rajax's fit;
+  // sizeByChar = each character's AK74 ratio vs Rajax (0.87) × Rajax's own tuned size for this gun.
+  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9,
+    rotDeg: [-88, -9, -89], gripPos: G, animSet: 'rifle',
+    gripByChar: { Rajax: [0.06, 0.34, 0.04] },
+    sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04 } },
+  { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9,
+    rotDeg: [-88, -9, -87], gripPos: G, animSet: 'rifle',
+    gripByChar: { Rajax: [0.04, 0.3, 0.04] },
+    sizeByChar: { Ash: 1.15, Dago: 1.40, Fluffer: 1.61, Jankz: 1.40, Rajax: 1.22, Thorn: 1.11 } },
   { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'submgun',       name: 'SubMGun',              itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'plasma_sniper4',name: 'Plasma Sniper',        itemNumbers: [4],   url: '/siege/weapons/item_4.glb',   lengthM: 1.3, rotDeg: R, gripPos: G, animSet: 'rifle' },
