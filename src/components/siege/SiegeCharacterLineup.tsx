@@ -259,9 +259,8 @@ export function SiegeCharacterLineup() {
       if (!getCharLineupEnabled()) return;
       if (e.key === 'm' || e.key === 'M') { e.stopImmediatePropagation(); cycleCharAnim(1); }
       else if (e.key === 'n' || e.key === 'N') { e.stopImmediatePropagation(); cycleCharAnim(-1); }
-      else if (e.key === 'f' || e.key === 'F') { e.stopImmediatePropagation(); triggerFlight('land'); }
-      else if (e.key === 'g' || e.key === 'G') { e.stopImmediatePropagation(); triggerFlight('wall'); }
-      else if (e.key === 'j' || e.key === 'J') { e.stopImmediatePropagation(); triggerParkour(); } // cycle obstacle + auto-parkour
+      // F/G (flight demo) and J (parkour demo) are DISABLED — they hijack the pose during weapon tuning
+      // and were hard to stop. Re-enable later if the demos are needed again.
       else if (e.key === '*') { e.stopImmediatePropagation(); cycleWeapon(1, GUNS.length); } // next held gun
       // ── Gun tuning (lineup-only, captured so it never reaches game/Chrome/macOS) ──
       // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
