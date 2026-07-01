@@ -274,7 +274,7 @@ export function SiegeCharacterLineup() {
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
-      // Left-hand IK: K = aim at the gun + capture the palm grip point; [ / ] = twist the wrist.
+      // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
       // (K, not P — the Arrange tool steals P to spawn a box.)
       else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -289,8 +289,8 @@ export function SiegeCharacterLineup() {
           if (wrap) setLeftTarget(gunRef.current.url, wrap.worldToLocal(hit.point.clone()));
         } else console.log('[lefthand] aim the crosshair AT the gun, then press K');
       }
-      else if (e.key === '[') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
-      else if (e.key === ']') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
+      else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
+      else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
       // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
       // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
       else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
