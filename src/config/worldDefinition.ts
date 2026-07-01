@@ -330,31 +330,33 @@ function samplerWorld(id: string, name: string, wireId: number): WorldDefinition
     spawn: { position: [0, 3, 0], yaw: 0 },
   };
 }
-export const CYBER_SAMPLER_WORLD = samplerWorld('cyber-demo', 'CyberCity', 5);
-export const MECH_SAMPLER_WORLD = samplerWorld('mech-demo', 'Mech', 6);
-export const WORLDS_SAMPLER_WORLD = samplerWorld('worlds-demo', 'SciFi Worlds', 7);
-export const APOC_SAMPLER_WORLD = samplerWorld('apoc-demo', 'Apocalypse', 8);
-export const DARK_SAMPLER_WORLD = samplerWorld('dark-demo', 'Dark Fantasy', 9);
+// Names carry the "ASSETGRID -" prefix so it's clear everywhere (Cmd-J menu + in-world label)
+// these are loose asset-pack showrooms, not assembled/playable worlds.
+export const CYBER_SAMPLER_WORLD = samplerWorld('cyber-demo', 'ASSETGRID - CyberCity', 5);
+export const MECH_SAMPLER_WORLD = samplerWorld('mech-demo', 'ASSETGRID - Mech', 6);
+export const WORLDS_SAMPLER_WORLD = samplerWorld('worlds-demo', 'ASSETGRID - SciFi Worlds', 7);
+export const APOC_SAMPLER_WORLD = samplerWorld('apoc-demo', 'ASSETGRID - Apocalypse', 8);
+export const DARK_SAMPLER_WORLD = samplerWorld('dark-demo', 'ASSETGRID - Dark Fantasy', 9);
 // Nature biome asset libraries (no baked scene) shown as sampler grids; also the palette
 // for the future biome terrain-painting builder.
-export const NATURE_SAMPLER_WORLD = samplerWorld('nature-demo', 'Nature', 10);
-export const ALPINE_SAMPLER_WORLD = samplerWorld('alpine-demo', 'Alpine Mountain', 11);
-export const DESERT_SAMPLER_WORLD = samplerWorld('desert-demo', 'Arid Desert', 12);
-export const MEADOW_SAMPLER_WORLD = samplerWorld('meadow-demo', 'Meadow Forest', 13);
-export const SWAMP_SAMPLER_WORLD = samplerWorld('swamp-demo', 'Swamp Marshland', 14);
-export const JUNGLE_SAMPLER_WORLD = samplerWorld('jungle-demo', 'Tropical Jungle', 15);
+export const NATURE_SAMPLER_WORLD = samplerWorld('nature-demo', 'ASSETGRID - Nature', 10);
+export const ALPINE_SAMPLER_WORLD = samplerWorld('alpine-demo', 'ASSETGRID - Alpine Mountain', 11);
+export const DESERT_SAMPLER_WORLD = samplerWorld('desert-demo', 'ASSETGRID - Arid Desert', 12);
+export const MEADOW_SAMPLER_WORLD = samplerWorld('meadow-demo', 'ASSETGRID - Meadow Forest', 13);
+export const SWAMP_SAMPLER_WORLD = samplerWorld('swamp-demo', 'ASSETGRID - Swamp Marshland', 14);
+export const JUNGLE_SAMPLER_WORLD = samplerWorld('jungle-demo', 'ASSETGRID - Tropical Jungle', 15);
 
 // Synty "Various 2" packs — component sampler grids (each its own map, Cmd-J + letter O–U).
 // 'adventure-grid' is the loose pieces; the assembled Adventure town is 'adventure-demo' (N).
-export const ADVENTURE_GRID_WORLD = samplerWorld('adventure-grid', 'Adventure Pieces', 17);
-export const ANCIENT_GRID_WORLD = samplerWorld('ancient-grid', 'Ancient Empire', 18);
-export const DUNGEON_GRID_WORLD = samplerWorld('dungeon-grid', 'Dungeon Props', 19);
-export const ELVEN_GRID_WORLD = samplerWorld('elven-grid', 'Elven Realm', 20);
-export const ENCHANTED_GRID_WORLD = samplerWorld('enchanted-grid', 'Enchanted Forest', 21);
-export const KINGDOM_GRID_WORLD = samplerWorld('kingdom-grid', 'Fantasy Kingdom', 22);
-export const SAMURAI_GRID_WORLD = samplerWorld('samurai-grid', 'Samurai Empire', 23);
+export const ADVENTURE_GRID_WORLD = samplerWorld('adventure-grid', 'ASSETGRID - Adventure Pieces', 17);
+export const ANCIENT_GRID_WORLD = samplerWorld('ancient-grid', 'ASSETGRID - Ancient Empire', 18);
+export const DUNGEON_GRID_WORLD = samplerWorld('dungeon-grid', 'ASSETGRID - Dungeon Props', 19);
+export const ELVEN_GRID_WORLD = samplerWorld('elven-grid', 'ASSETGRID - Elven Realm', 20);
+export const ENCHANTED_GRID_WORLD = samplerWorld('enchanted-grid', 'ASSETGRID - Enchanted Forest', 21);
+export const KINGDOM_GRID_WORLD = samplerWorld('kingdom-grid', 'ASSETGRID - Fantasy Kingdom', 22);
+export const SAMURAI_GRID_WORLD = samplerWorld('samurai-grid', 'ASSETGRID - Samurai Empire', 23);
 // PurePoly Mining Pack — crystals/ores/gems with baked emissive glow.
-export const MINING_GRID_WORLD = samplerWorld('mining-grid', 'Mining / Crystals', 24);
+export const MINING_GRID_WORLD = samplerWorld('mining-grid', 'ASSETGRID - Mining / Crystals', 24);
 
 /** Apocalypse City — the converted Synty Apocalypse Demo_City_Standard scene (~8000 placed objects),
  *  rendered as INDIVIDUAL instanced objects from /siege/apoc/placements.json (movable/deletable later).

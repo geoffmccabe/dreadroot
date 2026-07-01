@@ -60,31 +60,32 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 1.805, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −2.8 after the city was lowered): laser yaw 272.1°, pitch -0.7°
 
   { code: 'KeyB', key: 'B', name: 'SciFi Space', mapId: 'space-demo',  pos: [0, 3, 0] },
-  // Component-only sets shown as auto-arranged sampler grids.
-  { code: 'KeyC', key: 'C', name: 'CyberCity',   mapId: 'cyber-demo',  pos: [0, 3, 0] },
-  { code: 'KeyD', key: 'D', name: 'Mech',        mapId: 'mech-demo',   pos: [0, 3, 0] },
-  { code: 'KeyE', key: 'E', name: 'SciFi Worlds', mapId: 'worlds-demo', pos: [0, 3, 0] },
-  { code: 'KeyF', key: 'F', name: 'Apocalypse',  mapId: 'apoc-demo',   pos: [0, 3, 0] },
-  { code: 'KeyG', key: 'G', name: 'Dark Fantasy', mapId: 'dark-demo',  pos: [0, 3, 0] },
+  // Component-only sets shown as auto-arranged sampler grids. Prefixed "ASSETGRID -" so it's
+  // obvious in the menu these are loose asset-pack showrooms, not assembled/playable worlds.
+  { code: 'KeyC', key: 'C', name: 'ASSETGRID - CyberCity',   mapId: 'cyber-demo',  pos: [0, 3, 0] },
+  { code: 'KeyD', key: 'D', name: 'ASSETGRID - Mech',        mapId: 'mech-demo',   pos: [0, 3, 0] },
+  { code: 'KeyE', key: 'E', name: 'ASSETGRID - SciFi Worlds', mapId: 'worlds-demo', pos: [0, 3, 0] },
+  { code: 'KeyF', key: 'F', name: 'ASSETGRID - Apocalypse',  mapId: 'apoc-demo',   pos: [0, 3, 0] },
+  { code: 'KeyG', key: 'G', name: 'ASSETGRID - Dark Fantasy', mapId: 'dark-demo',  pos: [0, 3, 0] },
   // Nature biomes (asset libraries → future biome-painting palette).
-  { code: 'KeyH', key: 'H', name: 'Nature',         mapId: 'nature-demo', pos: [0, 3, 0] },
-  { code: 'KeyI', key: 'I', name: 'Alpine Mountain', mapId: 'alpine-demo', pos: [0, 3, 0] },
-  { code: 'KeyJ', key: 'J', name: 'Arid Desert',    mapId: 'desert-demo', pos: [0, 3, 0] },
-  { code: 'KeyK', key: 'K', name: 'Meadow Forest',  mapId: 'meadow-demo', pos: [0, 3, 0] },
-  { code: 'KeyL', key: 'L', name: 'Swamp Marshland', mapId: 'swamp-demo', pos: [0, 3, 0] },
-  { code: 'KeyM', key: 'M', name: 'Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
+  { code: 'KeyH', key: 'H', name: 'ASSETGRID - Nature',         mapId: 'nature-demo', pos: [0, 3, 0] },
+  { code: 'KeyI', key: 'I', name: 'ASSETGRID - Alpine Mountain', mapId: 'alpine-demo', pos: [0, 3, 0] },
+  { code: 'KeyJ', key: 'J', name: 'ASSETGRID - Arid Desert',    mapId: 'desert-demo', pos: [0, 3, 0] },
+  { code: 'KeyK', key: 'K', name: 'ASSETGRID - Meadow Forest',  mapId: 'meadow-demo', pos: [0, 3, 0] },
+  { code: 'KeyL', key: 'L', name: 'ASSETGRID - Swamp Marshland', mapId: 'swamp-demo', pos: [0, 3, 0] },
+  { code: 'KeyM', key: 'M', name: 'ASSETGRID - Tropical Jungle', mapId: 'jungle-demo', pos: [0, 3, 0] },
   // Baked assembled scene (like City/Space) — a full fantasy village to walk around.
   { code: 'KeyN', key: 'N', name: 'Adventure Town', mapId: 'adventure-demo', pos: [84.855, 4.908, 139.182], yaw: 0.068, pitch: 0.090 }, // laser readout yaw 183.9°, pitch 5.2°
   // (Snowy Cabin is NOT an asset demo — it lives in the top "Jump To" list, SIEGE_TELEPORTS slot 0.)
   // "Various 2" component sampler grids (loose pieces for map/challenge building).
-  { code: 'KeyO', key: 'O', name: 'Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
-  { code: 'KeyP', key: 'P', name: 'Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
-  { code: 'KeyQ', key: 'Q', name: 'Dungeon Props',   mapId: 'dungeon-grid',   pos: [0, 3, 0] },
-  { code: 'KeyR', key: 'R', name: 'Elven Realm',     mapId: 'elven-grid',     pos: [0, 3, 0] },
-  { code: 'KeyS', key: 'S', name: 'Enchanted Forest', mapId: 'enchanted-grid', pos: [0, 3, 0] },
-  { code: 'KeyT', key: 'T', name: 'Fantasy Kingdom', mapId: 'kingdom-grid',   pos: [0, 3, 0] },
-  { code: 'KeyU', key: 'U', name: 'Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
-  { code: 'KeyV', key: 'V', name: 'Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
+  { code: 'KeyO', key: 'O', name: 'ASSETGRID - Adventure Pieces', mapId: 'adventure-grid', pos: [0, 3, 0] },
+  { code: 'KeyP', key: 'P', name: 'ASSETGRID - Ancient Empire',  mapId: 'ancient-grid',   pos: [0, 3, 0] },
+  { code: 'KeyQ', key: 'Q', name: 'ASSETGRID - Dungeon Props',   mapId: 'dungeon-grid',   pos: [0, 3, 0] },
+  { code: 'KeyR', key: 'R', name: 'ASSETGRID - Elven Realm',     mapId: 'elven-grid',     pos: [0, 3, 0] },
+  { code: 'KeyS', key: 'S', name: 'ASSETGRID - Enchanted Forest', mapId: 'enchanted-grid', pos: [0, 3, 0] },
+  { code: 'KeyT', key: 'T', name: 'ASSETGRID - Fantasy Kingdom', mapId: 'kingdom-grid',   pos: [0, 3, 0] },
+  { code: 'KeyU', key: 'U', name: 'ASSETGRID - Samurai Empire',  mapId: 'samurai-grid',   pos: [0, 3, 0] },
+  { code: 'KeyV', key: 'V', name: 'ASSETGRID - Mining / Crystals', mapId: 'mining-grid',  pos: [0, 3, 0] },
   // The ASSEMBLED Enchanted Forest demo scene (vs 'enchanted-grid' on S = loose pieces).
   { code: 'KeyX', key: 'X', name: 'Enchanted Forest (Demo)', mapId: 'enchanted-forest', pos: [20.773, 9.693, -14.36], yaw: 2.499, pitch: -0.006 }, // inside the central hollow tree trunk
 ];

@@ -12,6 +12,26 @@ import { scifiAsset, scifiData } from '@/config/assetBase';
 interface SamplerItem { file: string; w: number; h: number; d: number; category: string; }
 interface SamplerManifest { set: string; cell: number; count: number; items: SamplerItem[]; }
 
+// A catalog row (the full per-set model list the builder palette uses) carries the same size
+// fields a sampler needs, so when a set has no curated `_sampler_<set>.json` we can synthesize a
+// grid straight from `_catalog_<set>.json`. Some packs have 700–2300 models, so we take an
+// even-spaced spread up to CATALOG_CAP (keeps the showroom light + varied across categories).
+interface CatalogItem { file: string; w?: number; h?: number; d?: number; category?: string; }
+const CATALOG_CAP = 140;
+function manifestFromCatalog(set: string, cat: { items?: CatalogItem[] }): SamplerManifest {
+  const all = (cat.items ?? []).filter((it) => it.file);
+  const stride = Math.max(1, Math.ceil(all.length / CATALOG_CAP));
+  const picked = all.filter((_, i) => i % stride === 0).slice(0, CATALOG_CAP);
+  const items: SamplerItem[] = picked.map((it) => ({
+    file: it.file, w: it.w ?? 1, h: it.h ?? 1, d: it.d ?? 1, category: it.category ?? 'misc',
+  }));
+  // Cell = biggest footprint among the chosen models (+20% gap), clamped so one giant building
+  // can't blow the grid out to a sparse field, and small props still get breathing room.
+  const foot = items.reduce((m, it) => Math.max(m, it.w, it.d), 1);
+  const cell = Math.min(30, Math.max(3, Math.round(foot * 1.2)));
+  return { set, cell, count: items.length, items };
+}
+
 // A single bad/corrupt model must NOT white-screen the whole map. This boundary swallows a
 // failed model (and its Suspense throw) so the rest of the grid still renders.
 class ModelBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -61,8 +81,11 @@ export function SetSampler({ set }: { set: string }) {
     const getJson = (url: string) => fetch(url).then((r) => r.json());
     getJson(`/siege/scifi/_sampler_${set}.json`)
       .catch(() => getJson(scifiData(`_sampler_${set}.json`)))
+      // No curated sampler for this set → synthesize a grid from the full model catalog so the
+      // pack still shows its assets (fixes the packs whose `_sampler_*.json` was never generated).
+      .catch(() => getJson(scifiData(`_catalog_${set}.json`)).then((c) => manifestFromCatalog(set, c)))
       .then((m) => { if (alive) setManifest(m); })
-      .catch(() => { /* manifest missing on both */ });
+      .catch(() => { /* no sampler and no catalog — nothing to show */ });
     return () => { alive = false; };
   }, [set]);
 
