@@ -46,6 +46,7 @@ const AHEAD = 5;     // metres in front of the player the row appears
 const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
 const _ikTarget = new THREE.Vector3();   // scratch: left-hand grip point in world space
+const _bakedLeft = new THREE.Vector3();  // scratch: baked left-hand point when there's no saved capture
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 // Shared animation libraries stay warmed at boot — the spawn character needs them for its idle the
@@ -182,7 +183,9 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
     // mixer and its result isn't overwritten. Bend the left arm to the captured grip point on the gun.
     const cn = names.length ? names[animIndex % names.length] : '';
     if (cn.includes('Rifle') && !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(cn)) {
-      const tgt = getLeftTarget(weapon.url);
+      // Use the user's captured point if any, else the baked weapon.leftHand default.
+      const bp = weapon.leftHand?.point;
+      const tgt = getLeftTarget(weapon.url) ?? (bp ? _bakedLeft.set(bp[0], bp[1], bp[2]) : null);
       const reg = tgt ? weaponWraps().find((r) => r.charName === charName && r.weaponKey === weapon.url) : null;
       if (tgt && reg) {
         if (!leftBonesRef.current) leftBonesRef.current = findLeftArm(cloned);
@@ -190,7 +193,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
         if (b) {
           g.updateWorldMatrix(true, true);
           _ikTarget.copy(tgt); reg.wrap.localToWorld(_ikTarget);
-          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url));
+          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0));
         }
       }
     }

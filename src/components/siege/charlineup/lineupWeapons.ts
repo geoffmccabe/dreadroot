@@ -15,6 +15,7 @@ export interface LineupWeaponDef {
   sizeByChar?: Record<string, number>;  // baked per-character size multiplier; default 1
   rotByChar?: Record<string, [number, number, number]>;   // baked per-character rotDeg (else rotDeg)
   gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
+  leftHand?: { point: [number, number, number]; wrist: number };  // baked support-hand grip (gun-local) + wrist°
 }
 
 // First-pass grip guesses — SIZE is auto-correct; rotation/position need a visual tuning pass.

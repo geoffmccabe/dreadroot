@@ -25,13 +25,13 @@ export function setLeftTarget(weaponKey: string, wrapLocal: THREE.Vector3): void
   try { localStorage.setItem(tKey(weaponKey), JSON.stringify([+wrapLocal.x.toFixed(4), +wrapLocal.y.toFixed(4), +wrapLocal.z.toFixed(4)])); } catch { /* ignore */ }
   console.log('[lefthand] target set for', weaponKey, '→', [wrapLocal.x, wrapLocal.y, wrapLocal.z].map((n) => +n.toFixed(3)));
 }
-export function getWrist(weaponKey: string): number {
+export function getWrist(weaponKey: string, fallback = 0): number {
   if (!wrist.has(weaponKey)) {
-    let d = 0;
-    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(wKey(weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n)) d = n; } } catch { /* 0 */ }
+    let d = fallback;   // baked wrist unless the user has a saved override
+    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(wKey(weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n)) d = n; } } catch { /* fallback */ }
     wrist.set(weaponKey, d);
   }
-  return wrist.get(weaponKey) ?? 0;
+  return wrist.get(weaponKey) ?? fallback;
 }
 export function nudgeWrist(weaponKey: string, deg: number): void {
   const d = getWrist(weaponKey) + deg; wrist.set(weaponKey, d);

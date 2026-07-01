@@ -16,6 +16,7 @@ export interface HeldWeapon {
   sizeByChar?: Record<string, number>;  // baked per-character size multiplier (auto-fit × this); default 1
   rotByChar?: Record<string, [number, number, number]>;   // baked per-character rotDeg (else rotDeg)
   gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
+  leftHand?: { point: [number, number, number]; wrist: number };  // baked support-hand grip (gun-local) + wrist°
   animSet: 'rifle' | 'pistol';
 }
 
@@ -38,7 +39,8 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], animSet: 'rifle',
     rotByChar:  { Ash: [2, 3, -81], Dago: [2, 1, -79], Fluffer: [3, -5, -81], Jankz: [2, 3, -81], Rajax: [2, 3, -81], Thorn: [2, 3, -77] },
     gripByChar: { Ash: [-0.04, 0.28, 0.04], Dago: [-0.22, 0.34, -0.06], Fluffer: [0.04, 0.4, 0.04], Jankz: [-0.02, 0.16, 0.04], Rajax: [0.02, 0.3, 0.04], Thorn: [0, 0.16, 0.02] },
-    sizeByChar: { Ash: 0.82, Dago: 1.00, Fluffer: 1.15, Jankz: 1.00, Rajax: 0.87, Thorn: 0.79 } },
+    sizeByChar: { Ash: 0.82, Dago: 1.00, Fluffer: 1.15, Jankz: 1.00, Rajax: 0.87, Thorn: 0.79 },
+    leftHand: { point: [-0.249, 0.061, 0.074], wrist: 0 } },
   { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
