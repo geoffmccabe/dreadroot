@@ -179,6 +179,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
             </Suspense>
           )}
           {!isBlank && world.meshColliders && <MeshColliderPlayer />}
+          {/* Bleakrock 2 — the cropped Bleakrock town objects on the editable island (shared
+              /siege/world glbs + textures, filtered placements in /siege/bleakrock2). */}
+          {world.id === 'bleakrock2' && (
+            <Suspense fallback={null}>
+              <WorldObjectsLayer dataDir="/siege/bleakrock2" renderDist={320}
+                onReady={() => setObjReadyWorld(world.id)} />
+            </Suspense>
+          )}
           {/* Hard arena walls for walled maps (Yeti Time). No-op unless the world sets `wallBox`. */}
           <WorldBoundsWall />
           {/* Bake a real heightmap from the glTF collider mesh so the player + monsters sit on the true

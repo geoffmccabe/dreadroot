@@ -27,6 +27,10 @@ export interface GroundConfig {
   terrainUrl?: string;
   /** Optional ground texture override (else world/default). */
   textureUrl?: string;
+  /** For 'heightmap' maps: a JSON seed ({baseY, samples:[key,h,…], water}) that pre-populates the
+   *  editable heightfield the FIRST time the map loads (no saved edits yet). Lets a heightmap map
+   *  start from real terrain (e.g. cropped from another map) instead of flat. */
+  seedUrl?: string;
 }
 
 /**
@@ -230,6 +234,26 @@ export const STARBLINK_WORLD: WorldDefinition = {
 };
 
 /**
+ * Bleakrock 2 — the Bleakrock mushrooms island lifted out of the big Siege Worlds map, dropped into
+ * a large open-water canvas so it can be grown. Editable heightmap (sculpt brush + object tools),
+ * SEEDED from the cropped Bleakrock terrain (/siege/bleakrock2/heightfield.json) with sea-level water
+ * all around. Its objects (shared /siege/world glbs + textures) load from /siege/bleakrock2.
+ */
+export const BLEAKROCK2_WORLD: WorldDefinition = {
+  id: 'bleakrock2',
+  name: 'Bleakrock 2',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 33,
+  kind: 'siege',
+  meshColliders: false,
+  bounds: { min: [-2100, -1680], max: [1900, 2320] }, // island ≈(-100,320), lots of water to expand into
+  ground: { kind: 'heightmap', surfaceY: 12, seedUrl: '/siege/bleakrock2/heightfield.json' },
+  spawn: { position: [-100, 26, 320], yaw: 0 },
+  props: undefined,
+};
+
+/**
  * City Demo — the fully-baked Synty SciFi City scene on a flat map, with BVH colliders.
  * A showcase/walkthrough map (teleport slot 0), separate from the Starblink builder.
  */
@@ -427,6 +451,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [ENCHANTED_FOREST_BAD_WORLD.id]: ENCHANTED_FOREST_BAD_WORLD,
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
   [STARBLINK_WORLD.id]: STARBLINK_WORLD,
+  [BLEAKROCK2_WORLD.id]: BLEAKROCK2_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
   [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
   [ADVENTURE_DEMO_WORLD.id]: ADVENTURE_DEMO_WORLD,

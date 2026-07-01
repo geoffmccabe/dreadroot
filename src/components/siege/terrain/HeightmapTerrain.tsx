@@ -78,9 +78,19 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     // Load any saved version of this map (local for now; server later — see mapPersistence).
     (async () => {
       const saved = await loadMap(world.id);
-      if (!alive || !saved) return;
-      loadField(saved.heightField);
-      setBrushState({ waterOn: saved.water.on, waterLevel: saved.water.level });
+      if (!alive) return;
+      if (saved) {
+        loadField(saved.heightField);
+        setBrushState({ waterOn: saved.water.on, waterLevel: saved.water.level });
+      } else if (world.ground.seedUrl) {
+        // First load of a SEEDED map (no saved edits yet): pull the initial terrain + water.
+        try {
+          const seed = await (await fetch(world.ground.seedUrl)).json();
+          if (!alive) return;
+          loadField(seed);
+          if (seed.water) setBrushState({ waterOn: !!seed.water.on, waterLevel: seed.water.level });
+        } catch { /* seed missing → stay flat */ return; }
+      } else return;
       // Rebuild any cells already streamed so they reflect the loaded heights.
       for (const m of loaded.current.values()) { groupRef.current?.remove(m); m.geometry.dispose(); }
       loaded.current.clear();
