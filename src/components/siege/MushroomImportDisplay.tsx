@@ -31,8 +31,9 @@ const FILES: { url: string; name: string; bump?: boolean }[] = [
   // Newly-found distinct models (same-named but different content, plus the tall originals).
   { url: '/siege/imports/meshes_tree05_tall.glb', name: 'meshes_tree05_tall', bump: true },
   { url: '/siege/imports/meshes_tree06_tall.glb', name: 'meshes_tree06_tall', bump: true },
-  { url: '/siege/imports/ashley_tree05.glb', name: 'ashley_tree05', bump: true },
-  { url: '/siege/imports/mushrooms2_tree06.glb', name: 'mushrooms2_tree06', bump: true },
+  // Ashley mushrooms are already good + correctly sized (they're used in Bleakrock) — keep native.
+  { url: '/siege/imports/ashley_tree05.glb', name: 'ashley_tree05' },
+  { url: '/siege/imports/mushrooms2_tree06.glb', name: 'mushrooms2_tree06' },
   { url: '/siege/imports/mushroom_line_straight.glb', name: 'mushroom_line_straight', bump: true },
   { url: '/siege/imports/Khaured_Tower_1.glb', name: 'Khaured_Tower_1' },
 ];
