@@ -4,6 +4,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
 import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
 import { isSiegeIntroActive } from '@/components/siege/spawnintro/siegeSpawnIntro'; // SW spawn cinematic owns the camera
+import { getTPDist, nudgeTPDist } from '@/components/siege/siegeThirdPerson'; // SW third-person camera pull-back (Alt+wheel)
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
@@ -178,6 +179,12 @@ export function FirstPersonControls({
   const isLocked = useRef(false);
   const velocity = useRef(new THREE.Vector3());
   const direction = useRef(new THREE.Vector3());
+  // Third-person (siege): the true player eye saved before the render pull-back, the current (lerped)
+  // pull-back distance, and whether the eye has been captured yet. All no-ops until Alt+wheel zooms out.
+  const tpEye = useRef(new THREE.Vector3());
+  const tpFwd = useRef(new THREE.Vector3());
+  const tpCurrent = useRef(0);
+  const tpEyeSet = useRef(false);
   const keys = useRef({
     w: false, s: false, a: false, d: false,
     shift: false, space: false, r: false, ctrl: false,
@@ -1027,6 +1034,9 @@ export function FirstPersonControls({
 
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current) return;
+    // Alt+wheel = third-person camera zoom (siege only). Wheel down = pull back, up = zoom in to first
+    // person. Handled first so it never fights block/seed cycling.
+    if (isSiege && event.altKey) { event.preventDefault(); nudgeTPDist(event.deltaY > 0 ? 1 : -1); return; }
     if (blockPlacementMode) {
       event.preventDefault();
       onCycleBlock(event.deltaY > 0 ? 'next' : 'prev');
@@ -2048,6 +2058,14 @@ export function FirstPersonControls({
       // Siege-only flag (never set in voxel play), so this is a no-op in DreadRoot. Zero velocity so
       // accumulated gravity doesn't jolt the player on handoff back to the controller.
       if (isSiegeIntroActive()) { velocity.current.set(0, 0, 0); return; }
+      // Third-person (siege): smoothly track the target pull-back distance, then RESTORE the true eye
+      // (undoing last frame's render offset) so all movement/collision/aim below use the real player
+      // position. The pull-back is re-applied at the very END of this loop. First-person (0) = no-op.
+      if (isSiege) {
+        tpCurrent.current += (getTPDist() - tpCurrent.current) * Math.min(1, delta * 10);
+        if (tpCurrent.current < 0.02) tpCurrent.current = 0;
+        if (tpCurrent.current > 0 && tpEyeSet.current) camera.position.copy(tpEye.current);
+      }
       // Note: useFrameCallCount only tracked in master loop now
 
       // Apply camera rotation if needed
@@ -3305,6 +3323,18 @@ export function FirstPersonControls({
         if (chunkUpdate) {
           chunkUpdate(camera.position.x, camera.position.z);
         }
+      }
+
+      // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye
+      // (movement, collision, aim, multiplayer broadcast, chunk-load); now move ONLY the rendered
+      // camera back along the look direction. Saved eye is restored at the top of next frame. When
+      // first-person (distance 0) this whole block is skipped → identical to today.
+      if (isSiege && tpCurrent.current > 0) {
+        tpEye.current.copy(camera.position); tpEyeSet.current = true;
+        tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+        camera.position.addScaledVector(tpFwd.current, -tpCurrent.current);
+      } else if (isSiege) {
+        tpEyeSet.current = false;
       }
     }, 20); // High priority - controls run early
 
