@@ -219,7 +219,8 @@ export function SiegeCharacterLineup() {
     let amp: number[] = [];
     const POS = 0.02;        // position-nudge step, metres
     const GROW = 1.02;       // size step (2%); shrink is the exact inverse
-    const sizeTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
+    // Every adjuster (rotate/size/position) targets the SELECTED character only (null = ALL when 0).
+    const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
@@ -240,19 +241,19 @@ export function SiegeCharacterLineup() {
       // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
       else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(Number(e.key) - 1); }
       else if (e.key === '0') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(-1); }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), 1 / GROW); } // 2% smaller
-      else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(sizeTarget(), GROW); }     // 2% bigger
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), 1 / GROW); } // 2% smaller
+      else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), GROW); }     // 2% bigger
       // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
-      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x', -POS); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('x',  POS); }
-      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('y',  POS); }
-      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('y', -POS); }
-      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z', -POS); }
-      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos('z',  POS); }
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'x', -POS); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'x',  POS); }
+      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'y',  POS); }
+      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'y', -POS); }
+      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
+      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
       // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
-      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
+      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

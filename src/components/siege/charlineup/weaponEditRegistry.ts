@@ -1,28 +1,29 @@
-// Registry of the live lineup-weapon wraps + the manual gun-tuning tools (orientation + per-character
-// size). Each gun's wrap LOCAL rotation = baseRot(euler) ∘ tune(weaponKey); its scale = baseScale ×
-// sizeMult(charName, weaponKey). Orientation is PER WEAPON (same in every hand); size is PER CHARACTER
-// PER WEAPON (hand size/aesthetics differ). Everything persists in localStorage and can be exported to
-// the clipboard for baking into code.
+// Registry of the live lineup-weapon wraps + the manual gun-tuning tools. EVERY tuning axis —
+// orientation, position, and size — is PER CHARACTER PER WEAPON (keyed `${charName}::${weaponKey}`),
+// because hand size/shape differ so a gun that grips right on one character is off on another. The
+// adjusters act only on the SELECTED character. Each gun's wrap = baseRot(char,weapon) ∘ rotTune,
+// pos = baseGrip + posTune, scale = baseScale × size. All persist in localStorage; '\' exports them.
 import * as THREE from 'three';
 
 export interface WeaponWrapReg {
   wrap: THREE.Group;        // group whose local rotation/scale we drive
   hand: THREE.Object3D;     // the hand bone it's parented to
   handScale: number;        // hand world scale (gripPos metres ↔ wrap-local units)
-  baseRot: [number, number, number];  // weapon def rotDeg (deg); tune composes onto this
-  baseScale: number;        // the auto-fit wrap scale; sizeMult multiplies it
-  bakedSize: number;        // baked per-character size multiplier (weapon.sizeByChar[char]); default 1
-  baseGrip: [number, number, number];  // weapon def gripPos (m); pos tune adds onto this
-  weaponKey: string;        // weapon MODEL url — selects orientation tune + (with char) size
-  charName: string;         // which character holds this wrap — selects the size multiplier
+  baseRot: [number, number, number];  // effective per-char baseline rotDeg (deg); rotTune composes on
+  baseScale: number;        // the auto-fit wrap scale; size multiplies it
+  bakedSize: number;        // baked per-character size multiplier; default 1
+  baseGrip: [number, number, number];  // effective per-char baseline gripPos (m); posTune adds on
+  weaponKey: string;        // weapon MODEL url
+  charName: string;         // which character holds this wrap
 }
 
 const regs = new Map<string, WeaponWrapReg>();   // key = unique per-character instance id
+const ck = (charName: string, weaponKey: string) => `${charName}::${weaponKey}`;
 
 export function registerWeaponWrap(id: string, reg: WeaponWrapReg): void {
   regs.set(id, reg);
-  baseRotByWeapon.set(reg.weaponKey, reg.baseRot);
-  baseGripByWeapon.set(reg.weaponKey, reg.baseGrip);
+  baseRotByKey.set(ck(reg.charName, reg.weaponKey), reg.baseRot);
+  baseGripByKey.set(ck(reg.charName, reg.weaponKey), reg.baseGrip);
   applyWrapRotation(reg);
   applyWrapScale(reg);
   applyWrapPos(reg);
@@ -33,21 +34,26 @@ export function weaponWraps(): WeaponWrapReg[] { return [...regs.values()]; }
 // The editor-object id every gun wrap tags itself with, so the crosshair/L selects them all as one.
 export const WEAPON_EDIT_ID = 'weapon:held';
 
-// When a weapon's tuning is baked into code, its in-browser orientation/position tweaks must be cleared
-// ONCE so the baked values apply cleanly (otherwise base ∘ saved-tune doubles the rotation). Bump
-// BAKE_VERSION + list the newly-baked urls each time we bake; only those are cleared, so other
-// weapons' in-progress tuning survives. (Size isn't cleared — it's a multiplier and never doubles.)
-const BAKE_VERSION = '2';
-const BAKED_URLS = [
+// When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
+// so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
+// baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
+const BAKE_VERSION = '3';
+const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
   '/siege/weapons/item_12.glb', '/siege/weapons/item_1.glb', '/siege/weapons/item_5.glb',
   '/siege/weapons/item_208.glb', '/siege/weapons/item_2.glb', '/siege/weapons/item_3.glb',
   '/siege/weapons/item_6.glb', '/siege/weapons/item_14.glb',
-];
+]);
 try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
-    for (const url of BAKED_URLS) { localStorage.removeItem(`siege_weapon_tune::${url}`); localStorage.removeItem(`siege_weapon_pos::${url}`); }
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i); if (!k) continue;
+      if (k.startsWith('siege_weapon_tune::') || k.startsWith('siege_weapon_pos::')) {
+        const url = k.slice(k.lastIndexOf('::') + 2);           // key = prefix[::char]::url
+        if (BAKED_URLS.has(url)) localStorage.removeItem(k);
+      }
+    }
     localStorage.setItem('siege_weapon_bake', BAKE_VERSION);
   }
 } catch { /* localStorage unavailable */ }
@@ -59,61 +65,61 @@ const _out = new THREE.Quaternion();
 const _outE = new THREE.Euler();
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+const baseRotByKey = new Map<string, [number, number, number]>();   // `${char}::${weapon}` → baseline
+const baseGripByKey = new Map<string, [number, number, number]>();
 
-// ── Orientation tune (^ then x/y/z) — one accumulated-flip quaternion PER weapon model ──────────────
+// ── Orientation tune (x/y/z rotate) — per character per weapon ───────────────────────────────────────
 const tunes = new Map<string, THREE.Quaternion>();
-const baseRotByWeapon = new Map<string, [number, number, number]>();   // for export
-const baseGripByWeapon = new Map<string, [number, number, number]>();  // for export
-const tuneKeyFor = (weaponKey: string) => `siege_weapon_tune::${weaponKey}`;
+const tuneKey = (charName: string, weaponKey: string) => `siege_weapon_tune::${charName}::${weaponKey}`;
 
-function getTune(weaponKey: string): THREE.Quaternion {
-  let q = tunes.get(weaponKey);
+function getTune(charName: string, weaponKey: string): THREE.Quaternion {
+  const key = ck(charName, weaponKey);
+  let q = tunes.get(key);
   if (!q) {
     q = new THREE.Quaternion();
-    try {
-      const s = typeof localStorage !== 'undefined' && localStorage.getItem(tuneKeyFor(weaponKey));
-      if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length === 4) q.fromArray(a); }
-    } catch { /* identity */ }
-    tunes.set(weaponKey, q);
+    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(tuneKey(charName, weaponKey)); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length === 4) q.fromArray(a); } } catch { /* identity */ }
+    tunes.set(key, q);
   }
   return q;
 }
 
 export function applyWrapRotation(reg: WeaponWrapReg): void {
   _baseE.set(reg.baseRot[0] * D2R, reg.baseRot[1] * D2R, reg.baseRot[2] * D2R, 'XYZ');
-  reg.wrap.quaternion.setFromEuler(_baseE).multiply(getTune(reg.weaponKey));
+  reg.wrap.quaternion.setFromEuler(_baseE).multiply(getTune(reg.charName, reg.weaponKey));
 }
 
-// Rotate the CURRENTLY-shown weapon by `degrees` about its own local axis (post-multiply = gun's own
-// frame). All mounted wraps share that weapon. Used for fine (2°) and coarse (45°) orientation tuning.
-export function rotateWeaponLocal(axis: 'x' | 'y' | 'z', degrees: number): void {
-  const all = weaponWraps();
-  const rep = all[0];
-  if (!rep) { console.log('[weapon-rot]', axis, '(no gun mounted — show a Rifle clip first)'); return; }
-  const tune = getTune(rep.weaponKey);
+// Rotate the current weapon `degrees` about its own local axis, for the SELECTED character (charName)
+// or ALL characters (charName = null). Post-multiply = gun's own frame.
+export function rotateWeaponLocal(charName: string | null, axis: 'x' | 'y' | 'z', degrees: number): void {
+  const targets = weaponWraps().filter((r) => charName === null || r.charName === charName);
+  if (!targets.length) { console.log('[weapon-rot]', axis, '(no gun on the selected character)'); return; }
   _axisV.set(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
   _flip.setFromAxisAngle(_axisV, degrees * D2R);
-  tune.multiply(_flip);
-  try { localStorage.setItem(tuneKeyFor(rep.weaponKey), JSON.stringify(tune.toArray())); } catch { /* ignore */ }
-  all.forEach(applyWrapRotation);
+  for (const reg of targets) {
+    const tune = getTune(reg.charName, reg.weaponKey);
+    tune.multiply(_flip);
+    try { localStorage.setItem(tuneKey(reg.charName, reg.weaponKey), JSON.stringify(tune.toArray())); } catch { /* ignore */ }
+    applyWrapRotation(reg);
+  }
+  const rep = targets[0];
   _baseE.set(rep.baseRot[0] * D2R, rep.baseRot[1] * D2R, rep.baseRot[2] * D2R, 'XYZ');
-  _out.setFromEuler(_baseE).multiply(tune);
+  _out.setFromEuler(_baseE).multiply(getTune(rep.charName, rep.weaponKey));
   _outE.setFromQuaternion(_out, 'XYZ');
-  console.log('[weapon-rot]', rep.weaponKey, `${degrees > 0 ? '+' : ''}${degrees}° ${axis}`, '→ rotDeg',
-    [Math.round(_outE.x * R2D), Math.round(_outE.y * R2D), Math.round(_outE.z * R2D)]);
+  console.log('[weapon-rot]', charName ?? 'ALL', rep.weaponKey, `${degrees > 0 ? '+' : ''}${degrees}° ${axis}`,
+    '→ rotDeg', [Math.round(_outE.x * R2D), Math.round(_outE.y * R2D), Math.round(_outE.z * R2D)]);
 }
 
-// ── Size tune (number selects character, -/= shrink/grow) — multiplier PER character PER weapon ──────
-const sizes = new Map<string, number>();   // key = `${charName}::${weaponKey}`
+// ── Size tune (-/=) — multiplier per character per weapon ─────────────────────────────────────────────
+const sizes = new Map<string, number>();
 const sizeKey = (charName: string, weaponKey: string) => `siege_weapon_size::${charName}::${weaponKey}`;
 
 export function getWeaponSize(charName: string, weaponKey: string, fallback = 1): number {
-  const k = `${charName}::${weaponKey}`;
-  let v = sizes.get(k);
+  const key = ck(charName, weaponKey);
+  let v = sizes.get(key);
   if (v === undefined) {
-    v = fallback;   // baked per-character size (weapon.sizeByChar) unless the user has a saved override
+    v = fallback;
     try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(sizeKey(charName, weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n) && n > 0) v = n; } } catch { /* default */ }
-    sizes.set(k, v);
+    sizes.set(key, v);
   }
   return v;
 }
@@ -124,69 +130,73 @@ export function applyWrapScale(reg: WeaponWrapReg): void {
 
 // Grow/shrink the current weapon for ONE character (charName) or ALL of them (charName = null).
 export function bumpWeaponSize(charName: string | null, factor: number): void {
-  let touched = 0;
-  for (const reg of regs.values()) {
-    if (charName !== null && reg.charName !== charName) continue;
-    const k = `${reg.charName}::${reg.weaponKey}`;
+  const targets = weaponWraps().filter((r) => charName === null || r.charName === charName);
+  for (const reg of targets) {
     const next = clamp(getWeaponSize(reg.charName, reg.weaponKey, reg.bakedSize) * factor, 0.2, 5);
-    sizes.set(k, next);
+    sizes.set(ck(reg.charName, reg.weaponKey), next);
     try { localStorage.setItem(sizeKey(reg.charName, reg.weaponKey), String(next)); } catch { /* ignore */ }
     applyWrapScale(reg);
-    touched++;
   }
-  console.log('[weapon-size]', charName ?? 'ALL', '×', factor.toFixed(2), `(${touched} gun${touched === 1 ? '' : 's'})`);
+  console.log('[weapon-size]', charName ?? 'ALL', '×', factor.toFixed(3), `(${targets.length} gun${targets.length === 1 ? '' : 's'})`);
 }
 
-// ── Position tune (arrows + ,/. move the gun in the hand) — offset PER weapon (shared across chars) ──
-const posTunes = new Map<string, [number, number, number]>();   // metres added onto baseGrip
-const posKeyFor = (weaponKey: string) => `siege_weapon_pos::${weaponKey}`;
+// ── Position tune (arrows + ,/.) — offset per character per weapon ────────────────────────────────────
+const posTunes = new Map<string, [number, number, number]>();
+const posKey = (charName: string, weaponKey: string) => `siege_weapon_pos::${charName}::${weaponKey}`;
 
-function getPos(weaponKey: string): [number, number, number] {
-  let p = posTunes.get(weaponKey);
+function getPos(charName: string, weaponKey: string): [number, number, number] {
+  const key = ck(charName, weaponKey);
+  let p = posTunes.get(key);
   if (!p) {
     p = [0, 0, 0];
-    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(posKeyFor(weaponKey)); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length === 3) p = a as [number, number, number]; } } catch { /* default */ }
-    posTunes.set(weaponKey, p);
+    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(posKey(charName, weaponKey)); if (s) { const a = JSON.parse(s); if (Array.isArray(a) && a.length === 3) p = a as [number, number, number]; } } catch { /* default */ }
+    posTunes.set(key, p);
   }
   return p;
 }
 
 export function applyWrapPos(reg: WeaponWrapReg): void {
-  const p = getPos(reg.weaponKey);
+  const p = getPos(reg.charName, reg.weaponKey);
   reg.wrap.position.set((reg.baseGrip[0] + p[0]) / reg.handScale, (reg.baseGrip[1] + p[1]) / reg.handScale, (reg.baseGrip[2] + p[2]) / reg.handScale);
 }
 
-// Move the current weapon along a hand-local axis (all characters share the grip offset).
-export function nudgeWeaponPos(axis: 'x' | 'y' | 'z', delta: number): void {
-  const all = weaponWraps();
-  const rep = all[0];
-  if (!rep) { console.log('[weapon-pos]', axis, '(no gun mounted)'); return; }
-  const p = getPos(rep.weaponKey);
+// Move the current weapon along a hand-local axis, for the SELECTED character (or ALL).
+export function nudgeWeaponPos(charName: string | null, axis: 'x' | 'y' | 'z', delta: number): void {
+  const targets = weaponWraps().filter((r) => charName === null || r.charName === charName);
+  if (!targets.length) { console.log('[weapon-pos]', axis, '(no gun on the selected character)'); return; }
   const i = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
-  p[i] = Math.round((p[i] + delta) * 1000) / 1000;
-  try { localStorage.setItem(posKeyFor(rep.weaponKey), JSON.stringify(p)); } catch { /* ignore */ }
-  for (const reg of all) if (reg.weaponKey === rep.weaponKey) applyWrapPos(reg);
-  console.log('[weapon-pos]', rep.weaponKey, 'gripPos',
+  for (const reg of targets) {
+    const p = getPos(reg.charName, reg.weaponKey);
+    p[i] = Math.round((p[i] + delta) * 1000) / 1000;
+    try { localStorage.setItem(posKey(reg.charName, reg.weaponKey), JSON.stringify(p)); } catch { /* ignore */ }
+    applyWrapPos(reg);
+  }
+  const rep = targets[0]; const p = getPos(rep.charName, rep.weaponKey);
+  console.log('[weapon-pos]', charName ?? 'ALL', rep.weaponKey, 'gripPos',
     [rep.baseGrip[0] + p[0], rep.baseGrip[1] + p[1], rep.baseGrip[2] + p[2]].map((n) => Math.round(n * 1000) / 1000));
 }
 
-// ── Export everything so it can be baked into code ──────────────────────────────────────────────────
-// Copies a readable block of every tuned weapon's orientation (rotDeg) + per-character size multipliers
-// to the clipboard (console as fallback). Paste it to Claude to make the tuning permanent for all players.
+// ── Export every tuned (character, weapon): orientation + grip + size, grouped by weapon ───────────────
 export function exportTuning(): void {
-  const lines = ['=== SIEGE GUN TUNING (paste to Claude to bake) ==='];
-  for (const [weaponKey, baseRot] of baseRotByWeapon) {
+  const keys = new Set<string>([...tunes.keys(), ...posTunes.keys(), ...sizes.keys()]);
+  const byWeapon = new Map<string, string[]>();
+  for (const key of keys) {
+    const sep = key.indexOf('::'); if (sep < 0) continue;
+    const charName = key.slice(0, sep), weaponKey = key.slice(sep + 2);
+    const baseRot = baseRotByKey.get(key); const baseGrip = baseGripByKey.get(key);
+    if (!baseRot || !baseGrip) continue;   // never mounted this session → nothing to read
     _baseE.set(baseRot[0] * D2R, baseRot[1] * D2R, baseRot[2] * D2R, 'XYZ');
-    _out.setFromEuler(_baseE).multiply(getTune(weaponKey));
+    _out.setFromEuler(_baseE).multiply(getTune(charName, weaponKey));
     _outE.setFromQuaternion(_out, 'XYZ');
-    const g = baseGripByWeapon.get(weaponKey) ?? [0, 0, 0]; const pp = getPos(weaponKey);
-    const grip = [g[0] + pp[0], g[1] + pp[1], g[2] + pp[2]].map((n) => Math.round(n * 1000) / 1000);
-    let line = `${weaponKey}  rotDeg=[${Math.round(_outE.x * R2D)}, ${Math.round(_outE.y * R2D)}, ${Math.round(_outE.z * R2D)}]  gripPos=[${grip.join(', ')}]`;
-    const scaleParts: string[] = [];
-    for (const [k, v] of sizes) { if (k.endsWith(`::${weaponKey}`) && Math.abs(v - 1) > 1e-3) scaleParts.push(`${k.split('::')[0]}=${v.toFixed(2)}`); }
-    if (scaleParts.length) line += `  size: ${scaleParts.join(' ')}`;
-    lines.push(line);
+    const p = getPos(charName, weaponKey);
+    const grip = [baseGrip[0] + p[0], baseGrip[1] + p[1], baseGrip[2] + p[2]].map((n) => Math.round(n * 1000) / 1000);
+    const size = getWeaponSize(charName, weaponKey);
+    const line = `  ${charName}: rotDeg=[${Math.round(_outE.x * R2D)}, ${Math.round(_outE.y * R2D)}, ${Math.round(_outE.z * R2D)}] gripPos=[${grip.join(', ')}] size=${size.toFixed(2)}`;
+    if (!byWeapon.has(weaponKey)) byWeapon.set(weaponKey, []);
+    byWeapon.get(weaponKey)!.push(line);
   }
+  const lines = ['=== SIEGE GUN TUNING (paste to Claude to bake) ==='];
+  for (const [weaponKey, rows] of byWeapon) { lines.push(weaponKey); lines.push(...rows.sort()); }
   const text = lines.join('\n');
   try { navigator.clipboard?.writeText(text); } catch { /* clipboard blocked — console only */ }
   console.log(text + '\n(copied to clipboard)');
