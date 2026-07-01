@@ -38,8 +38,8 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '5';   // v5: also baked burst_rifle (item_17) + M27 (item_18) — clear their saved tweaks
-const BAKED_URLS = new Set(['/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb']);
+const BAKE_VERSION = '6';   // v6: also baked Dragunov (item_19) + SubMGun (item_142) — clear their saved tweaks
+const BAKED_URLS = new Set(['/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb', '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb']);
 try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
     for (let i = localStorage.length - 1; i >= 0; i--) {
