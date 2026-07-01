@@ -11,32 +11,34 @@ import * as THREE from 'three';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled,
          type MeshInstanceInput } from './meshColliderSystem';
 
-const FILES = [
+const FILES: { url: string; name: string; bump?: boolean }[] = [
   { url: '/siege/imports/mushroomtree06.glb', name: 'mushroomtree06' },
   { url: '/siege/imports/mushroomtree05.glb', name: 'mushroomtree05' },
   { url: '/siege/imports/mushroomtree07.glb', name: 'mushroomtree07' },
   { url: '/siege/imports/MushroomTree_A.glb', name: 'MushroomTree_A' },
-  { url: '/siege/imports/Tree1.glb', name: 'Tree1' },
-  { url: '/siege/imports/vasim_tree1_collider.glb', name: 'vasim_tree1_collider' },
-  { url: '/siege/imports/vasim_tree1_collider_feb25.glb', name: 'vasim_tree1_collider_feb25' },
-  { url: '/siege/imports/vasim_tree1_collider2.glb', name: 'vasim_tree1_collider2' },
-  { url: '/siege/imports/vasim_tree1_flat.glb', name: 'vasim_tree1_flat' },
-  { url: '/siege/imports/jhay_tree1.glb', name: 'jhay_tree1' },
-  { url: '/siege/imports/jhay_tree2.glb', name: 'jhay_tree2' },
-  { url: '/siege/imports/jhay_tree3.glb', name: 'jhay_tree3' },
-  { url: '/siege/imports/jhay_tree4.glb', name: 'jhay_tree4' },
-  { url: '/siege/imports/jhay_tree5.glb', name: 'jhay_tree5' },
-  { url: '/siege/imports/jhay_tree6.glb', name: 'jhay_tree6' },
+  // Everything between MushroomTree_A and the Khaured Tower is bumped to BUMP_H tall for visibility.
+  { url: '/siege/imports/Tree1.glb', name: 'Tree1', bump: true },
+  { url: '/siege/imports/vasim_tree1_collider.glb', name: 'vasim_tree1_collider', bump: true },
+  { url: '/siege/imports/vasim_tree1_collider_feb25.glb', name: 'vasim_tree1_collider_feb25', bump: true },
+  { url: '/siege/imports/vasim_tree1_collider2.glb', name: 'vasim_tree1_collider2', bump: true },
+  { url: '/siege/imports/vasim_tree1_flat.glb', name: 'vasim_tree1_flat', bump: true },
+  { url: '/siege/imports/jhay_tree1.glb', name: 'jhay_tree1', bump: true },
+  { url: '/siege/imports/jhay_tree2.glb', name: 'jhay_tree2', bump: true },
+  { url: '/siege/imports/jhay_tree3.glb', name: 'jhay_tree3', bump: true },
+  { url: '/siege/imports/jhay_tree4.glb', name: 'jhay_tree4', bump: true },
+  { url: '/siege/imports/jhay_tree5.glb', name: 'jhay_tree5', bump: true },
+  { url: '/siege/imports/jhay_tree6.glb', name: 'jhay_tree6', bump: true },
   // Newly-found distinct models (same-named but different content, plus the tall originals).
-  { url: '/siege/imports/meshes_tree05_tall.glb', name: 'meshes_tree05_tall' },       // ~66 m
-  { url: '/siege/imports/meshes_tree06_tall.glb', name: 'meshes_tree06_tall' },       // ~118 m
-  { url: '/siege/imports/ashley_tree05.glb', name: 'ashley_tree05' },                 // multi-tree cluster
-  { url: '/siege/imports/mushrooms2_tree06.glb', name: 'mushrooms2_tree06' },
-  { url: '/siege/imports/mushroom_line_straight.glb', name: 'mushroom_line_straight' },
+  { url: '/siege/imports/meshes_tree05_tall.glb', name: 'meshes_tree05_tall', bump: true },
+  { url: '/siege/imports/meshes_tree06_tall.glb', name: 'meshes_tree06_tall', bump: true },
+  { url: '/siege/imports/ashley_tree05.glb', name: 'ashley_tree05', bump: true },
+  { url: '/siege/imports/mushrooms2_tree06.glb', name: 'mushrooms2_tree06', bump: true },
+  { url: '/siege/imports/mushroom_line_straight.glb', name: 'mushroom_line_straight', bump: true },
   { url: '/siege/imports/Khaured_Tower_1.glb', name: 'Khaured_Tower_1' },
 ];
 const GAP = 20;       // metres of clear space between models
 const ROW_Z = -200;   // place the row in front of the Starblink spawn (0, 3, 0)
+const BUMP_H = 100;   // scale the "between" models to this height so they're easy to see
 const GROUP = 'mushroom-display';
 
 // Force a material to render solid: opaque, both faces, writes depth. Fixes the see-through /
@@ -68,7 +70,11 @@ export function MushroomImportDisplay() {
         }
       });
       box.setFromObject(scene); box.getSize(size); box.getCenter(ctr);
-      return { scene, w: size.x || 1, cx: ctr.x, minY: box.min.y };
+      // Bumped models: uniformly scale so their height = BUMP_H (recentered to bottom-origin in
+      // Blender, so scaling about the scene origin keeps the bottom on the ground).
+      const s = FILES[i].bump ? BUMP_H / (size.y || 1) : 1;
+      scene.scale.setScalar(s);
+      return { scene, w: (size.x || 1) * s, cx: ctr.x * s, minY: box.min.y * s };
     });
     let cursor = 0;
     const placed = measured.map((m) => {
