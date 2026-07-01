@@ -43,7 +43,8 @@ export function SiegeDebugOverlay() {
     `fwd: [${f3(sdbg.fwdX)}, ${f3(sdbg.fwdY)}, ${f3(sdbg.fwdZ)}]  ` +
     `| cc_map:${sdbg.cc_map || '—'} cc_mesh:${sdbg.cc_mesh} cc_on:${sdbg.cc_on} ` +
     `cc_hit:${sdbg.cc_hit} cc_push:${sdbg.cc_push.toFixed(2)} cc_mode:${sdbg.cc_mode || '—'} ` +
-    `cc_feetY:${sdbg.cc_feetY.toFixed(2)}`;
+    `cc_feetY:${sdbg.cc_feetY.toFixed(2)} cc_dist:${sdbg.cc_dist.toFixed(2)} cc_pl:${sdbg.cc_pl} ` +
+    `cc_pathN:${sdbg.cc_pathN} cc_stuckMs:${sdbg.cc_stuckMs}`;
   const copy = () => {
     navigator.clipboard.writeText(copyText)
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })
@@ -81,6 +82,10 @@ export function SiegeDebugOverlay() {
       {row('cc_push', sdbg.cc_push.toFixed(2))}
       {row('cc_mode', sdbg.cc_mode || '—')}
       {row('cc_feetY', sdbg.cc_feetY.toFixed(2))}
+      {row('cc_dist', sdbg.cc_dist.toFixed(2))}
+      {row('cc_pl', sdbg.cc_pl, !sdbg.cc_pl)}
+      {row('cc_pathN', sdbg.cc_pathN, sdbg.cc_pathN < 0)}
+      {row('cc_stuckMs', sdbg.cc_stuckMs)}
       <button
         onClick={copy}
         style={{

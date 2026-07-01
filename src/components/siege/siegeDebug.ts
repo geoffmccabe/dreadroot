@@ -23,4 +23,8 @@ export const sdbg = {
   cc_push: 0,            // push magnitude applied (m)
   cc_mode: '',           // its cave state machine mode (none/enter/crawl/wedged)
   cc_feetY: 0,           // its feet Y (should sit on the street, not far below/above)
+  cc_dist: 0,            // straight-line distance to the player
+  cc_pl: false,          // pathLoco — is it actively following an A* path this frame?
+  cc_pathN: -1,          // waypoints in the current path (-1 = no path / findPath returned null)
+  cc_stuckMs: 0,         // ms since it last made progress (needs >1500 to trigger pathfinding)
 };

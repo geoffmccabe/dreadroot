@@ -1279,6 +1279,8 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
           s.cave.postureAt = now;
         }
         caveMode = stepCave(s.cave, s.cave.posture, pathLoco, now, cc.transitionMs);
+        sdbg.cc_dist = dist; sdbg.cc_pl = pathLoco;              // TEMP: trace where the crawl chain breaks
+        sdbg.cc_pathN = s.path?.length ?? -1; sdbg.cc_stuckMs = Math.round(now - s.progressAt);
       }
       g.rotation.y = Math.atan2(pathLoco ? cdx : dx, pathLoco ? cdz : dz) + c.faceOffset;
       // Ranged breath weapon: fire on cooldown whenever in range — INDEPENDENT of movement, so the
