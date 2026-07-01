@@ -90,7 +90,8 @@ export function ArrangePanel() {
 
       <div className="mt-2 border-t border-white/10 pt-2 text-[10px] leading-relaxed" style={muted}>
         <div>hold L-btn = grab &amp; carry · wheel = raise/lower</div>
-        <div>⇧+wheel rotate · ⌥+wheel scale</div>
+        <div>⇧+wheel rotate · ⌥+wheel scale (uniform)</div>
+        <div>hold X/Y/Z + wheel = stretch one axis</div>
         <div>hold Ctrl = drop onto surface below</div>
         <div>⇧+click duplicate · ⌘X/Del delete</div>
         <div>⌘Z undo · ⇧⌘Z redo · Esc cancel</div>

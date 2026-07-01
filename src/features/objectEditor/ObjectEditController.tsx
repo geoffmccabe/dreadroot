@@ -45,6 +45,7 @@ export function ObjectEditController() {
   // Live grab state (refs so the frame loop reads them without re-subscribing).
   const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0, startX: 0, startZ: 0, moved: false, hdx: 0, hdz: 1 });
   const ctrlDown = useRef(false);
+  const axisHeld = useRef<'x' | 'y' | 'z' | null>(null);   // per-axis stretch: hold X/Y/Z + wheel
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
@@ -104,7 +105,7 @@ export function ObjectEditController() {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd);
       const p = ro.clone().addScaledVector(rd, 6);
       const id = crypto.randomUUID();
-      addObject({ id, modelUrl: 'builtin:water', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [6, 6, 1] });
+      addObject({ id, modelUrl: 'builtin:water', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [6, 6, 6] });
       setSelected(id);
     };
 
@@ -147,7 +148,15 @@ export function ObjectEditController() {
       const dir = e.deltaY < 0 ? 1 : -1;       // wheel up = raise / +rotation / +scale
       const pf = getProfile();
       const grabbing = grab.current.active;
-      if (e.shiftKey) {                          // rotate yaw
+      const ax = axisHeld.current;
+      if (ax) {                                  // per-axis STRETCH (hold X/Y/Z + wheel)
+        const f = Math.pow(pf.scaleStep, dir);
+        const s: [number, number, number] = [o.scale[0], o.scale[1], o.scale[2]];
+        const i = ax === 'x' ? 0 : ax === 'y' ? 1 : 2;
+        s[i] = clampScale(s[i] * f);
+        const next: TRS = { pos: o.pos, quat: o.quat, scale: s };
+        if (grabbing) dragTo(next); else transformSelected(next);
+      } else if (e.shiftKey) {                   // rotate yaw
         cq.set(o.quat[0], o.quat[1], o.quat[2], o.quat[3]);
         dq.setFromAxisAngle(yAxis, dir * pf.rotateStep); cq.premultiply(dq);
         const next: TRS = { pos: o.pos, quat: [cq.x, cq.y, cq.z, cq.w], scale: o.scale };
@@ -182,6 +191,9 @@ export function ObjectEditController() {
       if (meta && e.code === 'KeyX') { e.preventDefault(); e.stopImmediatePropagation(); deleteSelected(); return; }
       if (meta && e.code === 'KeyS') { e.preventDefault(); e.stopImmediatePropagation(); saveWorldToDb(); return; }
       if (meta) return;
+      // Hold X / Y / Z to arm per-axis stretch; the wheel then scales just that axis.
+      const lk = e.key.toLowerCase();
+      if (lk === 'x' || lk === 'y' || lk === 'z') axisHeld.current = lk;
       let handled = true;
       switch (e.code) {
         case 'KeyP': spawnAhead(); break;
@@ -191,7 +203,11 @@ export function ObjectEditController() {
       }
       if (handled) { e.preventDefault(); e.stopImmediatePropagation(); }
     };
-    const onKeyUp = (e: KeyboardEvent) => { if (e.key === 'Control') ctrlDown.current = false; };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Control') ctrlDown.current = false;
+      const lk = e.key.toLowerCase();
+      if ((lk === 'x' || lk === 'y' || lk === 'z') && axisHeld.current === lk) axisHeld.current = null;
+    };
 
     window.addEventListener('mousedown', onDown, true);
     window.addEventListener('mouseup', onUp, true);
