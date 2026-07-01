@@ -40,7 +40,10 @@ export function SiegeDebugOverlay() {
   const copyText =
     `pos: [${f3(sdbg.playerX)}, ${f3(sdbg.playerY)}, ${f3(sdbg.playerZ)}]  ` +
     `yaw: ${sdbg.yawDeg.toFixed(1)}°  pitch: ${sdbg.pitchDeg.toFixed(1)}°  ` +
-    `fwd: [${f3(sdbg.fwdX)}, ${f3(sdbg.fwdY)}, ${f3(sdbg.fwdZ)}]`;
+    `fwd: [${f3(sdbg.fwdX)}, ${f3(sdbg.fwdY)}, ${f3(sdbg.fwdZ)}]  ` +
+    `| cc_map:${sdbg.cc_map || '—'} cc_mesh:${sdbg.cc_mesh} cc_on:${sdbg.cc_on} ` +
+    `cc_hit:${sdbg.cc_hit} cc_push:${sdbg.cc_push.toFixed(2)} cc_mode:${sdbg.cc_mode || '—'} ` +
+    `cc_feetY:${sdbg.cc_feetY.toFixed(2)}`;
   const copy = () => {
     navigator.clipboard.writeText(copyText)
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })
