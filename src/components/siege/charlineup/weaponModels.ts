@@ -32,9 +32,13 @@ export interface HeldWeapon {
 const R: [number, number, number] = [2, 3, -81];
 const G: [number, number, number] = [0.02, 0.3, 0.04];
 export const HELD_WEAPONS: HeldWeapon[] = [
-  // AK74 tuned + baked. lengthM folds in Rajax's 0.85 (the gun read 15% big) so EVERY character gets
-  // the corrected size, auto-scaled by their own height (0.9 × 0.85 = 0.765).
-  { key: 'ak47',          name: 'AK74',                 itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb',   lengthM: 0.765, rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], animSet: 'rifle' },
+  // AK74 tuned + baked PER CHARACTER (from the in-lineup export). lengthM 0.765 is the base; sizeByChar
+  // is each character's own multiplier; rotByChar/gripByChar are each character's finger-on-trigger fit.
+  { key: 'ak47', name: 'AK74', itemNumbers: [20, 111, 112, 113, 114, 115, 116], url: '/siege/weapons/ak47.glb', lengthM: 0.765,
+    rotDeg: [2, 3, -81], gripPos: [0.02, 0.3, 0.04], animSet: 'rifle',
+    rotByChar:  { Ash: [2, 3, -81], Dago: [2, 1, -79], Fluffer: [3, -5, -81], Jankz: [2, 3, -81], Rajax: [2, 3, -81], Thorn: [2, 3, -77] },
+    gripByChar: { Ash: [-0.04, 0.28, 0.04], Dago: [-0.22, 0.34, -0.06], Fluffer: [0.04, 0.4, 0.04], Jankz: [-0.02, 0.16, 0.04], Rajax: [0.02, 0.3, 0.04], Thorn: [0, 0.16, 0.02] },
+    sizeByChar: { Ash: 0.82, Dago: 1.00, Fluffer: 1.15, Jankz: 1.00, Rajax: 0.87, Thorn: 0.79 } },
   { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'm27',           name: 'M27',                  itemNumbers: [18],  url: '/siege/weapons/item_18.glb',  lengthM: 0.9, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'dragunov',      name: 'Dragunov',             itemNumbers: [19],  url: '/siege/weapons/item_19.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
