@@ -256,18 +256,20 @@ export function SiegeCharacterLineup() {
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
-      // Left-hand IK: P = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
-      else if (e.key === 'p' || e.key === 'P') {
+      // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
+      // (K, not P — the Arrange tool steals P to spawn a box.)
+      else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault(); e.stopImmediatePropagation();
-        const i = getTuneCharIndex(); const nm = i < 0 ? null : LINEUP_CHARS[i]?.name;
-        const wraps = weaponWraps(); const reg = nm ? wraps.find((r) => r.charName === nm) : wraps[0];
-        if (reg) {
-          const ro = camera.getWorldPosition(new THREE.Vector3()); const rd = camera.getWorldDirection(new THREE.Vector3());
-          const rc = new THREE.Raycaster(ro, rd);
-          const hit = rc.intersectObject(reg.wrap, true).find((h) => (h.object as THREE.Mesh).isMesh);
-          if (hit) setLeftTarget(gunRef.current.url, reg.wrap.worldToLocal(hit.point.clone()));
-          else console.log('[lefthand] aim the crosshair at the gun, then press P');
-        }
+        const wraps = weaponWraps();
+        const ro = camera.getWorldPosition(new THREE.Vector3()); const rd = camera.getWorldDirection(new THREE.Vector3());
+        const rc = new THREE.Raycaster(ro, rd);
+        const hit = rc.intersectObjects(wraps.map((r) => r.wrap), true).find((h) => (h.object as THREE.Mesh).isMesh);
+        if (hit) {
+          // find which gun wrap was hit, capture the point in ITS local frame (same spot for all guns)
+          let o: THREE.Object3D | null = hit.object, wrap: THREE.Object3D | null = null;
+          while (o) { if (wraps.some((r) => r.wrap === o)) { wrap = o; break; } o = o.parent; }
+          if (wrap) setLeftTarget(gunRef.current.url, wrap.worldToLocal(hit.point.clone()));
+        } else console.log('[lefthand] aim the crosshair AT the gun, then press K');
       }
       else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -2); }
       else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  2); }

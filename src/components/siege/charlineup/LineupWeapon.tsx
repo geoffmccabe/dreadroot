@@ -30,15 +30,28 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, le
   const showGizmoRef = useRef(showGizmo); showGizmoRef.current = showGizmo;   // latest, read in the frame loop
   const lhaRef = useRef(leftHandActive); lhaRef.current = leftHandActive;      // left-hand IK on for this clip?
   const bonesRef = useRef<ReturnType<typeof findLeftArm>>(null);
+  const markerRef = useRef<THREE.Mesh | null>(null);
+  const longestRef = useRef(1);
   const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
 
   useFrame(() => {
     if (gizmoRef.current) gizmoRef.current.visible = showGizmoRef.current;   // gizmo only on the selected char
     if (wrapRef.current) {
-      // Left-hand support IK: place the left hand on the gun's captured grip point (runs after the
-      // animation set the pose). Skips when no point captured or the clip has the left hand off the gun.
-      const target = lhaRef.current ? getLeftTarget(weapon.url) : null;
+      const target = getLeftTarget(weapon.url);
+      // Pink marker showing the captured left-hand grip point (on the selected character only), so you
+      // can SEE the capture landed and where the palm will go.
       if (target) {
+        if (!markerRef.current) {
+          const m = new THREE.Mesh(new THREE.SphereGeometry(longestRef.current * 0.05, 12, 12),
+            new THREE.MeshBasicMaterial({ color: 0xff2266, depthTest: false }));
+          m.renderOrder = 1000; wrapRef.current.add(m); markerRef.current = m;
+        }
+        markerRef.current.position.copy(target);
+        markerRef.current.visible = showGizmoRef.current;
+      } else if (markerRef.current) markerRef.current.visible = false;
+      // Left-hand support IK: bend the left arm so the hand reaches the grip point (after the animation
+      // set the pose). Skips when no point captured, or the clip has the left hand off the gun.
+      if (lhaRef.current && target) {
         if (!bonesRef.current) bonesRef.current = findLeftArm(root);
         const b = bonesRef.current;
         if (b) {
@@ -64,6 +77,7 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, le
     model.updateMatrixWorld(true);
     _box.setFromObject(model); _box.getSize(_size); _box.getCenter(_center);
     const longest = Math.max(_size.x, _size.y, _size.z) || 1;
+    longestRef.current = longest;   // for the left-hand marker size
     // RECENTER the model so its geometric centre sits at the wrap origin. The SWU weapon models have
     // their pivot far from the geometry, so without this they float off in the air; recentering puts
     // them in the hand, and gripPos (+ position nudges) fine-tunes from there.
