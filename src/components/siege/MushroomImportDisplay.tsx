@@ -1,18 +1,22 @@
 // Starblink display of the imported models (mushroom trees + Khaured Tower), converted from the
 // FBX/glb set in public/Mushroom Trees. Shown side by side at NATIVE height with their bottoms on
 // the ground (y=0), spaced by each model's own width, centred on x=0. Every mesh is tagged
-// userData.fbx so the Laser Pointer reports its name + coords for copy/paste. Mounted only in
-// Starblink (SiegeWorldLayers gates on world.id). Preview-only: static props, no colliders.
-import { useMemo } from 'react';
+// userData.fbx so the Laser Pointer reports its name + coords. Each material is forced SOLID +
+// double-sided (the FBX conversion left some with inverted normals / transparency, which made them
+// look see-through and inside-out). Each mesh is also registered as a real BVH collider so the
+// player collides with the actual shape. Mounted only in Starblink (SiegeWorldLayers gates on id).
+import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled,
+         type MeshInstanceInput } from './meshColliderSystem';
 
 const FILES = [
-  { url: '/siege/imports/mushroomtree06.glb', name: 'mushroomtree06' },              // ~49 m
-  { url: '/siege/imports/mushroomtree05.glb', name: 'mushroomtree05' },              // ~55 m
-  { url: '/siege/imports/mushroomtree07.glb', name: 'mushroomtree07' },              // ~42 m
-  { url: '/siege/imports/MushroomTree_A.glb', name: 'MushroomTree_A' },              // ~19 m
-  { url: '/siege/imports/Tree1.glb', name: 'Tree1' },                                // ~6 m
+  { url: '/siege/imports/mushroomtree06.glb', name: 'mushroomtree06' },
+  { url: '/siege/imports/mushroomtree05.glb', name: 'mushroomtree05' },
+  { url: '/siege/imports/mushroomtree07.glb', name: 'mushroomtree07' },
+  { url: '/siege/imports/MushroomTree_A.glb', name: 'MushroomTree_A' },
+  { url: '/siege/imports/Tree1.glb', name: 'Tree1' },
   { url: '/siege/imports/vasim_tree1_collider.glb', name: 'vasim_tree1_collider' },
   { url: '/siege/imports/vasim_tree1_collider_feb25.glb', name: 'vasim_tree1_collider_feb25' },
   { url: '/siege/imports/vasim_tree1_collider2.glb', name: 'vasim_tree1_collider2' },
@@ -27,15 +31,36 @@ const FILES = [
 ];
 const GAP = 20;       // metres of clear space between models
 const ROW_Z = -200;   // place the row in front of the Starblink spawn (0, 3, 0)
+const GROUP = 'mushroom-display';
+
+// Force a material to render solid: opaque, both faces, writes depth. Fixes the see-through /
+// inside-out look from inverted normals + any stray transparency the FBX export left behind.
+function makeSolid(mat: THREE.Material): void {
+  const m = mat as THREE.MeshStandardMaterial;
+  m.side = THREE.DoubleSide;
+  m.transparent = false;
+  m.depthWrite = true;
+  m.alphaTest = 0;
+  if ('opacity' in m) m.opacity = 1;
+  m.needsUpdate = true;
+}
 
 export function MushroomImportDisplay() {
+  const grpRef = useRef<THREE.Group>(null);
   const gltfs = useGLTF(FILES.map((f) => f.url), '/draco/') as unknown as { scene: THREE.Object3D }[];
   const sig = gltfs.map((g) => g.scene.uuid).join(',');
+
   const items = useMemo(() => {
     const box = new THREE.Box3(), size = new THREE.Vector3(), ctr = new THREE.Vector3();
     const measured = gltfs.map((g, i) => {
       const scene = g.scene.clone(true);
-      scene.traverse((o) => { o.userData.fbx = FILES[i].name; });
+      scene.traverse((o) => {
+        o.userData.fbx = FILES[i].name;
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh && mesh.material) {
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(makeSolid);
+        }
+      });
       box.setFromObject(scene); box.getSize(size); box.getCenter(ctr);
       return { scene, w: size.x || 1, cx: ctr.x, minY: box.min.y };
     });
@@ -50,8 +75,26 @@ export function MushroomImportDisplay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig]);
 
+  // Register every mesh as a BVH collider (real shape) so the player collides with the trees.
+  useEffect(() => {
+    const grp = grpRef.current; if (!grp) return;
+    grp.updateWorldMatrix(true, true);
+    const inputs: MeshInstanceInput[] = [];
+    grp.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.geometry) return;
+      const geo = mesh.geometry as THREE.BufferGeometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      registerMeshGeometry((mesh.userData.fbx as string) || GROUP, geo.uuid, geo, 1);
+      inputs.push({ key: geo.uuid, matrix: mesh.matrixWorld.clone(), geoBox: geo.boundingBox as THREE.Box3 });
+    });
+    setGroupInstances(GROUP, inputs);
+    setMeshCollidersEnabled(true);
+    return () => { clearGroup(GROUP); };
+  }, [sig, items]);
+
   return (
-    <group position={[0, 0, ROW_Z]}>
+    <group ref={grpRef} position={[0, 0, ROW_Z]}>
       {items.map((it, i) => <primitive key={i} object={it.scene} position={[it.px, it.py, 0]} />)}
     </group>
   );
