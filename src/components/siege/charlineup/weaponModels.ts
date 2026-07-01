@@ -88,7 +88,11 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     rotDeg: [-88, -9, -87], gripPos: G, animSet: 'pistol',
     gripByChar: { Rajax: [0.06, 0.2, 0.04] },
     sizeByChar: { Ash: 0.66, Dago: 0.80, Fluffer: 0.93, Jankz: 0.80, Rajax: 0.70, Thorn: 0.64 } },
-  { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2,
+    rotDeg: [92, 9, -93], gripPos: G, animSet: 'rifle',
+    gripByChar: { Rajax: [0.12, 0.02, 0.04] },
+    sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91 },
+    leftHand: { point: [0.078, -0.025, -0.425], wrist: 0 } },
 ];
 
 const byItem = new Map<number, HeldWeapon>();
