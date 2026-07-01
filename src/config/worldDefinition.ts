@@ -247,9 +247,9 @@ export const BLEAKROCK2_WORLD: WorldDefinition = {
   wireId: 33,
   kind: 'siege',
   meshColliders: false,
-  bounds: { min: [-2100, -1680], max: [1900, 2320] }, // island ≈(-100,320), lots of water to expand into
-  ground: { kind: 'heightmap', surfaceY: 12, seedUrl: '/siege/bleakrock2/heightfield.json' },
-  spawn: { position: [-100, 26, 320], yaw: 0 },
+  bounds: { min: [-3050, -890], max: [950, 3110] }, // island ≈(-1050,1110), lots of water to expand into
+  ground: { kind: 'heightmap', surfaceY: 14, seedUrl: '/siege/bleakrock2/heightfield.json' },
+  spawn: { position: [-1048, 31, 1108], yaw: 0 },
   props: undefined,
 };
 

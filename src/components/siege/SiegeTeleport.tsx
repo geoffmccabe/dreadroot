@@ -84,6 +84,11 @@ export function SiegeTeleport() {
       }
       if (!isTeleportArmed()) return;
       if (e.code === 'Escape') { e.preventDefault(); disarm(); return; }
+      // Custom-key areas (e.g. Bleakrock 2 on '!', which sits after the 0-9 digit slots).
+      if (e.key.length === 1 && !/[0-9]/.test(e.key)) {
+        const t = SIEGE_TELEPORTS.find((x) => x.key === e.key);
+        if (t) { e.preventDefault(); e.stopPropagation(); jump(t.mapId ?? 'siege-test', t.pos, t.yaw, t.pitch); disarm(); return; }
+      }
       // Letter = jump to a baked asset-set demo map (each is its own map). adminOnly maps (e.g. the
       // in-progress Apocalypse City) only jump for admins.
       const demo = DEMO_BY_CODE[e.code];

@@ -50,8 +50,8 @@ export function SiegeTeleportMenu() {
       <div style={headStyle}>⌖ Jump To</div>
       <div style={grid}>
         {SIEGE_TELEPORTS.map((t) => (
-          <button key={t.slot} style={cell} onClick={() => go(t.mapId ?? 'siege-test', t.pos, t.yaw, t.pitch)}>
-            <span style={keyBadge}>{t.slot}</span><span>{t.name}</span>
+          <button key={t.key ?? t.slot} style={cell} onClick={() => go(t.mapId ?? 'siege-test', t.pos, t.yaw, t.pitch)}>
+            <span style={keyBadge}>{t.key ?? t.slot}</span><span>{t.name}</span>
           </button>
         ))}
       </div>

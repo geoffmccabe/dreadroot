@@ -17,6 +17,7 @@
 
 export interface SiegeTeleport {
   slot: number;
+  key?: string;                  // display badge + jump key override (else the digit `slot`), e.g. '!'
   name: string;
   pos: [number, number, number]; // engine coords (X = -UnityX); Y a touch above ground
   yaw?: number;                  // facing (radians) applied on jump; undefined = keep current facing
@@ -34,6 +35,8 @@ export interface SiegeTeleport {
 export const SIEGE_SPAWN_POINT: [number, number, number] = [-1048.998, 31.120, 1062.865];
 
 export const SIEGE_TELEPORTS: SiegeTeleport[] = [
+  // Editable copy of the Bleakrock mushrooms island on an open-water canvas. Jump key '!' (after 0).
+  { slot: -1, key: '!', name: 'Bleakrock 2',  pos: [-1048, 31, 1108], mapId: 'bleakrock2' },
   { slot: 1, name: 'Lobby',         pos: [-96, 31, 325] },
   { slot: 2, name: 'Beach',         pos: [-537, 46, 688] },
   { slot: 3, name: 'Bleakrock',     pos: [-1039, 24, 1108] },
