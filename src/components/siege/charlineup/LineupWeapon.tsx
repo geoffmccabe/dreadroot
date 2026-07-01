@@ -14,23 +14,41 @@ import * as THREE from 'three';
 import { CHAR_ASSET_VERSION } from './siegeCharLineupState';
 import type { LineupWeaponDef } from './lineupWeapons';
 import { registerWeaponWrap, unregisterWeaponWrap, WEAPON_EDIT_ID } from './weaponEditRegistry';
+import { findLeftArm, getLeftTarget, getWrist, solveArmIK } from './leftHandIK';
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _center = new THREE.Vector3();
 const _ws = new THREE.Vector3();
+const _targetWorld = new THREE.Vector3();
 const REF_HEIGHT = 1.8;   // gun length is calibrated for a 1.8 m character; taller chars get bigger guns
 
-export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number; charName: string; showGizmo: boolean }) {
+export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, leftHandActive }: { root: THREE.Group; weapon: LineupWeaponDef; charHeight: number; charName: string; showGizmo: boolean; leftHandActive: boolean }) {
   const { scene } = useGLTF(`${weapon.url}?a=${CHAR_ASSET_VERSION}`);
   const wrapRef = useRef<THREE.Group | null>(null);
   const gizmoRef = useRef<THREE.AxesHelper | null>(null);
   const showGizmoRef = useRef(showGizmo); showGizmoRef.current = showGizmo;   // latest, read in the frame loop
+  const lhaRef = useRef(leftHandActive); lhaRef.current = leftHandActive;      // left-hand IK on for this clip?
+  const bonesRef = useRef<ReturnType<typeof findLeftArm>>(null);
   const regId = useRef<string>(`wpn-${Math.random().toString(36).slice(2)}`);   // unique per instance
 
   useFrame(() => {
     if (gizmoRef.current) gizmoRef.current.visible = showGizmoRef.current;   // gizmo only on the selected char
-    if (wrapRef.current) return;            // already attached
+    if (wrapRef.current) {
+      // Left-hand support IK: place the left hand on the gun's captured grip point (runs after the
+      // animation set the pose). Skips when no point captured or the clip has the left hand off the gun.
+      const target = lhaRef.current ? getLeftTarget(weapon.url) : null;
+      if (target) {
+        if (!bonesRef.current) bonesRef.current = findLeftArm(root);
+        const b = bonesRef.current;
+        if (b) {
+          root.updateMatrixWorld(true);
+          _targetWorld.copy(target); wrapRef.current.localToWorld(_targetWorld);
+          solveArmIK(b.arm, b.fore, b.hand, _targetWorld, getWrist(weapon.url));
+        }
+      }
+      return;
+    }            // already attached
     let hand: THREE.Object3D | undefined;   // Mixamo chars: 'mixamorig:RightHand'; Synty: 'Hand_R'.
     // three.js GLTFLoader sanitizes node names (strips reserved chars incl. ':'), so at RUNTIME the
     // bone is 'mixamorigRightHand' — NOT the file's 'mixamorig:RightHand'. Match by endsWith so it

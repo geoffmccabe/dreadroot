@@ -4,6 +4,7 @@
 // adjusters act only on the SELECTED character. Each gun's wrap = baseRot(char,weapon) ∘ rotTune,
 // pos = baseGrip + posTune, scale = baseScale × size. All persist in localStorage; '\' exports them.
 import * as THREE from 'three';
+import { leftHandExportLines } from './leftHandIK';
 
 export interface WeaponWrapReg {
   wrap: THREE.Group;        // group whose local rotation/scale we drive
@@ -194,6 +195,8 @@ export function exportTuning(): void {
   }
   const lines = ['=== SIEGE GUN TUNING (paste to Claude to bake) ==='];
   for (const [weaponKey, rows] of byWeapon) { lines.push(weaponKey); lines.push(...rows.sort()); }
+  const lh = leftHandExportLines();
+  if (lh.length) { lines.push('--- left hand ---'); lines.push(...lh); }
   const text = lines.join('\n');
   try { navigator.clipboard?.writeText(text); } catch { /* clipboard blocked — console only */ }
   console.log(text + '\n(copied to clipboard)');

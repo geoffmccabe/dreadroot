@@ -24,7 +24,8 @@ import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
-import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos } from './charlineup/weaponEditRegistry';
+import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
+import { setLeftTarget, nudgeWrist } from './charlineup/leftHandIK';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -181,6 +182,9 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   // stuck to the hand would look broken). Clip names from the rifle library all contain 'Rifle'.
   const currentName = names.length ? names[animIndex % names.length] : '';
   const showWeapon = currentName.includes('Rifle');
+  // Left hand belongs on the gun's foregrip EXCEPT when the clip deliberately moves it away (reload,
+  // holster/put-away, crawl, dives, falls, jumps, backward-run) — IK is disabled on those.
+  const leftHandActive = !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(currentName);
 
   return (
     <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
@@ -188,7 +192,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
       {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
-      {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} charName={charName} showGizmo={showGizmo} /></Suspense>}
+      {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} charName={charName} showGizmo={showGizmo} leftHandActive={leftHandActive} /></Suspense>}
     </group>
   );
 }
@@ -211,6 +215,7 @@ function ObstacleBox({ x, z, yaw, groundY, preset }: { x: number; z: number; yaw
 export function SiegeCharacterLineup() {
   const { enabled, animIndex, anchor, parkourSeq, weaponIndex, tuneCharIndex } = useCharLineup();
   const gun = GUNS[weaponIndex % GUNS.length];
+  const gunRef = useRef(gun); gunRef.current = gun;   // current gun for the '[]'-deps key handler
   const { camera } = useThree();
 
   // "&&&" toggles the lineup; M / N cycle animations while it's shown. Capture-phase so the
@@ -251,6 +256,21 @@ export function SiegeCharacterLineup() {
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
+      // Left-hand IK: P = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
+      else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        const i = getTuneCharIndex(); const nm = i < 0 ? null : LINEUP_CHARS[i]?.name;
+        const wraps = weaponWraps(); const reg = nm ? wraps.find((r) => r.charName === nm) : wraps[0];
+        if (reg) {
+          const ro = camera.getWorldPosition(new THREE.Vector3()); const rd = camera.getWorldDirection(new THREE.Vector3());
+          const rc = new THREE.Raycaster(ro, rd);
+          const hit = rc.intersectObject(reg.wrap, true).find((h) => (h.object as THREE.Mesh).isMesh);
+          if (hit) setLeftTarget(gunRef.current.url, reg.wrap.worldToLocal(hit.point.clone()));
+          else console.log('[lefthand] aim the crosshair at the gun, then press P');
+        }
+      }
+      else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -2); }
+      else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  2); }
       // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
       // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
       else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
