@@ -70,31 +70,35 @@ function rotateBoneWorld(bone: THREE.Object3D, axis: THREE.Vector3, angle: numbe
 }
 
 // Two-bone IK: bend shoulder (arm) + elbow (fore) so the hand reaches targetWorld, then roll the wrist.
+// Iterated a few times so it converges even when the target is far from the animation's hand pose (a
+// single pass under-reaches on far targets like a long gun's foregrip).
 export function solveArmIK(arm: THREE.Object3D, fore: THREE.Object3D, hand: THREE.Object3D, targetWorld: THREE.Vector3, wristTwistDeg: number): void {
-  arm.getWorldPosition(_pA); fore.getWorldPosition(_pB); hand.getWorldPosition(_pC);
-  const lAB = _pA.distanceTo(_pB), lBC = _pB.distanceTo(_pC);
-  if (lAB < 1e-5 || lBC < 1e-5) return;
-  _dAT.copy(targetWorld).sub(_pA);
-  const lAT = clamp(_dAT.length(), Math.abs(lAB - lBC) + 1e-4, lAB + lBC - 1e-4);
-  _dAB.copy(_pB).sub(_pA); _dAC.copy(_pC).sub(_pA);
-  // current + desired interior angles (law of cosines)
-  const a0 = Math.acos(clamp(_n1.copy(_dAB).normalize().dot(_n2.copy(_dAC).normalize()), -1, 1));
-  const b0 = Math.acos(clamp(_n1.copy(_pA).sub(_pB).normalize().dot(_n2.copy(_pC).sub(_pB).normalize()), -1, 1));
-  const a1 = Math.acos(clamp((lAB * lAB + lAT * lAT - lBC * lBC) / (2 * lAB * lAT), -1, 1));
-  const b1 = Math.acos(clamp((lAB * lAB + lBC * lBC - lAT * lAT) / (2 * lAB * lBC), -1, 1));
-  // bend axis = normal of the shoulder-elbow-hand plane (keeps the current elbow direction)
-  _axis.copy(_dAB).cross(_dAC);
-  if (_axis.lengthSq() < 1e-8) _axis.set(0, 1, 0);   // straight arm → arbitrary pole
-  _axis.normalize();
-  rotateBoneWorld(arm, _axis, a1 - a0);              // set shoulder angle
-  rotateBoneWorld(fore, _axis, b1 - b0);             // set elbow angle
-  // aim: rotate the shoulder so the (now re-bent) hand direction points at the target
-  hand.getWorldPosition(_pC);
-  _dAC.copy(_pC).sub(_pA); _dAT.copy(targetWorld).sub(_pA);
-  if (_dAC.lengthSq() > 1e-8 && _dAT.lengthSq() > 1e-8) {
-    _q.setFromUnitVectors(_dAC.normalize(), _dAT.normalize());
-    arm.getWorldQuaternion(_wq); _wq.premultiply(_q);
-    arm.parent!.getWorldQuaternion(_pq); arm.quaternion.copy(_pq.invert().multiply(_wq)); arm.updateMatrixWorld(true);
+  for (let iter = 0; iter < 4; iter++) {
+    arm.getWorldPosition(_pA); fore.getWorldPosition(_pB); hand.getWorldPosition(_pC);
+    const lAB = _pA.distanceTo(_pB), lBC = _pB.distanceTo(_pC);
+    if (lAB < 1e-5 || lBC < 1e-5) return;
+    _dAT.copy(targetWorld).sub(_pA);
+    const lAT = clamp(_dAT.length(), Math.abs(lAB - lBC) + 1e-4, lAB + lBC - 1e-4);
+    _dAB.copy(_pB).sub(_pA); _dAC.copy(_pC).sub(_pA);
+    // current + desired interior angles (law of cosines)
+    const a0 = Math.acos(clamp(_n1.copy(_dAB).normalize().dot(_n2.copy(_dAC).normalize()), -1, 1));
+    const b0 = Math.acos(clamp(_n1.copy(_pA).sub(_pB).normalize().dot(_n2.copy(_pC).sub(_pB).normalize()), -1, 1));
+    const a1 = Math.acos(clamp((lAB * lAB + lAT * lAT - lBC * lBC) / (2 * lAB * lAT), -1, 1));
+    const b1 = Math.acos(clamp((lAB * lAB + lBC * lBC - lAT * lAT) / (2 * lAB * lBC), -1, 1));
+    // bend axis = normal of the shoulder-elbow-hand plane (keeps the current elbow direction)
+    _axis.copy(_dAB).cross(_dAC);
+    if (_axis.lengthSq() < 1e-8) { _axis.copy(_dAB).cross(_dAT); if (_axis.lengthSq() < 1e-8) _axis.set(0, 1, 0); }   // straight arm → pole toward target
+    _axis.normalize();
+    rotateBoneWorld(arm, _axis, a1 - a0);              // set shoulder angle
+    rotateBoneWorld(fore, _axis, b1 - b0);             // set elbow angle
+    // aim: rotate the shoulder so the (now re-bent) hand direction points at the target
+    hand.getWorldPosition(_pC);
+    _dAC.copy(_pC).sub(_pA); _dAT.copy(targetWorld).sub(_pA);
+    if (_dAC.lengthSq() > 1e-8 && _dAT.lengthSq() > 1e-8) {
+      _q.setFromUnitVectors(_dAC.normalize(), _dAT.normalize());
+      arm.getWorldQuaternion(_wq); _wq.premultiply(_q);
+      arm.parent!.getWorldQuaternion(_pq); arm.quaternion.copy(_pq.invert().multiply(_wq)); arm.updateMatrixWorld(true);
+    }
   }
   // wrist twist: roll the hand about the forearm axis to wrap the grip
   if (wristTwistDeg) {
