@@ -10,6 +10,8 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled,
          type MeshInstanceInput } from './meshColliderSystem';
+import { voxelizeGeometry } from './voxelize';
+import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 
 const FILES: { url: string; name: string; bump?: boolean }[] = [
   { url: '/siege/imports/mushroomtree06.glb', name: 'mushroomtree06' },
@@ -93,17 +95,25 @@ export function MushroomImportDisplay() {
     const grp = grpRef.current; if (!grp) return;
     grp.updateWorldMatrix(true, true);
     const inputs: MeshInstanceInput[] = [];
+    const boxes: THREE.Box3[] = [];
     grp.traverse((o) => {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh || !mesh.geometry) return;
       const geo = mesh.geometry as THREE.BufferGeometry;
       if (!geo.boundingBox) geo.computeBoundingBox();
-      registerMeshGeometry((mesh.userData.fbx as string) || GROUP, geo.uuid, geo, 1);
-      inputs.push({ key: geo.uuid, matrix: mesh.matrixWorld.clone(), geoBox: geo.boundingBox as THREE.Box3 });
+      if (mesh.userData.fbx === 'Khaured_Tower_1') {
+        // A building needs BOX colliders that block at the walls. A walk-on mesh collider makes the
+        // ground system lift the player to the tallest surface in its footprint (the teleport bug).
+        for (const b of voxelizeGeometry(geo, mesh.matrixWorld, 2.5, 4000)) boxes.push(b);
+      } else {
+        registerMeshGeometry((mesh.userData.fbx as string) || GROUP, geo.uuid, geo, 1);
+        inputs.push({ key: geo.uuid, matrix: mesh.matrixWorld.clone(), geoBox: geo.boundingBox as THREE.Box3 });
+      }
     });
+    boxes.forEach((b) => worldCollisionGrid.insert(b));
     setGroupInstances(GROUP, inputs);
     setMeshCollidersEnabled(true);
-    return () => { clearGroup(GROUP); };
+    return () => { boxes.forEach((b) => worldCollisionGrid.remove(b)); clearGroup(GROUP); };
   }, [sig, items]);
 
   return (
