@@ -75,11 +75,19 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: { Rajax: [0.02, 0.38, 0.04] },
     sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04 },
     leftHand: { point: [0.008, 0.015, -0.055], wrist: 0 } },
-  { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'rifle' },
-  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  // PISTOLS (one-handed) — animSet 'pistol'; no leftHand grip. These need pulling out of the two-handed
+  // `*` cycle + their own animations (future). Tuning captured from the in-lineup export.
+  { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0,
+    rotDeg: [-87, -11, -94], gripPos: G, animSet: 'pistol',
+    gripByChar: { Rajax: [0.06, 0.3, 0.04] },
+    sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91 } },
+  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: G, animSet: 'pistol' },
   { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, animSet: 'rifle' },
-  { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7,
+    rotDeg: [-88, -9, -87], gripPos: G, animSet: 'pistol',
+    gripByChar: { Rajax: [0.06, 0.2, 0.04] },
+    sizeByChar: { Ash: 0.66, Dago: 0.80, Fluffer: 0.93, Jankz: 0.80, Rajax: 0.70, Thorn: 0.64 } },
   { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2, rotDeg: R, gripPos: G, animSet: 'rifle' },
 ];
 
