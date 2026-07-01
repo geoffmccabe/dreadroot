@@ -1463,7 +1463,11 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // "step" is ~3.6 m — tall enough to levitate-snap onto a ~3 m garage roof (the bounce-on-top bug,
     // it never crawled). While the player isn't genuinely on a rooftop ABOVE it, pin step-up to the base
     // height so the roof reads as a WALL → blocked → stuck → pathfind → crawl IN through the opening.
-    const caveStandDown = !!c.caveCrawl && nav.crawlHoles && (camera.position.y - (s.y + H * 0.5) <= 0.5);
+    // "Player is above me" reference height. CAP the offset at 1.5 m so a TALL giant decides you're
+    // overhead as readily as the (short) Red Demon does — using the raw mid-body (s.y + H*0.5 ≈ 3 m for a
+    // 6 m giant) made giants think a normal rooftop was NOT above them, so they stopped climbing entirely.
+    const climbEye = s.y + Math.min(H * 0.5, 1.5);
+    const caveStandDown = !!c.caveCrawl && nav.crawlHoles && (camera.position.y - climbEye <= 0.5);
     const stepUp = caveStandDown ? STEP_UP : Math.max(STEP_UP, H * 0.30);
     let groundY = groundAt(s.x, s.z, feet + stepUp) ?? feet;
     let wallTop = -Infinity, wallIsMonster = false;
@@ -1591,7 +1595,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // allows it, the player is above, and a mesh wall is right in front (toward you), scale that wall
     // up to the roof. Only while still BELOW you, so they don't climb into the sky.
     let bvhClimbing = false;
-    if (nav.climbToRoof && !climbing && !caveStandDown && moving && camera.position.y - (s.y + H * 0.5) > 0.5 && dist < CLIMB_LOD) {
+    if (nav.climbToRoof && !climbing && !caveStandDown && moving && camera.position.y - climbEye > 0.5 && dist < CLIMB_LOD) {
       const fdx = dx / dist, fdz = dz / dist;
       if (raycastMesh(preX, s.y + 1.0, preZ, fdx, 0, fdz, 0.7) != null) {   // a mesh wall just ahead
         bvhClimbing = true;
