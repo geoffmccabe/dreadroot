@@ -25,7 +25,7 @@ import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
-import { setLeftTarget, nudgeWrist } from './charlineup/leftHandIK';
+import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -45,6 +45,7 @@ const AHEAD = 5;     // metres in front of the player the row appears
 // scratch for the tail swish (no per-frame allocation)
 const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
+const _ikTarget = new THREE.Vector3();   // scratch: left-hand grip point in world space
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 // Shared animation libraries stay warmed at boot — the spawn character needs them for its idle the
@@ -110,6 +111,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   // character, applying the FSM's vertical lift + forward drift to the root. Resumes the normal
   // cycled clip when the sequence finishes. Forward axis for a yaw-rotated group is (sin, cos).
   const fsmRef = useRef<AnimFSM | null>(null);
+  const leftBonesRef = useRef<ReturnType<typeof findLeftArm>>(null);
   const seenSeq = useRef(getFlightSeq());
   const seenParkour = useRef(getParkourSeq());
   const demoMode = useRef<'flight' | 'parkour' | null>(null);
@@ -175,6 +177,22 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
       g.position.y = demoMode.current === 'parkour' ? groundY + fsm.offsetY : Math.max(groundY, groundY + fsm.offsetY);
       g.position.x = x + Math.sin(yaw) * fsm.offsetZ;
       g.position.z = z + Math.cos(yaw) * fsm.offsetZ;
+    }
+    // Left-hand IK — this useFrame is registered AFTER useAnimations, so it runs after the animation
+    // mixer and its result isn't overwritten. Bend the left arm to the captured grip point on the gun.
+    const cn = names.length ? names[animIndex % names.length] : '';
+    if (cn.includes('Rifle') && !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(cn)) {
+      const tgt = getLeftTarget(weapon.url);
+      const reg = tgt ? weaponWraps().find((r) => r.charName === charName && r.weaponKey === weapon.url) : null;
+      if (tgt && reg) {
+        if (!leftBonesRef.current) leftBonesRef.current = findLeftArm(cloned);
+        const b = leftBonesRef.current;
+        if (b) {
+          g.updateWorldMatrix(true, true);
+          _ikTarget.copy(tgt); reg.wrap.localToWorld(_ikTarget);
+          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url));
+        }
+      }
     }
   });
 
@@ -256,7 +274,7 @@ export function SiegeCharacterLineup() {
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); nudgeWeaponPos(tuneTarget(), 'z',  POS); }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
-      // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
+      // Left-hand IK: K = aim at the gun + capture the palm grip point; [ / ] = twist the wrist.
       // (K, not P — the Arrange tool steals P to spawn a box.)
       else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -271,8 +289,8 @@ export function SiegeCharacterLineup() {
           if (wrap) setLeftTarget(gunRef.current.url, wrap.worldToLocal(hit.point.clone()));
         } else console.log('[lefthand] aim the crosshair AT the gun, then press K');
       }
-      else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -2); }
-      else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  2); }
+      else if (e.key === '[') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
+      else if (e.key === ']') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
       // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
       // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
       else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }

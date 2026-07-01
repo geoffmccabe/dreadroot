@@ -42,24 +42,15 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, le
       // can SEE the capture landed and where the palm will go.
       if (target) {
         if (!markerRef.current) {
-          const m = new THREE.Mesh(new THREE.SphereGeometry(longestRef.current * 0.05, 12, 12),
+          const m = new THREE.Mesh(new THREE.SphereGeometry(longestRef.current * 0.025, 12, 12),
             new THREE.MeshBasicMaterial({ color: 0xff2266, depthTest: false }));
           m.renderOrder = 1000; wrapRef.current.add(m); markerRef.current = m;
         }
         markerRef.current.position.copy(target);
         markerRef.current.visible = showGizmoRef.current;
       } else if (markerRef.current) markerRef.current.visible = false;
-      // Left-hand support IK: bend the left arm so the hand reaches the grip point (after the animation
-      // set the pose). Skips when no point captured, or the clip has the left hand off the gun.
-      if (lhaRef.current && target) {
-        if (!bonesRef.current) bonesRef.current = findLeftArm(root);
-        const b = bonesRef.current;
-        if (b) {
-          root.updateMatrixWorld(true);
-          _targetWorld.copy(target); wrapRef.current.localToWorld(_targetWorld);
-          solveArmIK(b.arm, b.fore, b.hand, _targetWorld, getWrist(weapon.url));
-        }
-      }
+      // NOTE: the actual left-arm IK runs in LineupChar's frame loop (AFTER the animation mixer), so it
+      // isn't overwritten by the animation each frame. This component only draws the grip marker.
       return;
     }            // already attached
     let hand: THREE.Object3D | undefined;   // Mixamo chars: 'mixamorig:RightHand'; Synty: 'Hand_R'.
