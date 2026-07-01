@@ -37,7 +37,7 @@ const isSolidGroup = (fbx: string) => SOLID_RE.test(fbx) && !FOLIAGE_RE.test(fbx
 // Chunky props that should ALSO be solid + laser-pickable even though they miss SOLID_RE / are
 // foliage-named: the giant mushrooms (mushroom*tree* etc.), tents, stalagmites, camp clutter,
 // columns, dead trees. Real foliage (grass/ferns/flowers/plants/vines/reeds) stays walk-through.
-const SOLID_PROP_RE = /mushroom|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump|tree_giant|tree_large|tree_medium|tree_trunk|tree_house|tree_portal|env_log|env_roots/i;
+const SOLID_PROP_RE = /mushroom|moss_lump|tent|stalag|crate|barrel|campfire|whetstone|log_pile|log_fence|table|column|pillar|stone_path|statue|plinth|bonepile|anvil|leafless_tree|tree_root|tree_stump|stump|tree_giant|tree_large|tree_medium|tree_trunk|tree_house|tree_portal|env_log|env_roots/i;
 // Decorative scatter the player should walk THROUGH — so it never gets a player-collision mesh BVH.
 // SMALL mushrooms (SM_Env_Mushroom_Small_*) are ground litter you walk straight through. The BIG
 // numbered mushrooms (SM_Env_Mushroom_02 / _04 / …) are climbable props and DO get a real mesh-shape
@@ -83,6 +83,27 @@ function getAtlas(url: string): THREE.Texture {
     atlasCache.set(url, t);
   }
   return t;
+}
+
+// Rebuild a mesh's UVs by box-projection (world-axis planar per dominant face normal). Used to
+// rescue models whose exported/draco UVs are degenerate — e.g. the EF Moss_Lumps, which sampled a
+// single texel and rendered flat green. Local-space projection, so every instance maps identically.
+function boxProjectUVs(geo: THREE.BufferGeometry, scale: number): void {
+  if (geo.userData.__boxUV) return;
+  const pos = geo.getAttribute('position'); if (!pos) return;
+  const nrm = geo.getAttribute('normal');
+  const uv = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    const px = pos.getX(i), py = pos.getY(i), pz = pos.getZ(i);
+    const nx = nrm ? Math.abs(nrm.getX(i)) : 0, ny = nrm ? Math.abs(nrm.getY(i)) : 1, nz = nrm ? Math.abs(nrm.getZ(i)) : 0;
+    let u: number, v: number;
+    if (ny >= nx && ny >= nz) { u = px; v = pz; }        // top / bottom faces
+    else if (nx >= nz) { u = pz; v = py; }               // x-facing faces
+    else { u = px; v = py; }                              // z-facing faces
+    uv[i * 2] = u * scale; uv[i * 2 + 1] = v * scale;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.userData.__boxUV = true;
 }
 
 // Models whose source FBX is authored facing the opposite way, so they render 180°
@@ -208,6 +229,10 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
         local.compose(P, Q, S.set(norm(S.x) * k, norm(S.y) * k, norm(S.z) * k));
       }
       if (corr) local.premultiply(corr);
+      // EF Moss_Lumps ship with broken UVs (flat green). Rebuild them by box-projection so the moss
+      // texture actually maps, and force-bind the texture below so it can't be missing.
+      const isMossLump = /moss_lump/i.test(fbx);
+      if (isMossLump) boxProjectUVs(src.geometry, 3);
       const mats = Array.isArray(src.material) ? src.material : [src.material];
       mats.forEach((mm) => {
         const m = mm as THREE.MeshStandardMaterial;
@@ -219,6 +244,16 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
         // strip the glow and replace textures with flat colours. Only force non-metal.
         if (trustMaterials) {
           if ('metalness' in m) m.metalness = 0;
+          // Moss_Lumps: bind the moss texture explicitly (repeat-wrapped for the new box UVs) so it
+          // shows the moss surface instead of the broken-UV flat green.
+          if (isMossLump) {
+            const mossTex = getAtlas(url.replace(/[^/]+$/, '') + 'Moss_Enchanted_Texture_01.webp');
+            mossTex.wrapS = mossTex.wrapT = THREE.RepeatWrapping;
+            m.map = mossTex; m.color.setRGB(1, 1, 1);
+            if ('emissive' in m && m.emissive) m.emissive.setRGB(0, 0, 0);
+            m.needsUpdate = true;
+            return;
+          }
           // Boost the Synty emissive glow so it crosses the AgX bloom threshold (~0.9). The glow
           // maps survive export at KHR strength ~2.2, but AgX tone-mapping compresses that below
           // threshold → the "enchanted" glow reads flat. Multiply intensity ONLY where there's a
