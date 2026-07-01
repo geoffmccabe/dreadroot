@@ -246,7 +246,7 @@ export const BLEAKROCK2_WORLD: WorldDefinition = {
   ownerId: null,
   wireId: 33,
   kind: 'siege',
-  meshColliders: false,
+  meshColliders: true, // accurate shape colliders on the town objects (same as the real Bleakrock)
   bounds: { min: [-3050, -890], max: [950, 3110] }, // island ≈(-1050,1110), lots of water to expand into
   ground: { kind: 'heightmap', surfaceY: 14, seedUrl: '/siege/bleakrock2/heightfield.json' },
   spawn: { position: [-1048, 31, 1108], yaw: 0 },

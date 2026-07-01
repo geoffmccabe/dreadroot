@@ -20,8 +20,10 @@ const MARCH_STEP = 2;    // coarse step (m), refined by bisection
 const clampScale = (s: number) => Math.min(50, Math.max(0.05, s));
 const groundY = (x: number, z: number) => { const h = sampleHeight(x, z); return h == null ? 0 : h; };
 
+const resolveModel = (file: string) => (file.startsWith('/') || file.startsWith('http') ? file : scifiAsset(file));
+
 function GhostModel({ file }: { file: string }) {
-  const { scene } = useGLTF(scifiAsset(file), '/draco/');
+  const { scene } = useGLTF(resolveModel(file), '/draco/');
   const ghost = useMemo(() => {
     const c = scene.clone(true);
     c.traverse((o) => {

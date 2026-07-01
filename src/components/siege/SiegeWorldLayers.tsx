@@ -17,6 +17,7 @@ import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
 import { MushroomImportDisplay } from './MushroomImportDisplay';
+import { KhauredLandmark } from './KhauredLandmark';
 import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
 import { ObjectEditController } from '@/features/objectEditor/ObjectEditController';
 import { SiegePortalEffect } from './SiegePortalEffect';
@@ -178,15 +179,18 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               <WorldObjectsLayer meshColliders={world.meshColliders} onReady={() => setObjReadyWorld(world.id)} />
             </Suspense>
           )}
-          {!isBlank && world.meshColliders && <MeshColliderPlayer />}
+          {world.meshColliders && <MeshColliderPlayer />}
           {/* Bleakrock 2 — the cropped Bleakrock town objects on the editable island (shared
-              /siege/world glbs + textures, filtered placements in /siege/bleakrock2). */}
+              /siege/world glbs + textures, filtered placements in /siege/bleakrock2). Mesh colliders
+              so the player collides with the real object shapes, not loose boxes. */}
           {world.id === 'bleakrock2' && (
             <Suspense fallback={null}>
-              <WorldObjectsLayer dataDir="/siege/bleakrock2" renderDist={320}
+              <WorldObjectsLayer meshColliders dataDir="/siege/bleakrock2" renderDist={320}
                 onReady={() => setObjReadyWorld(world.id)} />
             </Suspense>
           )}
+          {/* Khaured Tower landmark on the sculpted land at (-1022, 533). */}
+          {world.id === 'bleakrock2' && <Suspense fallback={null}><KhauredLandmark /></Suspense>}
           {/* Hard arena walls for walled maps (Yeti Time). No-op unless the world sets `wallBox`. */}
           <WorldBoundsWall />
           {/* Bake a real heightmap from the glTF collider mesh so the player + monsters sit on the true

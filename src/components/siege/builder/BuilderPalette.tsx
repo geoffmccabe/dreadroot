@@ -19,6 +19,7 @@ import { useFavorites, toggleFavorite, isFavorite, removeFavorite } from '../sci
 
 // The converted asset sets (catalogs live at /siege/scifi/_catalog_<set>.json).
 const SETS: { id: string; label: string }[] = [
+  { id: 'mushrooms', label: '🍄 Mushroom Trees' },
   { id: 'nature', label: 'Nature' }, { id: 'alpine', label: 'Alpine' }, { id: 'meadow', label: 'Meadow' },
   { id: 'swamp', label: 'Swamp' }, { id: 'jungle', label: 'Jungle' }, { id: 'desert', label: 'Desert' },
   { id: 'apoc', label: 'Apocalypse' }, { id: 'dark', label: 'Dark Fantasy' }, { id: 'city', label: 'SciFi City' },
@@ -33,6 +34,17 @@ const SETS: { id: string; label: string }[] = [
 ];
 interface CatItem { id: string; name: string; set: string; file: string; category?: string }
 const catalogCache = new Map<string, CatItem[]>();
+
+// The imported mushroom-tree glbs (public/siege/imports) — a LOCAL catalog (not an R2 pack), listed
+// by file name. BuilderObjectsLayer loads absolute '/…' paths directly. Khaured Tower rides along too.
+const MUSHROOM_FILES = [
+  'mushroomtree05', 'mushroomtree06', 'mushroomtree07', 'MushroomTree_A', 'Tree1',
+  'vasim_tree1_collider', 'vasim_tree1_collider_feb25', 'vasim_tree1_collider2', 'vasim_tree1_flat',
+  'jhay_tree1', 'jhay_tree2', 'jhay_tree3', 'jhay_tree4', 'jhay_tree5', 'jhay_tree6',
+  'meshes_tree05_tall', 'meshes_tree06_tall', 'ashley_tree05', 'mushrooms2_tree06',
+  'mushroom_line_straight', 'Khaured_Tower_1',
+];
+const MUSHROOMS: CatItem[] = MUSHROOM_FILES.map((f) => ({ id: `mush:${f}`, name: f, set: 'mushrooms', file: `/siege/imports/${f}.glb` }));
 
 export function BuilderPalette() {
   const game = useActiveGame();
@@ -62,6 +74,7 @@ export function BuilderPalette() {
 
   useEffect(() => {
     let alive = true;
+    if (set === 'mushrooms') { setItems(MUSHROOMS); return; }   // local catalog, no R2 fetch
     const cached = catalogCache.get(set);
     if (cached) { setItems(cached); return; }
     fetch(scifiData(`_catalog_${set}.json`)).then((r) => r.json()).then((d) => {
