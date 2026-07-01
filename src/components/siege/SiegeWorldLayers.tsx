@@ -16,6 +16,7 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
+import { MushroomImportDisplay } from './MushroomImportDisplay';
 import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
 import { ObjectEditController } from '@/features/objectEditor/ObjectEditController';
 import { SiegePortalEffect } from './SiegePortalEffect';
@@ -190,6 +191,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
               Phase 3 drop-in palette lands. */}
           {world.id === 'starblink' && <SciFiShowcase />}
+          {/* Imported mushroom-tree FBX models, side by side at native height (laser-pickable). */}
+          {world.id === 'starblink' && (
+            <Suspense fallback={null}><MushroomImportDisplay /></Suspense>
+          )}
           {/* Pole-dance girls in the SciFi City nightclub. */}
           {world.id === 'city-demo' && <DancingDemons />}
           {/* Baked Synty asset-set demos + their BVH colliders (one per demo map). */}
@@ -210,8 +215,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
               {/* noMonsterColliders: apoc is explore-only (no monsters) AND has world-scale scenery
                   (mountains span ~1290m) — voxelizing those into monster collision boxes was a
                   multi-second hang / OOM that crashed the tab. Player floor-collision (BVH) stays on. */}
-              <WorldObjectsLayer meshColliders noMonsterColliders dataDir="/siege/apoc" renderDist={70} maxGroups={45} maxInstances={1200} />
-              <MeshColliderPlayer />
+              {/* HOLDING STATE: the apoc components are complex 49-mesh BUILDINGS, so meshColliders
+                  (a BVH per mesh) hangs for minutes and the streaming budget then culls most of the
+                  multi-mesh city (reads as transparent/see-through). Until the city is baked into merged
+                  spatial CHUNKS, run it collider-free + a modest budget so it at least loads safely
+                  (visual only; player stands on the heightmap terrain). trustMaterials keeps textures. */}
+              <WorldObjectsLayer trustMaterials noMonsterColliders dataDir="/siege/apoc" renderDist={90} maxGroups={60} maxInstances={2500} />
             </Suspense>
           )}
           {/* Enchanted Forest — instanced reconstruction of the Synty Demo_01 scene on its baked
