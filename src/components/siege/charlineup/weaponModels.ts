@@ -14,6 +14,8 @@ export interface HeldWeapon {
   rotDeg: [number, number, number];   // grip orientation in the Hand_R local frame (shared, eye-tuned)
   gripPos: [number, number, number];  // grip offset in Hand_R local metres (shared, eye-tuned)
   sizeByChar?: Record<string, number>;  // baked per-character size multiplier (auto-fit × this); default 1
+  rotByChar?: Record<string, [number, number, number]>;   // baked per-character rotDeg (else rotDeg)
+  gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
   animSet: 'rifle' | 'pistol';
 }
 

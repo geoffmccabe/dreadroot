@@ -13,6 +13,8 @@ export interface LineupWeaponDef {
   rotDeg: [number, number, number];   // orientation in the Hand_R local frame (eye-calibrated, shared)
   gripPos: [number, number, number];  // grip offset in Hand_R local metres (eye-calibrated, shared)
   sizeByChar?: Record<string, number>;  // baked per-character size multiplier; default 1
+  rotByChar?: Record<string, [number, number, number]>;   // baked per-character rotDeg (else rotDeg)
+  gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
 }
 
 // First-pass grip guesses — SIZE is auto-correct; rotation/position need a visual tuning pass.

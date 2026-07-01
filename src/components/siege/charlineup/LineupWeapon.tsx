@@ -72,7 +72,11 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo }: 
     wrap.traverse((c) => { c.userData.worldObjectId = WEAPON_EDIT_ID; });
     // Register with base rotation/scale/grip + char/weapon keys; registerWeaponWrap applies the saved
     // orientation, per-character size, and position offset for this weapon onto the wrap.
-    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot: weapon.rotDeg, baseScale: s, bakedSize: weapon.sizeByChar?.[charName] ?? 1, baseGrip: weapon.gripPos, weaponKey: weapon.url, charName });
+    // Effective per-character baseline (a baked per-char override if present, else the shared value);
+    // the runtime tune refines from there.
+    const baseRot = weapon.rotByChar?.[charName] ?? weapon.rotDeg;
+    const baseGrip = weapon.gripByChar?.[charName] ?? weapon.gripPos;
+    registerWeaponWrap(regId.current, { wrap, hand, handScale, baseRot, baseScale: s, bakedSize: weapon.sizeByChar?.[charName] ?? 1, baseGrip, weaponKey: weapon.url, charName });
   });
 
   useEffect(() => {
