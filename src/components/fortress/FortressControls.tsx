@@ -3348,6 +3348,8 @@ export function FirstPersonControls({
         tpEye.current.copy(camera.position); tpEyeSet.current = true;
         tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         camera.position.addScaledVector(tpFwd.current, -tpCurrent.current);
+        camera.position.y += 0.45 * tpCurrent.current;   // raise the camera → character sits LOW in the
+                                                          // frame so it never blocks the centre reticle
         tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
       } else if (isSiege) {
         tpEyeSet.current = false;

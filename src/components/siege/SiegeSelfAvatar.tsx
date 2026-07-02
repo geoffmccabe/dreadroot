@@ -35,7 +35,9 @@ function SelfBody() {
   const wrapRef = useRef<THREE.Group | null>(null);
   const cloned = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
-    c.traverse((o) => { (o as THREE.Mesh).frustumCulled = false; });
+    // NEVER raycast the self-avatar: it's just a view of you, sitting at your camera. In three.js
+    // visible=false does NOT skip raycasts, so without this the body intercepts your own shots.
+    c.traverse((o) => { const m = o as THREE.Mesh; m.frustumCulled = false; m.raycast = () => {}; });
     return c;
   }, [scene]);
   const anims = useMemo(() => [...rifleAnims, ...baseAnims], [rifleAnims, baseAnims]);
@@ -67,6 +69,7 @@ function SelfBody() {
         const ws = new THREE.Vector3(); hand.getWorldScale(ws); const hs = ws.x || 0;
         if (hs) {
           const model = gunScene.clone(true);
+          model.traverse((o) => { (o as THREE.Mesh).raycast = () => {}; });   // never block your own shots
           const box = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); box.getSize(size);
           const longest = Math.max(size.x, size.y, size.z) || 1;
           const rot = ak.rotByChar?.[SELF.name] ?? ak.rotDeg;
