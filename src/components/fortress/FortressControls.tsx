@@ -2065,8 +2065,10 @@ export function FirstPersonControls({
       // (undoing last frame's render offset) so all movement/collision/aim below use the real player
       // position. The pull-back is re-applied at the very END of this loop. First-person (0) = no-op.
       if (isSiege) {
-        tpCurrent.current += (getTPDist() - tpCurrent.current) * Math.min(1, delta * 10);
-        if (tpCurrent.current < 0.02) tpCurrent.current = 0;
+        // Snap straight to first person when the target is 0 (a map jump / full zoom-in) so the camera
+        // never lingers pulled-back inside walls at the new spawn; otherwise ease toward the target.
+        if (getTPDist() === 0) tpCurrent.current = 0;
+        else { tpCurrent.current += (getTPDist() - tpCurrent.current) * Math.min(1, delta * 10); if (tpCurrent.current < 0.02) tpCurrent.current = 0; }
         // Restore the eye ONLY if the camera is still exactly where WE left it (our render offset). If
         // ANYTHING else moved it since — a Cmd-J teleport, a spawn/respawn, god-mode fly — treat that
         // as the new eye instead of yanking it back to a stale one.

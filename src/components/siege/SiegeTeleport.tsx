@@ -10,6 +10,7 @@ import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { SIEGE_TELEPORTS, SIEGE_DEMOS } from './siegeAreas';
 import { setTeleportArmed, isTeleportArmed } from './teleportStore';
+import { setTPDist } from './siegeThirdPerson';
 import { setActiveMapId, getActiveMapId } from '@/config/activeMap';
 import { setSiegePendingSpawn, setSiegeReturnPoint } from './siegePlayerState';
 import { getSiegeAdmin } from './siegeAdmin';
@@ -57,6 +58,8 @@ export function SiegeTeleport() {
     // Shared jump, used by the keys AND by out-of-Canvas UI (Cmd-J menu clicks +
     // the Challenges → Worlds cards) via window.__siegeJump.
     const jump = (mapId: string, pos: [number, number, number], yaw?: number, pitch?: number) => {
+      setTPDist(0);   // arrive in first person — a zoomed 3rd-person camera would land inside/behind the
+                      // spawn's walls (esp. the enclosed lobby). Alt+wheel back out after arriving.
       // Switching maps: hand the controller this exact spawn so its world-change reset doesn't
       // overwrite it with the map's own (often placeholder) spawn.position. Same-map jumps need no
       // pending — the direct set below is final since the controller won't re-spawn.
