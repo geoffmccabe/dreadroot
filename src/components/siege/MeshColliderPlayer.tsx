@@ -20,6 +20,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { resolvePlayerMeshCollision, setPlayerProbeY } from './meshColliderSystem';
 import { sdbg } from './siegeDebug';
+import { getBrushState } from './terrain/terrainBrushState';
+import { getBuilder } from './builder/builderObjectsState';
 
 const PLAYER_RADIUS = 0.3;   // matches FortressControls
 const PLAYER_HEIGHT = 1.6;
@@ -34,6 +36,14 @@ export function MeshColliderPlayer() {
   const lastPos = useRef<THREE.Vector3 | null>(null);
 
   useFrame(() => {
+    // Stand down while sculpting/building: the per-frame camera push fights the terrain brush's
+    // aim and object placement (it once broke sculpting entirely). Keep the sweep origin current so
+    // resuming play doesn't sweep across the whole edit.
+    if (getBrushState().enabled || getBuilder().enabled) {
+      if (!lastPos.current) lastPos.current = new THREE.Vector3();
+      lastPos.current.copy(camera.position);
+      return;
+    }
     // God mode = fly through everything: skip the mesh push, but keep the sweep
     // origin current so exiting god mode doesn't sweep across the whole fly path.
     if (sdbg.godMode) {

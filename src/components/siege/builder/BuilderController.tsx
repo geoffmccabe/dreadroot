@@ -14,6 +14,7 @@ import {
   getBuilder, setBuilder, addObject, updateObject, removeObject, useBuilder,
 } from './builderObjectsState';
 import { scifiAsset } from '@/config/assetBase';
+import { getEditMode } from '@/features/objectEditor/store';
 
 const MARCH_MAX = 800;   // meters the placement ray reaches
 const MARCH_STEP = 2;    // coarse step (m), refined by bisection
@@ -88,6 +89,7 @@ export function BuilderController() {
     const onMouse = (e: MouseEvent) => {
       const b = getBuilder();
       if (!b.enabled || e.button !== 0) return;
+      if (getEditMode()) return;   // Arrange edit mode (Shift+`) owns clicks → grab/move placed objects
       if (e.target !== gl.domElement) return;   // let clicks on the panel (dropdown/search/buttons) work
       e.preventDefault(); e.stopImmediatePropagation();
       if (b.armed) place(); else selectAtCrosshair();

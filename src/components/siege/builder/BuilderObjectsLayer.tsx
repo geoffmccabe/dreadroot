@@ -17,6 +17,15 @@ import { registerMeshGeometry, setGroupInstances, clearGroup, type MeshInstanceI
 // through the R2 scifi resolver.
 const resolveModel = (file: string) => (file.startsWith('/') || file.startsWith('http') ? file : scifiAsset(file));
 
+// Force materials opaque + double-sided so imported models (esp. mushrooms) don't flicker/vanish by
+// angle from alpha-blend depth sorting — same treatment as the Starblink display mushrooms.
+function makeSolid(mat: THREE.Material): void {
+  const m = mat as THREE.MeshStandardMaterial;
+  m.side = THREE.DoubleSide; m.transparent = false; m.depthWrite = true; m.alphaTest = 0;
+  if ('opacity' in m) m.opacity = 1;
+  m.needsUpdate = true;
+}
+
 function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }) {
   const { scene } = useGLTF(resolveModel(obj.file), '/draco/');
   const grp = useRef<THREE.Group>(null);
@@ -24,7 +33,11 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
   useHelper(selected ? (grp as React.MutableRefObject<THREE.Object3D>) : null, THREE.BoxHelper, 0x6cf0ff);
   const cloned = useMemo(() => {
     const c = scene.clone(true);
-    c.traverse((o) => { (o as THREE.Mesh).userData.builderId = obj.id; });
+    c.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.userData.builderId = obj.id;
+      if (m.isMesh && m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach(makeSolid);
+    });
     applyVineWind(c);   // slow wind sway on any hanging vines (mushroomtree05/06)
     return c;
   }, [scene, obj.id]);
