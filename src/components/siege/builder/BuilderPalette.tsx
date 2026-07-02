@@ -123,34 +123,40 @@ export function BuilderPalette() {
     setSaved(true); setTimeout(() => setSaved(false), 1800);
   };
 
-  // Download the current map (terrain + water + objects) as a JSON backup file you keep.
-  const onExport = () => {
+  // Download the current map (terrain + water + objects) as a GZIP-compressed backup. Terrain
+  // heightmaps compress ~10× (neighbouring points are similar), so a ~12MB JSON becomes ~1MB.
+  const onExport = async () => {
     const data = {
       id: world.id, name: world.name, savedAt: Date.now(),
       heightField: serializeField(),
       water: { on: getBrushState().waterOn, level: getBrushState().waterLevel },
       objects: getBuilder().objects,
     };
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const json = JSON.stringify(data);
+    const date = new Date().toISOString().slice(0, 10);
+    let blob: Blob, ext: string;
+    try {
+      const gz = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+      blob = await new Response(gz).blob(); ext = 'json.gz';
+    } catch { blob = new Blob([json], { type: 'application/json' }); ext = 'json'; } // older browser: plain
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `${world.id}-map-${new Date().toISOString().slice(0, 10)}.json`;
+    a.href = url; a.download = `${world.id}-map-${date}.${ext}`;
     a.click(); URL.revokeObjectURL(url);
   };
-  // Restore a downloaded backup: save it to this map, then reload to render it.
-  const onImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    const r = new FileReader();
-    r.onload = async () => {
-      try {
-        const d = JSON.parse(String(r.result));
-        if (!d.heightField?.samples) { alert('Not a valid map backup file.'); return; }
-        await saveMap({ id: world.id, name: world.name, heightField: d.heightField, water: d.water ?? { on: false, level: 4 }, objects: d.objects ?? [] });
-        alert('Backup imported — reloading to render it.');
-        window.location.reload();
-      } catch { alert('Could not read that file.'); }
-    };
-    r.readAsText(file);
+  // Restore a backup (compressed .json.gz OR plain .json), save it, then reload to render it.
+  const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) { return; }
+    try {
+      const text = file.name.endsWith('.gz')
+        ? await new Response(file.stream().pipeThrough(new DecompressionStream('gzip'))).text()
+        : await file.text();
+      const d = JSON.parse(text);
+      if (!d.heightField?.samples) { alert('Not a valid map backup file.'); return; }
+      await saveMap({ id: world.id, name: world.name, heightField: d.heightField, water: d.water ?? { on: false, level: 4 }, objects: d.objects ?? [] });
+      alert('Backup imported — reloading to render it.');
+      window.location.reload();
+    } catch { alert('Could not read that file.'); }
     e.target.value = '';
   };
   const selected = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
@@ -250,7 +256,7 @@ export function BuilderPalette() {
             <span className="flex gap-1">
               <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={onExport}>⬇ Export</Button>
               <label className="inline-flex h-6 cursor-pointer items-center rounded border border-border px-2 text-[10px] hover:bg-accent" title="Restore from a backup file (reloads)">
-                ⬆ Import<input type="file" accept="application/json" className="hidden" onChange={onImport} />
+                ⬆ Import<input type="file" accept=".gz,.json,application/json,application/gzip" className="hidden" onChange={onImport} />
               </label>
             </span>
           </div>
