@@ -3316,7 +3316,10 @@ export function FirstPersonControls({
             if (slope > TAN60) {
               const k = (SLIDE_SPEED * dt) / slope;
               camera.position.x -= gx * k; camera.position.z -= gz * k;
-              tY = groundHeightFn(camera.position.x, camera.position.z);
+              // Glue to the slope surface as we drift down — otherwise the player rides horizontally
+              // over descending ground while grounded gravity is suppressed, and floats in mid-air.
+              const nY = groundHeightFn(camera.position.x, camera.position.z);
+              if (nY != null) { tY = nY; camera.position.y = nY + playerHeight + SURFACE_EPS; velocity.current.y = 0; }
             }
           }
         }

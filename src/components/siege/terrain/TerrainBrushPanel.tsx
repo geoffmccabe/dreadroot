@@ -29,21 +29,26 @@ export function TerrainBrushPanel() {
   const bs = useBrushState();
   const world = getWorldDefinition(mapId);
   const [saved, setSaved] = useState(false);
+  const [savedCloud, setSavedCloud] = useState(false);
+  const [saving, setSaving] = useState(false);
   // Hide the editor during a challenge (it's an open-world build tool, not a gameplay panel).
   const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
   // Enchanted Forest is a finished, reconstructed map (not a build canvas) — no terrain/builder tools.
   if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || isEnchantedForest(world.id) || inChallenge) return null;
 
   const onSave = async () => {
-    await saveMap({
+    setSaving(true);
+    const res = await saveMap({
       id: world.id,
       name: world.name,
       heightField: serializeField(),
       water: { on: bs.waterOn, level: bs.waterLevel },
       objects: getBuilder().objects,
     });
+    setSaving(false);
+    setSavedCloud(res.cloud);
     setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   return (
@@ -134,8 +139,9 @@ export function TerrainBrushPanel() {
         )}
       </div>
 
-      <Button size="sm" className="mt-3 h-7 w-full text-[11px]" onClick={onSave}>
-        {saved ? 'Saved ✓' : 'Save map'}
+      <Button size="sm" className="mt-3 h-7 w-full text-[11px]" onClick={onSave} disabled={saving}
+        title="Saves to your browser + Supabase cloud">
+        {saving ? 'Saving…' : saved ? (savedCloud ? 'Saved to cloud ☁' : 'Saved locally (not signed in)') : 'Save map'}
       </Button>
     </Card>
   );
