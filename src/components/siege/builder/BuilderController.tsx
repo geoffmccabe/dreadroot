@@ -14,7 +14,6 @@ import {
   getBuilder, setBuilder, addObject, updateObject, removeObject, useBuilder,
 } from './builderObjectsState';
 import { scifiAsset } from '@/config/assetBase';
-import { playerState } from '../playerState';
 
 const MARCH_MAX = 800;   // meters the placement ray reaches
 const MARCH_STEP = 2;    // coarse step (m), refined by bisection
@@ -51,8 +50,7 @@ export function BuilderController() {
   const ray = useMemo(() => new THREE.Raycaster(), []);
 
   const marchToGround = (): boolean => {
-    // March from the player EYE (before the 3rd-person camera pull-back), not the raw camera.
-    ro.set(playerState.x, playerState.y, playerState.z);
+    camera.getWorldPosition(ro);
     camera.getWorldDirection(rd);
     let prev = ro.y - groundY(ro.x, ro.z);
     for (let t = MARCH_STEP; t <= MARCH_MAX; t += MARCH_STEP) {

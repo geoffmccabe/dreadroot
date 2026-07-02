@@ -12,7 +12,6 @@ import * as THREE from 'three';
 import { applyBrush, getHeight } from './heightField';
 import { getBrushState, setBrushState } from './terrainBrushState';
 import { shapeOutline, type BrushShape } from './brushShapes';
-import { playerState } from '../playerState';
 
 // Indicator colour cycle: light blue → dark grey-blue, ~1 rev/sec, so the ring stays
 // visible over ANY ground colour (incl. blue water).
@@ -56,9 +55,7 @@ export function TerrainBrushController() {
   // Analytic ray-march of the crosshair ray vs the height function — a few hundred cheap
   // getHeight() calls instead of raycasting ~2.6M terrain triangles every frame.
   const marchToGround = (): boolean => {
-    // March from the PLAYER EYE (published before the 3rd-person camera pull-back), not the raw
-    // camera — otherwise, zoomed out, the brush aims from behind the player and misses the ground.
-    ro.set(playerState.x, playerState.y, playerState.z);
+    cam.getWorldPosition(ro);
     cam.getWorldDirection(rd);
     yaw.current = Math.atan2(rd.x, rd.z);   // facing → orients non-circular shapes
     let prev = ro.y - getHeight(ro.x, ro.z);
