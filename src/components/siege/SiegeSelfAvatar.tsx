@@ -5,7 +5,7 @@
 //
 // V1 = Rajax + the AK, rifle-idle. Character-select, live-anim sync (walk/run/aim) and the left-hand
 // grip are follow-ups.
-import { Suspense, useEffect, useMemo, useRef } from 'react';
+import { Suspense, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -22,6 +22,28 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 
 // V1 self character (matches the spawn intro). A character-select panel will set this later.
 const SELF = { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 };
+
+// Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
+// standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
+// covers both back speeds. Holster + reload one-shots are a follow-up.)
+const CLIP = {
+  idle: 'Anim_Rifle_Idle_NoSkin',
+  walkF: 'Anim_Rifle_Walk_Not_Aiming_NoSkin',
+  runF: 'Anim_Rifle_Run_NoSkin',
+  back: 'Anim_Rifle_Backward_Run_NoSkin',
+  strafeL: 'Anim_Rifle_Strafe_Left_NoSkin', strafeR: 'Anim_Rifle_Strafe_Right_NoSkin',
+  runL: 'Anim_Rifle_Run_Left_NoSkin', runR: 'Anim_Rifle_Run_Right_NoSkin',
+  jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', jumpDown: 'Anim_Rifle_Jump_Down_NoSkin',
+};
+function pickRifleClip(): string {
+  const s = playerState;
+  if (!s.grounded) return s.vy > 0.5 ? CLIP.jumpUp : CLIP.jumpDown;
+  if (s.mf > 0) return s.run ? CLIP.runF : CLIP.walkF;    // forward (run takes priority over strafe)
+  if (s.mf < 0) return CLIP.back;                          // backward
+  if (s.mr < 0) return s.run ? CLIP.runL : CLIP.strafeL;  // strafe left
+  if (s.mr > 0) return s.run ? CLIP.runR : CLIP.strafeR;  // strafe right
+  return CLIP.idle;
+}
 
 function SelfBody() {
   const { scene } = useGLTF(glbUrl(SELF.file), '/draco/');
@@ -41,19 +63,19 @@ function SelfBody() {
     return c;
   }, [scene]);
   const anims = useMemo(() => [...rifleAnims, ...baseAnims], [rifleAnims, baseAnims]);
-  const { actions, names } = useAnimations(anims, inner);
-
-  // Play a rifle idle/aim clip so the two-handed hold is visible.
-  useEffect(() => {
-    if (!names.length) return;
-    const pick = names.find((n) => /rifle/i.test(n) && /idle/i.test(n)) ?? names.find((n) => /rifle/i.test(n)) ?? names[0];
-    const a = pick ? actions[pick] : null;
-    if (a) a.reset().fadeIn(0.3).play();
-    return () => { a?.fadeOut(0.2); };
-  }, [actions, names]);
+  const { actions } = useAnimations(anims, inner);
+  const curClip = useRef('');
 
   useFrame(() => {
     const g = group.current; if (!g) return;
+    // Locomotion selector (runs even when hidden so the pose is right the instant you zoom out):
+    // pick the clip for the current movement and cross-fade to it when it changes.
+    const want = pickRifleClip();
+    if (want !== curClip.current && actions[want]) {
+      if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.2);
+      actions[want]!.reset().fadeIn(0.2).play();
+      curClip.current = want;
+    }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
     if (!shown) return;

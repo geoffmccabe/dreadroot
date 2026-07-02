@@ -3,6 +3,13 @@
 export const playerState = {
   x: 0, y: 0, z: 0,   // engine world position
   fx: 0, fz: -1,      // forward direction (XZ), normalized
+  // Movement state for the third-person self-avatar's locomotion (written by the controller).
+  mf: 0,              // forward input: +1 forward, -1 backward, 0 none
+  mr: 0,              // strafe input: +1 right, -1 left, 0 none
+  run: false,         // sprinting (Shift)
+  grounded: true,     // on the ground (vs jumping/falling)
+  vy: 0,              // vertical velocity (jump up vs fall down)
+  gun: false,         // weapon equipped / aiming (crosshairs on)
 };
 
 /** Compass heading from a forward XZ vector. -Z = North, +X = East. */

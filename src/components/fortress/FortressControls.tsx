@@ -3338,6 +3338,13 @@ export function FirstPersonControls({
       if (isSiege) {
         siegePlayerPose.x = camera.position.x; siegePlayerPose.y = camera.position.y; siegePlayerPose.z = camera.position.z;
         siegePlayerPose.fx = -Math.sin(yaw.current); siegePlayerPose.fz = -Math.cos(yaw.current);
+        // Movement state → drives the self-avatar's locomotion animation.
+        siegePlayerPose.mf = (keys.current.w ? 1 : 0) - (keys.current.s ? 1 : 0);
+        siegePlayerPose.mr = (keys.current.d ? 1 : 0) - (keys.current.a ? 1 : 0);
+        siegePlayerPose.run = !!keys.current.shift;
+        siegePlayerPose.grounded = onGround.current;
+        siegePlayerPose.vy = velocity.current.y;
+        siegePlayerPose.gun = showCrosshairsRef.current;
       }
 
       // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye
