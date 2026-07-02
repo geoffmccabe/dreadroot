@@ -10,6 +10,9 @@ export const playerState = {
   grounded: true,     // on the ground (vs jumping/falling)
   vy: 0,              // vertical velocity (jump up vs fall down)
   gun: false,         // weapon equipped / aiming (crosshairs on)
+  gliding: false,     // holding G while airborne → glide pose + slowed fall
+  glideFactor: 100,   // the player character's glide factor: 100 = normal fall, 200 = half speed,
+                      // 50 = double speed. Set by the self-avatar from the current character.
 };
 
 /** Compass heading from a forward XZ vector. -Z = North, +X = East. */

@@ -2855,7 +2855,9 @@ export function FirstPersonControls({
       // this, a long fall just accelerates past the half-gravity effect and the
       // glide is barely noticeable (the reported "doesn't work" bug). 5 blocks/s
       // ≈ parachute speed; horizontal momentum then carries you a long way.
-      const GLIDE_FALL_SPEED = 5;
+      // Base 5 blocks/s ≈ parachute speed, scaled by the character's glide factor: 100 = normal,
+      // 200 = half speed (glides better), 50 = double (heavier). Voxel = factor 100 → unchanged.
+      const GLIDE_FALL_SPEED = 5 * (100 / (siegePlayerPose.glideFactor || 100));
       if (isGliding && velocity.current.y < -GLIDE_FALL_SPEED) {
         velocity.current.y = -GLIDE_FALL_SPEED;
       }
@@ -3380,6 +3382,7 @@ export function FirstPersonControls({
         siegePlayerPose.grounded = onGround.current;
         siegePlayerPose.vy = velocity.current.y;
         siegePlayerPose.gun = showCrosshairsRef.current;
+        siegePlayerPose.gliding = glideActiveRef.current;
       }
 
       // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye

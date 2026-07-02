@@ -15,7 +15,7 @@ import { getTPDist } from './siegeThirdPerson';
 import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { setCharSnap, pushCharAnimEvent, type CharSnap } from './charAnimDebug';
-import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY } from './charlineup/siegeCharLineupState';
+import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY, LINEUP_CHARS } from './charlineup/siegeCharLineupState';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 
 const EYE_HEIGHT = 1.6;
@@ -25,6 +25,7 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 
 // V1 self character (matches the spawn intro). A character-select panel will set this later.
 const SELF = { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 };
+const SELF_GLIDE = LINEUP_CHARS.find((c) => c.name === SELF.name)?.glideFactor ?? 100;
 
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
@@ -37,6 +38,7 @@ const CLIP = {
   strafeL: 'Anim_Rifle_Strafe_Left_NoSkin', strafeR: 'Anim_Rifle_Strafe_Right_NoSkin',
   runL: 'Anim_Rifle_Run_Left_NoSkin', runR: 'Anim_Rifle_Run_Right_NoSkin',
   jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', jumpDown: 'Anim_Rifle_Jump_Down_NoSkin',
+  glide: 'Gliding', idleFall: 'Anim_Idle_Falling_NoSkin',
 };
 // Snapshot of everything driving the current clip, for the DFLOW character-anim tracker.
 function gatherSnap(clip: string): CharSnap {
@@ -55,9 +57,11 @@ function gatherSnap(clip: string): CharSnap {
 
 function pickRifleClip(): string {
   const s = playerState;
+  if (s.gliding) return CLIP.glide;   // holding G while airborne → glide pose (slowed fall)
   // Only play jump/fall on REAL vertical motion — a momentary "not grounded" with ~zero vertical
   // speed (e.g. grounded flicker on a slope) shouldn't trigger a jump loop; treat it as locomotion.
-  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? CLIP.jumpUp : CLIP.jumpDown;
+  // Airborne + rising = jump; airborne + falling (G not held) = the Idle Fall pose.
+  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? CLIP.jumpUp : CLIP.idleFall;
   if (s.mf > 0) return s.run ? CLIP.runF : CLIP.walkF;    // forward (run takes priority over strafe)
   if (s.mf < 0) return CLIP.back;                          // backward
   if (s.mr < 0) return s.run ? CLIP.runL : CLIP.strafeL;  // strafe left
@@ -69,6 +73,7 @@ function SelfBody() {
   const { scene } = useGLTF(glbUrl(SELF.file), '/draco/');
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
+  const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');   // Gliding + Idle Fall clips
   const ak = heldWeaponByKey('ak47');
   const { scene: gunScene } = useGLTF(glbUrl(ak?.url ?? SELF.file), '/draco/');
 
@@ -82,13 +87,14 @@ function SelfBody() {
     c.traverse((o) => { const m = o as THREE.Mesh; m.frustumCulled = false; m.raycast = () => {}; });
     return c;
   }, [scene]);
-  const anims = useMemo(() => [...rifleAnims, ...baseAnims], [rifleAnims, baseAnims]);
+  const anims = useMemo(() => [...rifleAnims, ...baseAnims, ...locoAnims], [rifleAnims, baseAnims, locoAnims]);
   const { actions } = useAnimations(anims, inner);
   const curClip = useRef('');
   const lastGather = useRef(0);
 
   useFrame(() => {
     const g = group.current; if (!g) return;
+    playerState.glideFactor = SELF_GLIDE;   // tell the controller this character's glide factor
     // Locomotion selector (runs even when hidden so the pose is right the instant you zoom out):
     // pick the clip for the current movement and cross-fade to it when it changes.
     const want = pickRifleClip();
