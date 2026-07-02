@@ -39,7 +39,7 @@ function GhostModel({ file }: { file: string }) {
 }
 
 export function BuilderController() {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
   const { enabled, armed } = useBuilder();
 
   const ro = useMemo(() => new THREE.Vector3(), []);
@@ -88,6 +88,7 @@ export function BuilderController() {
     const onMouse = (e: MouseEvent) => {
       const b = getBuilder();
       if (!b.enabled || e.button !== 0) return;
+      if (e.target !== gl.domElement) return;   // let clicks on the panel (dropdown/search/buttons) work
       e.preventDefault(); e.stopImmediatePropagation();
       if (b.armed) place(); else selectAtCrosshair();
     };
@@ -115,7 +116,7 @@ export function BuilderController() {
     window.addEventListener('mousedown', onMouse, true);
     window.addEventListener('keydown', onKey, true);
     return () => { window.removeEventListener('mousedown', onMouse, true); window.removeEventListener('keydown', onKey, true); };
-  }, [camera, scene, ray, ro, rd, hit]);
+  }, [camera, scene, gl, ray, ro, rd, hit]);
 
   useFrame(() => {
     if (!enabled || !armed) { hitValid.current = false; return; }

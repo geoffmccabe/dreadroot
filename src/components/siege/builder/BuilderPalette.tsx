@@ -2,7 +2,8 @@
 // like the terrain panel. Shows only on editable (heightmap) siege maps. Toggle build mode, pick
 // an asset set + asset to ARM, then place it in-world with the crosshair (BuilderController does
 // the placing). Save writes terrain + water + objects together via mapPersistence.
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useDraggablePanel } from '../useDraggablePanel';
 import { subscribeChallenge, getChallengeState } from '../challenge/challengeStore';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,6 +60,20 @@ export function BuilderPalette() {
   const [matches, setMatches] = useState<AssetEntry[]>([]);
   const favs = useFavorites();
 
+  // Draggable (by the title) + resizable (bottom-right corner), like the other panels.
+  const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 268), top: 96 });
+  const [size, setSize] = useState({ w: 248, h: 520 });
+  const rz = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const onRzDown = (e: React.PointerEvent) => {
+    rz.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId); e.preventDefault(); e.stopPropagation();
+  };
+  const onRzMove = (e: React.PointerEvent) => {
+    if (!rz.current) return;
+    setSize({ w: Math.max(200, rz.current.w + (e.clientX - rz.current.x)), h: Math.max(220, rz.current.h + (e.clientY - rz.current.y)) });
+  };
+  const onRzUp = (e: React.PointerEvent) => { rz.current = null; (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); };
+
   // Type a stable asset code (any pack) → prefix-resolve against the global index and arm it.
   useEffect(() => {
     if (codeQ.trim().length < 3) { setMatches([]); return; }
@@ -108,9 +123,10 @@ export function BuilderPalette() {
   const selected = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
 
   return (
-    <Card className="waterfall-card fixed right-4 top-1/2 -translate-y-1/2 z-50 w-60 p-3 text-xs font-mono">
+    <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
+      style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined }}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-bold text-primary">🧱 Builder</span>
+        <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧱 Builder</span>
         <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
           onClick={() => setBuilder({ enabled: !b.enabled })}>
           {b.enabled ? 'Build ON' : 'Build off'}
@@ -118,7 +134,7 @@ export function BuilderPalette() {
       </div>
 
       {b.enabled && (
-        <>
+        <div className="flex flex-1 flex-col overflow-y-auto pr-0.5">
           {/* Type an asset CODE (from the ASSETGRID labels) — pulls that exact asset from ANY pack. */}
           <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="type a code (e.g. 3fa9c…)"
             className="mb-1 w-full rounded bg-background/60 px-2 py-1 font-mono text-[11px]" />
@@ -189,14 +205,19 @@ export function BuilderPalette() {
             </div>
           )}
 
-          <div className="flex items-center justify-between">
+          <div className="mt-1 flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">{b.objects.length} placed</span>
             <span className="flex gap-1">
               <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSave}>{saved ? 'Saved!' : 'Save map'}</Button>
               <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => clearObjects()}>Clear</Button>
             </span>
           </div>
-        </>
+        </div>
+      )}
+      {b.enabled && (
+        <div onPointerDown={onRzDown} onPointerMove={onRzMove} onPointerUp={onRzUp} title="Drag to resize"
+          className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end text-primary/70"
+          style={{ touchAction: 'none' }}>◢</div>
       )}
     </Card>
   );
