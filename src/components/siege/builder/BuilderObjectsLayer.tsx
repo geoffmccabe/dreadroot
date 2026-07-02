@@ -9,6 +9,7 @@ import { useActiveMapId } from '@/config/activeMap';
 import { loadMap } from '../terrain/mapPersistence';
 import { useBuilder, setObjects, type PlacedObject } from './builderObjectsState';
 import { scifiAsset } from '@/config/assetBase';
+import { registerMeshGeometry, setGroupInstances, clearGroup, type MeshInstanceInput } from '../meshColliderSystem';
 
 // Absolute paths (local /siege/imports imports, or full URLs) load directly; catalog file ids go
 // through the R2 scifi resolver.
@@ -24,6 +25,25 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
     c.traverse((o) => { (o as THREE.Mesh).userData.builderId = obj.id; });
     return c;
   }, [scene, obj.id]);
+  // Register this placed object's real shape as a walk-on BVH collider (active only on maps with
+  // meshColliders on, e.g. Bleakrock 2). Re-runs when it's moved/rotated/scaled; cleared on delete.
+  const gid = `builder:${obj.id}`;
+  const [px, py, pz] = obj.pos;
+  useEffect(() => {
+    const g = grp.current; if (!g) return;
+    g.updateWorldMatrix(true, true);
+    const inputs: MeshInstanceInput[] = [];
+    g.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !m.geometry) return;
+      const geo = m.geometry as THREE.BufferGeometry;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      registerMeshGeometry(gid, geo.uuid, geo, 1);
+      inputs.push({ key: geo.uuid, matrix: m.matrixWorld.clone(), geoBox: geo.boundingBox as THREE.Box3 });
+    });
+    setGroupInstances(gid, inputs);
+    return () => clearGroup(gid);
+  }, [cloned, gid, px, py, pz, obj.rotY, obj.scale]);
   return (
     <group ref={grp} position={obj.pos} rotation={[0, obj.rotY, 0]} scale={obj.scale} userData={{ builderId: obj.id }}>
       <primitive object={cloned} />
