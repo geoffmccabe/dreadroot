@@ -84,7 +84,7 @@ export function BuilderPalette() {
   }, [codeQ]);
 
   const arm = (a: { set: string; file: string; name: string }) => {
-    setBuilder({ armed: { set: a.set, file: a.file, name: a.name } });
+    setBuilder({ armed: { set: a.set, file: a.file, name: a.name }, armedY: 0 });
     setSet(a.set);
   };
 
@@ -225,7 +225,7 @@ export function BuilderPalette() {
           {b.armed ? (
             <div className="mb-2 rounded bg-primary/15 p-1.5 text-[10px] leading-snug">
               <div>Placing: <b className="text-foreground">{b.armed.name}</b></div>
-              <div className="text-muted-foreground">click = place · [ ] rotate · - = scale · Esc cancel</div>
+              <div className="text-muted-foreground">click = drop · scroll = up/down · [ ] rotate · - = scale · Esc = let go</div>
             </div>
           ) : (
             <div className="mb-2 text-[10px] text-muted-foreground">Pick an asset to place, or click a placed object to select.</div>

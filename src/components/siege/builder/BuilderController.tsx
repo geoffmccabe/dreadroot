@@ -74,7 +74,7 @@ export function BuilderController() {
     const place = () => {
       const b = getBuilder();
       if (!b.armed || !hitValid.current) return;
-      const y = groundY(hit.x, hit.z);
+      const y = groundY(hit.x, hit.z) + b.armedY;   // wheel raises/lowers above the ground
       addObject({ set: b.armed.set, file: b.armed.file, name: b.armed.name, pos: [hit.x, y, hit.z], rotY: b.armedRotY, scale: b.armedScale });
     };
     const selectAtCrosshair = () => {
@@ -89,10 +89,20 @@ export function BuilderController() {
     const onMouse = (e: MouseEvent) => {
       const b = getBuilder();
       if (!b.enabled || e.button !== 0) return;
-      if (getEditMode()) return;   // Arrange edit mode (Shift+`) owns clicks → grab/move placed objects
       if (e.target !== gl.domElement) return;   // let clicks on the panel (dropdown/search/buttons) work
+      // Holding an item → left-click DROPS it (takes priority over everything).
+      if (b.armed) { e.preventDefault(); e.stopImmediatePropagation(); place(); return; }
+      if (getEditMode()) return;   // not holding → let Arrange edit mode (Shift+`) grab/move placed objects
       e.preventDefault(); e.stopImmediatePropagation();
-      if (b.armed) place(); else selectAtCrosshair();
+      selectAtCrosshair();
+    };
+    // Scroll wheel while holding an item → raise/lower it on Y (Shift = coarse).
+    const onWheel = (e: WheelEvent) => {
+      const b = getBuilder();
+      if (!b.enabled || !b.armed || getEditMode() || e.target !== gl.domElement) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const step = e.shiftKey ? 2 : 0.5;
+      setBuilder({ armedY: b.armedY + (e.deltaY < 0 ? step : -step) });
     };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
@@ -112,12 +122,20 @@ export function BuilderController() {
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         if (b.selectedId) { removeObject(b.selectedId); e.preventDefault(); }
       } else if (e.code === 'Escape') {
-        if (b.armed) setBuilder({ armed: null }); else if (b.selectedId) setBuilder({ selectedId: null });
+        // 1st ESC while holding/selecting → drop the held item (or deselect) and CONSUME the event,
+        // so it doesn't also exit gameplay. 2nd ESC (nothing held) falls through to normal behaviour.
+        if (b.armed) { setBuilder({ armed: null, armedY: 0 }); e.preventDefault(); e.stopImmediatePropagation(); }
+        else if (b.selectedId) { setBuilder({ selectedId: null }); e.preventDefault(); e.stopImmediatePropagation(); }
       }
     };
     window.addEventListener('mousedown', onMouse, true);
     window.addEventListener('keydown', onKey, true);
-    return () => { window.removeEventListener('mousedown', onMouse, true); window.removeEventListener('keydown', onKey, true); };
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener('mousedown', onMouse, true);
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('wheel', onWheel, true);
+    };
   }, [camera, scene, gl, ray, ro, rd, hit]);
 
   useFrame(() => {
@@ -128,7 +146,7 @@ export function BuilderController() {
       g.visible = hitValid.current;
       if (hitValid.current) {
         const b = getBuilder();
-        g.position.set(hit.x, groundY(hit.x, hit.z), hit.z);
+        g.position.set(hit.x, groundY(hit.x, hit.z) + b.armedY, hit.z);
         g.rotation.set(0, b.armedRotY, 0);
         g.scale.setScalar(b.armedScale);
       }
