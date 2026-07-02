@@ -38,7 +38,10 @@ export const EXTRA_VIEW_CHUNKS = 0;
 // Pick density so visibility is exactly VIS_AT_BOUNDARY at the full-detail edge; the
 // silhouette ring then continues the same curve to ~1.6% at the far edge.
 const CHUNK_SIZE = 16;
-const VIS_AT_BOUNDARY = 0.04;   // thicker than 0.10 — distant textured chunks fade harder into the sky
+// Lower = THICKER fog (distant objects hidden harder, so they emerge gradually as you
+// approach instead of popping in at the render edge). Raised thickness 2026-Jul: the
+// brighter AgX tone-mapping made the old 0.04 read as a thin haze. 0.012 ≈ +37% density.
+const VIS_AT_BOUNDARY = 0.012;
 export const FOG_DENSITY = -Math.log(VIS_AT_BOUNDARY) / (FOG_DISTANCE_CHUNKS * CHUNK_SIZE);
 
 /**
