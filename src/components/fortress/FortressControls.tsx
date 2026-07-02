@@ -241,6 +241,7 @@ export function FirstPersonControls({
   // (God Mode toggle, Shift+E super-sprint) mid-play.
   const adminEverRef = useRef(false);
   const onGround = useRef(true);
+  const lastSiegeGround = useRef<{ x: number; z: number; y: number } | null>(null); // prev-frame terrain pos for the slope limit
   const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
   const lastGroundCheck = useRef(0);
@@ -3290,7 +3291,35 @@ export function FirstPersonControls({
       //    colliders, so clamp the player onto the sampled ground for smooth walking. Gated:
       //    only runs when groundHeightFn is provided (siege); the voxel world never enters here.
       if (groundHeightFn) {
-        const tY = groundHeightFn(camera.position.x, camera.position.z);
+        let tY = groundHeightFn(camera.position.x, camera.position.z);
+        // ── Slope limit (siege terrain): you can't walk UP anything steeper than ~60°, and you
+        //    slide DOWN steep ground. Walking along/down passes through normally. God-mode ignores it.
+        if (tY != null && onGround.current && !godModeRef.current) {
+          const TAN60 = 1.7320508, SLIDE_SPEED = 9, e = 1;
+          const last = lastSiegeGround.current;
+          // Block a too-steep CLIMB: if this frame's move gained height faster than tan(60°) per
+          // metre travelled, undo the horizontal move — you stop at the base of the cliff.
+          if (last) {
+            const dxz = Math.hypot(camera.position.x - last.x, camera.position.z - last.z);
+            if (dxz > 0.01 && (tY - last.y) / dxz > TAN60) {
+              camera.position.x = last.x; camera.position.z = last.z; tY = last.y;
+            }
+          }
+          // Slide DOWN steep slopes: drift opposite the uphill gradient.
+          const gxp = groundHeightFn(camera.position.x + e, camera.position.z);
+          const gxm = groundHeightFn(camera.position.x - e, camera.position.z);
+          const gzp = groundHeightFn(camera.position.x, camera.position.z + e);
+          const gzm = groundHeightFn(camera.position.x, camera.position.z - e);
+          if (gxp != null && gxm != null && gzp != null && gzm != null) {
+            const gx = (gxp - gxm) / (2 * e), gz = (gzp - gzm) / (2 * e); // points uphill
+            const slope = Math.hypot(gx, gz);
+            if (slope > TAN60) {
+              const k = (SLIDE_SPEED * dt) / slope;
+              camera.position.x -= gx * k; camera.position.z -= gz * k;
+              tY = groundHeightFn(camera.position.x, camera.position.z);
+            }
+          }
+        }
         sdbg.isSiege = true; sdbg.ghf = true; sdbg.godMode = godModeRef.current; sdbg.onGround = onGround.current; sdbg.playerY = camera.position.y; sdbg.terrainY = tY; // SW debug
         sdbg.playerX = camera.position.x; sdbg.playerZ = camera.position.z;
         { const _f = camera.getWorldDirection(_sdbgDir); sdbg.fwdX = _f.x; sdbg.fwdY = _f.y; sdbg.fwdZ = _f.z;
@@ -3305,6 +3334,7 @@ export function FirstPersonControls({
           if (velocity.current.y < 0) velocity.current.y = 0;
           onGround.current = true;
         }
+        lastSiegeGround.current = { x: camera.position.x, z: camera.position.z, y: tY != null ? tY : 22 };
       }
 
       // Broadcast position to multiplayer (throttled to 20Hz)
