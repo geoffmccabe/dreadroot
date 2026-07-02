@@ -9,6 +9,13 @@ import type { WorldObject, TRS, BakedRef } from './types';
 import { trsOf } from './types';
 import { insertObject, persistTransform, deleteObject } from './persistence';
 import { applyBakedTransform, liveBakedTransform, hideBaked } from './bakedOverrides';
+import { updateObject as updateBuilderObject, removeObject as removeBuilderObject } from '@/components/siege/builder/builderObjectsState';
+
+// Builder objects store a single yaw + uniform scale; extract them from the Arrange tool's quat/Vec3.
+const yawOf = (q: [number, number, number, number]) => 2 * Math.atan2(q[1], q[3]);
+function writeBuilder(id: string, t: TRS): void {
+  updateBuilderObject(id, { pos: t.pos, rotY: yawOf(t.quat), scale: t.scale[0] });
+}
 
 interface HistoryEntry { undo: () => void; redo: () => void; }
 
@@ -45,7 +52,7 @@ export function setSelected(id: string | null): void { if (state.selectedId !== 
 export function toggleEditMode(): void {
   if (!state.canEdit) return;
   state.editMode = !state.editMode;
-  if (!state.editMode) { state.selectedId = null; state.objects = state.objects.filter((o) => !o.baked && !o.external); }
+  if (!state.editMode) { state.selectedId = null; state.objects = state.objects.filter((o) => !o.baked && !o.external && !o.builder); }
   emit();
 }
 
@@ -81,6 +88,22 @@ export function clearBaked(): void {
   }
 }
 
+// Select a builder-placed object as a temporary editable, so the Arrange grab-and-carry / wheel /
+// rotate / scale drive it too — writing back to builderObjectsState. One builder selection at a time.
+export function selectBuilder(id: string, t: TRS): void {
+  const tid = `builder:${id}`;
+  state.objects = [...state.objects.filter((o) => !o.builder), { id: tid, modelUrl: `builder:${id}`, pos: t.pos, quat: t.quat, scale: t.scale, builder: { id } }];
+  state.selectedId = tid;
+  emit();
+}
+export function clearBuilder(): void {
+  if (state.objects.some((o) => o.builder)) {
+    state.objects = state.objects.filter((o) => !o.builder);
+    if (state.selectedId?.startsWith('builder:')) state.selectedId = null;
+    emit();
+  }
+}
+
 // --- local mutators (pure list ops, no history, no persistence) ---
 function localAdd(o: WorldObject): void { state.objects = [...state.objects, o]; emit(); }
 function localRemove(id: string): void {
@@ -108,6 +131,7 @@ export function addObject(o: WorldObject): void {
 export function deleteSelected(): void {
   const o = current(); if (!o) return;
   if (o.external) { removeExternal(o.id); return; }   // can't delete a live weapon — just deselect it
+  if (o.builder) { const bid = o.builder.id; localRemove(o.id); removeBuilderObject(bid); return; }
   if (o.baked) {
     const baked = o.baked; const trs = trsOf(o);
     localRemove(o.id); hideBaked(baked);
@@ -129,6 +153,7 @@ export function deleteSelected(): void {
 // objects go to Supabase. The local list update is the same for both.
 function persistTRS(o: WorldObject, t: TRS): void {
   if (o.external) return;            // transient live editable — the bridge reads its TRS; no DB/override
+  if (o.builder) { writeBuilder(o.builder.id, t); return; }
   if (o.baked) applyBakedTransform(o.baked, t);
   else persistTransform(o.id, t);
 }
@@ -162,7 +187,8 @@ export function dragTo(next: TRS): void {
   if (!dragId) return;
   const o = state.objects.find((x) => x.id === dragId); if (!o) return;
   localSetTRS(dragId, next);
-  if (o.baked) liveBakedTransform(o.baked, next);   // visual only; not saved until commit
+  if (o.builder) writeBuilder(o.builder.id, next);  // move the builder object live
+  else if (o.baked) liveBakedTransform(o.baked, next);   // visual only; not saved until commit
 }
 
 export function dragCommit(): void {
@@ -187,7 +213,8 @@ export function dragCancel(): void {
   if (!id || !prev) return;
   const o = state.objects.find((x) => x.id === id); if (!o) return;
   localSetTRS(id, prev);
-  if (o.baked) liveBakedTransform(o.baked, prev);
+  if (o.builder) writeBuilder(o.builder.id, prev);
+  else if (o.baked) liveBakedTransform(o.baked, prev);
 }
 
 // True while a grab-and-carry drag is in progress (used by the controller's frame loop).

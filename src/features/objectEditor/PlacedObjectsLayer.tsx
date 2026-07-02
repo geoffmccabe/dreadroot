@@ -57,7 +57,7 @@ export function PlacedObjectsLayer({ worldId }: { worldId: string }) {
 
   return (
     <Suspense fallback={null}>
-      {objects.filter((o) => !o.baked && !o.external).map((o) => (
+      {objects.filter((o) => !o.baked && !o.external && !o.builder).map((o) => (
         o.modelUrl === 'builtin:water'
           ? <WaterObject key={o.id} obj={o} />
           : o.modelUrl.startsWith('builtin:')

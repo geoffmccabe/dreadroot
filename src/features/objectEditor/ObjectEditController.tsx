@@ -19,8 +19,9 @@ import { IDENTITY_QUAT, type TRS } from './types';
 import {
   getCanEdit, getEditMode, toggleEditMode, setSelected, current,
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
-  selectBaked, clearBaked, dragBegin, dragTo, dragCommit, dragCancel, isDragging,
+  selectBaked, clearBaked, selectBuilder, clearBuilder, dragBegin, dragTo, dragCommit, dragCancel, isDragging,
 } from './store';
+import { getBuilder } from '@/components/siege/builder/builderObjectsState';
 import { placeKey, transformOverrides, saveWorldToDb } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
@@ -74,7 +75,19 @@ export function ObjectEditController() {
       const hits = ray.intersectObjects(scene.children, true);
       for (const h of hits) {
         let o: THREE.Object3D | null = h.object;
-        while (o) { if (o.userData?.worldObjectId) { clearBaked(); setSelected(o.userData.worldObjectId as string); return true; } o = o.parent; }
+        while (o) {
+          if (o.userData?.worldObjectId) { clearBaked(); clearBuilder(); setSelected(o.userData.worldObjectId as string); return true; }
+          if (o.userData?.builderId) {   // a builder-placed object — grab it the same grab-and-carry way
+            const bo = getBuilder().objects.find((x) => x.id === o!.userData.builderId);
+            if (bo) {
+              const hy = bo.rotY / 2;
+              clearBaked(); setSelected(null);
+              selectBuilder(bo.id, { pos: [...bo.pos], quat: [0, Math.sin(hy), 0, Math.cos(hy)], scale: [bo.scale, bo.scale, bo.scale] });
+              return true;
+            }
+          }
+          o = o.parent;
+        }
         const im = h.object as THREE.InstancedMesh;
         if (im.isInstancedMesh && im.userData?.placements && h.instanceId != null) {
           // Only individual objects are grabbable: skip merged-region blobs and map-sized / terrain
@@ -88,7 +101,7 @@ export function ObjectEditController() {
           if (selectBakedHit(im, h.instanceId)) return true;
         }
       }
-      clearBaked(); setSelected(null); return false;
+      clearBaked(); clearBuilder(); setSelected(null); return false;
     };
 
     const spawnAhead = () => {

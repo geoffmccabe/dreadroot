@@ -58,8 +58,12 @@ export function SelectionHighlight() {
     } else {
       if (idRef.current !== sel.id) { idRef.current = sel.id; targetRef.current = null; }
       if (!targetRef.current) {
+        const bid = sel.builder?.id;   // builder-placed objects are tagged userData.builderId
         const id = sel.id;
-        scene.traverse((o) => { if (!targetRef.current && o.userData?.worldObjectId === id) targetRef.current = o; });
+        scene.traverse((o) => {
+          if (targetRef.current) return;
+          if (bid ? o.userData?.builderId === bid : o.userData?.worldObjectId === id) targetRef.current = o;
+        });
       }
       if (!targetRef.current) { group.visible = false; return; }
       b3.setFromObject(targetRef.current);

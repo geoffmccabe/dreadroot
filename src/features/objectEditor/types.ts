@@ -33,6 +33,8 @@ export interface WorldObject {
   external?: boolean;  // present ⇒ a transient live editable (e.g. a hand-attached weapon): flows
                        // through the panel + transform controls, but is NOT rendered here and NOT
                        // persisted — a bridge applies its transform to the real object.
+  builder?: { id: string };  // present ⇒ a builder-placed object; Arrange-tool edits write back to
+                             // builderObjectsState (pos + yaw + uniform scale), rendered by the builder.
 }
 
 // The transform triple, the unit every edit command moves between.
