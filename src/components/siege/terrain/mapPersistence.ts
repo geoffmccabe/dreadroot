@@ -60,20 +60,22 @@ export async function saveMap(data: Omit<MapSaveData, 'version' | 'savedAt'>): P
   // 2) Supabase — the durable, cross-device copy. Needs a signed-in user (RLS: owner-only writes).
   try {
     const uid = await currentUserId();
-    if (!uid) return { cloud: false };
+    if (!uid) { console.warn('[mapPersistence] cloud save skipped — not signed in'); return { cloud: false }; }
     const { error } = await cloud.from('siege_maps').upsert({
       id: data.id, name: data.name ?? data.id, owner_id: uid,
       data: { heightField: data.heightField, water: data.water, objects: data.objects ?? [] },
       updated_at: new Date().toISOString(),
     });
+    if (error) console.warn('[mapPersistence] cloud save failed', error);
     return { cloud: !error };
-  } catch { return { cloud: false }; }
+  } catch (e) { console.warn('[mapPersistence] cloud save threw', e); return { cloud: false }; }
 }
 
 export async function loadMap(id: string): Promise<MapSaveData | null> {
   // Prefer the cloud copy (latest, cross-device); cache it locally; fall back to IndexedDB offline.
   try {
     const { data, error } = await cloud.from('siege_maps').select('name, data').eq('id', id).maybeSingle();
+    if (error) console.warn('[mapPersistence] cloud load failed', error);
     if (!error && data?.data?.heightField) {
       const m: MapSaveData = {
         id, name: data.name, version: SAVE_VERSION, savedAt: Date.now(),
