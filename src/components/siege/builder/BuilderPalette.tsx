@@ -120,6 +120,37 @@ export function BuilderPalette() {
     });
     setSaved(true); setTimeout(() => setSaved(false), 1500);
   };
+
+  // Download the current map (terrain + water + objects) as a JSON backup file you keep.
+  const onExport = () => {
+    const data = {
+      id: world.id, name: world.name, savedAt: Date.now(),
+      heightField: serializeField(),
+      water: { on: getBrushState().waterOn, level: getBrushState().waterLevel },
+      objects: getBuilder().objects,
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${world.id}-map-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+  // Restore a downloaded backup: save it to this map, then reload to render it.
+  const onImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = async () => {
+      try {
+        const d = JSON.parse(String(r.result));
+        if (!d.heightField?.samples) { alert('Not a valid map backup file.'); return; }
+        await saveMap({ id: world.id, name: world.name, heightField: d.heightField, water: d.water ?? { on: false, level: 4 }, objects: d.objects ?? [] });
+        alert('Backup imported — reloading to render it.');
+        window.location.reload();
+      } catch { alert('Could not read that file.'); }
+    };
+    r.readAsText(file);
+    e.target.value = '';
+  };
   const selected = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
 
   return (
@@ -210,6 +241,15 @@ export function BuilderPalette() {
             <span className="flex gap-1">
               <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSave}>{saved ? 'Saved!' : 'Save map'}</Button>
               <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => clearObjects()}>Clear</Button>
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-muted-foreground" title="Download / restore a backup file you keep">Backup file</span>
+            <span className="flex gap-1">
+              <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={onExport}>⬇ Export</Button>
+              <label className="inline-flex h-6 cursor-pointer items-center rounded border border-border px-2 text-[10px] hover:bg-accent" title="Restore from a backup file (reloads)">
+                ⬆ Import<input type="file" accept="application/json" className="hidden" onChange={onImport} />
+              </label>
             </span>
           </div>
         </div>
