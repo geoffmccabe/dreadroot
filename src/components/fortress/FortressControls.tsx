@@ -5,6 +5,7 @@ import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (tempo
 import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
 import { isSiegeIntroActive } from '@/components/siege/spawnintro/siegeSpawnIntro'; // SW spawn cinematic owns the camera
 import { getTPDist, nudgeTPDist } from '@/components/siege/siegeThirdPerson'; // SW third-person camera pull-back (Alt+wheel)
+import { playerState as siegePlayerPose } from '@/components/siege/playerState'; // publish the true player eye for the self-avatar
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
 import * as THREE from 'three';
 import { useRaycaster } from '@/hooks/useRaycaster';
@@ -3331,6 +3332,12 @@ export function FirstPersonControls({
         if (chunkUpdate) {
           chunkUpdate(camera.position.x, camera.position.z);
         }
+      }
+
+      // Publish the true player eye + facing (BEFORE the pull-back) for the siege self-avatar + HUD.
+      if (isSiege) {
+        siegePlayerPose.x = camera.position.x; siegePlayerPose.y = camera.position.y; siegePlayerPose.z = camera.position.z;
+        siegePlayerPose.fx = -Math.sin(yaw.current); siegePlayerPose.fz = -Math.cos(yaw.current);
       }
 
       // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye

@@ -51,6 +51,7 @@ import { BleakrockLighting } from './BleakrockLighting';
 import { UnderwaterEffect } from './UnderwaterEffect';
 import { ChallengeRunner } from './challenge/ChallengeRunner';
 import { SiegeSpawnIntro, SiegeSpawnIntroLiveTriggers } from './spawnintro/SpawnIntroCinematic';
+import { SiegeSelfAvatar } from './SiegeSelfAvatar';
 import { RegionSpawnerRunner } from './challenge/RegionSpawnerRunner';
 import { CombatTelemetryProbe } from './CombatTelemetryView';
 import { DamageNumbers } from './DamageNumbersLayer';
@@ -159,6 +160,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       <SiegeSpawnIntro />
       {/* Real-game triggers: auto-fire on the open-world spawn + Space/Enter countdown bypass. */}
       <SiegeSpawnIntroLiveTriggers />
+      {/* Third-person self-avatar: your own character, shown when the Alt+wheel camera is zoomed out. */}
+      <SiegeSelfAvatar />
       {/* Combat recorder probe — feeds player position to the telemetry every frame. */}
       <CombatTelemetryProbe />
       {/* Floating combat damage numbers (Unity FloatingDamageText port). */}
