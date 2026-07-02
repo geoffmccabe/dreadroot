@@ -22,18 +22,18 @@ export const LOCO_LIBRARY = '/siege/characters/siege_loco_anims.glb';
 // scaled feet on the ground.  Ash → 2.0 m incl. hat (raw 1.783), Thorn → 1.4 m (raw 2.010).
 // heightM = the character's KNOWN rendered height (m). Used to size the held gun proportionally —
 // a live bounding box can't be trusted (it includes hats, hair, Ash's cigarette smoke, raised arms).
-// heightM = KNOWN rendered height. glideFactor = fall speed while gliding (100 = normal, 200 = half
-// speed, 50 = double). All default 100 — replace with each character's real value when you send them.
-export interface LineupChar { name: string; file: string; scale: number; minY: number; heightM: number; glideFactor: number; }
+// heightM = the character's KNOWN rendered height (m). (Glide factor + other tunable stats live in
+// charadmin/characterStats, set via the Admin/Characters panel.)
+export interface LineupChar { name: string; file: string; scale: number; minY: number; heightM: number; }
 // Character MESHES only (no embedded animations — those live in ANIM_LIBRARY).
 // scale = targetHeight / rawHeight. Dago 2.4m (raw 1.695), Jankz 1.65m (raw 1.711), Rajax 1.75m (raw 1.926).
 export const LINEUP_CHARS: LineupChar[] = [
-  { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055, heightM: 2.0, glideFactor: 100 },
-  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455, heightM: 1.4, glideFactor: 100 },
-  { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.298, minY: -0.0590, heightM: 2.2, glideFactor: 100 },  // improved model (Dago5) — correct head + hands, 2.2m
-  { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', scale: 0.965, minY: -0.0038, heightM: 1.65, glideFactor: 100 },
-  { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002, heightM: 1.75, glideFactor: 100 },  // animated stance reads short; bumped to look 1.75m
-  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', scale: 1.181, minY: -0.0139, heightM: 2.3, glideFactor: 100 }, // 2.3m — calibrated vs Dago(2.2m) by actual rendered height (POSITION bbox lies for skinned meshes)
+  { name: 'Ash',   file: '/siege/characters/pilot_ash.glb',   scale: 1.122, minY: -0.0055, heightM: 2.0 },
+  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', scale: 0.697, minY: -0.2455, heightM: 1.4 },
+  { name: 'Dago',  file: '/siege/characters/pilot_dago.glb',  scale: 1.298, minY: -0.0590, heightM: 2.2 },  // improved model (Dago5) — correct head + hands, 2.2m
+  { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', scale: 0.965, minY: -0.0038, heightM: 1.65 },
+  { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002, heightM: 1.75 },  // animated stance reads short; bumped to look 1.75m
+  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', scale: 1.181, minY: -0.0139, heightM: 2.3 }, // 2.3m — calibrated vs Dago(2.2m) by actual rendered height (POSITION bbox lies for skinned meshes)
 ];
 
 export interface LineupAnchor { x: number; z: number; yaw: number; groundY: number }

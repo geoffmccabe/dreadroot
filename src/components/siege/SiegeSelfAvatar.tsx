@@ -15,8 +15,9 @@ import { getTPDist } from './siegeThirdPerson';
 import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { setCharSnap, pushCharAnimEvent, type CharSnap } from './charAnimDebug';
-import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY, LINEUP_CHARS } from './charlineup/siegeCharLineupState';
+import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY } from './charlineup/siegeCharLineupState';
 import { heldWeaponByKey } from './charlineup/weaponModels';
+import { getCharData } from './charadmin/characterStats';
 
 const EYE_HEIGHT = 1.6;
 const SHOW_DIST = 0.3;   // reveal the body once the camera has pulled past this
@@ -25,7 +26,6 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 
 // V1 self character (matches the spawn intro). A character-select panel will set this later.
 const SELF = { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 };
-const SELF_GLIDE = LINEUP_CHARS.find((c) => c.name === SELF.name)?.glideFactor ?? 100;
 
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
@@ -94,7 +94,6 @@ function SelfBody() {
 
   useFrame(() => {
     const g = group.current; if (!g) return;
-    playerState.glideFactor = SELF_GLIDE;   // tell the controller this character's glide factor
     // Locomotion selector (runs even when hidden so the pose is right the instant you zoom out):
     // pick the clip for the current movement and cross-fade to it when it changes.
     const want = pickRifleClip();
@@ -108,7 +107,11 @@ function SelfBody() {
     }
     // Refresh the live snapshot ~5×/s so the COPY dump shows the current state even when the clip
     // is stuck (which is the case we're trying to debug).
-    if (performance.now() - lastGather.current > 200) { lastGather.current = performance.now(); setCharSnap(gatherSnap(curClip.current || want)); }
+    if (performance.now() - lastGather.current > 200) {
+      lastGather.current = performance.now();
+      playerState.glideFactor = getCharData(SELF.name).stats.glide;   // the Admin/Characters glide stat
+      setCharSnap(gatherSnap(curClip.current || want));
+    }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
     if (!shown) return;
