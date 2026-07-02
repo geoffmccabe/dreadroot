@@ -4,7 +4,9 @@
 // object gets a cyan bounding-box highlight. Draco-compressed glbs decode via the local /draco/.
 import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useGLTF, useHelper } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { applyVineWind, vineTime } from '../vineWind';
 import { useActiveMapId } from '@/config/activeMap';
 import { loadMap } from '../terrain/mapPersistence';
 import { useBuilder, setObjects, type PlacedObject } from './builderObjectsState';
@@ -23,6 +25,7 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
   const cloned = useMemo(() => {
     const c = scene.clone(true);
     c.traverse((o) => { (o as THREE.Mesh).userData.builderId = obj.id; });
+    applyVineWind(c);   // slow wind sway on any hanging vines (mushroomtree05/06)
     return c;
   }, [scene, obj.id]);
   // Register this placed object's real shape as a walk-on BVH collider (active only on maps with
@@ -54,6 +57,7 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
 export function BuilderObjectsLayer() {
   const mapId = useActiveMapId();
   const { objects, selectedId } = useBuilder();
+  useFrame((s) => { vineTime.value = s.clock.elapsedTime; });   // drive the vine-wind sway
 
   // Load this map's saved placements on enter; clear first so objects never bleed across maps.
   useEffect(() => {
