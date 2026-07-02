@@ -4,6 +4,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { charAnimExport, charAnimLine } from '@/components/siege/charAnimDebug';
 
 interface PerformanceData {
   fps: number;
@@ -426,6 +427,8 @@ sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid heapMB`;
       }
     }
 
+    text += `\n\n${charAnimExport()}`;   // self-avatar locomotion diagnostics
+
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -465,6 +468,11 @@ sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid heapMB`;
       {/* Session Info */}
       <div className="text-gray-500 text-[10px] mb-1">
         Recording: {data.duration}s ({data.sampleCount} samples)
+      </div>
+
+      {/* Character animation (self-avatar) — live line; full detail is in COPY */}
+      <div className="text-[10px] mb-1 text-amber-300 break-all border-t border-white/10 pt-1">
+        anim: {charAnimLine()}
       </div>
 
       {/* FPS Stats */}

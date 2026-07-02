@@ -12,6 +12,9 @@ import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { playerState } from './playerState';
 import { getTPDist } from './siegeThirdPerson';
+import { sampleHeight } from './terrainHeight';
+import { groundAt } from './siegeGround';
+import { setCharSnap, pushCharAnimEvent, type CharSnap } from './charAnimDebug';
 import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY } from './charlineup/siegeCharLineupState';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 
@@ -35,9 +38,26 @@ const CLIP = {
   runL: 'Anim_Rifle_Run_Left_NoSkin', runR: 'Anim_Rifle_Run_Right_NoSkin',
   jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', jumpDown: 'Anim_Rifle_Jump_Down_NoSkin',
 };
+// Snapshot of everything driving the current clip, for the DFLOW character-anim tracker.
+function gatherSnap(clip: string): CharSnap {
+  const s = playerState;
+  const grid: (number | null)[] = [];
+  for (let r = -1; r <= 1; r++) for (let c = -1; c <= 1; c++) grid.push(sampleHeight(s.x + c * 0.5, s.z + r * 0.5));
+  return {
+    t: performance.now(), clip,
+    grounded: s.grounded, vy: s.vy, mf: s.mf, mr: s.mr, run: s.run, gun: s.gun,
+    x: s.x, y: s.y, z: s.z, eyeH: EYE_HEIGHT,
+    groundTerrain: sampleHeight(s.x, s.z),
+    groundMesh: groundAt(s.x, s.z, s.y + 2),
+    grid,
+  };
+}
+
 function pickRifleClip(): string {
   const s = playerState;
-  if (!s.grounded) return s.vy > 0.5 ? CLIP.jumpUp : CLIP.jumpDown;
+  // Only play jump/fall on REAL vertical motion — a momentary "not grounded" with ~zero vertical
+  // speed (e.g. grounded flicker on a slope) shouldn't trigger a jump loop; treat it as locomotion.
+  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? CLIP.jumpUp : CLIP.jumpDown;
   if (s.mf > 0) return s.run ? CLIP.runF : CLIP.walkF;    // forward (run takes priority over strafe)
   if (s.mf < 0) return CLIP.back;                          // backward
   if (s.mr < 0) return s.run ? CLIP.runL : CLIP.strafeL;  // strafe left
@@ -65,6 +85,7 @@ function SelfBody() {
   const anims = useMemo(() => [...rifleAnims, ...baseAnims], [rifleAnims, baseAnims]);
   const { actions } = useAnimations(anims, inner);
   const curClip = useRef('');
+  const lastGather = useRef(0);
 
   useFrame(() => {
     const g = group.current; if (!g) return;
@@ -72,10 +93,16 @@ function SelfBody() {
     // pick the clip for the current movement and cross-fade to it when it changes.
     const want = pickRifleClip();
     if (want !== curClip.current && actions[want]) {
+      const snap = gatherSnap(want);
+      pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
+      setCharSnap(snap);
       if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.2);
       actions[want]!.reset().fadeIn(0.2).play();
       curClip.current = want;
     }
+    // Refresh the live snapshot ~5×/s so the COPY dump shows the current state even when the clip
+    // is stuck (which is the case we're trying to debug).
+    if (performance.now() - lastGather.current > 200) { lastGather.current = performance.now(); setCharSnap(gatherSnap(curClip.current || want)); }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
     if (!shown) return;
