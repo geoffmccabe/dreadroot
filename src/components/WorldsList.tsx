@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { blockDB } from '@/hooks/useIndexedDB';
 import { RarityTiersPanel } from './AdminPanel.RarityTiersPanel';
 import { SoundSettingsPanel } from './SoundSettingsPanel';
+import { PanelThemeEditor } from '@/features/panelThemeEditor/PanelThemeEditor';
 
 const LOCAL_STORAGE_KEY = 'currentWorldId';
 
@@ -1328,9 +1329,7 @@ export function WorldsList({ currentWorldId, onWorldChange, subtab }: WorldsList
         </TabsContent>
 
         <TabsContent value="css" className="mt-0">
-          <Card className="p-4">
-            <p className="text-muted-foreground text-sm">CSS settings coming soon.</p>
-          </Card>
+          <PanelThemeEditor />
         </TabsContent>
 
         <TabsContent value="rarity-tiers" className="mt-0">
