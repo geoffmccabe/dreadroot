@@ -132,6 +132,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     geo.setIndex(idx);
     geo.computeVertexNormals();
     paintWeights(geo);
+    geo.computeBoundingSphere();   // else frustum culling uses default/stale bounds
     return geo;
   };
 
@@ -157,6 +158,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     pos.needsUpdate = true;
     geo.computeVertexNormals();
     paintWeights(geo);
+    geo.computeBoundingSphere();   // sculpted heights changed → refresh cull bounds so it doesn't vanish
   };
 
   const addCell = (key: number, cx: number, cz: number) => {
@@ -164,6 +166,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     const mesh = new THREE.Mesh(buildGeometry(cx, cz), cellMat);
     mesh.receiveShadow = true;   // catch the sun for 3D form
     mesh.castShadow = true;
+    mesh.frustumCulled = false;  // few cells loaded at once; never let a sculpted cell cull out
     mesh.userData.ground = true;
     mesh.userData.terrainCell = key;
     groupRef.current.add(mesh);
