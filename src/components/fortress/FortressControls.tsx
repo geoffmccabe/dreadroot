@@ -183,6 +183,7 @@ export function FirstPersonControls({
   // pull-back distance, and whether the eye has been captured yet. All no-ops until Alt+wheel zooms out.
   const tpEye = useRef(new THREE.Vector3());
   const tpFwd = useRef(new THREE.Vector3());
+  const tpRender = useRef(new THREE.Vector3());   // where WE left the render camera last frame
   const tpCurrent = useRef(0);
   const tpEyeSet = useRef(false);
   const keys = useRef({
@@ -2064,7 +2065,14 @@ export function FirstPersonControls({
       if (isSiege) {
         tpCurrent.current += (getTPDist() - tpCurrent.current) * Math.min(1, delta * 10);
         if (tpCurrent.current < 0.02) tpCurrent.current = 0;
-        if (tpCurrent.current > 0 && tpEyeSet.current) camera.position.copy(tpEye.current);
+        // Restore the eye ONLY if the camera is still exactly where WE left it (our render offset). If
+        // ANYTHING else moved it since — a Cmd-J teleport, a spawn/respawn, god-mode fly — treat that
+        // as the new eye instead of yanking it back to a stale one.
+        if (tpCurrent.current > 0 && tpEyeSet.current && camera.position.distanceToSquared(tpRender.current) < 1e-4) {
+          camera.position.copy(tpEye.current);
+        } else {
+          tpEyeSet.current = false;
+        }
       }
       // Note: useFrameCallCount only tracked in master loop now
 
@@ -3333,6 +3341,7 @@ export function FirstPersonControls({
         tpEye.current.copy(camera.position); tpEyeSet.current = true;
         tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         camera.position.addScaledVector(tpFwd.current, -tpCurrent.current);
+        tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
       } else if (isSiege) {
         tpEyeSet.current = false;
       }
