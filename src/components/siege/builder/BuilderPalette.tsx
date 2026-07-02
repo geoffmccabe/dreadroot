@@ -159,10 +159,10 @@ export function BuilderPalette() {
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined }}>
       <div className="mb-2 flex items-center justify-between">
-        <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧱 Builder</span>
+        <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧩 Model Placer</span>
         <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
           onClick={() => setBuilder({ enabled: !b.enabled })}>
-          {b.enabled ? 'Build ON' : 'Build off'}
+          {b.enabled ? 'Place ON' : 'Place off'}
         </Button>
       </div>
 
