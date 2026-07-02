@@ -56,6 +56,7 @@ export function BuilderPalette() {
   const [items, setItems] = useState<CatItem[]>([]);
   const [q, setQ] = useState('');
   const [saved, setSaved] = useState(false);
+  const [savedCloud, setSavedCloud] = useState(false);
   const [codeQ, setCodeQ] = useState('');
   const [matches, setMatches] = useState<AssetEntry[]>([]);
   const favs = useFavorites();
@@ -112,13 +113,14 @@ export function BuilderPalette() {
   if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || isEnchantedForest(world.id) || inChallenge) return null;
 
   const onSave = async () => {
-    await saveMap({
+    const res = await saveMap({
       id: world.id, name: world.name,
       heightField: serializeField(),
       water: { on: getBrushState().waterOn, level: getBrushState().waterLevel },
       objects: getBuilder().objects,
     });
-    setSaved(true); setTimeout(() => setSaved(false), 1500);
+    setSavedCloud(res.cloud);
+    setSaved(true); setTimeout(() => setSaved(false), 1800);
   };
 
   // Download the current map (terrain + water + objects) as a JSON backup file you keep.
@@ -239,7 +241,7 @@ export function BuilderPalette() {
           <div className="mt-1 flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">{b.objects.length} placed</span>
             <span className="flex gap-1">
-              <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSave}>{saved ? 'Saved!' : 'Save map'}</Button>
+              <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSave} title="Save to your browser + Supabase cloud">{saved ? (savedCloud ? 'Saved ☁' : 'Saved (local)') : 'Save map'}</Button>
               <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => clearObjects()}>Clear</Button>
             </span>
           </div>

@@ -6,6 +6,16 @@
 // stay the same. Keyed by map id (= world id).
 
 import type { PlacedObject } from '../builder/builderObjectsState';
+import { supabase } from '@/integrations/supabase/client';
+
+// Cloud home for authored maps: the additive, siege-only `siege_maps` table (see the SQL Geoff
+// pastes into the Supabase dashboard). types.ts is generated and doesn't include it yet, so these
+// calls are loosely typed. Cloud is best-effort + needs auth; local IndexedDB is always written.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const cloud = supabase as unknown as { from: (t: string) => any };
+async function currentUserId(): Promise<string | null> {
+  try { const { data } = await supabase.auth.getUser(); return data.user?.id ?? null; } catch { return null; }
+}
 
 export interface MapSaveData {
   id: string;
@@ -35,7 +45,8 @@ function db(): Promise<IDBDatabase> {
   return dbp;
 }
 
-export async function saveMap(data: Omit<MapSaveData, 'version' | 'savedAt'>): Promise<void> {
+export async function saveMap(data: Omit<MapSaveData, 'version' | 'savedAt'>): Promise<{ cloud: boolean }> {
+  // 1) Local IndexedDB — always, instant, survives reloads on this browser.
   try {
     const d = await db();
     await new Promise<void>((resolve, reject) => {
@@ -45,9 +56,35 @@ export async function saveMap(data: Omit<MapSaveData, 'version' | 'savedAt'>): P
       tx.onerror = () => reject(tx.error);
     });
   } catch { /* persistence is best-effort during dev */ }
+
+  // 2) Supabase — the durable, cross-device copy. Needs a signed-in user (RLS: owner-only writes).
+  try {
+    const uid = await currentUserId();
+    if (!uid) return { cloud: false };
+    const { error } = await cloud.from('siege_maps').upsert({
+      id: data.id, name: data.name ?? data.id, owner_id: uid,
+      data: { heightField: data.heightField, water: data.water, objects: data.objects ?? [] },
+      updated_at: new Date().toISOString(),
+    });
+    return { cloud: !error };
+  } catch { return { cloud: false }; }
 }
 
 export async function loadMap(id: string): Promise<MapSaveData | null> {
+  // Prefer the cloud copy (latest, cross-device); cache it locally; fall back to IndexedDB offline.
+  try {
+    const { data, error } = await cloud.from('siege_maps').select('name, data').eq('id', id).maybeSingle();
+    if (!error && data?.data?.heightField) {
+      const m: MapSaveData = {
+        id, name: data.name, version: SAVE_VERSION, savedAt: Date.now(),
+        heightField: data.data.heightField,
+        water: data.data.water ?? { on: false, level: 4 },
+        objects: data.data.objects ?? [],
+      };
+      try { const d = await db(); const tx = d.transaction(STORE, 'readwrite'); tx.objectStore(STORE).put({ ...m }); } catch { /* cache best-effort */ }
+      return m;
+    }
+  } catch { /* offline / not signed in → fall through to local */ }
   try {
     const d = await db();
     return await new Promise<MapSaveData | null>((resolve, reject) => {
