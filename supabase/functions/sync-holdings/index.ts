@@ -45,9 +45,8 @@ Deno.serve(async (req) => {
     admin.from('supporter_requirements').select('gate_kind, nft_chain, nft_collection, nft_schema, nft_template_id'),
     admin.from('user_divigo_links').select('app_token').eq('user_id', user.id).maybeSingle(),
   ])
-  const links = ((linkRes.data as { chain: string; account: string }[]) ?? []).filter((l) => l.account)
+  const pastedLinks = ((linkRes.data as { chain: string; account: string }[]) ?? []).filter((l) => l.account)
   const divigoToken = (divigoRes.data as { app_token?: string } | null)?.app_token ?? null
-  if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
   const themes = (themeRes.data as ThemeRow[]) ?? []
   const reqs = (reqRes.data as ReqRow[]) ?? []
 
@@ -66,6 +65,37 @@ Deno.serve(async (req) => {
   }
 
   const SSO = (Deno.env.get('SSO_BASE_URL') ?? 'https://sso.lightningworks.io').replace(/\/$/, '')
+
+  // Ownership-PROVEN addresses: the wallets the user connected (and signed with) in the SSO. Sourced
+  // by email (login maps 1:1) via app credentials — trustworthy, unlike a pasted address. chain_type
+  // maps: solana→solana, evm→ethereum (primary EVM), wax→wax, divi→divi.
+  const appSlug = Deno.env.get('DIVIGO_APP_SLUG') ?? '', appSecret = Deno.env.get('DIVIGO_APP_SECRET') ?? ''
+  const chainMap: Record<string, string> = { solana: 'solana', evm: 'ethereum', wax: 'wax', divi: 'divi' }
+  const provenLinks: { chain: string; account: string }[] = []
+  if (appSlug && appSecret && user.email) {
+    try {
+      const r = await fetch(`${SSO}/api/app/connected-wallets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-LW-App-Slug': appSlug, 'X-LW-App-Secret': appSecret },
+        body: JSON.stringify({ email: user.email }),
+      })
+      const d = await r.json()
+      for (const w of (d.wallets ?? [])) {
+        const chain = chainMap[String(w.chain).toLowerCase()];
+        if (chain && w.address) provenLinks.push({ chain, account: String(w.address) });
+      }
+    } catch (e) {
+      console.error('[sync-holdings] connected-wallets fetch failed', (e as Error).message)
+    }
+  }
+
+  // Merge proven + pasted, dedupe by chain+account (proven first so it wins).
+  const seenLink = new Set<string>()
+  const links = [...provenLinks, ...pastedLinks].filter((l) => {
+    const k = `${norm(l.chain)}:${l.account}`; if (seenLink.has(k)) return false; seenLink.add(k); return true;
+  })
+  if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
+
   const nowIso = new Date().toISOString()
   const nftAcc: NftAcc[] = []
   const extByKey = new Map<string, ExtAcc>() // key = token_theme_id (keep the largest amount seen)
