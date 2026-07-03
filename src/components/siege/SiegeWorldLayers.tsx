@@ -15,6 +15,7 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
+import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
 import { BuilderController } from './builder/BuilderController';
 import { MushroomImportDisplay } from './MushroomImportDisplay';
 import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
@@ -129,6 +130,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Drop-in object builder: render placed objects always (so saved maps show them in play),
           and the placement controller (no-ops unless build mode is on). */}
       {isBuilderMap && <BuilderObjectsLayer />}
+      {isBuilderMap && <ProceduralObjectsLayer />}
       {isBuilderMap && <BuilderController />}
       {/* Universal placed-objects system (works on every SWW map). Renders objects from the
           shared world_objects table; the controller is a no-op until edit mode (backtick) is on. */}

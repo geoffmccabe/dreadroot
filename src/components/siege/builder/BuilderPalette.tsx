@@ -14,6 +14,7 @@ import { serializeField } from '../terrain/heightField';
 import { getBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
+import { ProceduralPanel } from './ProceduralPanel';
 import { scifiData, ASSET_BASE } from '@/config/assetBase';
 import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
 import { useFavorites, toggleFavorite, isFavorite, removeFavorite } from '../scifi/assetFavorites';
@@ -163,16 +164,22 @@ export function BuilderPalette() {
 
   return (
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
-      style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined }}>
-      <div className="mb-2 flex items-center justify-between">
+      style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>
+      <div className="mb-2 flex items-center justify-between gap-1">
         <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧩 Model Placer</span>
-        <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-          onClick={() => setBuilder({ enabled: !b.enabled })}>
-          {b.enabled ? 'Place ON' : 'Place off'}
-        </Button>
+        <span className="flex gap-1">
+          <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
+            onClick={() => setBuilder({ enabled: !b.enabled })}>{b.enabled ? 'ON' : 'OFF'}</Button>
+          <Button size="sm" variant={b.enabled && b.pgMode === 'place' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
+            onClick={() => setBuilder({ enabled: true, pgMode: 'place' })}>Place</Button>
+          <Button size="sm" variant={b.enabled && b.pgMode === 'pg' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
+            onClick={() => setBuilder({ enabled: true, pgMode: 'pg' })} title="Procedural Generator">PG</Button>
+        </span>
       </div>
 
-      {b.enabled && (
+      {b.enabled && b.pgMode === 'pg' && <ProceduralPanel />}
+
+      {b.enabled && b.pgMode === 'place' && (
         <div className="flex flex-1 flex-col overflow-y-auto pr-0.5">
           {/* Type an asset CODE (from the ASSETGRID labels) — pulls that exact asset from ANY pack. */}
           <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="type a code (e.g. 3fa9c…)"

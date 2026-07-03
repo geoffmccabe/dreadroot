@@ -25,10 +25,11 @@ interface BuilderState {
   armedScale: number;               // scale to apply to the next placed object
   armedY: number;                   // manual Y offset above ground for the held item (scroll wheel)
   selectedId: string | null;        // currently selected placed object
+  pgMode: 'place' | 'pg';           // manual placement vs procedural generation
 }
 
 let state: BuilderState = {
-  enabled: false, objects: [], armed: null, armedRotY: 0, armedScale: 1, armedY: 0, selectedId: null,
+  enabled: false, objects: [], armed: null, armedRotY: 0, armedScale: 1, armedY: 0, selectedId: null, pgMode: 'place',
 };
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
