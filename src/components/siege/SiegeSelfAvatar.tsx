@@ -27,10 +27,12 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 const HOLSTER_CLIP = 'Anim_Rifle_Put_Away_NoSkin';   // played forward = holster, reversed = draw
 const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
-// Coyote time: how long the player must be CONTINUOUSLY off the ground before the animation counts
-// as airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so
-// it keeps the walk/run pose instead of snapping to falling. Standard platformer/FPS technique.
-const COYOTE_MS = 130;
+// Coyote time: how long the player must be CONTINUOUSLY off the ground before FALLING counts as
+// airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so it
+// keeps the walk/run pose instead of snapping to the fall pose. Standard platformer/FPS technique.
+// (A real JUMP bypasses this — it's detected by the upward launch speed and shows immediately.)
+const COYOTE_MS = 230;
+const JUMP_VY = 2;   // upward speed that means "the player just jumped" → jump pose with no delay
 
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
@@ -121,14 +123,18 @@ function SelfBody({ char }: { char: LineupChar }) {
     const g = group.current; if (!g) return;
     const armed = playerState.gun;
 
-    // Coyote time: only count as airborne after being off the ground CONTINUOUSLY past COYOTE_MS — so a
-    // one-frame unground from a bump / downhill (grounded flickers back true, resetting the timer) never
-    // trips the fall pose. A real jump (strong upward speed) shows immediately.
+    // Airborne detection:
+    //  - a real JUMP (strong upward speed) shows immediately, and STAYS airborne through the whole arc
+    //    (once we've been off the ground past the grace, vy magnitude no longer matters — so the apex,
+    //    where vy≈0, no longer flickers back to the ground pose, which read as a broken jump).
+    //  - a FALL (walking off a ledge, no launch) only counts after being off the ground continuously
+    //    past COYOTE_MS, so a bump / downhill (grounded flickers back, resetting the timer) never trips it.
     const now = performance.now();
     if (playerState.grounded) airborneAt.current = 0;
     else if (!airborneAt.current) airborneAt.current = now;
-    const airborne = playerState.vy > 2
-      || (!playerState.grounded && airborneAt.current > 0 && now - airborneAt.current > COYOTE_MS && Math.abs(playerState.vy) > 0.6);
+    const jumping = playerState.vy > JUMP_VY;
+    const sustainedAir = !playerState.grounded && airborneAt.current > 0 && now - airborneAt.current > COYOTE_MS;
+    const airborne = jumping || sustainedAir;
 
     // Holster / draw one-shot: on the weapon-out state flipping, play the put-away clip forward
     // (holster) or reversed (draw), and hold off the locomotion selector until it finishes.
@@ -156,8 +162,15 @@ function SelfBody({ char }: { char: LineupChar }) {
         const snap = gatherSnap(want);
         pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
         setCharSnap(snap);
-        if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.2);
-        const na = actions[want]!; na.reset(); na.setLoop(THREE.LoopRepeat, Infinity); na.timeScale = 1; na.fadeIn(0.2).play();
+        // The jump-up clip snaps in fast and plays ONCE, holding the rising pose — otherwise the fade
+        // and a re-looping leap/windup make the jump read as delayed. Everything else cross-fades normally.
+        const isJump = want === CLIP.jumpUp || want === UNARMED.jumpUp;
+        const fade = isJump ? 0.06 : 0.2;
+        if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(fade);
+        const na = actions[want]!; na.reset();
+        na.setLoop(isJump ? THREE.LoopOnce : THREE.LoopRepeat, isJump ? 1 : Infinity);
+        na.clampWhenFinished = isJump;
+        na.timeScale = 1; na.fadeIn(fade).play();
         curClip.current = want;
       }
       if (wrapRef.current) wrapRef.current.visible = armed;   // gun hidden while unarmed
