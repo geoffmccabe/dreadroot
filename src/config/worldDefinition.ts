@@ -31,6 +31,9 @@ export interface GroundConfig {
    *  editable heightfield the FIRST time the map loads (no saved edits yet). Lets a heightmap map
    *  start from real terrain (e.g. cropped from another map) instead of flat. */
   seedUrl?: string;
+  /** For 'heightmap' maps: streamed-cell view radius in 128 m cells (fog + terrain range). Default 3
+   *  (~380 m, mobile-friendly). Raise for long-view builder islands (each +1 is ~128 m but more geometry). */
+  viewCells?: number;
 }
 
 /**
@@ -254,7 +257,7 @@ export const BLEAKROCK2_WORLD: WorldDefinition = {
     height: 300,
     line: [[-2900, -740], [800, -740], [800, 2960], [-2900, 2960], [-2900, -740]],
   },
-  ground: { kind: 'heightmap', surfaceY: 14, seedUrl: '/siege/bleakrock2/heightfield.json' },
+  ground: { kind: 'heightmap', surfaceY: 14, seedUrl: '/siege/bleakrock2/heightfield.json', viewCells: 8 }, // ~1 km view for the big-mushroom island
   spawn: { position: [-1048, 31, 1108], yaw: 0 },
   props: undefined,
 };

@@ -19,7 +19,7 @@ import { loadMap } from './mapPersistence';
 import { setBrushState } from './terrainBrushState';
 import { loadTerrainTex, makeTerrainBlendMaterial } from './terrainBlend';
 
-const VIEW_CELLS = 3;          // load radius in cells (3×128 = 384 m of editable detail) — mobile-friendly
+const DEFAULT_VIEW_CELLS = 3;  // load radius in cells (3×128 = 384 m) — mobile-friendly default; world.ground.viewCells overrides
 const TEX_REPEAT_M = 6;
 const KEY_OFF = 32768;         // matches heightField cellKey packing
 
@@ -39,6 +39,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   // Night maps (SciFi City) darken the terrain toward black so it doesn't glow under the dark city;
   // the material colour multiplies the blended textures.
   const night = world.id === 'city-demo';
+  const VIEW_CELLS = world.ground.viewCells ?? DEFAULT_VIEW_CELLS;   // per-world view radius (long view for builder islands)
   // ONE sand/grass/rock blend material shared by every cell — not one per cell.
   const cellMat = useMemo(
     () => makeTerrainBlendMaterial(
@@ -66,7 +67,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     // Night maps fade to dark, not the daytime light grey-blue (which washed the night city grey).
     scene.fog = new THREE.Fog(night ? 0x0a0e1a : 0x9fb2c4, VIEW_CELLS * CELL_M * 0.45, VIEW_CELLS * CELL_M * 0.95);
     return () => { scene.fog = prevFog; };
-  }, [scene, night]);
+  }, [scene, night, VIEW_CELLS]);
 
   useEffect(() => {
     let alive = true;
