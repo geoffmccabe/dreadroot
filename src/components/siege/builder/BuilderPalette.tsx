@@ -15,7 +15,7 @@ import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
-import { ModelPreview } from './ModelPreview';
+import { ModelPreview, ModelPortCanvas } from './ModelPreview';
 import { MUSHROOM_TREES } from './mushroomCatalog';
 import { scifiData, ASSET_BASE } from '@/config/assetBase';
 import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
@@ -59,8 +59,8 @@ export function BuilderPalette() {
   const favs = useFavorites();
 
   // Draggable (by the title) + resizable (bottom-right corner), like the other panels.
-  const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 268), top: 96 });
   const [size, setSize] = useState({ w: 347, h: 624 });   // 40% wider, 20% taller — more prominent
+  const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 347 - 20), top: 96 });
   const rz = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const onRzDown = (e: React.PointerEvent) => {
     rz.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
@@ -160,6 +160,7 @@ export function BuilderPalette() {
 
   return (
     <>
+    {b.enabled && b.pgMode === 'pg' && <ModelPortCanvas />}
     {b.enabled && b.pgMode === 'pg' && <ModelPreview panelLeft={pos.left} />}
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>

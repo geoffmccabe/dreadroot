@@ -13,6 +13,7 @@ import {
 import { savePgSet, loadPgSet, exportPgSet, importPgSet } from './pgPersistence';
 import { addObjects, removeBySet, useBuilder } from './builderObjectsState';
 import { modelHeights } from './modelMeasure';
+import { ModelThumb, preloadModels } from './ModelPreview';
 
 const num = 'w-12 rounded bg-background/60 px-1 py-0.5 text-right text-[10px]';
 function Slider({ label, val, min, max, step, suffix, on }: { label: string; val: number; min: number; max: number; step: number; suffix?: string; on: (v: number) => void }) {
@@ -31,7 +32,7 @@ function ChosenRow({ c }: { c: SpeciesCfg }) {
   return (
     <div className="rounded border border-primary/30 bg-primary/5 p-1">
       <div className="flex items-center gap-1">
-        <span onMouseEnter={() => setPgPreview(c.file)} onMouseLeave={() => setPgPreview(null)} className="cursor-help" title="Hover to preview">🔍</span>
+        <span onMouseEnter={() => setPgPreview(c.file)} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb file={c.file} size={30} /></span>
         <span className="flex-1 truncate">{c.file}</span>
         <button className="rounded border border-border px-1 text-muted-foreground hover:text-foreground" title="Remove" onClick={() => removeSpecies(c.file)}>×</button>
       </div>
@@ -49,6 +50,7 @@ export function ProceduralPanel() {
   const mapId = useActiveMapId();
   const [setMsg, setSetMsg] = useState('');
   useEffect(() => { loadPgSet(mapId); }, [mapId]);   // load this map's saved PG set on entry
+  useEffect(() => { preloadModels(); }, []);          // warm the thumbnail/preview cache
   const onSaveSet = async () => {
     const r = await savePgSet(mapId, `${mapId} mushrooms`);
     setSetMsg(r.cloud ? 'Saved ☁' : 'Saved local'); setTimeout(() => setSetMsg(''), 2500);
@@ -102,7 +104,7 @@ export function ProceduralPanel() {
         <div className="max-h-28 overflow-y-auto rounded border border-border/40 p-1">
           {unchosen.map((f) => (
             <div key={f} className="flex items-center gap-1 px-1 py-0.5 hover:bg-accent">
-              <span onMouseEnter={() => setPgPreview(f)} onMouseLeave={() => setPgPreview(null)} className="cursor-help" title="Hover to preview">🔍</span>
+              <span onMouseEnter={() => setPgPreview(f)} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb file={f} size={30} /></span>
               <span className="flex-1 truncate">{f}</span>
               <button className="rounded border border-border px-1" title="Add to chosen" onClick={() => addSpecies(f)}>+</button>
             </div>
