@@ -136,6 +136,10 @@ function TokensPanel() {
   const [newTicker, setNewTicker] = useState('');
   const [newAddress, setNewAddress] = useState('');
   const [newLogoUrl, setNewLogoUrl] = useState('');
+  const [newDecimals, setNewDecimals] = useState('');
+  const [newRpcUrl, setNewRpcUrl] = useState('');
+  const [newExplorerUrl, setNewExplorerUrl] = useState('');
+  const [fetchingMint, setFetchingMint] = useState(false);
 
   // Edit form state
   const [editName, setEditName] = useState('');
@@ -143,6 +147,7 @@ function TokensPanel() {
   const [editAddress, setEditAddress] = useState('');
   const [editRpcUrl, setEditRpcUrl] = useState('');
   const [editExplorerUrl, setEditExplorerUrl] = useState('');
+  const [editDecimals, setEditDecimals] = useState('');
 
   const solanaTokens = useMemo(
     () => availableThemes.filter(t => t.blockchain?.toLowerCase() === 'solana'),
@@ -159,6 +164,7 @@ function TokensPanel() {
     setEditAddress(selectedToken.contract_address || '');
     setEditRpcUrl(selectedToken.rpc_url || '');
     setEditExplorerUrl(selectedToken.block_explorer_url || '');
+    setEditDecimals((selectedToken as { decimals?: number }).decimals != null ? String((selectedToken as { decimals?: number }).decimals) : '');
     setEditing(true);
   }, [selectedToken]);
 
@@ -166,13 +172,19 @@ function TokensPanel() {
     if (!selectedToken) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('token_themes').update({
+      const patch: Record<string, unknown> = {
         display_name: editName.trim() || selectedToken.display_name,
         ticker_symbol: editTicker.trim() || null,
         contract_address: editAddress.trim() || null,
         rpc_url: editRpcUrl.trim() || null,
         block_explorer_url: editExplorerUrl.trim() || null,
-      }).eq('id', selectedToken.id);
+        // Repair chain fields on any save (legacy Solana rows were stored with blockchain only).
+        network: 'solana',
+        is_onchain: !!editAddress.trim(),
+      };
+      const dec = parseInt(editDecimals, 10);
+      if (Number.isFinite(dec) && dec >= 0 && dec <= 18) patch.decimals = dec;
+      const { error } = await supabase.from('token_themes').update(patch).eq('id', selectedToken.id);
 
       if (error) throw error;
       toast({ title: 'Token updated', duration: 2000 });
@@ -183,7 +195,7 @@ function TokensPanel() {
     } finally {
       setSaving(false);
     }
-  }, [selectedToken, editName, editTicker, editAddress, editRpcUrl, editExplorerUrl, toast, refreshThemes]);
+  }, [selectedToken, editName, editTicker, editAddress, editRpcUrl, editExplorerUrl, editDecimals, toast, refreshThemes]);
 
   const handleImageUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -224,37 +236,69 @@ function TokensPanel() {
     }
   }, [selectedToken, toast, refreshThemes]);
 
+  // Auto-fetch the mint's on-chain decimals so the admin can't mis-enter them (wrong decimals corrupt
+  // every balance by orders of magnitude). Best-effort via public Solana RPC; falls back to manual.
+  const autofillFromMint = useCallback(async () => {
+    const mint = newAddress.trim();
+    if (!mint || newDecimals) return;
+    setFetchingMint(true);
+    try {
+      const rpc = newRpcUrl.trim() || 'https://api.mainnet-beta.solana.com';
+      const r = await fetch(rpc, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTokenSupply', params: [mint] }),
+      });
+      const j = await r.json();
+      const dec = j?.result?.value?.decimals;
+      if (typeof dec === 'number') setNewDecimals(String(dec));
+    } catch { /* leave manual */ } finally { setFetchingMint(false); }
+  }, [newAddress, newDecimals, newRpcUrl]);
+
   const handleAddToken = useCallback(async () => {
-    if (!newName.trim()) {
-      toast({ title: 'Name is required', duration: 2000 });
-      return;
-    }
-    if (!newAddress.trim()) {
-      toast({ title: 'Token address is required', duration: 2000 });
+    if (!newName.trim()) { toast({ title: 'Name is required', duration: 2000 }); return; }
+    if (!newAddress.trim()) { toast({ title: 'Token mint address is required', duration: 2000 }); return; }
+    const decimals = parseInt(newDecimals, 10);
+    if (!Number.isFinite(decimals) || decimals < 0 || decimals > 18) {
+      toast({ title: 'Decimals required', description: 'Auto-fills from the mint, or enter it (SOL=9, most SPL=6).', duration: 3500 });
       return;
     }
 
     setSaving(true);
     try {
       const slug = newName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const { error } = await supabase.from('token_themes').insert({
+      // 1. The token_theme (the on-chain variant) with full Solana config.
+      const { data: theme, error } = await supabase.from('token_themes').insert({
         name: slug,
         display_name: newName.trim(),
         ticker_symbol: newTicker.trim() || null,
         contract_address: newAddress.trim(),
         coin_image_url: newLogoUrl.trim() || null,
         blockchain: 'Solana',
+        network: 'solana',
+        is_onchain: true,
+        decimals,
+        rpc_url: newRpcUrl.trim() || null,
+        block_explorer_url: newExplorerUrl.trim() || null,
         is_active: true,
         color_palette: [{ hex: '#9945FF', weight: 1 }],
-      });
-
+      }).select('id').single();
       if (error) throw error;
 
+      // 2. Link (or create) the token_asset brand so it groups correctly in the wallet UI.
+      const sym = (newTicker.trim() || newName.trim()).toUpperCase();
+      const { data: existing } = await supabase.from('token_assets' as never).select('id').eq('symbol', sym).maybeSingle();
+      let assetId = (existing as { id?: string } | null)?.id;
+      if (!assetId) {
+        const { data: created } = await supabase.from('token_assets' as never)
+          .insert({ symbol: sym, display_name: newName.trim(), kind: 'token', logo_url: newLogoUrl.trim() || null, is_active: true } as never)
+          .select('id').single();
+        assetId = (created as { id?: string } | null)?.id;
+      }
+      if (assetId && theme?.id) await supabase.from('token_themes').update({ asset_id: assetId }).eq('id', theme.id);
+
       toast({ title: 'Token added', duration: 2000 });
-      setNewName('');
-      setNewTicker('');
-      setNewAddress('');
-      setNewLogoUrl('');
+      setNewName(''); setNewTicker(''); setNewAddress(''); setNewLogoUrl('');
+      setNewDecimals(''); setNewRpcUrl(''); setNewExplorerUrl('');
       setAddOpen(false);
       refreshThemes?.();
     } catch (err: any) {
@@ -262,7 +306,7 @@ function TokensPanel() {
     } finally {
       setSaving(false);
     }
-  }, [newName, newTicker, newAddress, newLogoUrl, toast, refreshThemes]);
+  }, [newName, newTicker, newAddress, newLogoUrl, newDecimals, newRpcUrl, newExplorerUrl, toast, refreshThemes]);
 
   return (
     <div className="space-y-4">
@@ -370,6 +414,10 @@ function TokensPanel() {
                 <Input value={editAddress} onChange={e => setEditAddress(e.target.value)} className="font-mono text-xs" />
               </div>
               <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Decimals</label>
+                <Input type="number" value={editDecimals} onChange={e => setEditDecimals(e.target.value)} className="w-28" placeholder="6" />
+              </div>
+              <div>
                 <label className="text-xs text-muted-foreground mb-1 block">RPC URL</label>
                 <Input value={editRpcUrl} onChange={e => setEditRpcUrl(e.target.value)} className="font-mono text-xs" />
               </div>
@@ -418,13 +466,35 @@ function TokensPanel() {
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Token Address (Contract) *</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Token Mint Address *</label>
               <Input
                 placeholder="Solana token mint address"
                 value={newAddress}
                 onChange={e => setNewAddress(e.target.value)}
+                onBlur={autofillFromMint}
                 className="font-mono text-xs"
               />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block flex items-center gap-1">
+                Decimals * {fetchingMint && <Loader2 className="w-3 h-3 animate-spin" />}
+                <span className="text-muted-foreground/60">(auto-fills from the mint)</span>
+              </label>
+              <Input
+                placeholder="e.g. 6"
+                type="number"
+                value={newDecimals}
+                onChange={e => setNewDecimals(e.target.value)}
+                className="w-28"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">RPC URL (optional — defaults to Helius/public)</label>
+              <Input placeholder="https://mainnet.helius-rpc.com/?api-key=…" value={newRpcUrl} onChange={e => setNewRpcUrl(e.target.value)} className="font-mono text-xs" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Block Explorer URL (optional)</label>
+              <Input placeholder="https://solscan.io/token/…" value={newExplorerUrl} onChange={e => setNewExplorerUrl(e.target.value)} className="font-mono text-xs" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground mb-1 block">Coin Logo URL</label>
