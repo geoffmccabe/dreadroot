@@ -98,6 +98,17 @@ Deno.serve(async (req) => {
       } else if (chain === 'divi') {
         const d = await fetch(`${SSO}/api/divi-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
         for (const t of (d.tokens ?? [])) pushExt(findTheme('divi', t.symbol ?? 'DIVI', null), 'divi', account, t.amount ?? 0)
+      } else if (chain === 'solana') {
+        const d = await fetch(`${SSO}/api/solana-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
+        for (const t of (d.tokens ?? [])) pushExt(findTheme('solana', t.symbol ?? '', t.contract ?? null), 'solana', account, t.amount ?? 0)
+        // NFTs: mirror only collections a requirement gates on, keyed to the requirement's exact string.
+        const byCollection = new Map<string, number>()
+        for (const n of (d.nfts ?? [])) if (n.collection) byCollection.set(String(n.collection).toLowerCase(), n.count ?? 0)
+        for (const r of reqs) {
+          if (r.gate_kind !== 'nft' || norm(r.nft_chain) !== 'solana' || !r.nft_collection) continue;
+          const count = byCollection.get(r.nft_collection.toLowerCase()) ?? 0;
+          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, updated_at: nowIso })
+        }
       }
     } catch (e) {
       console.error(`[sync-holdings] ${chain} fetch failed`, (e as Error).message)

@@ -13,6 +13,7 @@ import { startDivigoConnect } from './divigoConnect';
 interface ChainField { chain: string; label: string; placeholder: string; valid: (v: string) => boolean; }
 const FIELDS: ChainField[] = [
   { chain: 'ethereum', label: 'Ethereum address', placeholder: '0x…', valid: (v) => /^0x[a-fA-F0-9]{40}$/.test(v.trim()) },
+  { chain: 'solana',   label: 'Solana address',   placeholder: 'e.g. 5Fh…', valid: (v) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim()) },
   { chain: 'divi',     label: 'Divi address',     placeholder: 'D…',  valid: (v) => v.trim().length >= 26 },
 ];
 
