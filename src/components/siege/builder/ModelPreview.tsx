@@ -11,8 +11,6 @@ import * as THREE from 'three';
 import { importUrl, MUSHROOM_TREES } from './mushroomCatalog';
 import { usePgPreview } from './pgState';
 
-const BOX_BG = 'radial-gradient(120% 100% at 50% 10%, hsla(220,30%,24%,0.96), hsla(222,34%,8%,0.98))';
-
 // The centred, auto-rotating model (used at every size). Materials forced opaque + double-sided.
 function SpinModel({ file, rate = 0.6 }: { file: string; rate?: number }) {
   const { scene } = useGLTF(importUrl(file), '/draco/');
@@ -48,25 +46,28 @@ function Lights() {
   </>);
 }
 
-// Small inline square in a species row. The monster comes from the shared ModelPortCanvas.
-export function ModelThumb({ file, size = 30 }: { file: string; size?: number }) {
+// Small inline square in a species row — transparent so the panel colour shows through. The model
+// itself is drawn by the shared ModelPortCanvas (positioned over the list, so it clips on scroll).
+export function ModelThumb({ file, size = 44 }: { file: string; size?: number }) {
   return (
     <View style={{
       width: size, height: size, flexShrink: 0, borderRadius: 5, overflow: 'hidden',
-      border: '1px solid hsl(var(--panel-glow) / 0.5)', background: BOX_BG,
+      border: '1px solid hsl(var(--panel-glow) / 0.35)', background: 'transparent',
     }}>
-      <PerspectiveCamera makeDefault position={[0, 0, 4]} fov={40} />
+      <PerspectiveCamera makeDefault position={[0, 0, 3.4]} fov={42} />
       <Lights />
       <Suspense fallback={null}><SpinModel file={file} /></Suspense>
     </View>
   );
 }
 
-// One fixed, transparent, click-through canvas that draws every ModelThumb on the page.
+// The canvas that draws every ModelThumb. Positioned ABSOLUTELY over its parent (the scrolling list
+// body), so WebGL's scissor clips any thumbnail scrolled outside — they never float over the header
+// or other panels. Click-through. Mount ONE inside the PG panel body.
 export function ModelPortCanvas() {
   return (
     <Canvas gl={{ alpha: true, antialias: true }} dpr={[1, 2]}
-      style={{ position: 'fixed', inset: 0, zIndex: 55, pointerEvents: 'none' }}>
+      style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
       <View.Port />
     </Canvas>
   );

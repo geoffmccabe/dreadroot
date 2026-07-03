@@ -15,7 +15,7 @@ import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
-import { ModelPreview, ModelPortCanvas } from './ModelPreview';
+import { ModelPreview } from './ModelPreview';
 import { MUSHROOM_TREES } from './mushroomCatalog';
 import { scifiData, ASSET_BASE } from '@/config/assetBase';
 import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
@@ -160,7 +160,6 @@ export function BuilderPalette() {
 
   return (
     <>
-    {b.enabled && b.pgMode === 'pg' && <ModelPortCanvas />}
     {b.enabled && b.pgMode === 'pg' && <ModelPreview panelLeft={pos.left} />}
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>
