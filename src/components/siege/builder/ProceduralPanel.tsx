@@ -3,7 +3,7 @@
 // the instanced layer in one synchronous pass) or Clear. Seed makes a run reproducible; 🎲 re-rolls it.
 import { Button } from '@/components/ui/button';
 import { MUSHROOM_TREES } from './mushroomCatalog';
-import { usePgParams, usePgInstances, setPgParams, toggleSpecies, generate, clearInstances } from './pgState';
+import { usePgParams, usePgInstances, setPgParams, toggleSpecies, generate, clearInstances, setPgPreview } from './pgState';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return <div className="flex items-center justify-between gap-2"><span className="text-muted-foreground">{label}</span>{children}</div>;
@@ -37,10 +37,14 @@ export function ProceduralPanel() {
         </div>
         <div className="max-h-28 overflow-y-auto rounded border border-border/40 p-1">
           {MUSHROOM_TREES.map((f) => (
-            <label key={f} className="flex cursor-pointer items-center gap-1 px-1 py-0.5 hover:bg-accent">
-              <input type="checkbox" checked={p.species.includes(f)} onChange={() => toggleSpecies(f)} />
-              <span className="truncate">{f}</span>
-            </label>
+            <div key={f} className="flex items-center gap-1 px-1 py-0.5 hover:bg-accent">
+              <span onMouseEnter={() => setPgPreview(f)} onMouseLeave={() => setPgPreview(null)}
+                className="cursor-help select-none" title="Hover to preview">🔍</span>
+              <label className="flex flex-1 cursor-pointer items-center gap-1 truncate">
+                <input type="checkbox" checked={p.species.includes(f)} onChange={() => toggleSpecies(f)} />
+                <span className="truncate">{f}</span>
+              </label>
+            </div>
           ))}
         </div>
       </div>

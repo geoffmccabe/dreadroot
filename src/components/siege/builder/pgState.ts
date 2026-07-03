@@ -57,6 +57,14 @@ export function toggleSpecies(file: string): void {
 }
 export function clearInstances(): void { instances = []; emit(); }
 
+// Hover-preview: which species model to float+spin beside the panel (null = none).
+let previewFile: string | null = null;
+export const getPgPreview = () => previewFile;
+export function setPgPreview(f: string | null): void { if (previewFile !== f) { previewFile = f; emit(); } }
+export function usePgPreview(): string | null {
+  return useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, getPgPreview, getPgPreview);
+}
+
 // Small fast seeded PRNG (mulberry32) so a seed reproduces the forest.
 function rng(seed: number) {
   let a = seed >>> 0;
