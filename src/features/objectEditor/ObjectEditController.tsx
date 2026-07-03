@@ -58,7 +58,11 @@ export function ObjectEditController() {
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
-    let typedBuf = '';   // rolling buffer for typed spawn codes (e.g. *wa = water)
+    // Typed spawn codes (e.g. *wa = water). Pressing * ARMS command mode: the following keys are
+    // captured as the code (and swallowed so they don't walk you) until it matches or hits a dead end.
+    // The old silent rolling-buffer broke if * ever missed the 3-char window; explicit arming is robust.
+    let cmdArmed = false;
+    let cmdBuf = '';
 
     const selectBakedHit = (im: THREE.InstancedMesh, instanceId: number): boolean => {
       const placements = im.userData.placements as number[][] | undefined;
@@ -203,6 +207,13 @@ export function ObjectEditController() {
       }
     };
 
+    // Known typed codes → action. (Kept tiny; add future codes here, e.g. wf for a one-shot flood.)
+    const CODES: Record<string, () => void> = { wa: spawnWater };
+    // Recognise the "*" that starts a code across keyboards/OS quirks: the '*' character itself,
+    // Shift+8 on a US layout, or the numeric-keypad multiply — so a layout can't silently eat it.
+    const isStarKey = (e: KeyboardEvent) =>
+      e.key === '*' || (e.shiftKey && e.code === 'Digit8') || e.code === 'NumpadMultiply';
+
     // ── keys ──
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Control') ctrlDown.current = true;
@@ -212,11 +223,17 @@ export function ObjectEditController() {
         return;
       }
       if (!getEditMode()) return;
-      // Typed spawn codes: *wa = water. Build a rolling buffer of single characters; walking keys
-      // (w/a) still pass through — only the completed code triggers and is swallowed.
-      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        typedBuf = (typedBuf + e.key.toLowerCase()).slice(-3);
-        if (typedBuf === '*wa') { typedBuf = ''; spawnWater(); e.preventDefault(); e.stopImmediatePropagation(); return; }
+      // Typed spawn codes. Pressing * arms command mode; while armed, letters build the code (and are
+      // swallowed so they don't walk the player) until it matches or dead-ends.
+      if (isStarKey(e)) { cmdArmed = true; cmdBuf = ''; e.preventDefault(); e.stopImmediatePropagation(); return; }
+      if (cmdArmed) {
+        if (e.key === 'Escape') { cmdArmed = false; cmdBuf = ''; return; }
+        if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const cand = cmdBuf + e.key.toLowerCase();
+          if (CODES[cand]) { CODES[cand](); cmdArmed = false; cmdBuf = ''; e.preventDefault(); e.stopImmediatePropagation(); return; }
+          if (Object.keys(CODES).some((k) => k.startsWith(cand))) { cmdBuf = cand; e.preventDefault(); e.stopImmediatePropagation(); return; }
+          cmdArmed = false; cmdBuf = '';   // dead end — fall through so this key acts normally
+        } else if (e.key.length !== 1) return;   // modifier keydown (Shift etc.) — stay armed, ignore
       }
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }
