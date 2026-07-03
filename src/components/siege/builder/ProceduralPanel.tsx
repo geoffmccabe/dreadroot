@@ -5,12 +5,14 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useActiveMapId } from '@/config/activeMap';
-import { MUSHROOM_TREES } from './mushroomCatalog';
+import { MUSHROOM_TREES, importUrl } from './mushroomCatalog';
 import {
-  usePgParams, usePgInstances, setPgParams, generate, clearInstances, setPgPreview,
+  usePgParams, usePgInstances, getPgInstances, setPgParams, generate, clearInstances, setPgPreview,
   isChosen, addSpecies, removeSpecies, updateSpecies, type SpeciesCfg,
 } from './pgState';
 import { savePgSet, loadPgSet, exportPgSet, importPgSet } from './pgPersistence';
+import { addObjects, removeBySet, useBuilder } from './builderObjectsState';
+import { modelHeights } from './modelMeasure';
 
 const num = 'w-12 rounded bg-background/60 px-1 py-0.5 text-right text-[10px]';
 function Slider({ label, val, min, max, step, suffix, on }: { label: string; val: number; min: number; max: number; step: number; suffix?: string; on: (v: number) => void }) {
@@ -55,6 +57,25 @@ export function ProceduralPanel() {
     const f = e.target.files?.[0]; if (f) { const ok = await importPgSet(f); setSetMsg(ok ? 'Imported' : 'Bad file'); setTimeout(() => setSetMsg(''), 2500); }
     e.target.value = '';
   };
+  // ACCEPT: turn the live preview into real, editable objects (grab them with Shift+`). Preserves
+  // lean + stretch. Tagged as a batch so it can be deleted cleanly later (no orphaned edits).
+  const acceptedCount = useBuilder().objects.filter((o) => o.pgSetId).length;
+  const [accepting, setAccepting] = useState(false);
+  const onAccept = async () => {
+    const insts = getPgInstances();
+    if (!insts.length) return;
+    setAccepting(true);
+    const heights = await modelHeights(insts.map((i) => i.file));
+    const setId = `pg_${Math.floor(performance.now())}`;
+    addObjects(insts.map((i) => ({
+      set: 'pg', file: importUrl(i.file), name: i.file,
+      pos: [i.x, i.y, i.z] as [number, number, number], rotY: i.yaw, scale: i.height / (heights.get(i.file) || 1),
+      tiltX: i.tiltX, tiltZ: i.tiltZ, sx: i.stretchX, sy: i.stretchY, sz: i.stretchZ, pgSetId: setId, noCollider: true,
+    })));
+    clearInstances();
+    setAccepting(false);
+  };
+  const onDeleteAll = () => { if (window.confirm(`Delete all ${acceptedCount} generated objects (and their edits)?`)) removeBySet(); };
   return (
     <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5 text-[10px]">
       <select className="w-full rounded bg-background/60 px-1 py-1 text-[11px]" value="mushrooms" onChange={() => { /* only category for now */ }}>
@@ -104,12 +125,20 @@ export function ProceduralPanel() {
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <span className="text-muted-foreground">{count.toLocaleString()} placed</span>
+        <span className="text-muted-foreground">{count.toLocaleString()} preview</span>
         <span className="flex gap-1">
           <Button size="sm" className="h-7 px-3 text-[11px]" onClick={() => generate()}>Generate</Button>
+          <Button size="sm" className="h-7 px-3 text-[11px]" disabled={!count || accepting} onClick={onAccept}
+            title="Turn the preview into real editable objects (grab with Shift+`)">{accepting ? '…' : 'Accept'}</Button>
           <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => clearInstances()}>Clear</Button>
         </span>
       </div>
+      {acceptedCount > 0 && (
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-muted-foreground">{acceptedCount.toLocaleString()} generated objects placed</span>
+          <Button size="sm" variant="destructive" className="h-6 px-2 text-[10px]" onClick={onDeleteAll}>Delete set</Button>
+        </div>
+      )}
       <div className="flex items-center justify-between border-t border-border/40 pt-1 text-[10px]">
         <span className="text-muted-foreground">{setMsg || 'PG set'}</span>
         <span className="flex gap-1">

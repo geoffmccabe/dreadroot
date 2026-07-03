@@ -60,7 +60,7 @@ export function BuilderPalette() {
 
   // Draggable (by the title) + resizable (bottom-right corner), like the other panels.
   const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 268), top: 96 });
-  const [size, setSize] = useState({ w: 248, h: 520 });
+  const [size, setSize] = useState({ w: 347, h: 624 });   // 40% wider, 20% taller — more prominent
   const rz = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const onRzDown = (e: React.PointerEvent) => {
     rz.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };

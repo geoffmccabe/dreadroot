@@ -46,6 +46,7 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
   const gid = `builder:${obj.id}`;
   const [px, py, pz] = obj.pos;
   useEffect(() => {
+    if (obj.noCollider) return;   // accepted procedural forests skip BVH (perf) — still editable
     const g = grp.current; if (!g) return;
     g.updateWorldMatrix(true, true);
     const inputs: MeshInstanceInput[] = [];
@@ -59,9 +60,10 @@ function PlacedModel({ obj, selected }: { obj: PlacedObject; selected: boolean }
     });
     setGroupInstances(gid, inputs);
     return () => clearGroup(gid);
-  }, [cloned, gid, px, py, pz, obj.rotY, obj.scale]);
+  }, [cloned, gid, px, py, pz, obj.rotY, obj.scale, obj.noCollider]);
   return (
-    <group ref={grp} position={obj.pos} rotation={[0, obj.rotY, 0]} scale={obj.scale} userData={{ builderId: obj.id }}>
+    <group ref={grp} position={obj.pos} rotation={[obj.tiltX ?? 0, obj.rotY, obj.tiltZ ?? 0]}
+      scale={[obj.scale * (obj.sx ?? 1), obj.scale * (obj.sy ?? 1), obj.scale * (obj.sz ?? 1)]} userData={{ builderId: obj.id }}>
       <primitive object={cloned} />
     </group>
   );
