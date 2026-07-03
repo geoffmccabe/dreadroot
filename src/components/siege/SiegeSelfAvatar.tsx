@@ -5,7 +5,7 @@
 //
 // V1 = Rajax + the AK, rifle-idle. Character-select, live-anim sync (walk/run/aim) and the left-hand
 // grip are follow-ups.
-import { Suspense, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -15,9 +15,10 @@ import { getTPDist } from './siegeThirdPerson';
 import { sampleHeight } from './terrainHeight';
 import { groundAt } from './siegeGround';
 import { setCharSnap, pushCharAnimEvent, type CharSnap } from './charAnimDebug';
-import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY } from './charlineup/siegeCharLineupState';
+import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY, LINEUP_CHARS, getCharLineupEnabled, type LineupChar } from './charlineup/siegeCharLineupState';
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { getCharData } from './charadmin/characterStats';
+import { useSelfCharIndex, setSelfCharIndex } from './siegeSelfChar';
 
 const EYE_HEIGHT = 1.6;
 const SHOW_DIST = 0.3;   // reveal the body once the camera has pulled past this
@@ -26,9 +27,10 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 const HOLSTER_CLIP = 'Anim_Rifle_Put_Away_NoSkin';   // played forward = holster, reversed = draw
 const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
-
-// V1 self character (matches the spawn intro). A character-select panel will set this later.
-const SELF = { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 };
+// Coyote time: how long the player must be CONTINUOUSLY off the ground before the animation counts
+// as airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so
+// it keeps the walk/run pose instead of snapping to falling. Standard platformer/FPS technique.
+const COYOTE_MS = 130;
 
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
@@ -69,28 +71,25 @@ function gatherSnap(clip: string): CharSnap {
   };
 }
 
-function pickClip(armed: boolean): string {
+function pickClip(armed: boolean, airborne: boolean): string {
   const C = armed ? CLIP : UNARMED;
   const s = playerState;
-  if (s.gliding) return C.glide;   // holding G while airborne → glide pose (slowed fall)
-  // Only play jump/fall on REAL vertical motion — a momentary "not grounded" with ~zero vertical
-  // speed (e.g. grounded flicker on a slope) shouldn't trigger a jump loop; treat it as locomotion.
-  // Airborne + rising = jump; airborne + falling (G not held) = the Idle Fall pose.
-  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? C.jumpUp : C.idleFall;
-  if (s.mf > 0) return s.run ? C.runF : C.walkF;    // forward (run takes priority over strafe)
+  if (s.gliding) return C.glide;                     // holding G → glide pose (slowed fall)
+  if (airborne) return s.vy > 0 ? C.jumpUp : C.idleFall;   // rising = jump, falling = idle fall
+  if (s.mf > 0) return s.run ? C.runF : C.walkF;     // forward (run takes priority over strafe)
   if (s.mf < 0) return C.back;                        // backward
   if (s.mr < 0) return s.run ? C.runL : C.strafeL;   // strafe left
   if (s.mr > 0) return s.run ? C.runR : C.strafeR;   // strafe right
   return C.idle;
 }
 
-function SelfBody() {
-  const { scene } = useGLTF(glbUrl(SELF.file), '/draco/');
+function SelfBody({ char }: { char: LineupChar }) {
+  const { scene } = useGLTF(glbUrl(char.file), '/draco/');
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');   // Gliding + Idle Fall clips
   const ak = heldWeaponByKey('ak47');
-  const { scene: gunScene } = useGLTF(glbUrl(ak?.url ?? SELF.file), '/draco/');
+  const { scene: gunScene } = useGLTF(glbUrl(ak?.url ?? char.file), '/draco/');
 
   const group = useRef<THREE.Group>(null);
   const inner = useRef<THREE.Group>(null);
@@ -116,10 +115,20 @@ function SelfBody() {
   const lastGather = useRef(0);
   const prevGun = useRef(playerState.gun);
   const oneShotUntil = useRef(0);
+  const airborneAt = useRef(0);   // when the player last LEFT the ground (0 = grounded), for coyote time
 
   useFrame((state) => {
     const g = group.current; if (!g) return;
     const armed = playerState.gun;
+
+    // Coyote time: only count as airborne after being off the ground CONTINUOUSLY past COYOTE_MS — so a
+    // one-frame unground from a bump / downhill (grounded flickers back true, resetting the timer) never
+    // trips the fall pose. A real jump (strong upward speed) shows immediately.
+    const now = performance.now();
+    if (playerState.grounded) airborneAt.current = 0;
+    else if (!airborneAt.current) airborneAt.current = now;
+    const airborne = playerState.vy > 2
+      || (!playerState.grounded && airborneAt.current > 0 && now - airborneAt.current > COYOTE_MS && Math.abs(playerState.vy) > 0.6);
 
     // Holster / draw one-shot: on the weapon-out state flipping, play the put-away clip forward
     // (holster) or reversed (draw), and hold off the locomotion selector until it finishes.
@@ -142,7 +151,7 @@ function SelfBody() {
     // Locomotion selector (armed = rifle set, unarmed = generic loco set). Runs even when hidden so the
     // pose is right the instant you zoom out — but not while a holster/draw one-shot is playing.
     if (!inOneShot) {
-      const want = pickClip(armed);
+      const want = pickClip(armed, airborne);
       if (want !== curClip.current && actions[want]) {
         const snap = gatherSnap(want);
         pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
@@ -157,14 +166,14 @@ function SelfBody() {
     // Refresh the live snapshot ~5×/s so the COPY dump shows the current state even when stuck.
     if (performance.now() - lastGather.current > 200) {
       lastGather.current = performance.now();
-      playerState.glideFactor = getCharData(SELF.name).stats.glide;   // the Admin/Characters glide stat
+      playerState.glideFactor = getCharData(char.name).stats.glide;   // the Admin/Characters glide stat
       setCharSnap(gatherSnap(curClip.current));
     }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
     if (!shown) return;
     // Stand at the player's feet, facing the look direction (away from the camera).
-    g.position.set(playerState.x, playerState.y - EYE_HEIGHT - SELF.minY * SELF.scale, playerState.z);
+    g.position.set(playerState.x, playerState.y - EYE_HEIGHT - char.minY * char.scale, playerState.z);
     g.rotation.y = Math.atan2(playerState.fx, playerState.fz);
 
     // Procedural tail (Rajax) — ALWAYS swish (never straight); spread wider while gliding (rudder-like).
@@ -193,9 +202,9 @@ function SelfBody() {
           model.traverse((o) => { (o as THREE.Mesh).raycast = () => {}; });   // never block your own shots
           const box = new THREE.Box3().setFromObject(model); const size = new THREE.Vector3(); box.getSize(size);
           const longest = Math.max(size.x, size.y, size.z) || 1;
-          const rot = ak.rotByChar?.[SELF.name] ?? ak.rotDeg;
-          const grip = ak.gripByChar?.[SELF.name] ?? ak.gripPos;
-          const sz = ak.sizeByChar?.[SELF.name] ?? 1;
+          const rot = ak.rotByChar?.[char.name] ?? ak.rotDeg;
+          const grip = ak.gripByChar?.[char.name] ?? ak.gripPos;
+          const sz = ak.sizeByChar?.[char.name] ?? 1;
           const s = (ak.lengthM * sz / longest) / hs;
           const wrap = new THREE.Group();
           wrap.scale.setScalar(s);
@@ -208,12 +217,36 @@ function SelfBody() {
   });
 
   return (
-    <group ref={group} scale={SELF.scale} visible={false}>
+    <group ref={group} scale={char.scale} visible={false}>
       <group ref={inner}><primitive object={cloned} /></group>
     </group>
   );
 }
 
 export function SiegeSelfAvatar() {
-  return <Suspense fallback={null}><SelfBody /></Suspense>;
+  const idx = useSelfCharIndex();
+  // '*' then 1-6 switches which of the 6 characters you are (for testing all of them). '*' arms a
+  // 2s window; the digit picks the character. Capture-phase + preventDefault so the digit doesn't
+  // also hit the hotbar. ('*' still cycles weapons while the &&& lineup is up — deferred to it there.)
+  useEffect(() => {
+    let armed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (e.key === '*') {
+        if (getCharLineupEnabled()) return;
+        armed = true; if (timer) clearTimeout(timer); timer = setTimeout(() => { armed = false; }, 2000);
+        e.preventDefault(); return;
+      }
+      if (armed && /^[1-6]$/.test(e.key)) {
+        e.preventDefault(); e.stopPropagation();
+        setSelfCharIndex(parseInt(e.key, 10) - 1);
+        armed = false; if (timer) clearTimeout(timer);
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => { window.removeEventListener('keydown', onKey, true); if (timer) clearTimeout(timer); };
+  }, []);
+  return <Suspense fallback={null}><SelfBody key={idx} char={LINEUP_CHARS[idx]} /></Suspense>;
 }
