@@ -11,7 +11,7 @@ import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition, isEnchantedForest } from '@/config/worldDefinition';
 import { serializeField } from '../terrain/heightField';
-import { getBrushState } from '../terrain/terrainBrushState';
+import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
@@ -167,11 +167,11 @@ export function BuilderPalette() {
         <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧩 Model Placer</span>
         <span className="flex gap-1">
           <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-            onClick={() => setBuilder({ enabled: !b.enabled })}>{b.enabled ? 'ON' : 'OFF'}</Button>
+            onClick={() => { const on = !b.enabled; setBuilder({ enabled: on }); if (on) setBrushState({ enabled: false }); }}>{b.enabled ? 'ON' : 'OFF'}</Button>
           <Button size="sm" variant={b.enabled && b.pgMode === 'place' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-            onClick={() => setBuilder({ enabled: true, pgMode: 'place' })}>Place</Button>
+            onClick={() => { setBuilder({ enabled: true, pgMode: 'place' }); setBrushState({ enabled: false }); }}>Place</Button>
           <Button size="sm" variant={b.enabled && b.pgMode === 'pg' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-            onClick={() => setBuilder({ enabled: true, pgMode: 'pg' })} title="Procedural Generator">PG</Button>
+            onClick={() => { setBuilder({ enabled: true, pgMode: 'pg' }); setBrushState({ enabled: false }); }} title="Procedural Generator">PG</Button>
         </span>
       </div>
 

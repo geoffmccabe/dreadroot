@@ -14,7 +14,7 @@ import { useBrushState, setBrushState } from './terrainBrushState';
 import { serializeField, type BrushMode } from './heightField';
 import { BRUSH_SHAPES } from './brushShapes';
 import { saveMap } from './mapPersistence';
-import { getBuilder } from '../builder/builderObjectsState';
+import { getBuilder, setBuilder } from '../builder/builderObjectsState';
 
 const MODES: { key: BrushMode; label: string }[] = [
   { key: 'raise', label: 'Raise (R)' },
@@ -52,14 +52,15 @@ export function TerrainBrushPanel() {
   };
 
   return (
-    <Card className="waterfall-card fixed left-4 top-1/2 -translate-y-1/2 z-50 w-56 p-3 text-xs font-mono">
+    <Card className="waterfall-card fixed left-4 top-1/2 -translate-y-1/2 z-50 w-56 p-3 text-xs font-mono"
+      style={{ opacity: bs.enabled ? 1 : 0.5 }}>
       <div className="mb-2 flex items-center justify-between">
         <span className="font-bold text-primary">⛰ Terrain</span>
         <Button
           size="sm"
           variant={bs.enabled ? 'default' : 'outline'}
           className="h-6 px-2 text-[10px]"
-          onClick={() => setBrushState({ enabled: !bs.enabled })}
+          onClick={() => { const on = !bs.enabled; setBrushState({ enabled: on }); if (on) setBuilder({ enabled: false }); }}
         >
           {bs.enabled ? 'BUILD ON' : 'build off'}
         </Button>
