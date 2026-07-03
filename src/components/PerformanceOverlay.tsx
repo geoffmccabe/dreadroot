@@ -5,6 +5,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { charAnimExport, charAnimLine } from '@/components/siege/charAnimDebug';
+import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 
 interface PerformanceData {
   fps: number;
@@ -61,6 +62,7 @@ interface PerformanceData {
 export function PerformanceOverlay() {
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState(false);
+  const { pos, handleProps } = useDraggablePanel({ left: 8, top: 8 });
   const [data, setData] = useState<PerformanceData>({
     fps: 0,
     frameTime: 0,
@@ -437,9 +439,10 @@ sample fps frames drawCalls loadChk visChk renChk pChkX pChkZ wGrid heapMB`;
   const issues = getIssues();
 
   return (
-    <div className="debug-panel fixed top-2 left-2 z-[9999] text-[11px] p-3 select-none min-w-[240px] max-w-[280px]">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-2 pb-2 border-b border-white/20">
+    <div className="debug-panel z-[9999] text-[11px] p-3 select-none"
+      style={{ position: 'fixed', left: pos.left, top: pos.top, resize: 'both', overflow: 'auto', minWidth: 220, maxWidth: '90vw', maxHeight: '90vh' }}>
+      {/* Header (drag handle) */}
+      <div {...handleProps} className="flex justify-between items-center mb-2 pb-2 border-b border-white/20">
         <div className="flex items-center gap-2">
           <span className="text-cyan-400 font-bold">DF</span>
           <span className={`text-xl font-bold ${fpsColor}`}>{data.fps}</span>

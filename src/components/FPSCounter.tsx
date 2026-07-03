@@ -5,6 +5,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { supabase } from '@/integrations/supabase/client';
 import { APP_VERSION } from '@/version';
 import { useDebugStatus } from '@/lib/debugStatus';
+import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 
 let globalFps = 0;
 let globalPlayerPos = { x: 0, y: 0, z: 0 };
@@ -239,6 +240,8 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
   const [isLookingAtSky, setIsLookingAtSky] = useState(false);
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const lastOwnerId = useRef<string | null>(null);
+  // Drag position shared by the inspector popup (only one variant shows at once).
+  const insp = useDraggablePanel({ left: 320, top: 8 });
 
   // Check if user can delete (admin or superadmin)
   const canDelete = userRoles.includes('admin') || userRoles.includes('superadmin');
@@ -402,13 +405,15 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
               padding: '8px 10px',
               fontSize: '11px',
               lineHeight: '1.5',
-              position: 'relative',
-              minWidth: '280px',
-              maxWidth: '320px',
+              position: 'fixed',
+              left: insp.pos.left, top: insp.pos.top,
+              resize: 'both', overflow: 'auto',
+              minWidth: '240px',
+              maxWidth: '90vw', maxHeight: '85vh',
             }}
           >
             {/* Header with close button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
+            <div {...insp.handleProps} style={{ cursor: 'move', touchAction: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
               <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
@@ -445,15 +450,15 @@ export function FPSDisplay({ isAdmin = false, userRoles = [], onDeleteBlock }: F
               padding: '8px 10px',
               fontSize: '11px',
               lineHeight: '1.5',
-              position: 'relative',
-              minWidth: '280px',
-              maxWidth: '320px',
-              maxHeight: '500px',
-              overflowY: 'auto',
+              position: 'fixed',
+              left: insp.pos.left, top: insp.pos.top,
+              resize: 'both', overflow: 'auto',
+              minWidth: '240px',
+              maxWidth: '90vw', maxHeight: '85vh',
             }}
           >
             {/* Header with close button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
+            <div {...insp.handleProps} style={{ cursor: 'move', touchAction: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', borderBottom: '1px solid var(--pt-debug-border)', paddingBottom: '4px' }}>
               <span style={{ fontWeight: 'bold', fontSize: '12px' }}>ITEM INSPECTOR</span>
               <button
                 onClick={handleDismiss}
@@ -766,6 +771,7 @@ export function DFlowOutputPanel() {
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
+  const { pos, handleProps } = useDraggablePanel({ left: 8, top: 64 });
 
   useEffect(() => {
     const checkOutput = () => {
@@ -793,8 +799,9 @@ export function DFlowOutputPanel() {
   if (!visible) return null;
 
   return (
-    <div className="debug-panel fixed top-16 left-2 z-[9999] p-3">
-      <div className="text-white font-mono text-sm mb-2">
+    <div className="debug-panel z-[9999] p-3"
+      style={{ position: 'fixed', left: pos.left, top: pos.top, resize: 'both', overflow: 'auto', minWidth: 160 }}>
+      <div {...handleProps} className="text-white font-mono text-sm mb-2">
         D-Flow: {sampleCount} samples
       </div>
       <div className="flex gap-2">
