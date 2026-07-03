@@ -248,6 +248,12 @@ export const BLEAKROCK2_WORLD: WorldDefinition = {
   kind: 'siege',
   meshColliders: true, // ON: MeshColliderPlayer now stands down during build/brush mode, so sculpting still works
   bounds: { min: [-3050, -890], max: [950, 3110] }, // island ≈(-1050,1110), lots of water to expand into
+  // Invisible ocean-edge wall: a closed rectangle ~150 m inside the rendered bounds, so you can roam
+  // the water around the island but can't wander off into the un-rendered void. Solid up to 300 m.
+  wallBox: {
+    height: 300,
+    line: [[-2900, -740], [800, -740], [800, 2960], [-2900, 2960], [-2900, -740]],
+  },
   ground: { kind: 'heightmap', surfaceY: 14, seedUrl: '/siege/bleakrock2/heightfield.json' },
   spawn: { position: [-1048, 31, 1108], yaw: 0 },
   props: undefined,

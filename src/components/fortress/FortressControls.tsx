@@ -581,6 +581,9 @@ export function FirstPersonControls({
           setTimeout(() => finishReload(), (awR?.reloadTime ?? 2) * 1000);
           break;
         }
+        // Siege: R is RELOAD-ONLY — it must never holster (a full clip + R was accidentally putting
+        // the gun away). Holster/draw is on X instead. DreadRoot keeps R's draw/holster below.
+        if (isSiege) break;
         // R toggles gun on/off regardless of shift/movement state
         if (!blockPlacementMode) {
           const newCrosshairsState = !showCrosshairs;
@@ -844,6 +847,16 @@ export function FirstPersonControls({
           onThrowGrenade?.();
           grenadeReadyRef.current = false;
           onGrenadeReadyChange?.(false);
+        }
+        break;
+      case 'KeyX':
+        // Siege: holster / draw the weapon (X, since R is reload-only). The self-avatar plays the
+        // put-away / draw animation off the resulting weapon-out state.
+        if (!isSiege || event.repeat || blockPlacementMode) break;
+        {
+          const drawing = !showCrosshairs;
+          onModeChange(drawing ? 'shooting' : null);
+          playSpatialSound(getSoundUrl(drawing ? 'pistol_cock' : 'pistol_holster', drawing ? '/pistol_cocking_sound.mp3' : '/holster_pistol_sound.mp3'), 0, { baseVolume: 0.5 });
         }
         break;
       case 'KeyH':

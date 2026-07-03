@@ -23,6 +23,9 @@ const EYE_HEIGHT = 1.6;
 const SHOW_DIST = 0.3;   // reveal the body once the camera has pulled past this
 const D2R = Math.PI / 180;
 const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
+const HOLSTER_CLIP = 'Anim_Rifle_Put_Away_NoSkin';   // played forward = holster, reversed = draw
+const _tailEuler = new THREE.Euler();
+const _tailQ = new THREE.Quaternion();
 
 // V1 self character (matches the spawn intro). A character-select panel will set this later.
 const SELF = { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', scale: 1.140, minY: -0.0002 };
@@ -37,8 +40,19 @@ const CLIP = {
   back: 'Anim_Rifle_Backward_Run_NoSkin',
   strafeL: 'Anim_Rifle_Strafe_Left_NoSkin', strafeR: 'Anim_Rifle_Strafe_Right_NoSkin',
   runL: 'Anim_Rifle_Run_Left_NoSkin', runR: 'Anim_Rifle_Run_Right_NoSkin',
-  jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', jumpDown: 'Anim_Rifle_Jump_Down_NoSkin',
-  glide: 'Gliding', idleFall: 'Anim_Idle_Falling_NoSkin',
+  jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', idleFall: 'Anim_Idle_Falling_NoSkin',
+  glide: 'Gliding',
+};
+// UNARMED locomotion (no weapon out) — the generic loco set, so the character isn't posed holding an
+// invisible rifle when he has nothing in hand.
+const UNARMED = {
+  idle: 'Loco_M_idle',
+  walkF: 'Loco_M_walking', runF: 'Loco_M_running',
+  back: 'Anim_Walking_Backward_NoSkin',
+  strafeL: 'Loco_M_left_strafe_walking', strafeR: 'Loco_M_right_strafe_walking',
+  runL: 'Loco_M_left_strafe', runR: 'Loco_M_right_strafe',
+  jumpUp: 'Loco_M_jump', idleFall: 'Anim_Idle_Falling_NoSkin',
+  glide: 'Gliding',
 };
 // Snapshot of everything driving the current clip, for the DFLOW character-anim tracker.
 function gatherSnap(clip: string): CharSnap {
@@ -55,18 +69,19 @@ function gatherSnap(clip: string): CharSnap {
   };
 }
 
-function pickRifleClip(): string {
+function pickClip(armed: boolean): string {
+  const C = armed ? CLIP : UNARMED;
   const s = playerState;
-  if (s.gliding) return CLIP.glide;   // holding G while airborne → glide pose (slowed fall)
+  if (s.gliding) return C.glide;   // holding G while airborne → glide pose (slowed fall)
   // Only play jump/fall on REAL vertical motion — a momentary "not grounded" with ~zero vertical
   // speed (e.g. grounded flicker on a slope) shouldn't trigger a jump loop; treat it as locomotion.
   // Airborne + rising = jump; airborne + falling (G not held) = the Idle Fall pose.
-  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? CLIP.jumpUp : CLIP.idleFall;
-  if (s.mf > 0) return s.run ? CLIP.runF : CLIP.walkF;    // forward (run takes priority over strafe)
-  if (s.mf < 0) return CLIP.back;                          // backward
-  if (s.mr < 0) return s.run ? CLIP.runL : CLIP.strafeL;  // strafe left
-  if (s.mr > 0) return s.run ? CLIP.runR : CLIP.strafeR;  // strafe right
-  return CLIP.idle;
+  if (!s.grounded && Math.abs(s.vy) > 0.8) return s.vy > 0 ? C.jumpUp : C.idleFall;
+  if (s.mf > 0) return s.run ? C.runF : C.walkF;    // forward (run takes priority over strafe)
+  if (s.mf < 0) return C.back;                        // backward
+  if (s.mr < 0) return s.run ? C.runL : C.strafeL;   // strafe left
+  if (s.mr > 0) return s.run ? C.runR : C.strafeR;   // strafe right
+  return C.idle;
 }
 
 function SelfBody() {
@@ -87,30 +102,63 @@ function SelfBody() {
     c.traverse((o) => { const m = o as THREE.Mesh; m.frustumCulled = false; m.raycast = () => {}; });
     return c;
   }, [scene]);
+  // Grafted tail bones (Rajax) + their rest pose — the shared clips don't animate these, so we swish
+  // them procedurally (as in the &&& lineup), otherwise the tail hangs dead straight.
+  const tailBones = useMemo(() => {
+    const bs: THREE.Object3D[] = [];
+    cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
+    return bs.sort((a, b) => a.name.localeCompare(b.name));
+  }, [cloned]);
+  const tailRest = useMemo(() => tailBones.map((b) => b.quaternion.clone()), [tailBones]);
   const anims = useMemo(() => [...rifleAnims, ...baseAnims, ...locoAnims], [rifleAnims, baseAnims, locoAnims]);
   const { actions } = useAnimations(anims, inner);
   const curClip = useRef('');
   const lastGather = useRef(0);
+  const prevGun = useRef(playerState.gun);
+  const oneShotUntil = useRef(0);
 
-  useFrame(() => {
+  useFrame((state) => {
     const g = group.current; if (!g) return;
-    // Locomotion selector (runs even when hidden so the pose is right the instant you zoom out):
-    // pick the clip for the current movement and cross-fade to it when it changes.
-    const want = pickRifleClip();
-    if (want !== curClip.current && actions[want]) {
-      const snap = gatherSnap(want);
-      pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
-      setCharSnap(snap);
-      if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.2);
-      actions[want]!.reset().fadeIn(0.2).play();
-      curClip.current = want;
+    const armed = playerState.gun;
+
+    // Holster / draw one-shot: on the weapon-out state flipping, play the put-away clip forward
+    // (holster) or reversed (draw), and hold off the locomotion selector until it finishes.
+    if (armed !== prevGun.current) {
+      prevGun.current = armed;
+      const a = actions[HOLSTER_CLIP];
+      if (a) {
+        const dur = a.getClip().duration;
+        if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.12);
+        a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true;
+        a.timeScale = armed ? -1 : 1; a.time = armed ? dur : 0;
+        a.fadeIn(0.12).play();
+        curClip.current = HOLSTER_CLIP;
+        oneShotUntil.current = performance.now() + dur * 1000;
+        if (armed && wrapRef.current) wrapRef.current.visible = true;   // gun appears as you draw it
+      }
     }
-    // Refresh the live snapshot ~5×/s so the COPY dump shows the current state even when the clip
-    // is stuck (which is the case we're trying to debug).
+    const inOneShot = performance.now() < oneShotUntil.current;
+
+    // Locomotion selector (armed = rifle set, unarmed = generic loco set). Runs even when hidden so the
+    // pose is right the instant you zoom out — but not while a holster/draw one-shot is playing.
+    if (!inOneShot) {
+      const want = pickClip(armed);
+      if (want !== curClip.current && actions[want]) {
+        const snap = gatherSnap(want);
+        pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
+        setCharSnap(snap);
+        if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(0.2);
+        const na = actions[want]!; na.reset(); na.setLoop(THREE.LoopRepeat, Infinity); na.timeScale = 1; na.fadeIn(0.2).play();
+        curClip.current = want;
+      }
+      if (wrapRef.current) wrapRef.current.visible = armed;   // gun hidden while unarmed
+    }
+
+    // Refresh the live snapshot ~5×/s so the COPY dump shows the current state even when stuck.
     if (performance.now() - lastGather.current > 200) {
       lastGather.current = performance.now();
       playerState.glideFactor = getCharData(SELF.name).stats.glide;   // the Admin/Characters glide stat
-      setCharSnap(gatherSnap(curClip.current || want));
+      setCharSnap(gatherSnap(curClip.current));
     }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
@@ -118,6 +166,21 @@ function SelfBody() {
     // Stand at the player's feet, facing the look direction (away from the camera).
     g.position.set(playerState.x, playerState.y - EYE_HEIGHT - SELF.minY * SELF.scale, playerState.z);
     g.rotation.y = Math.atan2(playerState.fx, playerState.fz);
+
+    // Procedural tail (Rajax) — ALWAYS swish (never straight); spread wider while gliding (rudder-like).
+    if (tailBones.length) {
+      const t = state.clock.elapsedTime; const N = tailBones.length;
+      const boost = playerState.gliding ? 1.6 : 1;
+      for (let i = 0; i < N; i++) {
+        const frac = i / (N - 1);
+        const amp = (0.22 + 0.42 * frac) * boost;
+        const ph = t * 1.6 - i * 0.7;
+        _tailEuler.set(Math.sin(ph) * amp, 0, Math.sin(ph * 0.5 + 1.2) * amp * 0.3);
+        _tailQ.setFromEuler(_tailEuler);
+        tailBones[i].quaternion.copy(tailRest[i]).multiply(_tailQ);
+      }
+    }
+
     // Attach the gun to the right hand once the bone + world matrices are live (retry each frame).
     if (!wrapRef.current && ak) {
       let hand: THREE.Object3D | undefined;
@@ -138,7 +201,7 @@ function SelfBody() {
           wrap.scale.setScalar(s);
           wrap.position.set(grip[0] / hs, grip[1] / hs, grip[2] / hs);
           wrap.rotation.set(rot[0] * D2R, rot[1] * D2R, rot[2] * D2R);
-          wrap.add(model); hand.add(wrap); wrapRef.current = wrap;
+          wrap.add(model); hand.add(wrap); wrap.visible = armed; wrapRef.current = wrap;
         }
       }
     }
