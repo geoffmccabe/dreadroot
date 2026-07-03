@@ -16,6 +16,7 @@ import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
 import { ModelPreview } from './ModelPreview';
+import { MUSHROOM_TREES } from './mushroomCatalog';
 import { scifiData, ASSET_BASE } from '@/config/assetBase';
 import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
 import { useFavorites, toggleFavorite, isFavorite, removeFavorite } from '../scifi/assetFavorites';
@@ -38,15 +39,9 @@ const SETS: { id: string; label: string }[] = [
 interface CatItem { id: string; name: string; set: string; file: string; category?: string }
 const catalogCache = new Map<string, CatItem[]>();
 
-// The imported mushroom-tree glbs (public/siege/imports) — a LOCAL catalog (not an R2 pack), listed
-// by file name. BuilderObjectsLayer loads absolute '/…' paths directly. Khaured Tower rides along too.
-const MUSHROOM_FILES = [
-  'mushroomtree05', 'mushroomtree06', 'mushroomtree07', 'MushroomTree_A', 'Tree1',
-  'vasim_tree1_collider', 'vasim_tree1_collider_feb25', 'vasim_tree1_collider2', 'vasim_tree1_flat',
-  'jhay_tree1', 'jhay_tree2', 'jhay_tree3', 'jhay_tree4', 'jhay_tree5', 'jhay_tree6',
-  'meshes_tree05_tall', 'meshes_tree06_tall', 'ashley_tree05', 'mushrooms2_tree06',
-  'mushroom_line_straight', 'Khaured_Tower_1',
-];
+// The manual "🍄 Mushroom Trees" set = the shared mushroom-tree catalog (kept in sync with the PG,
+// incl. the split individuals) + Khaured Tower. BuilderObjectsLayer loads absolute '/…' paths directly.
+const MUSHROOM_FILES = [...MUSHROOM_TREES, 'Khaured_Tower_1'];
 const MUSHROOMS: CatItem[] = MUSHROOM_FILES.map((f) => ({ id: `mush:${f}`, name: f, set: 'mushrooms', file: `/siege/imports/${f}.glb` }));
 
 export function BuilderPalette() {
