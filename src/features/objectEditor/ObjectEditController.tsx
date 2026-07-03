@@ -11,7 +11,7 @@
 //   wheel     raise / lower             Shift+wheel rotate · Option+wheel scale
 //   hold Ctrl ride surface below        Shift+click grab a duplicate
 //   P spawn box · Del delete · Esc cancel/deselect · Cmd-Z undo (+Shift redo)
-//   *wa add water · F flood selected water to the shoreline (press again after plugging a leak)
+//   ^wa add water · F flood selected water to the shoreline (press again after plugging a leak)
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -58,9 +58,10 @@ export function ObjectEditController() {
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
-    // Typed spawn codes (e.g. *wa = water). Pressing * ARMS command mode: the following keys are
+    // Typed spawn codes (e.g. ^wa = water). Pressing ^ ARMS command mode: the following keys are
     // captured as the code (and swallowed so they don't walk you) until it matches or hits a dead end.
-    // The old silent rolling-buffer broke if * ever missed the 3-char window; explicit arming is robust.
+    // NB: the trigger is '^' (not '*') because the weapon-tuning lineup steals every '*' keydown
+    // (stopImmediatePropagation) while it's open, so '*' never reached here.
     let cmdArmed = false;
     let cmdBuf = '';
 
@@ -124,7 +125,7 @@ export function ObjectEditController() {
       addObject({ id: crypto.randomUUID(), modelUrl: 'builtin:box', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [1, 1, 1] });
     };
 
-    // *wa → drop a flat water surface a few metres ahead and auto-select it so it can be carried
+    // ^wa → drop a flat water surface a few metres ahead and auto-select it so it can be carried
     // immediately. It's a normal placed object (shared via world_objects); default 6×6 footprint.
     const spawnWater = () => {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd);
@@ -209,10 +210,10 @@ export function ObjectEditController() {
 
     // Known typed codes → action. (Kept tiny; add future codes here, e.g. wf for a one-shot flood.)
     const CODES: Record<string, () => void> = { wa: spawnWater };
-    // Recognise the "*" that starts a code across keyboards/OS quirks: the '*' character itself,
-    // Shift+8 on a US layout, or the numeric-keypad multiply — so a layout can't silently eat it.
-    const isStarKey = (e: KeyboardEvent) =>
-      e.key === '*' || (e.shiftKey && e.code === 'Digit8') || e.code === 'NumpadMultiply';
+    // Recognise the "^" that starts a code (the '^' character, or Shift+6 across layouts). We use '^'
+    // rather than '*' because the weapon-tuning lineup consumes '*' when it's open.
+    const isCmdKey = (e: KeyboardEvent) =>
+      e.key === '^' || (e.shiftKey && e.code === 'Digit6');
 
     // ── keys ──
     const onKey = (e: KeyboardEvent) => {
@@ -223,9 +224,9 @@ export function ObjectEditController() {
         return;
       }
       if (!getEditMode()) return;
-      // Typed spawn codes. Pressing * arms command mode; while armed, letters build the code (and are
+      // Typed spawn codes. Pressing ^ arms command mode; while armed, letters build the code (and are
       // swallowed so they don't walk the player) until it matches or dead-ends.
-      if (isStarKey(e)) { cmdArmed = true; cmdBuf = ''; e.preventDefault(); e.stopImmediatePropagation(); return; }
+      if (isCmdKey(e)) { cmdArmed = true; cmdBuf = ''; e.preventDefault(); e.stopImmediatePropagation(); return; }
       if (cmdArmed) {
         if (e.key === 'Escape') { cmdArmed = false; cmdBuf = ''; return; }
         if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
