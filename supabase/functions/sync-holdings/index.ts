@@ -45,9 +45,8 @@ Deno.serve(async (req) => {
     admin.from('supporter_requirements').select('gate_kind, nft_chain, nft_collection, nft_schema, nft_template_id'),
     admin.from('user_divigo_links').select('app_token').eq('user_id', user.id).maybeSingle(),
   ])
-  const links = ((linkRes.data as { chain: string; account: string }[]) ?? []).filter((l) => l.account)
+  const pastedLinks = ((linkRes.data as { chain: string; account: string }[]) ?? []).filter((l) => l.account)
   const divigoToken = (divigoRes.data as { app_token?: string } | null)?.app_token ?? null
-  if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
   const themes = (themeRes.data as ThemeRow[]) ?? []
   const reqs = (reqRes.data as ReqRow[]) ?? []
 
@@ -66,6 +65,37 @@ Deno.serve(async (req) => {
   }
 
   const SSO = (Deno.env.get('SSO_BASE_URL') ?? 'https://sso.lightningworks.io').replace(/\/$/, '')
+
+  // Ownership-PROVEN addresses: the wallets the user connected (and signed with) in the SSO. Sourced
+  // by email (login maps 1:1) via app credentials — trustworthy, unlike a pasted address. chain_type
+  // maps: solana→solana, evm→ethereum (primary EVM), wax→wax, divi→divi.
+  const appSlug = Deno.env.get('DIVIGO_APP_SLUG') ?? '', appSecret = Deno.env.get('DIVIGO_APP_SECRET') ?? ''
+  const chainMap: Record<string, string> = { solana: 'solana', evm: 'ethereum', wax: 'wax', divi: 'divi' }
+  const provenLinks: { chain: string; account: string }[] = []
+  if (appSlug && appSecret && user.email) {
+    try {
+      const r = await fetch(`${SSO}/api/app/connected-wallets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-LW-App-Slug': appSlug, 'X-LW-App-Secret': appSecret },
+        body: JSON.stringify({ email: user.email }),
+      })
+      const d = await r.json()
+      for (const w of (d.wallets ?? [])) {
+        const chain = chainMap[String(w.chain).toLowerCase()];
+        if (chain && w.address) provenLinks.push({ chain, account: String(w.address) });
+      }
+    } catch (e) {
+      console.error('[sync-holdings] connected-wallets fetch failed', (e as Error).message)
+    }
+  }
+
+  // Merge proven + pasted, dedupe by chain+account (proven first so it wins).
+  const seenLink = new Set<string>()
+  const links = [...provenLinks, ...pastedLinks].filter((l) => {
+    const k = `${norm(l.chain)}:${l.account}`; if (seenLink.has(k)) return false; seenLink.add(k); return true;
+  })
+  if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
+
   const nowIso = new Date().toISOString()
   const nftAcc: NftAcc[] = []
   const extByKey = new Map<string, ExtAcc>() // key = token_theme_id (keep the largest amount seen)
@@ -98,6 +128,17 @@ Deno.serve(async (req) => {
       } else if (chain === 'divi') {
         const d = await fetch(`${SSO}/api/divi-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
         for (const t of (d.tokens ?? [])) pushExt(findTheme('divi', t.symbol ?? 'DIVI', null), 'divi', account, t.amount ?? 0)
+      } else if (chain === 'solana') {
+        const d = await fetch(`${SSO}/api/solana-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
+        for (const t of (d.tokens ?? [])) pushExt(findTheme('solana', t.symbol ?? '', t.contract ?? null), 'solana', account, t.amount ?? 0)
+        // NFTs: mirror only collections a requirement gates on, keyed to the requirement's exact string.
+        const byCollection = new Map<string, number>()
+        for (const n of (d.nfts ?? [])) if (n.collection) byCollection.set(String(n.collection).toLowerCase(), n.count ?? 0)
+        for (const r of reqs) {
+          if (r.gate_kind !== 'nft' || norm(r.nft_chain) !== 'solana' || !r.nft_collection) continue;
+          const count = byCollection.get(r.nft_collection.toLowerCase()) ?? 0;
+          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, updated_at: nowIso })
+        }
       }
     } catch (e) {
       console.error(`[sync-holdings] ${chain} fetch failed`, (e as Error).message)
