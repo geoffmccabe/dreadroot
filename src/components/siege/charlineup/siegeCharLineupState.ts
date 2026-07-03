@@ -7,7 +7,7 @@ import { useSyncExternalStore } from 'react';
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
 // browser like an offline store). v2 = Draco meshes + shared animation library.
-export const CHAR_ASSET_VERSION = '36';
+export const CHAR_ASSET_VERSION = '37';
 // Shared Draco/clip libraries holding every animation — loaded once, applied to every character by
 // bone name (all mixamorig). Adding a character costs ~0.6–0.9 MB; adding clips grows only these.
 // Split by category so each is fetched independently and we can rebuild one without the others'
