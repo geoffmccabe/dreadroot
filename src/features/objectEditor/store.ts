@@ -7,7 +7,8 @@
 import { useSyncExternalStore } from 'react';
 import type { WorldObject, TRS, BakedRef } from './types';
 import { trsOf } from './types';
-import { insertObject, persistTransform, deleteObject } from './persistence';
+import { insertObject, persistTransform, deleteObject, persistMeta } from './persistence';
+import type { FloodData } from './floodFill';
 import { applyBakedTransform, liveBakedTransform, hideBaked } from './bakedOverrides';
 import { updateObject as updateBuilderObject, removeObject as removeBuilderObject } from '@/components/siege/builder/builderObjectsState';
 
@@ -126,6 +127,22 @@ export function addObject(o: WorldObject): void {
     undo: () => { localRemove(o.id); deleteObject(o.id); },
     redo: () => { localAdd(o); insertObject(game, worldId, o); },
   });
+}
+
+// Attach (or clear) a shore-seeking flood footprint on a water object. Not on the undo stack —
+// re-flooding is a deliberate recompute, and Ctrl-Z on a flood would be confusing; press F again
+// to reshape. Persists via the object's `meta` jsonb so the pool shape is shared with everyone.
+export function setObjectFlood(id: string, flood: FloodData | undefined): void {
+  let changed = false;
+  state.objects = state.objects.map((o) => {
+    if (o.id !== id) return o;
+    changed = true;
+    const next = { ...o }; if (flood) next.flood = flood; else delete next.flood;
+    return next;
+  });
+  if (!changed) return;
+  emit();
+  persistMeta(id, { flood: flood ?? null });
 }
 
 export function deleteSelected(): void {

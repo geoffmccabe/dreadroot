@@ -5,10 +5,11 @@
 // It's a normal placed object: moves/rotates/scales with the Arrange tools and shares via
 // world_objects. Spawn by typing *wa. (Step 2 will add an optional quarter-res every-other-frame
 // planar mirror of the actual terrain on desktop; this is the cheap tier that runs everywhere.)
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WorldObject } from './types';
+import { buildFloodGeometry } from './floodMesh';
 
 // Per-water look (defaults for now; Step 3 wires these to per-object pickers + a DB column).
 const TINT = '#2f8fb0';
@@ -46,7 +47,14 @@ export function WaterObject({ obj }: { obj: WorldObject }) {
     return { mat, uniforms };
   }, []);
   useFrame((_, dt) => { uniforms.uTime.value += dt; });
-  // Plane laid flat (normal up); group pos/quat/scale come from the editor like any object.
+  // A flooded pool: the surface is the baked shore-seeking footprint, in WORLD space, so it renders
+  // at the origin with no transform. (obj.pos/scale still mark the seed + level for re-flooding.)
+  const floodGeo = useMemo(() => (obj.flood ? buildFloodGeometry(obj.flood) : null), [obj.flood]);
+  useEffect(() => () => floodGeo?.dispose(), [floodGeo]);
+  if (floodGeo) {
+    return <mesh geometry={floodGeo} material={mat} userData={{ worldObjectId: obj.id }} />;
+  }
+  // Not yet flooded: the movable 1×1 preview plane, laid flat (normal up); pos/quat/scale from the editor.
   return (
     <group position={obj.pos} quaternion={obj.quat} scale={obj.scale} userData={{ worldObjectId: obj.id }}>
       <mesh rotation-x={-Math.PI / 2} material={mat} userData={{ worldObjectId: obj.id }}>

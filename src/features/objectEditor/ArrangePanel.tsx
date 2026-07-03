@@ -96,6 +96,7 @@ export function ArrangePanel() {
         <div>⇧+click duplicate · ⌘X/Del delete</div>
         <div>⌘Z undo · ⇧⌘Z redo · Esc cancel</div>
         <div>type *wa = add water · P = test box</div>
+        <div>F = flood water to shoreline (repeat to re-seal)</div>
       </div>
     </div>
   );

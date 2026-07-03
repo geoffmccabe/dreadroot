@@ -11,6 +11,7 @@
 //   wheel     raise / lower             Shift+wheel rotate · Option+wheel scale
 //   hold Ctrl ride surface below        Shift+click grab a duplicate
 //   P spawn box · Del delete · Esc cancel/deselect · Cmd-Z undo (+Shift redo)
+//   *wa add water · F flood selected water to the shoreline (press again after plugging a leak)
 import { useEffect, useMemo, useRef } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -20,17 +21,23 @@ import {
   getCanEdit, getEditMode, toggleEditMode, setSelected, current,
   addObject, transformSelected, duplicateSelected, deleteSelected, undo, redo,
   selectBaked, clearBaked, selectBuilder, clearBuilder, dragBegin, dragTo, dragCommit, dragCancel, isDragging,
+  setObjectFlood,
 } from './store';
 import { getBuilder } from '@/components/siege/builder/builderObjectsState';
 import { placeKey, transformOverrides, saveWorldToDb } from './bakedOverrides';
 import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
+import { beginFlood, stepFlood, finishFlood, type FloodJob } from './floodFill';
+import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
 
 const SELECT_MAX = 150;    // biggest individual object you can grab (m) — tall trees qualify; bigger
                            // than this is a merged-region blob (also caught by the `combined` flag)
 const MIN_REACH = 1.5;     // closest the carried object can sit to the camera (m)
 const MAX_REACH = 150;     // furthest a plane-hit is accepted before falling back to last reach
 const SNAP_UP = 60;        // how far above the carry point the surface down-ray starts (m)
+const FLOOD_CEIL = 3;      // probe the solid surface from this far ABOVE the waterline: shore/rock/
+                           // trunk within 3 m of the surface = a wall; high canopy overhead is ignored
+const FLOOD_PER_FRAME = 1500;  // cells probed per frame (matches MeshHeightmapBaker's proven budget)
 const clampScale = (s: number) => Math.min(50, Math.max(0.05, s));
 
 export function ObjectEditController() {
@@ -47,6 +54,7 @@ export function ObjectEditController() {
   const grab = useRef({ active: false, planeY: 0, reach: 8, offsetX: 0, offsetZ: 0, startX: 0, startZ: 0, moved: false, hdx: 0, hdz: 1 });
   const ctrlDown = useRef(false);
   const axisHeld = useRef<'x' | 'y' | 'z' | null>(null);   // per-axis stretch: hold X/Y/Z + wheel
+  const floodJob = useRef<FloodJob | null>(null);          // in-progress shore-seeking water flood
 
   useEffect(() => {
     ray.near = 0.8; // skip first-person arms/weapon right in front of the camera
@@ -120,6 +128,17 @@ export function ObjectEditController() {
       const id = crypto.randomUUID();
       addObject({ id, modelUrl: 'builtin:water', pos: [p.x, p.y, p.z], quat: [...IDENTITY_QUAT], scale: [6, 6, 6] });
       setSelected(id);
+    };
+
+    // F → shore-seek: flood the SELECTED water object outward from its position at its current height,
+    // filling the basin up to the surrounding terrain/rock/tree walls. Press F again after dropping a
+    // rock in a leak to re-seal. The fill is stepped over frames in the carry loop (no hitch). Returns
+    // false (key not handled) unless a water object is selected, so F stays free otherwise.
+    const floodSelectedWater = (): boolean => {
+      const o = current();
+      if (!o || o.modelUrl !== 'builtin:water') return false;
+      floodJob.current = beginFlood(o.pos[0], o.pos[2], o.pos[1], o.id);
+      return true;
     };
 
     // ── grab / release (left button) ──
@@ -210,6 +229,7 @@ export function ObjectEditController() {
       let handled = true;
       switch (e.code) {
         case 'KeyP': spawnAhead(); break;
+        case 'KeyF': handled = floodSelectedWater(); break;
         case 'Delete': case 'Backspace': deleteSelected(); break;
         case 'Escape': if (isDragging()) { dragCancel(); grab.current.active = false; } else setSelected(null); break;
         default: handled = false;
@@ -238,6 +258,15 @@ export function ObjectEditController() {
 
   // ── carry loop: while grabbing, slide the object along its height plane under the aim ──
   useFrame(() => {
+    // Advance an in-progress shore-seek flood (runs whether or not something is grabbed). Probes the
+    // top solid surface from just above the waterline so the waterline geometry — shore, rocks, tree
+    // trunks — acts as the wall, while high canopy overhead is ignored.
+    if (floodJob.current) {
+      const job = floodJob.current;
+      const ceil = job.level + FLOOD_CEIL;
+      const done = stepFlood(job, (x, z) => meshGroundHeight(x, z, ceil), FLOOD_PER_FRAME);
+      if (done) { setObjectFlood(job.objId, finishFlood(job) ?? undefined); floodJob.current = null; }
+    }
     if (!grab.current.active || !getEditMode()) return;
     const o = current(); if (!o) { grab.current.active = false; return; }
     camera.getWorldPosition(ro); camera.getWorldDirection(rd);

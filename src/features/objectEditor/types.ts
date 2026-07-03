@@ -6,6 +6,7 @@
 // and Siege Worlds.
 
 import type { InstancedMesh } from 'three';
+import type { FloodData } from './floodFill';
 
 export type Vec3 = [number, number, number];
 export type Quat = [number, number, number, number]; // x, y, z, w
@@ -35,6 +36,9 @@ export interface WorldObject {
                        // persisted — a bridge applies its transform to the real object.
   builder?: { id: string };  // present ⇒ a builder-placed object; Arrange-tool edits write back to
                              // builderObjectsState (pos + yaw + uniform scale), rendered by the builder.
+  flood?: FloodData;         // present on a 'builtin:water' object ⇒ a shore-seeking flood pool: the
+                             // surface is this baked footprint (world-anchored), not the 1×1 preview
+                             // plane. pos still marks the seed/level for re-flooding. Persisted in meta.
 }
 
 // The transform triple, the unit every edit command moves between.

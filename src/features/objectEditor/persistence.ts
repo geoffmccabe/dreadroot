@@ -16,6 +16,7 @@ interface Row {
   rot_x: number; rot_y: number; rot_z: number; rot_w: number;
   scale_x: number; scale_y: number; scale_z: number;
   owner_id: string | null;
+  meta?: { flood?: WorldObject['flood'] } | null;   // optional jsonb column (added later); absent ⇒ undefined
 }
 
 function rowToObject(r: Row): WorldObject {
@@ -26,6 +27,7 @@ function rowToObject(r: Row): WorldObject {
     quat: [r.rot_x, r.rot_y, r.rot_z, r.rot_w],
     scale: [r.scale_x, r.scale_y, r.scale_z],
     ownerId: r.owner_id,
+    flood: r.meta?.flood,
   };
 }
 
@@ -79,6 +81,15 @@ export async function persistTransform(id: string, t: TRS): Promise<void> {
     updated_at: new Date().toISOString(),
   }).eq('id', id);
   if (error) console.error('[objectEditor] update failed', error);
+}
+
+// Persist the object's `meta` jsonb (currently the flood footprint; later also per-water tint/glow).
+// Kept OUT of insertObject so that, if the `meta` column hasn't been added yet, only this write
+// fails (logged) — the base object + its transform still save. Add the column with:
+//   alter table world_objects add column if not exists meta jsonb;
+export async function persistMeta(id: string, meta: Record<string, unknown>): Promise<void> {
+  const { error } = await db().update({ meta, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) console.error('[objectEditor] meta update failed (add a `meta jsonb` column?)', error);
 }
 
 export async function deleteObject(id: string): Promise<void> {
