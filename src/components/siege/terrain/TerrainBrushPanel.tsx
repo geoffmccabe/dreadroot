@@ -15,6 +15,8 @@ import { serializeField, type BrushMode } from './heightField';
 import { BRUSH_SHAPES } from './brushShapes';
 import { saveMap } from './mapPersistence';
 import { getBuilder, setBuilder } from '../builder/builderObjectsState';
+import { usePGState, setPGState } from './pg/pgState';
+import { TerrainPGPanel } from './pg/TerrainPGPanel';
 
 const MODES: { key: BrushMode; label: string }[] = [
   { key: 'raise', label: 'Raise (R)' },
@@ -27,6 +29,7 @@ export function TerrainBrushPanel() {
   const game = useActiveGame();
   const mapId = useActiveMapId();
   const bs = useBrushState();
+  const pg = usePGState();
   const world = getWorldDefinition(mapId);
   const [saved, setSaved] = useState(false);
   const [savedCloud, setSavedCloud] = useState(false);
@@ -56,16 +59,41 @@ export function TerrainBrushPanel() {
       style={{ opacity: bs.enabled ? 1 : 0.5 }}>
       <div className="mb-2 flex items-center justify-between">
         <span className="font-bold text-primary">⛰ Terrain</span>
+        {pg.mode === 'manual' && (
+          <Button
+            size="sm"
+            variant={bs.enabled ? 'default' : 'outline'}
+            className="h-6 px-2 text-[10px]"
+            onClick={() => { const on = !bs.enabled; setBrushState({ enabled: on }); if (on) setBuilder({ enabled: false }); }}
+          >
+            {bs.enabled ? 'BUILD ON' : 'build off'}
+          </Button>
+        )}
+      </div>
+
+      {/* Manual (hand-sculpt brush) vs PG (procedural generation), like the Model Placer's mode toggle. */}
+      <div className="mb-2 grid grid-cols-2 gap-1">
         <Button
           size="sm"
-          variant={bs.enabled ? 'default' : 'outline'}
-          className="h-6 px-2 text-[10px]"
-          onClick={() => { const on = !bs.enabled; setBrushState({ enabled: on }); if (on) setBuilder({ enabled: false }); }}
+          variant={pg.mode === 'manual' ? 'default' : 'outline'}
+          className="h-7 text-[10px]"
+          onClick={() => setPGState({ mode: 'manual' })}
         >
-          {bs.enabled ? 'BUILD ON' : 'build off'}
+          Manual
+        </Button>
+        <Button
+          size="sm"
+          variant={pg.mode === 'pg' ? 'default' : 'outline'}
+          className="h-7 text-[10px]"
+          onClick={() => setPGState({ mode: 'pg' })}
+        >
+          PG
         </Button>
       </div>
 
+      {pg.mode === 'pg' && <TerrainPGPanel />}
+
+      {pg.mode === 'manual' && (<>
       <div className="grid grid-cols-2 gap-1">
         {MODES.map((m) => (
           <Button
@@ -139,6 +167,7 @@ export function TerrainBrushPanel() {
           </div>
         )}
       </div>
+      </>)}
 
       <Button size="sm" className="mt-3 h-7 w-full text-[11px]" onClick={onSave} disabled={saving}
         title="Saves to your browser + Supabase cloud">

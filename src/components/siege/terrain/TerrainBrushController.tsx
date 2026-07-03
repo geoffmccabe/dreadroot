@@ -11,6 +11,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { applyBrush, getHeight } from './heightField';
 import { getBrushState, setBrushState } from './terrainBrushState';
+import { getPGState } from './pg/pgState';
 import { shapeOutline, type BrushShape } from './brushShapes';
 
 // Indicator colour cycle: light blue → dark grey-blue, ~1 rev/sec, so the ring stays
@@ -128,8 +129,9 @@ export function TerrainBrushController() {
   const tRef = useRef(0);
   useFrame((_, dt) => {
     const bs = getBrushState();
-    indicator.visible = bs.enabled && hasHit.current;
-    if (!bs.enabled) { applying.current = false; return; }
+    const canSculpt = bs.enabled && getPGState().mode === 'manual';  // PG mode never sculpts
+    indicator.visible = canSculpt && hasHit.current;
+    if (!canSculpt) { applying.current = false; return; }
 
     // Ground point under the crosshair (analytic ray-march vs the height function).
     hasHit.current = marchToGround();
