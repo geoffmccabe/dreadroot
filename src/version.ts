@@ -10,8 +10,4 @@
 //                     redesigns, paradigm changes)
 //
 // Do NOT touch this manually — the AI bumps it on every push.
-<<<<<<< HEAD
-export const APP_VERSION = '4.256.0';
-=======
-export const APP_VERSION = '4.256.0';
->>>>>>> dc413549 (Debug panels draggable + resizable (DFlow, DFlow-output, Item Inspector) (4.256.0))
+export const APP_VERSION = '4.256.1';
