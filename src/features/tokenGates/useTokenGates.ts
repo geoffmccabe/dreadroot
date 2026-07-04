@@ -36,7 +36,8 @@ export function useTokenGates(userId: string | null): GateEvaluation & { isLoadi
       const [gatesRes, balsRes, nftRes] = await Promise.all([
         supabase.from('token_gates' as never).select('*').eq('is_active', true),
         supabase.from('user_token_balances').select('token_theme_id, coins').eq('user_id', userId),
-        supabase.from('user_nft_holdings' as never).select('collection, schema_name, template_id, asset_count').eq('user_id', userId),
+        // Proven NFTs only ('sync'/'sw-legacy'); exclude 'sync-unverified' pasted addresses.
+        supabase.from('user_nft_holdings' as never).select('collection, schema_name, template_id, asset_count').eq('user_id', userId).in('source', ['sync', 'sw-legacy']),
       ]);
 
       const gates = ((gatesRes.data as unknown as GateRow[]) ?? []).filter((g) => !g.game || g.game === game);

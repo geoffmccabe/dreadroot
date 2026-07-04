@@ -58,8 +58,11 @@ export function useSupporterStatus(userId: string | null): SupporterStatus {
         supabase.from('supporter_requirements' as never).select('*'),
         supabase.from('supporter_benefits' as never).select('*').eq('enabled', true).order('sort_order'),
         userId ? supabase.from('user_token_balances').select('token_theme_id, coins').eq('user_id', userId) : Promise.resolve({ data: [] }),
-        userId ? supabase.from('user_external_holdings' as never).select('token_theme_id, amount').eq('user_id', userId) : Promise.resolve({ data: [] }),
-        userId ? supabase.from('user_nft_holdings' as never).select('collection, schema_name, template_id, asset_count').eq('user_id', userId) : Promise.resolve({ data: [] }),
+        // Only OWNERSHIP-PROVEN holdings count toward VIP: 'sync' (SSO-connected wallet / Telegram-verified
+        // DiviGo) and 'sw-legacy' (verified backfill). 'sync-unverified' = a pasted address the user has
+        // NOT proven they own — excluded so nobody gets VIP by pasting a whale's wallet.
+        userId ? supabase.from('user_external_holdings' as never).select('token_theme_id, amount').eq('user_id', userId).in('source', ['sync', 'sw-legacy']) : Promise.resolve({ data: [] }),
+        userId ? supabase.from('user_nft_holdings' as never).select('collection, schema_name, template_id, asset_count').eq('user_id', userId).in('source', ['sync', 'sw-legacy']) : Promise.resolve({ data: [] }),
         userId ? supabase.from('user_subscriptions' as never).select('tier_id, status, paid_until').eq('user_id', userId) : Promise.resolve({ data: [] }),
       ]);
 

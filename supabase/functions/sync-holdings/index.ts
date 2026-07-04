@@ -21,8 +21,10 @@ const EVM_CHAINS = new Set(['ethereum', 'base', 'polygon'])
 
 interface ThemeRow { id: string; ticker_symbol: string | null; blockchain: string | null; contract_address: string | null }
 interface ReqRow { gate_kind: string; nft_chain: string | null; nft_collection: string | null; nft_schema: string | null; nft_template_id: number | null }
-interface NftAcc { user_id: string; collection: string; schema_name: string; template_id: number; asset_count: number; updated_at: string }
-interface ExtAcc { user_id: string; token_theme_id: string; chain: string; account: string; amount: number; updated_at: string }
+// source: 'sync' = ownership-PROVEN (SSO-connected wallet or Telegram-verified DiviGo); 'sync-unverified'
+// = a PASTED address the user hasn't proven they control. Only proven sources count toward VIP/gating.
+interface NftAcc { user_id: string; collection: string; schema_name: string; template_id: number; asset_count: number; source: string; updated_at: string }
+interface ExtAcc { user_id: string; token_theme_id: string; chain: string; account: string; amount: number; source: string; updated_at: string }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
@@ -69,14 +71,14 @@ Deno.serve(async (req) => {
   // Ownership-PROVEN addresses: the wallets the user connected (and signed with) in the SSO. Sourced
   // by email (login maps 1:1) via app credentials — trustworthy, unlike a pasted address. chain_type
   // maps: solana→solana, evm→ethereum (primary EVM), wax→wax, divi→divi.
-  const appSlug = Deno.env.get('DIVIGO_APP_SLUG') ?? '', appSecret = Deno.env.get('DIVIGO_APP_SECRET') ?? ''
+  const holdingsSecret = Deno.env.get('LW_HOLDINGS_SECRET') ?? ''
   const chainMap: Record<string, string> = { solana: 'solana', evm: 'ethereum', wax: 'wax', divi: 'divi' }
   const provenLinks: { chain: string; account: string }[] = []
-  if (appSlug && appSecret && user.email) {
+  if (holdingsSecret && user.email) {
     try {
       const r = await fetch(`${SSO}/api/app/connected-wallets`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-LW-App-Slug': appSlug, 'X-LW-App-Secret': appSecret },
+        headers: { 'Content-Type': 'application/json', 'X-LW-Holdings-Secret': holdingsSecret },
         body: JSON.stringify({ email: user.email }),
       })
       const d = await r.json()
@@ -89,33 +91,40 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Merge proven + pasted, dedupe by chain+account (proven first so it wins).
+  // Merge proven + pasted, each tagged; dedupe by chain+account (proven first so it wins a tie).
   const seenLink = new Set<string>()
-  const links = [...provenLinks, ...pastedLinks].filter((l) => {
+  const links = [
+    ...provenLinks.map((l) => ({ ...l, proven: true })),
+    ...pastedLinks.map((l) => ({ ...l, proven: false })),
+  ].filter((l) => {
     const k = `${norm(l.chain)}:${l.account}`; if (seenLink.has(k)) return false; seenLink.add(k); return true;
   })
   if (!links.length && !divigoToken) return json({ error: 'no linked wallets', tokens: 0, nfts: 0 }, 400)
 
   const nowIso = new Date().toISOString()
   const nftAcc: NftAcc[] = []
-  const extByKey = new Map<string, ExtAcc>() // key = token_theme_id (keep the largest amount seen)
-  const pushExt = (themeId: string | null, chain: string, account: string, amount: number) => {
+  // Keyed by token_theme + provenance so a pasted amount can NEVER overwrite a proven one — the two
+  // are stored as separate rows (proven counts toward gating, unverified is display-only).
+  const extByKey = new Map<string, ExtAcc>()
+  const pushExt = (themeId: string | null, chain: string, account: string, amount: number, proven: boolean) => {
     if (!themeId) return;
-    const prev = extByKey.get(themeId);
-    if (!prev || amount > prev.amount) extByKey.set(themeId, { user_id: user.id, token_theme_id: themeId, chain, account, amount, updated_at: nowIso });
+    const source = proven ? 'sync' : 'sync-unverified';
+    const key = `${themeId}:${source}`;
+    const prev = extByKey.get(key);
+    if (!prev || amount > prev.amount) extByKey.set(key, { user_id: user.id, token_theme_id: themeId, chain, account, amount, source, updated_at: nowIso });
   }
 
   for (const link of links) {
-    const chain = norm(link.chain), account = link.account;
+    const chain = norm(link.chain), account = link.account, proven = link.proven, nsrc = proven ? 'sync' : 'sync-unverified';
     try {
       if (chain === 'wax') {
         const d = await fetch(`${SSO}/api/wax-holdings?account=${encodeURIComponent(account)}`).then((r) => r.json())
-        for (const t of (d.tokens ?? [])) pushExt(findTheme('wax', t.symbol ?? '', t.contract ?? null), 'wax', account, t.amount ?? 0)
+        for (const t of (d.tokens ?? [])) pushExt(findTheme('wax', t.symbol ?? '', t.contract ?? null), 'wax', account, t.amount ?? 0, proven)
         for (const n of (d.nfts ?? [])) if (n.collection && (n.count ?? 0) > 0)
-          nftAcc.push({ user_id: user.id, collection: n.collection, schema_name: n.schema ?? '', template_id: n.template_id ?? 0, asset_count: n.count, updated_at: nowIso })
+          nftAcc.push({ user_id: user.id, collection: n.collection, schema_name: n.schema ?? '', template_id: n.template_id ?? 0, asset_count: n.count, source: nsrc, updated_at: nowIso })
       } else if (EVM_CHAINS.has(chain)) {
         const d = await fetch(`${SSO}/api/evm-holdings?address=${encodeURIComponent(account)}&chain=${chain}`).then((r) => r.json())
-        for (const t of (d.tokens ?? [])) pushExt(findTheme(chain, t.symbol ?? '', t.contract ?? null), chain, account, t.amount ?? 0)
+        for (const t of (d.tokens ?? [])) pushExt(findTheme(chain, t.symbol ?? '', t.contract ?? null), chain, account, t.amount ?? 0, proven)
         // NFTs: only mirror contracts that a requirement actually gates on, keyed by the requirement's
         // exact nft_collection string so the client's strict collection match succeeds.
         const byContract = new Map<string, number>()
@@ -123,21 +132,21 @@ Deno.serve(async (req) => {
         for (const r of reqs) {
           if (r.gate_kind !== 'nft' || norm(r.nft_chain) !== chain || !r.nft_collection) continue;
           const count = byContract.get(r.nft_collection.toLowerCase()) ?? 0;
-          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, updated_at: nowIso })
+          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, source: nsrc, updated_at: nowIso })
         }
       } else if (chain === 'divi') {
         const d = await fetch(`${SSO}/api/divi-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
-        for (const t of (d.tokens ?? [])) pushExt(findTheme('divi', t.symbol ?? 'DIVI', null), 'divi', account, t.amount ?? 0)
+        for (const t of (d.tokens ?? [])) pushExt(findTheme('divi', t.symbol ?? 'DIVI', null), 'divi', account, t.amount ?? 0, proven)
       } else if (chain === 'solana') {
         const d = await fetch(`${SSO}/api/solana-holdings?address=${encodeURIComponent(account)}`).then((r) => r.json())
-        for (const t of (d.tokens ?? [])) pushExt(findTheme('solana', t.symbol ?? '', t.contract ?? null), 'solana', account, t.amount ?? 0)
+        for (const t of (d.tokens ?? [])) pushExt(findTheme('solana', t.symbol ?? '', t.contract ?? null), 'solana', account, t.amount ?? 0, proven)
         // NFTs: mirror only collections a requirement gates on, keyed to the requirement's exact string.
         const byCollection = new Map<string, number>()
         for (const n of (d.nfts ?? [])) if (n.collection) byCollection.set(String(n.collection).toLowerCase(), n.count ?? 0)
         for (const r of reqs) {
           if (r.gate_kind !== 'nft' || norm(r.nft_chain) !== 'solana' || !r.nft_collection) continue;
           const count = byCollection.get(r.nft_collection.toLowerCase()) ?? 0;
-          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, updated_at: nowIso })
+          if (count > 0) nftAcc.push({ user_id: user.id, collection: r.nft_collection, schema_name: r.nft_schema ?? '', template_id: r.nft_template_id ?? 0, asset_count: count, source: nsrc, updated_at: nowIso })
         }
       }
     } catch (e) {
@@ -156,22 +165,20 @@ Deno.serve(async (req) => {
           headers: { 'X-LW-App-Slug': slug, 'X-LW-App-Secret': secret, Authorization: `Bearer ${divigoToken}` },
         }).then((r) => r.json())
         const divi = Number((d?.balances ?? {}).divi ?? 0)
-        if (divi > 0) pushExt(findTheme('divi', 'DIVI', null), 'divigo', 'divigo', divi)
+        if (divi > 0) pushExt(findTheme('divi', 'DIVI', null), 'divigo', 'divigo', divi, true) // Telegram-verified = proven
       } catch (e) {
         console.error('[sync-holdings] divigo balance failed', (e as Error).message)
       }
     }
   }
 
-  // Replace this user's OWN (live) mirror rows so sold-off assets drop out — but DON'T touch the
-  // 'sw-legacy' rows written by the Siege Worlds VIP backfill. Those represent an honorary VIP that
-  // only changes once the player actually re-certifies (a real DiviGo connect clears them; see
-  // divigo-connect). Tag our writes source='sync' so this stays scoped.
-  for (const r of nftAcc) (r as Record<string, unknown>).source = 'sync'
+  // Replace this user's OWN live mirror rows (source 'sync' = proven, 'sync-unverified' = pasted) so
+  // sold-off assets drop out — but DON'T touch 'sw-legacy' rows (the Siege Worlds VIP backfill, cleared
+  // only on a real DiviGo re-cert; see divigo-connect). Each row already carries its own source tag.
   await admin.from('user_nft_holdings').delete().eq('user_id', user.id).neq('source', 'sw-legacy')
   if (nftAcc.length) await admin.from('user_nft_holdings').insert(nftAcc)
   await admin.from('user_external_holdings').delete().eq('user_id', user.id).neq('source', 'sw-legacy')
-  const extRows = Array.from(extByKey.values()).map((r) => ({ ...r, source: 'sync' }))
+  const extRows = Array.from(extByKey.values())
   if (extRows.length) await admin.from('user_external_holdings').insert(extRows)
 
   const chains = [...links.map((l) => l.chain), ...(divigoToken ? ['divigo'] : [])]

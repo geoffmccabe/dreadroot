@@ -6,7 +6,7 @@
 // DIVI is never copied as spendable; these are gating-only mirrors, replaced when the user re-certifies.
 //
 // POST { limit?, recheck? }  (auth: an admin/superadmin JWT)
-// Uses the EXISTING Dreadroot↔SSO app credentials (DIVIGO_APP_SLUG/SECRET) — no new secret.
+// Auth to partner-holdings uses the dedicated LW_HOLDINGS_SECRET (separate from the DiviGo OAuth secret).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4'
 
 const cors = {
@@ -35,8 +35,8 @@ Deno.serve(async (req) => {
   if (!roles || roles.length === 0) return json({ error: 'admin only' }, 403)
 
   const SSO = (Deno.env.get('SSO_BASE_URL') ?? 'https://sso.lightningworks.io').replace(/\/$/, '')
-  const appSlug = Deno.env.get('DIVIGO_APP_SLUG') ?? '', appSecret = Deno.env.get('DIVIGO_APP_SECRET') ?? ''
-  if (!appSlug || !appSecret) return json({ error: 'DiviGo app credentials not set (DIVIGO_APP_SLUG/SECRET)' }, 503)
+  const holdingsSecret = Deno.env.get('LW_HOLDINGS_SECRET') ?? ''
+  if (!holdingsSecret) return json({ error: 'LW_HOLDINGS_SECRET not set' }, 503)
 
   const body = await req.json().catch(() => ({})) as { limit?: number; recheck?: boolean }
   const limit = Math.min(Math.max(body.limit ?? 50, 1), 200)
@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     try {
       const r = await fetch(`${SSO}/api/divigo/partner-holdings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-LW-App-Slug': appSlug, 'X-LW-App-Secret': appSecret },
+        headers: { 'Content-Type': 'application/json', 'X-LW-Holdings-Secret': holdingsSecret },
         body: JSON.stringify({ number: row.telegram_id, route: 'telegram', portalContract }),
       })
       const d = await r.json().catch(() => ({}))
