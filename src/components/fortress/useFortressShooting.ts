@@ -3,6 +3,9 @@ import * as THREE from 'three';
 
 // Pre-allocated scratch for tracer calculation
 const _scratchTracerEnd = new THREE.Vector3();
+const _muzzle = new THREE.Vector3();
+const _right = new THREE.Vector3();
+const _WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 import { MAX_BULLETS, type BulletLocal } from './fortressScene.constants';
 import { isPointInFSZ } from '@/features/enemies/ai/fortressSafeZone';
@@ -103,11 +106,25 @@ export function useFortressShooting({
     setBulletRenderTrigger((prev) => prev + 1);
     setShowCrosshairs(true);
 
-    // Add initial tracer segment from camera position
+    // Siege: draw the tracer as if from the gun MUZZLE (below/right/ahead of the eye), not the eye
+    // centre. Physics still fires from the eye so aim stays exact; we only shift the tracer's visual
+    // path by a constant offset (stored on the bullet, applied to every trail segment in the frame loop).
+    let ox = 0, oy = 0, oz = 0;
+    if (isSiege) {
+      _muzzle.copy(bullet.direction).multiplyScalar(0.4);   // ahead of the eye along the aim
+      _right.crossVectors(bullet.direction, _WORLD_UP).normalize();
+      _muzzle.addScaledVector(_right, 0.12);                 // slightly toward the (right) gun hand
+      _muzzle.y -= 0.2;                                       // and below the eye ≈ gun height
+      ox = _muzzle.x; oy = _muzzle.y; oz = _muzzle.z;
+      (bullet as any).tracerOffset = { x: ox, y: oy, z: oz };
+    } else {
+      (bullet as any).tracerOffset = null;
+    }
+    // Add initial tracer segment from the muzzle (or eye in DreadRoot)
     _scratchTracerEnd.copy(bullet.position).addScaledVector(bullet.direction, 2);
     tracersRef.current?.addSegment(
-      bullet.position.x, bullet.position.y, bullet.position.z,
-      _scratchTracerEnd.x, _scratchTracerEnd.y, _scratchTracerEnd.z,
+      bullet.position.x + ox, bullet.position.y + oy, bullet.position.z + oz,
+      _scratchTracerEnd.x + ox, _scratchTracerEnd.y + oy, _scratchTracerEnd.z + oz,
       bullet.color
     );
   }, [

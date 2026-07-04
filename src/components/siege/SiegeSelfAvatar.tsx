@@ -47,8 +47,8 @@ const JUMP_VY = 2;   // upward speed that means "the player just jumped" → jum
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
 // covers both back speeds. Holster + reload one-shots are a follow-up.)
 const CLIP = {
-  idle: 'Anim_Rifle_Idle_NoSkin',
-  walkF: 'Anim_Rifle_Walk_Not_Aiming_NoSkin',
+  idle: 'Anim_Rifle_Idle_Aiming_NoSkin',   // gun up & ready when armed (not the relaxed/crossed idle)
+  walkF: 'Anim_Rifle_Walk_Not_Aiming_NoSkin',   // no aiming-walk clip exists — would need upper-body layering
   runF: 'Anim_Rifle_Run_NoSkin',
   back: 'Anim_Rifle_Backward_Run_NoSkin',
   strafeL: 'Anim_Rifle_Strafe_Left_NoSkin', strafeR: 'Anim_Rifle_Strafe_Right_NoSkin',

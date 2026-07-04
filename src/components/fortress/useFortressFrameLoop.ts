@@ -284,13 +284,17 @@ export function useFortressFrameLoop({
       // here too; the caller still owns the dead-bullet filter below.
       stepBulletPhysics(bullet, delta, { gravity: BULLET_GRAVITY });
       
-      // Add tracer segment only if bullet moved at least 2 meters since last segment
+      // Add tracer segment only if bullet moved at least 2 meters since last segment.
+      // tracerOffset (Siege) shifts the visual trail to the gun muzzle; positions/dedup stay in
+      // bullet-space, the offset is applied only at render so aim/physics are untouched.
+      const _to = (bullet as any).tracerOffset;
+      const tox = _to ? _to.x : 0, toy = _to ? _to.y : 0, toz = _to ? _to.z : 0;
       const lastTracerPos = (bullet as any).lastTracerPos;
       if (!lastTracerPos) {
         (bullet as any).lastTracerPos = { x: prevX, y: prevY, z: prevZ };
         tracersRef.current?.addSegment(
-          prevX, prevY, prevZ,
-          bullet.position.x, bullet.position.y, bullet.position.z,
+          prevX + tox, prevY + toy, prevZ + toz,
+          bullet.position.x + tox, bullet.position.y + toy, bullet.position.z + toz,
           bullet.color
         );
       } else {
@@ -298,11 +302,11 @@ export function useFortressFrameLoop({
         const dy = bullet.position.y - lastTracerPos.y;
         const dz = bullet.position.z - lastTracerPos.z;
         const distSq = dx * dx + dy * dy + dz * dz;
-        
+
         if (distSq >= 25.0) { // 5 meters squared
           tracersRef.current?.addSegment(
-            lastTracerPos.x, lastTracerPos.y, lastTracerPos.z,
-            bullet.position.x, bullet.position.y, bullet.position.z,
+            lastTracerPos.x + tox, lastTracerPos.y + toy, lastTracerPos.z + toz,
+            bullet.position.x + tox, bullet.position.y + toy, bullet.position.z + toz,
             bullet.color
           );
           lastTracerPos.x = bullet.position.x;
