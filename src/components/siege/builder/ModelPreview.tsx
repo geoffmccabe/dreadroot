@@ -91,17 +91,25 @@ export function ModelPortCanvas() {
 }
 
 // Big floating turntable to the left of the panel while a thumb is hovered (usePgPreview holds a URL).
-export function ModelPreview({ panelLeft }: { panelLeft: number }) {
+// If onGrab is given (PLACE mode), the preview is clickable — click it to GRAB the model for placing.
+export function ModelPreview({ panelLeft, onGrab }: { panelLeft: number; onGrab?: () => void }) {
   const url = usePgPreview();
   const h = Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.6);
   const left = Math.max(8, panelLeft - h - 16);
+  const grabbable = !!(url && onGrab);
   return (
-    <div style={{ position: 'fixed', left, top: '20vh', width: h, height: h, pointerEvents: 'none', zIndex: 60, opacity: url ? 1 : 0, transition: 'opacity 120ms' }}>
+    <div onClick={grabbable ? onGrab : undefined}
+      style={{ position: 'fixed', left, top: '20vh', width: h, height: h, pointerEvents: grabbable ? 'auto' : 'none', cursor: grabbable ? 'grab' : 'default', zIndex: 60, opacity: url ? 1 : 0, transition: 'opacity 120ms' }}>
       {url && (
         <Canvas gl={{ alpha: true }} camera={{ position: [0, 0, 4], fov: 40 }} style={{ background: 'transparent' }}>
           <Lights />
           <Suspense fallback={null}><SpinModel url={url} /></Suspense>
         </Canvas>
+      )}
+      {grabbable && (
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 12, textAlign: 'center', color: '#e8eefb', fontSize: 13, fontWeight: 700, textShadow: '0 1px 4px #000', pointerEvents: 'none' }}>
+          click to grab
+        </div>
       )}
     </div>
   );

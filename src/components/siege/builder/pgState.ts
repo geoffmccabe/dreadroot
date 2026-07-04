@@ -99,10 +99,13 @@ export function generate(): void {
   emit();
 }
 
-// Hover-preview (unchanged).
+// Hover-preview (a URL) + the PLACE item behind it, so clicking the big preview can GRAB (arm) it.
 let previewFile: string | null = null;
 export const getPgPreview = () => previewFile;
 export function setPgPreview(f: string | null): void { if (previewFile !== f) { previewFile = f; emit(); } }
+let grabItem: { set: string; file: string; name: string } | null = null;
+export const getPgGrab = () => grabItem;
+export function setPgGrab(i: { set: string; file: string; name: string } | null): void { grabItem = i; }
 
 const sub = (cb: () => void) => { subs.add(cb); return () => subs.delete(cb); };
 export const usePgParams = (): PgParams => useSyncExternalStore(sub, getPgParams, getPgParams);

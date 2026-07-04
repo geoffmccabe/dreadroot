@@ -16,7 +16,7 @@ import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
 import { ModelPreview, ModelPortCanvas, ModelThumb, purgeUrls } from './ModelPreview';
-import { setPgPreview } from './pgState';
+import { setPgPreview, setPgGrab, getPgGrab } from './pgState';
 import { MUSHROOM_TREES } from './mushroomCatalog';
 import { scifiAsset } from '@/config/assetBase';
 
@@ -32,16 +32,18 @@ function PlaceThumbRow({ item, url, code, armed, onArm, onFav, isFav }: {
   onArm: () => void; onFav: () => void; isFav: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const onEnter = () => { setPgPreview(url); setPgGrab(item); };
   const onLeave = (e: React.MouseEvent) => {
     const r = ref.current?.getBoundingClientRect();
-    if (r && e.clientX <= r.left + 2 && e.clientY >= r.top && e.clientY <= r.bottom) { onArm(); return; } // slid LEFT → arm
+    // Slid LEFT out of the row → keep the big preview up so you can move onto it and CLICK to grab.
+    if (r && e.clientX <= r.left + 2 && e.clientY >= r.top && e.clientY <= r.bottom) return;
     setPgPreview(null);
   };
   return (
-    <div ref={ref} onClick={onArm} onMouseEnter={() => setPgPreview(url)} onMouseLeave={onLeave}
+    <div ref={ref} onClick={onArm} onMouseEnter={onEnter} onMouseLeave={onLeave}
       style={{ height: 80 }}
       className={`flex cursor-pointer items-center gap-2 px-2 hover:bg-accent ${armed ? 'bg-primary/25' : ''}`}
-      title="Hover to preview · slide LEFT to grab & place">
+      title="Click (or slide left onto the preview and click) to grab & place">
       <ModelThumb url={url} size={72} />
       <span onClick={(e) => { e.stopPropagation(); onFav(); }} className="cursor-pointer text-[12px]" title="Add to staging">{isFav ? '★' : '☆'}</span>
       <span className="flex-1 truncate text-[10px]">{item.name}</span>
@@ -199,7 +201,8 @@ export function BuilderPalette() {
   return (
     <>
     {b.enabled && <ModelPortCanvas />}
-    {b.enabled && <ModelPreview panelLeft={pos.left} />}
+    {b.enabled && <ModelPreview panelLeft={pos.left}
+      onGrab={b.pgMode === 'place' ? () => { const g = getPgGrab(); if (g) { arm(g); setPgPreview(null); } } : undefined} />}
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>
       <div className="mb-2 flex items-center justify-between gap-1">

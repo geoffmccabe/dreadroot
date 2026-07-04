@@ -30,15 +30,18 @@ const N = (v: number, on: (n: number) => void, min = 0) => (
 
 function ChosenRow({ c }: { c: SpeciesCfg }) {
   return (
-    <div className="rounded border border-primary/30 bg-primary/5 p-1">
-      <div className="flex items-center gap-1">
-        <span onMouseEnter={() => setPgPreview(importUrl(c.file))} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb url={importUrl(c.file)} size={44} /></span>
-        <span className="flex-1 truncate">{c.file}</span>
-        <button className="rounded border border-border px-1 text-muted-foreground hover:text-foreground" title="Remove" onClick={() => removeSpecies(c.file)}>×</button>
+    <div className="flex gap-2 rounded border border-primary/30 bg-primary/5 p-1" style={{ minHeight: 120 }}>
+      <span onMouseEnter={() => setPgPreview(importUrl(c.file))} onMouseLeave={() => setPgPreview(null)}
+        className="flex items-center" title="Hover for a big view"><ModelThumb url={importUrl(c.file)} size={112} /></span>
+      <div className="flex flex-1 flex-col justify-center gap-0.5">
+        <div className="flex items-center gap-1">
+          <span className="flex-1 truncate">{c.file}</span>
+          <button className="rounded border border-border px-1 text-muted-foreground hover:text-foreground" title="Remove" onClick={() => removeSpecies(c.file)}>×</button>
+        </div>
+        <div className="flex items-center justify-between"><span className="text-muted-foreground">rarity ⚖</span>{N(c.weight, (v) => updateSpecies(c.file, { weight: v }))}</div>
+        <div className="flex items-center justify-between"><span className="text-muted-foreground">size m</span><span className="flex gap-1">{N(c.minH, (v) => updateSpecies(c.file, { minH: v }), 1)}{N(c.maxH, (v) => updateSpecies(c.file, { maxH: v }), 2)}</span></div>
+        <div className="flex items-center justify-between"><span className="text-muted-foreground">altitude</span><span className="flex gap-1">{N(c.altMin, (v) => updateSpecies(c.file, { altMin: v }))}{N(c.altMax, (v) => updateSpecies(c.file, { altMax: v }))}</span></div>
       </div>
-      <div className="mt-0.5 flex items-center justify-between"><span className="text-muted-foreground">rarity ⚖</span>{N(c.weight, (v) => updateSpecies(c.file, { weight: v }))}</div>
-      <div className="flex items-center justify-between"><span className="text-muted-foreground">size m</span><span className="flex gap-1">{N(c.minH, (v) => updateSpecies(c.file, { minH: v }), 1)}{N(c.maxH, (v) => updateSpecies(c.file, { maxH: v }), 2)}</span></div>
-      <div className="flex items-center justify-between"><span className="text-muted-foreground">altitude</span><span className="flex gap-1">{N(c.altMin, (v) => updateSpecies(c.file, { altMin: v }))}{N(c.altMax, (v) => updateSpecies(c.file, { altMax: v }))}</span></div>
     </div>
   );
 }
@@ -103,8 +106,8 @@ export function ProceduralPanel() {
         <div className="mb-1 font-bold text-muted-foreground">All Species ({unchosen.length})</div>
         <div className="rounded border border-border/40 p-1">
           {unchosen.map((f) => (
-            <div key={f} className="flex items-center gap-1 px-1 py-0.5 hover:bg-accent">
-              <span onMouseEnter={() => setPgPreview(importUrl(f))} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb url={importUrl(f)} size={44} /></span>
+            <div key={f} className="flex items-center gap-2 px-1 py-0.5 hover:bg-accent">
+              <span onMouseEnter={() => setPgPreview(importUrl(f))} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb url={importUrl(f)} size={60} /></span>
               <span className="flex-1 truncate">{f}</span>
               <button className="rounded border border-border px-1" title="Add to chosen" onClick={() => addSpecies(f)}>+</button>
             </div>
