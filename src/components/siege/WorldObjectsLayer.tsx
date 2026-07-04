@@ -51,6 +51,11 @@ const NO_PLAYER_COLLIDE_RE = /mushroom.*small|small.*mushroom|toadstool|stalag|l
 // Models textured from their OWN embedded glb material (not the shared atlas) — the geometry cache
 // can't reproduce those, so they're never cached and always decode (keeping their textures).
 const EMBEDDED_TEX_RE = /portal|gate|warp|forge|fountain|exchange|crystal|geode|gem|shard|sign/i;
+// Gems (crystals/geodes/shards) are baked with a REAL emissive glow map + correct texture, so they
+// must ALWAYS take the trust path — keep their baked material, boost the glow past the bloom
+// threshold, and render translucent — even in layers (e.g. the lobby) that don't set trustMaterials.
+// Unlike forge/fountain (flat white emissive artifact → munge), gems have a genuine emissiveMap.
+const GEM_RE = /crystal|geode|gem|shard/i;
 
 // Objects mapped to the PP_Color_Palette swatch sheet (hash f50be3a42b) render as a single
 // flat — and wrong — color (terra-cotta rocks, near-black tent), because that palette doesn't
@@ -245,7 +250,8 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
         // (KHR_materials_emissive_strength) — keep them verbatim. Skip the DreadRoot/old-SW-export
         // munging below (tree-flatten, PP-palette, flat-emissive-zero, atlas override) which would
         // strip the glow and replace textures with flat colours. Only force non-metal.
-        if (trustMaterials) {
+        const isGem = GEM_RE.test(fbx);
+        if (trustMaterials || isGem) {
           if ('metalness' in m) m.metalness = 0;
           // Moss_Lumps: bind the moss texture explicitly (repeat-wrapped for the new box UVs) so it
           // shows the moss surface instead of the broken-UV flat green.
@@ -261,8 +267,11 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
           // maps survive export at KHR strength ~2.2, but AgX tone-mapping compresses that below
           // threshold → the "enchanted" glow reads flat. Multiply intensity ONLY where there's a
           // real glow map (a flat factor with no map would just wash the surface out).
-          if (emissiveBoost !== 1 && 'emissiveIntensity' in m && m.emissiveMap) {
-            m.emissiveIntensity *= emissiveBoost;
+          // Gems get a guaranteed glow boost (≥3.5) even when the layer sets no emissiveBoost,
+          // so the lobby crystals actually bloom instead of reading flat.
+          const eb = isGem ? Math.max(emissiveBoost, 3.5) : emissiveBoost;
+          if (eb !== 1 && 'emissiveIntensity' in m && m.emissiveMap) {
+            m.emissiveIntensity *= eb;
           }
           // Crystals / geodes / water exported as opaque (alphaMode MASK) — they're meant to be
           // translucent glowing gems / transparent water. Honour the baseColor alpha and let the
