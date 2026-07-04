@@ -8,7 +8,8 @@ import { Slider } from '@/components/ui/slider';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition, isEnchantedForest } from '@/config/worldDefinition';
-import { useState, useSyncExternalStore } from 'react';
+import { useRef, useState, useSyncExternalStore } from 'react';
+import { useDraggablePanel } from '../useDraggablePanel';
 import { subscribeChallenge, getChallengeState } from '../challenge/challengeStore';
 import { useBrushState, setBrushState } from './terrainBrushState';
 import { serializeField, type BrushMode } from './heightField';
@@ -34,6 +35,20 @@ export function TerrainBrushPanel() {
   const [saved, setSaved] = useState(false);
   const [savedCloud, setSavedCloud] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Draggable (by the top grab-bar) + resizable (bottom-right corner), matching the User panel.
+  const { pos, handleProps } = useDraggablePanel({ left: 16, top: Math.max(8, Math.round(window.innerHeight / 2) - 260) });
+  const [size, setSize] = useState({ w: 240, h: 520 });
+  const rz = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const onRzDown = (e: React.PointerEvent) => {
+    rz.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  };
+  const onRzMove = (e: React.PointerEvent) => {
+    if (!rz.current) return;
+    setSize({ w: Math.max(200, rz.current.w + (e.clientX - rz.current.x)), h: Math.max(220, rz.current.h + (e.clientY - rz.current.y)) });
+  };
+  const onRzUp = (e: React.PointerEvent) => { rz.current = null; (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); };
   // Hide the editor during a challenge (it's an open-world build tool, not a gameplay panel).
   const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
   // Enchanted Forest is a finished, reconstructed map (not a build canvas) — no terrain/builder tools.
@@ -55,8 +70,14 @@ export function TerrainBrushPanel() {
   };
 
   return (
-    <Card className="waterfall-card fixed left-4 top-1/2 -translate-y-1/2 z-50 w-56 p-3 text-xs font-mono"
-      style={{ opacity: bs.enabled ? 1 : 0.5 }}>
+    <Card className="waterfall-card fixed z-50 flex flex-col overflow-hidden p-0 text-xs font-mono"
+      style={{ left: pos.left, top: pos.top, width: size.w, height: size.h, opacity: bs.enabled ? 1 : 0.85 }}>
+      {/* Top grab-bar (User-panel style: a small centered bar, not the six-dots). */}
+      <div {...handleProps} title="Drag to move" className="relative h-[18px] shrink-0">
+        <div className="absolute left-1/2 top-[6px] h-1 w-11 -translate-x-1/2 rounded" style={{ background: 'hsla(var(--hud-border-h) / 0.75)' }} />
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="font-bold text-primary">⛰ Terrain</span>
         {pg.mode === 'manual' && (
@@ -173,6 +194,12 @@ export function TerrainBrushPanel() {
         title="Saves to your browser + Supabase cloud">
         {saving ? 'Saving…' : saved ? (savedCloud ? 'Saved to cloud ☁' : 'Saved locally (not signed in)') : 'Save map'}
       </Button>
+      </div>
+
+      {/* Resize from the bottom-right corner. */}
+      <div onPointerDown={onRzDown} onPointerMove={onRzMove} onPointerUp={onRzUp} title="Drag to resize"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+        style={{ touchAction: 'none', background: 'linear-gradient(135deg, transparent 50%, hsla(var(--hud-border-h) / 0.7) 50%)' }} />
     </Card>
   );
 }
