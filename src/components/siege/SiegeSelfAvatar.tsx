@@ -34,8 +34,6 @@ const _footR = new THREE.Vector3();
 // Jet-boot flame tier. Boots aren't a real equippable yet, so default to tier 1; when they exist this
 // reads the boot's tier for its plume colour (the Jet Plume sprite from Admin/Effects/Flame).
 const BOOT_TIER = 1;
-const JET_L = 'siege_jetboot_L';
-const JET_R = 'siege_jetboot_R';
 // Coyote time: how long the player must be CONTINUOUSLY off the ground before FALLING counts as
 // airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so it
 // keeps the walk/run pose instead of snapping to the fall pose. Standard platformer/FPS technique.
@@ -158,10 +156,6 @@ function SelfBody({ char }: { char: LineupChar }) {
   const prevGun = useRef(playerState.gun);
   const oneShotUntil = useRef(0);
   const airborneAt = useRef(0);   // when the player last LEFT the ground (0 = grounded), for coyote time
-  const jetFlamesOn = useRef(false);
-
-  // Make sure the jet-boot flames are removed if this avatar unmounts (e.g. character switch) mid-burn.
-  useEffect(() => () => { const f = getUniversalFlame(); f?.removeAttached(JET_L); f?.removeAttached(JET_R); }, []);
 
   useFrame((state) => {
     const g = group.current; if (!g) return;
@@ -229,33 +223,25 @@ function SelfBody({ char }: { char: LineupChar }) {
     }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
-    // Jet-boot flames off when hidden (first person) or the burn ended.
-    if ((!shown || !playerState.boosting) && jetFlamesOn.current) {
-      jetFlamesOn.current = false;
-      const f = getUniversalFlame(); f?.removeAttached(JET_L); f?.removeAttached(JET_R);
-    }
     if (!shown) return;
     // Stand at the player's feet, facing the look direction (away from the camera).
     g.position.set(playerState.x, playerState.y - EYE_HEIGHT - char.minY * char.scale, playerState.z);
     g.rotation.y = Math.atan2(playerState.fx, playerState.fz);
 
-    // Jet-boot flames while boosting (air-jump): two downward Jet Plume sprites at the soles.
+    // Jet-boot flames while boosting (air-jump): emit a short DOWNWARD Point Fire burst at each sole
+    // every frame. Each burst stays where it was emitted and fades — so the particles TRAIL like exhaust
+    // as you move, while the emission point tracks the feet (nothing rigid is left behind). The burn is
+    // brief, so per-frame spawning is cheap and stays well under the flame cap.
     if (playerState.boosting && footBones.L && footBones.R) {
       const flame = getUniversalFlame();
       if (flame) {
         g.updateWorldMatrix(true, true);
         footBones.L.getWorldPosition(_footL);
         footBones.R.getWorldPosition(_footR);
-        if (!jetFlamesOn.current) {
-          jetFlamesOn.current = true;
-          const colors = TIER_COLORS[BOOT_TIER] ?? ['#FF6600'];
-          // Point Fire, flipped DOWNWARD, 10× faster, thin vertical streaks → fast flame jets from the soles.
-          const cfg = { type: 'point' as const, colors, size: 0.2, height: 0.5, duration: 999999, particleCount: 40, colorMode: 'static' as const, flipY: true, speedMul: 10, particleAspect: 6 };
-          flame.spawnFlame({ ...cfg, position: _footL, attachTo: JET_L });
-          flame.spawnFlame({ ...cfg, position: _footR, attachTo: JET_R });
-        }
-        flame.updateAttachedPosition(JET_L, _footL);
-        flame.updateAttachedPosition(JET_R, _footR);
+        const colors = TIER_COLORS[BOOT_TIER] ?? ['#FF6600'];
+        const cfg = { type: 'point' as const, colors, size: 0.2, height: 0.5, duration: 0.3, particleCount: 8, colorMode: 'static' as const, flipY: true, speedMul: 6, particleAspect: 6 };
+        flame.spawnFlame({ ...cfg, position: _footL });
+        flame.spawnFlame({ ...cfg, position: _footR });
       }
     }
 

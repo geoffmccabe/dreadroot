@@ -3069,12 +3069,7 @@ export function FirstPersonControls({
         const canJump = onGround.current && !keys.current.ctrl;
 
         if (keys.current.space && canJump) {
-          let jumpHeight = 1.25;
-          // DreadRoot gives admins a 2.5 m super-jump; Siege wants normal physics for everyone (a 2.5 m
-          // jump at 9.8 hangs ~1.4 s, which reads as "floaty"). 1.25 m ≈ 1.0 s air time.
-          if (!isSiege && (roles.includes('admin') || roles.includes('superadmin'))) {
-            jumpHeight = 2.5;
-          }
+          const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump
           velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
           onGround.current = false;
         }
