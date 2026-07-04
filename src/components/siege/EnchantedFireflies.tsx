@@ -3,7 +3,7 @@
 // high-flyers, colour variance) runs in the vertex/fragment shader off a per-point attribute set +
 // a single uTime uniform — so it's a handful of draw calls and stays cheap at high counts (the LOD
 // answer). A distance cull fades out fireflies far from the camera. Driven live by the panel store.
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { FireflySpecies, useFireflyStore } from './fireflies/fireflySpecies';
@@ -113,6 +113,11 @@ function SpeciesPoints({ sp }: { sp: FireflySpecies }) {
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), sp.area * 2);
     return g;
   }, [sp]);
+
+  // Free the PREVIOUS geometry's GPU buffers whenever `sp` changes (every panel slider tick rebuilds
+  // it) and on unmount. Without this, R3F leaves prop-supplied geometries un-disposed on swap, so a
+  // tuning session orphans a fresh BufferGeometry per edit → steadily growing GPU memory.
+  useEffect(() => () => geom.dispose(), [geom]);
 
   // STABLE uniforms object (created once) so the drift animation never resets: an inline {uTime:{value:0}}
   // prop is a fresh object each render, and any re-render would reset uTime to 0 → fireflies freeze.
