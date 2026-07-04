@@ -47,12 +47,13 @@ export function WaterObject({ obj }: { obj: WorldObject }) {
     return { mat, uniforms };
   }, []);
   useFrame((_, dt) => { uniforms.uTime.value += dt; });
-  // A flooded pool: the surface is the baked shore-seeking footprint, in WORLD space, so it renders
-  // at the origin with no transform. (obj.pos/scale still mark the seed + level for re-flooding.)
+  // A flooded pool: the surface is the baked shore-seeking footprint (world XZ, built at y=0). It
+  // renders at the object's live height (obj.pos[1]) so wheeling raises/lowers the whole surface you
+  // see, and pressing F re-floods at exactly that level. The XZ footprint stays world-anchored.
   const floodGeo = useMemo(() => (obj.flood ? buildFloodGeometry(obj.flood) : null), [obj.flood]);
   useEffect(() => () => floodGeo?.dispose(), [floodGeo]);
   if (floodGeo) {
-    return <mesh geometry={floodGeo} material={mat} userData={{ worldObjectId: obj.id }} />;
+    return <mesh geometry={floodGeo} material={mat} position={[0, obj.pos[1], 0]} userData={{ worldObjectId: obj.id }} />;
   }
   // Not yet flooded: the movable 1×1 preview plane, laid flat (normal up); pos/quat/scale from the editor.
   return (
