@@ -29,6 +29,7 @@ import { getProfile, snapAxis } from './controlProfiles';
 import { SelectionHighlight } from './SelectionHighlight';
 import { beginFlood, stepFlood, finishFlood, type FloodJob } from './floodFill';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
+import { sampleHeight } from '@/components/siege/terrainHeight';
 
 const SELECT_MAX = 150;    // biggest individual object you can grab (m) — tall trees qualify; bigger
                            // than this is a merged-region blob (also caught by the `combined` flag)
@@ -282,7 +283,14 @@ export function ObjectEditController() {
     if (floodJob.current) {
       const job = floodJob.current;
       const ceil = job.level + FLOOD_CEIL;
-      const done = stepFlood(job, (x, z) => meshGroundHeight(x, z, ceil), FLOOD_PER_FRAME);
+      // Top SOLID surface = the higher of object colliders (probed just above the waterline so canopy
+      // overhead is ignored) and the terrain heightfield. Terrain counts as a wall too, so the flood
+      // works on brush/heightmap maps (a terrain-only volcano) exactly like it does around objects.
+      const done = stepFlood(job, (x, z) => {
+        const m = meshGroundHeight(x, z, ceil);
+        const t = sampleHeight(x, z);
+        return m == null ? t : t == null ? m : Math.max(m, t);
+      }, FLOOD_PER_FRAME);
       if (done) { setObjectFlood(job.objId, finishFlood(job) ?? undefined); floodJob.current = null; }
     }
     if (!grab.current.active || !getEditMode()) return;
