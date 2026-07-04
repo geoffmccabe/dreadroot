@@ -11,6 +11,8 @@ export interface SpeciesCfg {
   weight: number;              // relative rarity within the chosen group (higher = more common)
   minH: number; maxH: number;  // this species' size range (m)
   altMin: number; altMax: number;   // this species' altitude band (world Y)
+  slopeMax: number;            // this species' own max ground slope (°); a HIGHER value than the global lets
+                               // just this species climb steeper ground — effective = max(global, this).
 }
 
 export interface PgInstance {
@@ -30,8 +32,8 @@ export interface PgParams {
   seed: number;
 }
 
-const DEF = { minH: 10, maxH: 200, altMin: 22, altMax: 400 };
-const mkCfg = (file: string, d = DEF): SpeciesCfg => ({ file, weight: 1, minH: d.minH, maxH: d.maxH, altMin: d.altMin, altMax: d.altMax });
+const DEF = { minH: 10, maxH: 200, altMin: 22, altMax: 400, slope: 38 };
+const mkCfg = (file: string, d = DEF): SpeciesCfg => ({ file, weight: 1, minH: d.minH, maxH: d.maxH, altMin: d.altMin, altMax: d.altMax, slopeMax: d.slope });
 
 let params: PgParams = {
   chosen: MUSHROOM_TREES.map((f) => mkCfg(f)),   // start with all chosen at defaults
@@ -51,7 +53,7 @@ export function setPgParams(patch: Partial<PgParams>): void { params = { ...para
 export function isChosen(file: string): boolean { return params.chosen.some((c) => c.file === file); }
 export function addSpecies(file: string): void {   // seeds from the CURRENT global defaults
   if (isChosen(file)) return;
-  params = { ...params, chosen: [...params.chosen, mkCfg(file, { minH: params.defMinH, maxH: params.defMaxH, altMin: params.defAltMin, altMax: params.defAltMax })] };
+  params = { ...params, chosen: [...params.chosen, mkCfg(file, { minH: params.defMinH, maxH: params.defMaxH, altMin: params.defAltMin, altMax: params.defAltMax, slope: params.slopeMax })] };
   emit();
 }
 export function removeSpecies(file: string): void {
@@ -83,10 +85,13 @@ export function generate(): void {
     if (y <= waterLevel) continue;
     const gx = (getHeight(x + e, z) - getHeight(x - e, z)) / (2 * e);
     const gz = (getHeight(x, z + e) - getHeight(x, z - e)) / (2 * e);
-    if (Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI > p.slopeMax) continue;
-    // weighted species pick
+    const slopeDeg = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
+    // weighted species pick (before the slope test, so each species' own slope cap can apply)
     let r = rand() * totalW, s = pool[0];
     for (const c of pool) { r -= c.weight; if (r <= 0) { s = c; break; } }
+    // Global slope is the baseline for everyone; a species with a HIGHER own cap may climb steeper.
+    const effSlope = Math.max(p.slopeMax, s.slopeMax ?? p.slopeMax);
+    if (slopeDeg > effSlope) continue;
     if (y < s.altMin || y > s.altMax) continue;   // this species' altitude band
     const height = s.minH * Math.pow(s.maxH / s.minH, Math.pow(rand(), p.sizeBias));
     const yaw = p.yawRandom ? rand() * Math.PI * 2 : 0;
