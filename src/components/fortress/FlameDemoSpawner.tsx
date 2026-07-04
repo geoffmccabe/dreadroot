@@ -149,8 +149,17 @@ export const FlameDemoSpawner = forwardRef<FlameDemoHandle, FlameDemoSpawnerProp
             }
             const renderer = new SpriteRenderer(scene, THREE);
             system.addRenderer(renderer);
+            // The JSON `position` field above is NOT honored by fromJSONAsync —
+            // emission position comes from the emitter's Position initializer/zone,
+            // which defaults to the world origin (off-screen from the player camera),
+            // so the demo appeared to render nothing. Set the position with the real
+            // three-nebula API (same as FortressNebulaImpacts) so particles emit at
+            // the demo spot (left of the panel, camera eye level).
+            for (const emitter of system.emitters) {
+              (emitter as any).setPosition({ x: position.x, y: position.y, z: position.z });
+            }
             nebulaSystemRef.current = system;
-            console.log('[FlameDemoSpawner] Nebula created, emitters:', system.emitters.length);
+            console.log('[FlameDemoSpawner] Nebula created at', position.x.toFixed(1), position.y.toFixed(1), position.z.toFixed(1), '— emitters:', system.emitters.length);
           } catch (err) {
             console.error('[FlameDemoSpawner] Nebula init failed:', err);
           }
