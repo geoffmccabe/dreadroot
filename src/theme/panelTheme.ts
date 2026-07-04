@@ -83,7 +83,9 @@ const ADMIN: PanelTheme = {
     darken: 0.4, // a bit darker than User (40% vs 20%)
   },
   text: {
-    heading:    { ...USER.text.heading },
+    // White headings — the Admin panel's titles/section headers read as white
+    // (drives the .admin-panel-dialog h1–h4 rule; editable in the CSS editor).
+    heading:    { ...USER.text.heading, color: { h: 0, s: 0, l: 100 } },
     subheading: { ...USER.text.subheading },
     body:       { ...USER.text.body },
     info:       { ...USER.text.info },

@@ -757,6 +757,17 @@ All colors MUST be HSL.
   /* (Admin headings inherit --foreground like the User panel — no override, so
      the two classes render identically apart from the blue border.) */
 
+  /* Titles/headings inside the admin panel are light — otherwise they inherit the
+     dark page foreground and look black (Admin Panel title, section headers like
+     "Siege Worlds"/"Effects", etc.). Driven by the Admin "Heading" color token so
+     the CSS editor controls it; defaults to white. */
+  .admin-panel-dialog h1,
+  .admin-panel-dialog h2,
+  .admin-panel-dialog h3,
+  .admin-panel-dialog h4 {
+    color: var(--pt-admin-heading-color) !important;
+  }
+
   /* Active tab inside admin panel: subtle highlight, not bright white */
   .admin-panel-dialog [data-state="active"][role="tab"] {
     background: hsla(211, 30%, 51%, 0.5) !important;
