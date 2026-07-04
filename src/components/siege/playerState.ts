@@ -11,6 +11,7 @@ export const playerState = {
   vy: 0,              // vertical velocity (jump up vs fall down)
   gun: false,         // weapon equipped / aiming (crosshairs on)
   gliding: false,     // holding G while airborne → glide pose + slowed fall
+  boosting: false,    // jet-boost (air-jump) burn active → show foot jet flames, no jump pose
   glideFactor: 100,   // the player character's glide factor: 100 = normal fall, 200 = half speed,
                       // 50 = double speed. Set by the self-avatar from the current character.
 };

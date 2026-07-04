@@ -58,6 +58,9 @@ const UNARMED = {
   jumpUp: 'Loco_M_jump', idleFall: 'Anim_Idle_Falling_NoSkin',
   glide: 'Gliding',
 };
+// Jump clips are full standalone jumps with a crouch/windup at the START; the physics jump is instant,
+// so we start the clip PAST the windup so the leap/airborne pose shows immediately, not the crouch.
+const JUMP_OFFSET: Record<string, number> = { 'Loco_M_jump': 0.85, 'Anim_Rifle_Jump_Up_NoSkin': 0.12 };
 // Snapshot of everything driving the current clip, for the DFLOW character-anim tracker.
 function gatherSnap(clip: string): CharSnap {
   const s = playerState;
@@ -73,10 +76,12 @@ function gatherSnap(clip: string): CharSnap {
   };
 }
 
-function pickClip(armed: boolean, airborne: boolean): string {
+function pickClip(armed: boolean, airborne: boolean, boosting: boolean): string {
   const C = armed ? CLIP : UNARMED;
   const s = playerState;
   if (s.gliding) return C.glide;                     // holding G → glide pose (slowed fall)
+  if (boosting) return C.idleFall;                   // jet-boost (air-jump): NO jump pose — the boot
+                                                     // flames do the work; hold a neutral airborne pose
   if (airborne) return s.vy > 0 ? C.jumpUp : C.idleFall;   // rising = jump, falling = idle fall
   if (s.mf > 0) return s.run ? C.runF : C.walkF;     // forward (run takes priority over strafe)
   if (s.mf < 0) return C.back;                        // backward
@@ -132,7 +137,7 @@ function SelfBody({ char }: { char: LineupChar }) {
     const now = performance.now();
     if (playerState.grounded) airborneAt.current = 0;
     else if (!airborneAt.current) airborneAt.current = now;
-    const jumping = playerState.vy > JUMP_VY;
+    const jumping = playerState.vy > JUMP_VY && !playerState.boosting;   // a jet-boost isn't a jump pose
     const sustainedAir = !playerState.grounded && airborneAt.current > 0 && now - airborneAt.current > COYOTE_MS;
     const airborne = jumping || sustainedAir;
 
@@ -157,17 +162,18 @@ function SelfBody({ char }: { char: LineupChar }) {
     // Locomotion selector (armed = rifle set, unarmed = generic loco set). Runs even when hidden so the
     // pose is right the instant you zoom out — but not while a holster/draw one-shot is playing.
     if (!inOneShot) {
-      const want = pickClip(armed, airborne);
+      const want = pickClip(armed, airborne, playerState.boosting);
       if (want !== curClip.current && actions[want]) {
         const snap = gatherSnap(want);
         pushCharAnimEvent(curClip.current || '(start)', want, snap);   // DFLOW tracker
         setCharSnap(snap);
-        // The jump-up clip snaps in fast and plays ONCE, holding the rising pose — otherwise the fade
-        // and a re-looping leap/windup make the jump read as delayed. Everything else cross-fades normally.
+        // The jump-up clip snaps in fast and plays ONCE from PAST its windup, holding the rising pose —
+        // otherwise the fade + the clip's crouch make the jump read as delayed / not happening.
         const isJump = want === CLIP.jumpUp || want === UNARMED.jumpUp;
         const fade = isJump ? 0.06 : 0.2;
         if (curClip.current && actions[curClip.current]) actions[curClip.current]!.fadeOut(fade);
         const na = actions[want]!; na.reset();
+        if (isJump) na.time = JUMP_OFFSET[want] ?? 0;
         na.setLoop(isJump ? THREE.LoopOnce : THREE.LoopRepeat, isJump ? 1 : Infinity);
         na.clampWhenFinished = isJump;
         na.timeScale = 1; na.fadeIn(fade).play();

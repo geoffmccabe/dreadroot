@@ -211,6 +211,7 @@ export function FirstPersonControls({
   const jetBoostAvailRef = useRef(0);
   const jetBoostNextRefillRef = useRef(0);
   const jetBoostRequestRef = useRef(false);
+  const boostFlameUntilRef = useRef(0);   // while now < this, the self-avatar shows the jet-boot flames
   const spaceKeyEdgeRef = useRef(false); // Edge detection for space key
   // Rocket Belt forward-boost: discrete bursts (each 0.25s of fast-forward), regen 1/5s.
   const beltBurstsRef = useRef(0);          // available bursts
@@ -2802,6 +2803,7 @@ export function FirstPersonControls({
       // Apply jet boost if requested
       if (jetBoostRequestRef.current) {
         jetBoostRequestRef.current = false;
+        boostFlameUntilRef.current = now + 500;   // fire the jet-boot flames for ~0.5 s per boost
 
         // Calculate horizontal speed
         const vx = velocity.current.x;
@@ -3068,7 +3070,9 @@ export function FirstPersonControls({
 
         if (keys.current.space && canJump) {
           let jumpHeight = 1.25;
-          if (roles.includes('admin') || roles.includes('superadmin')) {
+          // DreadRoot gives admins a 2.5 m super-jump; Siege wants normal physics for everyone (a 2.5 m
+          // jump at 9.8 hangs ~1.4 s, which reads as "floaty"). 1.25 m ≈ 1.0 s air time.
+          if (!isSiege && (roles.includes('admin') || roles.includes('superadmin'))) {
             jumpHeight = 2.5;
           }
           velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
@@ -3404,6 +3408,7 @@ export function FirstPersonControls({
         siegePlayerPose.vy = velocity.current.y;
         siegePlayerPose.gun = showCrosshairsRef.current;
         siegePlayerPose.gliding = glideActiveRef.current;
+        siegePlayerPose.boosting = performance.now() < boostFlameUntilRef.current;
       }
 
       // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye
