@@ -13,7 +13,7 @@ import {
 import { savePgSet, loadPgSet, exportPgSet, importPgSet } from './pgPersistence';
 import { addObjects, removeBySet, useBuilder } from './builderObjectsState';
 import { modelHeights } from './modelMeasure';
-import { ModelThumb, ModelPortCanvas, preloadModels } from './ModelPreview';
+import { ModelThumb, preloadModels } from './ModelPreview';
 
 const num = 'w-12 rounded bg-background/60 px-1 py-0.5 text-right text-[10px]';
 function Slider({ label, val, min, max, step, suffix, on }: { label: string; val: number; min: number; max: number; step: number; suffix?: string; on: (v: number) => void }) {
@@ -79,8 +79,6 @@ export function ProceduralPanel() {
   };
   const onDeleteAll = () => { if (window.confirm(`Delete all ${acceptedCount} generated objects (and their edits)?`)) removeBySet(); };
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden">
-    <ModelPortCanvas />
     <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5 text-[10px]">
       <select className="w-full rounded bg-background/60 px-1 py-1 text-[11px]" value="mushrooms" onChange={() => { /* only category for now */ }}>
         <option value="mushrooms">🍄 Mushroom Trees</option>
@@ -153,7 +151,6 @@ export function ProceduralPanel() {
           </label>
         </span>
       </div>
-    </div>
     </div>
   );
 }

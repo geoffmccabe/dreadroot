@@ -6,7 +6,7 @@
 //   • ModelPreview    — the big floating turntable shown to the left while you hover a thumb.
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, View, PerspectiveCamera } from '@react-three/drei';
-import { Suspense, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { importUrl, MUSHROOM_TREES } from './mushroomCatalog';
 import { usePgPreview } from './pgState';
@@ -47,28 +47,44 @@ function Lights() {
   </>);
 }
 
-// Small inline square in a species row — transparent so the panel colour shows through. The model
-// itself is drawn by the shared ModelPortCanvas (positioned over the list, so it clips on scroll).
+// Small inline square in a species/catalog row — transparent so the panel colour shows through. The
+// model is drawn by the shared full-viewport ModelPortCanvas. To stop it floating over the header/other
+// panels when scrolled out of the list, an IntersectionObserver (rooted on the nearest scroll ancestor)
+// removes the <View> once the row leaves the list — a plain sized box holds its place.
 export function ModelThumb({ url, size = 44 }: { url: string; size?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [vis, setVis] = useState(true);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    let root: HTMLElement | null = el.parentElement;
+    while (root && root !== document.body) {
+      const oy = getComputedStyle(root).overflowY;
+      if (oy === 'auto' || oy === 'scroll') break;
+      root = root.parentElement;
+    }
+    const io = new IntersectionObserver(([e]) => setVis(e.isIntersecting), { root: root ?? null });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
-    <View style={{
-      width: size, height: size, flexShrink: 0, borderRadius: 5, overflow: 'hidden',
-      border: '1px solid hsl(var(--panel-glow) / 0.35)', background: 'transparent',
-    }}>
-      <PerspectiveCamera makeDefault position={[0, 0, 3.4]} fov={42} />
-      <Lights />
-      <Suspense fallback={null}><SpinModel url={url} /></Suspense>
-    </View>
+    <div ref={ref} style={{ width: size, height: size, flexShrink: 0 }}>
+      {vis && (
+        <View style={{ width: size, height: size, borderRadius: 5, overflow: 'hidden', border: '1px solid hsl(var(--panel-glow) / 0.35)', background: 'transparent' }}>
+          <PerspectiveCamera makeDefault position={[0, 0, 3.4]} fov={42} />
+          <Lights />
+          <Suspense fallback={null}><SpinModel url={url} /></Suspense>
+        </View>
+      )}
+    </div>
   );
 }
 
-// The canvas that draws every ModelThumb. Positioned ABSOLUTELY over its parent (the scrolling list
-// body), so WebGL's scissor clips any thumbnail scrolled outside — they never float over the header
-// or other panels. Click-through. Mount ONE inside the PG panel body.
+// The one full-viewport, transparent, click-through canvas that draws every ModelThumb (drei <View>
+// needs a viewport-covering canvas to position correctly). Mount ONE while the panel is open.
 export function ModelPortCanvas() {
   return (
     <Canvas gl={{ alpha: true, antialias: true }} dpr={[1, 2]}
-      style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}>
+      style={{ position: 'fixed', inset: 0, zIndex: 55, pointerEvents: 'none' }}>
       <View.Port />
     </Canvas>
   );

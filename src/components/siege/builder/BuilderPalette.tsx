@@ -198,6 +198,7 @@ export function BuilderPalette() {
 
   return (
     <>
+    {b.enabled && <ModelPortCanvas />}
     {b.enabled && <ModelPreview panelLeft={pos.left} />}
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>
@@ -216,8 +217,6 @@ export function BuilderPalette() {
       {b.enabled && b.pgMode === 'pg' && <ProceduralPanel />}
 
       {b.enabled && b.pgMode === 'place' && (
-        <div className="relative flex flex-1 flex-col overflow-hidden">
-        <ModelPortCanvas />
         <div className="flex flex-1 flex-col overflow-y-auto pr-0.5">
           {/* Type an asset CODE (from the ASSETGRID labels) — pulls that exact asset from ANY pack. */}
           <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="type a code (e.g. 3fa9c…)"
@@ -300,7 +299,6 @@ export function BuilderPalette() {
               </label>
             </span>
           </div>
-        </div>
         </div>
       )}
       {b.enabled && (
