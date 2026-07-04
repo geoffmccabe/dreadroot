@@ -15,8 +15,39 @@ import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
-import { ModelPreview } from './ModelPreview';
+import { ModelPreview, ModelPortCanvas, ModelThumb, purgeUrls } from './ModelPreview';
+import { setPgPreview } from './pgState';
 import { MUSHROOM_TREES } from './mushroomCatalog';
+import { scifiAsset } from '@/config/assetBase';
+
+// Resolve a catalog file to a glb URL (local '/…' imports pass through; ids go through R2). Same rule
+// BuilderObjectsLayer/Controller use.
+const resolveModel = (file: string) => (file.startsWith('/') || file.startsWith('http') ? file : scifiAsset(file));
+
+// One PLACE-tab catalog row: an 80px rotating thumbnail + star + name. Hover shows the big preview on
+// the left; sliding the mouse straight LEFT out of the row (staying in its 80px band) arms the model
+// for placement, so you glide from the thumbnail into grab-and-place. Clicking also arms it.
+function PlaceThumbRow({ item, url, code, armed, onArm, onFav, isFav }: {
+  item: { set: string; file: string; name: string }; url: string; code: string; armed: boolean;
+  onArm: () => void; onFav: () => void; isFav: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onLeave = (e: React.MouseEvent) => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r && e.clientX <= r.left + 2 && e.clientY >= r.top && e.clientY <= r.bottom) { onArm(); return; } // slid LEFT → arm
+    setPgPreview(null);
+  };
+  return (
+    <div ref={ref} onClick={onArm} onMouseEnter={() => setPgPreview(url)} onMouseLeave={onLeave}
+      style={{ height: 80 }}
+      className={`flex cursor-pointer items-center gap-2 px-2 hover:bg-accent ${armed ? 'bg-primary/25' : ''}`}
+      title="Hover to preview · slide LEFT to grab & place">
+      <ModelThumb url={url} size={72} />
+      <span onClick={(e) => { e.stopPropagation(); onFav(); }} className="cursor-pointer text-[12px]" title="Add to staging">{isFav ? '★' : '☆'}</span>
+      <span className="flex-1 truncate text-[10px]">{item.name}</span>
+    </div>
+  );
+}
 import { scifiData, ASSET_BASE } from '@/config/assetBase';
 import { assetCode, idFromFile, loadAllAssets, resolveCode, type AssetEntry } from '../scifi/assetCode';
 import { useFavorites, toggleFavorite, isFavorite, removeFavorite } from '../scifi/assetFavorites';
@@ -98,6 +129,13 @@ export function BuilderPalette() {
     return () => { alive = false; };
   }, [set]);
 
+  // Purge the previous category's models from GPU/memory when a new one loads (thumbnails can be many).
+  const prevPlaceUrls = useRef<string[]>([]);
+  useEffect(() => {
+    purgeUrls(prevPlaceUrls.current);
+    prevPlaceUrls.current = items.map((i) => resolveModel(i.file));
+  }, [items]);
+
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     const list = t ? items.filter((i) => i.name.toLowerCase().includes(t)) : items;
@@ -160,7 +198,7 @@ export function BuilderPalette() {
 
   return (
     <>
-    {b.enabled && b.pgMode === 'pg' && <ModelPreview panelLeft={pos.left} />}
+    {b.enabled && <ModelPreview panelLeft={pos.left} />}
     <Card className="waterfall-card fixed z-50 p-3 text-xs font-mono flex flex-col overflow-hidden"
       style={{ left: pos.left, top: pos.top, width: size.w, height: b.enabled ? size.h : undefined, opacity: b.enabled ? 1 : 0.5 }}>
       <div className="mb-2 flex items-center justify-between gap-1">
@@ -178,6 +216,8 @@ export function BuilderPalette() {
       {b.enabled && b.pgMode === 'pg' && <ProceduralPanel />}
 
       {b.enabled && b.pgMode === 'place' && (
+        <div className="relative flex flex-1 flex-col overflow-hidden">
+        <ModelPortCanvas />
         <div className="flex flex-1 flex-col overflow-y-auto pr-0.5">
           {/* Type an asset CODE (from the ASSETGRID labels) — pulls that exact asset from ANY pack. */}
           <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="type a code (e.g. 3fa9c…)"
@@ -200,18 +240,13 @@ export function BuilderPalette() {
           </select>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="search…"
             className="mb-2 w-full rounded bg-background/60 px-2 py-1 text-[11px]" />
-          <div className="mb-2 max-h-44 overflow-y-auto rounded border border-border/40">
+          <div className="mb-2 rounded border border-border/40">
             {filtered.map((i) => {
               const code = assetCode(i.id ?? idFromFile(i.file));
               return (
-                <div key={i.id}
-                  onClick={() => arm(i)}
-                  className={`flex cursor-pointer items-center gap-1 px-2 py-0.5 text-[10px] hover:bg-accent ${b.armed?.file === i.file ? 'bg-primary/30 text-foreground' : 'text-muted-foreground'}`}>
-                  <span onClick={(e) => { e.stopPropagation(); toggleFavorite({ code, set: i.set, file: i.file, name: i.name }); }}
-                    className="cursor-pointer" title="Add to staging">{isFavorite(code) ? '★' : '☆'}</span>
-                  <span className="font-mono text-primary/80">{code}</span>
-                  <span className="truncate">{i.name}</span>
-                </div>
+                <PlaceThumbRow key={i.id} item={i} url={resolveModel(i.file)} code={code}
+                  armed={b.armed?.file === i.file} onArm={() => arm(i)}
+                  onFav={() => toggleFavorite({ code, set: i.set, file: i.file, name: i.name })} isFav={isFavorite(code)} />
               );
             })}
             {!filtered.length && <div className="px-2 py-1 text-[10px] text-muted-foreground">no matches</div>}
@@ -265,6 +300,7 @@ export function BuilderPalette() {
               </label>
             </span>
           </div>
+        </div>
         </div>
       )}
       {b.enabled && (

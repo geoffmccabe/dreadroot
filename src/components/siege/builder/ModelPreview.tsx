@@ -11,9 +11,10 @@ import * as THREE from 'three';
 import { importUrl, MUSHROOM_TREES } from './mushroomCatalog';
 import { usePgPreview } from './pgState';
 
-// The centred, auto-rotating model (used at every size). Materials forced opaque + double-sided.
-function SpinModel({ file, rate = 0.6 }: { file: string; rate?: number }) {
-  const { scene } = useGLTF(importUrl(file), '/draco/');
+// The centred, auto-rotating model (used at every size), by full glb URL (works for local imports AND
+// R2 catalog assets). Materials forced opaque + double-sided.
+function SpinModel({ url, rate = 0.6 }: { url: string; rate?: number }) {
+  const { scene } = useGLTF(url, '/draco/');
   const spin = useRef<THREE.Group>(null);
   const { obj, s, center } = useMemo(() => {
     const c = scene.clone(true);
@@ -48,7 +49,7 @@ function Lights() {
 
 // Small inline square in a species row — transparent so the panel colour shows through. The model
 // itself is drawn by the shared ModelPortCanvas (positioned over the list, so it clips on scroll).
-export function ModelThumb({ file, size = 44 }: { file: string; size?: number }) {
+export function ModelThumb({ url, size = 44 }: { url: string; size?: number }) {
   return (
     <View style={{
       width: size, height: size, flexShrink: 0, borderRadius: 5, overflow: 'hidden',
@@ -56,7 +57,7 @@ export function ModelThumb({ file, size = 44 }: { file: string; size?: number })
     }}>
       <PerspectiveCamera makeDefault position={[0, 0, 3.4]} fov={42} />
       <Lights />
-      <Suspense fallback={null}><SpinModel file={file} /></Suspense>
+      <Suspense fallback={null}><SpinModel url={url} /></Suspense>
     </View>
   );
 }
@@ -73,22 +74,24 @@ export function ModelPortCanvas() {
   );
 }
 
-// Big floating turntable to the left of the panel while a thumb is hovered.
+// Big floating turntable to the left of the panel while a thumb is hovered (usePgPreview holds a URL).
 export function ModelPreview({ panelLeft }: { panelLeft: number }) {
-  const file = usePgPreview();
+  const url = usePgPreview();
   const h = Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.6);
   const left = Math.max(8, panelLeft - h - 16);
   return (
-    <div style={{ position: 'fixed', left, top: '20vh', width: h, height: h, pointerEvents: 'none', zIndex: 60, opacity: file ? 1 : 0, transition: 'opacity 120ms' }}>
-      {file && (
+    <div style={{ position: 'fixed', left, top: '20vh', width: h, height: h, pointerEvents: 'none', zIndex: 60, opacity: url ? 1 : 0, transition: 'opacity 120ms' }}>
+      {url && (
         <Canvas gl={{ alpha: true }} camera={{ position: [0, 0, 4], fov: 40 }} style={{ background: 'transparent' }}>
           <Lights />
-          <Suspense fallback={null}><SpinModel file={file} /></Suspense>
+          <Suspense fallback={null}><SpinModel url={url} /></Suspense>
         </Canvas>
       )}
     </div>
   );
 }
 
-// Warm the model cache so thumbs + previews pop instantly (call once from the panel).
+// Warm the mushroom cache (PG); and a generic list warmer / purger for PLACE categories.
 export function preloadModels() { MUSHROOM_TREES.forEach((f) => useGLTF.preload(importUrl(f), '/draco/')); }
+export function preloadUrls(urls: string[]) { urls.forEach((u) => useGLTF.preload(u, '/draco/')); }
+export function purgeUrls(urls: string[]) { urls.forEach((u) => { try { useGLTF.clear(u); } catch { /* ignore */ } }); }

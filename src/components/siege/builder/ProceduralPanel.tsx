@@ -32,7 +32,7 @@ function ChosenRow({ c }: { c: SpeciesCfg }) {
   return (
     <div className="rounded border border-primary/30 bg-primary/5 p-1">
       <div className="flex items-center gap-1">
-        <span onMouseEnter={() => setPgPreview(c.file)} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb file={c.file} size={30} /></span>
+        <span onMouseEnter={() => setPgPreview(importUrl(c.file))} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb url={importUrl(c.file)} size={44} /></span>
         <span className="flex-1 truncate">{c.file}</span>
         <button className="rounded border border-border px-1 text-muted-foreground hover:text-foreground" title="Remove" onClick={() => removeSpecies(c.file)}>×</button>
       </div>
@@ -106,7 +106,7 @@ export function ProceduralPanel() {
         <div className="rounded border border-border/40 p-1">
           {unchosen.map((f) => (
             <div key={f} className="flex items-center gap-1 px-1 py-0.5 hover:bg-accent">
-              <span onMouseEnter={() => setPgPreview(f)} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb file={f} size={30} /></span>
+              <span onMouseEnter={() => setPgPreview(importUrl(f))} onMouseLeave={() => setPgPreview(null)} title="Hover for a big view"><ModelThumb url={importUrl(f)} size={44} /></span>
               <span className="flex-1 truncate">{f}</span>
               <button className="rounded border border-border px-1" title="Add to chosen" onClick={() => addSpecies(f)}>+</button>
             </div>
