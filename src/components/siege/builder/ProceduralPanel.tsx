@@ -5,12 +5,14 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useActiveMapId } from '@/config/activeMap';
+import { useActiveGame } from '@/config/activeGame';
+import { SavePgSetModal, LoadPgSetModal } from './PgSetModals';
 import { MUSHROOM_TREES, importUrl } from './mushroomCatalog';
 import {
   usePgParams, usePgInstances, getPgInstances, setPgParams, generate, clearInstances, setPgPreview,
   isChosen, addSpecies, removeSpecies, updateSpecies, type SpeciesCfg,
 } from './pgState';
-import { savePgSet, loadPgSet, exportPgSet, importPgSet } from './pgPersistence';
+import { loadPgSet, exportPgSet, importPgSet } from './pgPersistence';
 import { addObjects, removeBySet, useBuilder } from './builderObjectsState';
 import { modelHeights } from './modelMeasure';
 import { ModelThumb, preloadModels } from './ModelPreview';
@@ -47,7 +49,7 @@ const N = (v: number, on: (n: number) => void, min = 0) => <NumBox v={v} on={on}
 
 function ChosenRow({ c }: { c: SpeciesCfg }) {
   return (
-    <div className="flex gap-2 rounded border border-primary/30 bg-primary/5 p-1" style={{ minHeight: 120 }}>
+    <div className="flex gap-2 rounded border border-primary/30 bg-primary/5 p-1" style={{ minHeight: 138 }}>
       <span onMouseEnter={() => setPgPreview(importUrl(c.file))} onMouseLeave={() => setPgPreview(null)}
         className="flex items-center" title="Hover for a big view"><ModelThumb url={importUrl(c.file)} size={112} /></span>
       <div className="flex flex-1 flex-col justify-center gap-0.5">
@@ -58,6 +60,7 @@ function ChosenRow({ c }: { c: SpeciesCfg }) {
         <div className="flex items-center justify-between"><span className="text-muted-foreground">rarity ⚖</span>{N(c.weight, (v) => updateSpecies(c.file, { weight: v }))}</div>
         <div className="flex items-center justify-between"><span className="text-muted-foreground">size m</span><span className="flex gap-1">{N(c.minH, (v) => updateSpecies(c.file, { minH: v }), 1)}{N(c.maxH, (v) => updateSpecies(c.file, { maxH: v }), 2)}</span></div>
         <div className="flex items-center justify-between"><span className="text-muted-foreground">altitude</span><span className="flex gap-1">{N(c.altMin, (v) => updateSpecies(c.file, { altMin: v }))}{N(c.altMax, (v) => updateSpecies(c.file, { altMax: v }))}</span></div>
+        <div className="flex items-center justify-between"><span className="text-muted-foreground" title="This species' own max ground slope. Higher than the global lets it climb steeper.">max slope °</span>{N(c.slopeMax, (v) => updateSpecies(c.file, { slopeMax: v }))}</div>
       </div>
     </div>
   );
@@ -68,13 +71,13 @@ export function ProceduralPanel() {
   const count = usePgInstances().length;
   const unchosen = MUSHROOM_TREES.filter((f) => !isChosen(f));
   const mapId = useActiveMapId();
+  const game = useActiveGame();
   const [setMsg, setSetMsg] = useState('');
-  useEffect(() => { loadPgSet(mapId); }, [mapId]);   // load this map's saved PG set on entry
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [loadOpen, setLoadOpen] = useState(false);
+  useEffect(() => { loadPgSet(mapId); }, [mapId]);   // load this map's last autosaved PG set on entry
   useEffect(() => { preloadModels(); }, []);          // warm the thumbnail/preview cache
-  const onSaveSet = async () => {
-    const r = await savePgSet(mapId, `${mapId} mushrooms`);
-    setSetMsg(r.cloud ? 'Saved ☁' : 'Saved local'); setTimeout(() => setSetMsg(''), 2500);
-  };
+  const flashMsg = (m: string) => { setSetMsg(m); setTimeout(() => setSetMsg(''), 2500); };
   const onImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]; if (f) { const ok = await importPgSet(f); setSetMsg(ok ? 'Imported' : 'Bad file'); setTimeout(() => setSetMsg(''), 2500); }
     e.target.value = '';
@@ -167,13 +170,16 @@ export function ProceduralPanel() {
       <div className="flex items-center justify-between border-t border-border/40 pt-1 text-[10px]">
         <span className="text-muted-foreground">{setMsg || 'PG set'}</span>
         <span className="flex gap-1">
-          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onSaveSet} title="Save this species set + settings to the cloud">Save set</Button>
-          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => exportPgSet(mapId)} title="Download as a file">⬇</Button>
-          <label className="inline-flex h-6 cursor-pointer items-center rounded border border-border px-1.5 text-[10px] hover:bg-accent" title="Load a set file">
-            ⬆<input type="file" accept="application/json,.json" className="hidden" onChange={onImport} />
+          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={() => setSaveOpen(true)} title="Name + save this set (cloud + .json.gz), choose private/public">Save set…</Button>
+          <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setLoadOpen(true)} title="Load one of your sets or a public set">Load…</Button>
+          <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" onClick={() => exportPgSet(mapId)} title="Download as a compressed .json.gz file">⬇</Button>
+          <label className="inline-flex h-6 cursor-pointer items-center rounded border border-border px-1.5 text-[10px] hover:bg-accent" title="Load a set file (.json.gz or .json)">
+            ⬆<input type="file" accept=".gz,.json,application/json,application/gzip" className="hidden" onChange={onImport} />
           </label>
         </span>
       </div>
+      <SavePgSetModal open={saveOpen} game={game} onClose={() => setSaveOpen(false)} onDone={flashMsg} />
+      <LoadPgSetModal open={loadOpen} game={game} onClose={() => setLoadOpen(false)} onDone={flashMsg} />
     </div>
   );
 }

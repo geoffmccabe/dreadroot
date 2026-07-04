@@ -34,17 +34,64 @@ export async function loadPgSet(mapId: string): Promise<boolean> {
   return false;
 }
 
-export function exportPgSet(mapId: string): void {
-  const blob = new Blob([JSON.stringify(getPgParams(), null, 2)], { type: 'application/json' });
+// Download the set as a compressed .json.gz (same gzip path as the world backup).
+export async function exportPgSet(name: string): Promise<void> {
+  const json = JSON.stringify(getPgParams());
+  const gz = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
+  const blob = await new Response(gz).blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `${mapId}-pgset-${new Date().toISOString().slice(0, 10)}.json`;
+  const safe = (name || 'pgset').replace(/[^a-z0-9_-]+/gi, '_');
+  a.href = url; a.download = `${safe}-${new Date().toISOString().slice(0, 10)}.json.gz`;
   a.click(); URL.revokeObjectURL(url);
 }
 
-export function importPgSet(file: File): Promise<boolean> {
-  return file.text().then((t) => {
-    try { const d = JSON.parse(t); if (d?.chosen) { setPgParams(d as PgParams); return true; } } catch { /* ignore */ }
-    return false;
-  });
+// Load a set file — accepts the new compressed .json.gz OR a plain .json.
+export async function importPgSet(file: File): Promise<boolean> {
+  try {
+    const text = file.name.endsWith('.gz')
+      ? await new Response(file.stream().pipeThrough(new DecompressionStream('gzip'))).text()
+      : await file.text();
+    const d = JSON.parse(text);
+    if (d?.chosen) { setPgParams(d as PgParams); return true; }
+  } catch { /* ignore */ }
+  return false;
+}
+
+// ── Named, shareable set library (siege_pg_library) ─────────────────────────────
+// Each SAVE creates a named set owned by you; mark it public so other players can browse + generate
+// with it. Resilient: if the table/columns aren't in the cloud yet, saving still works locally.
+export interface PgSetRow { id: string; name: string; owner_id: string; is_public: boolean; game: string; data: PgParams; updated_at?: string }
+
+export async function saveNamedSet(name: string, isPublic: boolean, game: string): Promise<{ cloud: boolean }> {
+  const data = getPgParams();
+  try { localStorage.setItem('pglib_last', JSON.stringify({ name, isPublic, data })); } catch { /* best effort */ }
+  const owner = await uid();
+  if (!owner) { console.warn('[pgLib] save skipped — not signed in'); return { cloud: false }; }
+  try {
+    const { error } = await cloud.from('siege_pg_library').insert({ owner_id: owner, game, name, is_public: isPublic, data });
+    if (error) console.warn('[pgLib] cloud save failed', error);
+    return { cloud: !error };
+  } catch (e) { console.warn('[pgLib] cloud save threw', e); return { cloud: false }; }
+}
+
+export async function listMySets(game: string): Promise<PgSetRow[]> {
+  const owner = await uid(); if (!owner) return [];
+  try {
+    const { data } = await cloud.from('siege_pg_library').select('*').eq('game', game).eq('owner_id', owner).order('updated_at', { ascending: false });
+    return (data as PgSetRow[]) ?? [];
+  } catch { return []; }
+}
+
+export async function listPublicSets(game: string): Promise<PgSetRow[]> {
+  try {
+    const { data } = await cloud.from('siege_pg_library').select('*').eq('game', game).eq('is_public', true).order('updated_at', { ascending: false }).limit(100);
+    return (data as PgSetRow[]) ?? [];
+  } catch { return []; }
+}
+
+// Load a library row's settings into the live generator.
+export function applyPgSet(row: PgSetRow): boolean {
+  if (row?.data?.chosen) { setPgParams(row.data); return true; }
+  return false;
 }
