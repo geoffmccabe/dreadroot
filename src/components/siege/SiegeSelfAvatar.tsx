@@ -31,6 +31,10 @@ const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
 const _footL = new THREE.Vector3();
 const _footR = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+// Undo the Mixamo FBX Z-up→Y-up 90° tilt on the root, so the runtime-loaded aiming-walk clips stand
+// upright. The glb-baked clips already had this conversion; these loose FBX did not → face-down/swimming.
+const HIP_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
 // Jet-boot flame tier. Boots aren't a real equippable yet, so default to tier 1; when they exist this
 // reads the boot's tier for its plume colour (the Jet Plume sprite from Admin/Effects/Flame).
 const BOOT_TIER = 1;
@@ -119,7 +123,14 @@ function SelfBody({ char }: { char: LineupChar }) {
     const src = grp.animations?.[0]; if (!src) return null;
     const clip = src.clone(); clip.name = WALK_AIM[i].name;
     for (const t of clip.tracks) {
-      if (/Hips\.position$/i.test(t.name)) for (let k = 0; k < t.values.length; k += 3) { t.values[k] = 0; t.values[k + 2] = 0; }
+      if (/Hips\.position$/i.test(t.name)) { for (let k = 0; k < t.values.length; k += 3) { t.values[k] = 0; t.values[k + 2] = 0; } }
+      else if (/Hips\.quaternion$/i.test(t.name)) {
+        const v = t.values;   // undo the 90° face-down root tilt on every keyframe
+        for (let k = 0; k < v.length; k += 4) {
+          _q.set(v[k], v[k + 1], v[k + 2], v[k + 3]).premultiply(HIP_FIX);
+          v[k] = _q.x; v[k + 1] = _q.y; v[k + 2] = _q.z; v[k + 3] = _q.w;
+        }
+      }
     }
     return clip;
   }).filter((c): c is THREE.AnimationClip => !!c), [walkFbx]);
