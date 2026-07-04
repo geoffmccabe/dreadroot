@@ -24,9 +24,26 @@ function Slider({ label, val, min, max, step, suffix, on }: { label: string; val
     </div>
   );
 }
-const N = (v: number, on: (n: number) => void, min = 0) => (
-  <input type="number" className={num} value={v} onChange={(e) => on(Math.max(min, +e.target.value))} />
-);
+// Editable number box. Holds the raw text while you type (so Backspace/Delete and clearing the
+// field work normally) and only commits a clamped number on blur or Enter — the old version
+// re-clamped on every keystroke, which snapped an emptied field back to the min so you could
+// never delete the first digit.
+function NumBox({ v, on, min = 0 }: { v: number; on: (n: number) => void; min?: number }) {
+  const [txt, setTxt] = useState(String(v));
+  useEffect(() => { setTxt(String(v)); }, [v]);   // resync when the value changes externally (reset, dice, etc.)
+  const commit = () => { const n = parseFloat(txt); on(Number.isFinite(n) ? Math.max(min, n) : min); };
+  return (
+    <input
+      type="text"
+      className={num}
+      value={txt}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur(); }}
+    />
+  );
+}
+const N = (v: number, on: (n: number) => void, min = 0) => <NumBox v={v} on={on} min={min} />;
 
 function ChosenRow({ c }: { c: SpeciesCfg }) {
   return (
@@ -118,7 +135,10 @@ export function ProceduralPanel() {
 
       <div className="rounded border border-border/40 p-1.5">
         <div className="mb-1 font-bold text-muted-foreground">Scatter</div>
-        <Slider label="Count (attempts)" val={p.count} min={10} max={3000} step={10} on={(v) => setPgParams({ count: v })} />
+        <div className="flex items-end gap-1">
+          <div className="flex-1"><Slider label="Count (attempts)" val={p.count} min={10} max={50000} step={10} on={(v) => setPgParams({ count: v })} /></div>
+          {N(p.count, (v) => setPgParams({ count: Math.min(50000, Math.max(10, v)) }), 10)}
+        </div>
         <Slider label="Big-is-rare bias" val={p.sizeBias} min={1} max={6} step={0.5} on={(v) => setPgParams({ sizeBias: v })} />
         <Slider label="Max slope" val={p.slopeMax} min={0} max={70} step={1} suffix="°" on={(v) => setPgParams({ slopeMax: v })} />
         <Slider label="Lean / tilt" val={p.tiltMax} min={0} max={30} step={1} suffix="°" on={(v) => setPgParams({ tiltMax: v })} />
