@@ -6,9 +6,9 @@
 // V1 = Rajax + the AK, rifle-idle. Character-select, live-anim sync (walk/run/aim) and the left-hand
 // grip are follow-ups.
 import { Suspense, useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useLoader } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
-import { SkeletonUtils } from 'three-stdlib';
+import { SkeletonUtils, FBXLoader } from 'three-stdlib';
 import * as THREE from 'three';
 import { playerState } from './playerState';
 import { getTPDist } from './siegeThirdPerson';
@@ -46,12 +46,22 @@ const JUMP_VY = 2;   // upward speed that means "the player just jumped" → jum
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
 // standard "locomotion selector" every game uses. (No dedicated rifle walk-back clip → backward-run
 // covers both back speeds. Holster + reload one-shots are a follow-up.)
+// Aiming-walk clips the user supplied as loose FBX (loaded at runtime, below). "Aiming & ready to fire"
+// — NOT scoped/zoomed (right-mouse ADS); no walking-while-zoomed clips exist yet — add if found.
+const WALK_AIM = [
+  { url: '/Anim_Rifle/Anim_Rifle_Walk_Aiming_NoSkin.fbx',          name: 'WalkAimF' },
+  { url: '/Anim_Rifle/Anim_Rifle_Walk_Backward_Aiming_NoSkin.fbx', name: 'WalkAimB' },
+  { url: '/Anim_Rifle/Anim_Rifle_Walk_Left_Aiming_NoSkin.fbx',     name: 'WalkAimL' },
+  { url: '/Anim_Rifle/Anim_Rifle_Walk_Right_Aiming_NoSkin.fbx',    name: 'WalkAimR' },
+];
+const WALK_AIM_URLS = WALK_AIM.map((w) => w.url);
+
 const CLIP = {
   idle: 'Anim_Rifle_Idle_Aiming_NoSkin',   // gun up & ready when armed (not the relaxed/crossed idle)
-  walkF: 'Anim_Rifle_Walk_Not_Aiming_NoSkin',   // no aiming-walk clip exists — would need upper-body layering
+  walkF: 'WalkAimF',                        // aiming walk, gun up & ready (the new FBX clips)
   runF: 'Anim_Rifle_Run_NoSkin',
-  back: 'Anim_Rifle_Backward_Run_NoSkin',
-  strafeL: 'Anim_Rifle_Strafe_Left_NoSkin', strafeR: 'Anim_Rifle_Strafe_Right_NoSkin',
+  back: 'WalkAimB',
+  strafeL: 'WalkAimL', strafeR: 'WalkAimR',
   runL: 'Anim_Rifle_Run_Left_NoSkin', runR: 'Anim_Rifle_Run_Right_NoSkin',
   jumpUp: 'Anim_Rifle_Jump_Up_NoSkin', idleFall: 'Anim_Idle_Falling_NoSkin',
   glide: 'Gliding',
@@ -104,6 +114,17 @@ function SelfBody({ char }: { char: LineupChar }) {
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');   // Gliding + Idle Fall clips
+  // Aiming-walk clips from loose FBX (bind by the same mixamorig: bone names as the skeleton). Rename to
+  // our keys and zero the Hips X/Z translation so they stay in-place (physics drives the movement).
+  const walkFbx = useLoader(FBXLoader, WALK_AIM_URLS);
+  const walkAimClips = useMemo(() => walkFbx.map((grp, i) => {
+    const src = grp.animations?.[0]; if (!src) return null;
+    const clip = src.clone(); clip.name = WALK_AIM[i].name;
+    for (const t of clip.tracks) {
+      if (/Hips\.position$/i.test(t.name)) for (let k = 0; k < t.values.length; k += 3) { t.values[k] = 0; t.values[k + 2] = 0; }
+    }
+    return clip;
+  }).filter((c): c is THREE.AnimationClip => !!c), [walkFbx]);
   const ak = heldWeaponByKey('ak47');
   const { scene: gunScene } = useGLTF(glbUrl(ak?.url ?? char.file), '/draco/');
 
@@ -130,7 +151,7 @@ function SelfBody({ char }: { char: LineupChar }) {
     cloned.traverse((o) => { if (o.name.endsWith('LeftFoot')) L = o; else if (o.name.endsWith('RightFoot')) R = o; });
     return { L, R };
   }, [cloned]);
-  const anims = useMemo(() => [...rifleAnims, ...baseAnims, ...locoAnims], [rifleAnims, baseAnims, locoAnims]);
+  const anims = useMemo(() => [...rifleAnims, ...baseAnims, ...locoAnims, ...walkAimClips], [rifleAnims, baseAnims, locoAnims, walkAimClips]);
   const { actions } = useAnimations(anims, inner);
   const curClip = useRef('');
   const lastGather = useRef(0);
