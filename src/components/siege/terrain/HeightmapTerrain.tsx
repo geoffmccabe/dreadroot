@@ -18,6 +18,9 @@ import {
 import { loadMap } from './mapPersistence';
 import { setBrushState } from './terrainBrushState';
 import { setMapLoadStatus } from '../mapLoadStatus';
+import { isSiegeLoadActive } from '../siegeInitLoad';
+// Show the map-switch modal only for a Cmd-J switch — the initial lobby uses the full init overlay.
+const announce = (m: string | null) => { if (!isSiegeLoadActive()) setMapLoadStatus(m); };
 import { loadTerrainTex, makeTerrainBlendMaterial } from './terrainBlend';
 
 const DEFAULT_VIEW_CELLS = 3;  // load radius in cells (3×128 = 384 m) — mobile-friendly default; world.ground.viewCells overrides
@@ -37,6 +40,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const groupRef = useRef<THREE.Group>(null);
   const loaded = useRef(new Map<number, THREE.Mesh>());
   const fieldReady = useRef(false);   // true once the saved/seed heightfield is loaded — gates streaming + onReady
+  const readyFired = useRef(false);   // onReady fires exactly once, after the camera's cell is actually rendered
 
   // Night maps (SciFi City) darken the terrain toward black so it doesn't glow under the dark city;
   // the material colour multiplies the blended textures.
@@ -76,7 +80,8 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     setBaseline(baseY);
     clearField();
     fieldReady.current = false;
-    setMapLoadStatus('Loading Terrain');
+    readyFired.current = false;
+    announce('Loading Objects and Terrain');   // phase 1: pulling data into memory
     setBrushState({ waterOn: false }); // reset flood until the saved map (if any) loads
     setDynamicHeightProvider(getHeight);
     // Load the saved/seed heightfield FIRST, then signal ready — so the REAL terrain renders before
@@ -99,8 +104,8 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
       // Rebuild any cells already streamed so they reflect the loaded heights.
       for (const m of loaded.current.values()) { groupRef.current?.remove(m); m.geometry.dispose(); }
       loaded.current.clear();
-      fieldReady.current = true;
-      onReady?.();
+      fieldReady.current = true;   // streaming can start; onReady fires once the camera's cell renders (useFrame)
+      announce('Loading Terrain');   // phase 2: heightfield in memory, rendering the ground
     })();
     return () => {
       alive = false;
@@ -217,6 +222,14 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
       const mesh = loaded.current.get(key);
       if (!mesh) continue;
       refreshGeometry(mesh.geometry, Math.floor(key / 65536) - KEY_OFF, (key % 65536) - KEY_OFF);
+    }
+
+    // Signal ready ONLY once the player's own cell has actually rendered — so objects mount on visible
+    // terrain, not before it. (Cells stream via the budgeted queue, so this lands a few frames later.)
+    if (fieldReady.current && !readyFired.current && loaded.current.has(cellKey(ccx, ccz))) {
+      readyFired.current = true;
+      announce(null);   // terrain is on screen — the object layer (if any) takes over the modal
+      onReady?.();
     }
   });
 

@@ -10,6 +10,9 @@ import * as THREE from 'three';
 import { worldCollisionGrid, monsterColliderGrid } from '@/lib/spatialHashGrid';
 import { managedRocks, keyFor, colliderOverrides, mergeBakedOverrides, loadColliderOverridesFromDB } from './voxelOverrides';
 import { siegeLoadStart, siegeLoadFinish, siegeLoadNote, isSiegeLoadActive } from './siegeInitLoad';
+import { setMapLoadStatus } from './mapLoadStatus';
+// Map-switch modal only (the initial lobby uses the full init overlay).
+const announceObjs = (m: string | null) => { if (!isSiegeLoadActive()) setMapLoadStatus(m); };
 import { loadColliderCache, getCachedBoxes, recordBoxes, groupColliderSig } from './siegeColliderCache';
 import { loadGeoIndex, hasGeo, putGeo, getGeoGroup } from './siegeGeoCache';
 import { registerMeshGeometry, setGroupInstances, clearGroup, setMeshCollidersEnabled, clearMeshColliders, type MeshInstanceInput } from './meshColliderSystem';
@@ -471,7 +474,10 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
       setMatMap(mm as Record<string, Record<string, string>>);
       setCutout(new Set(ct as string[]));
       if (d) setData(d as { groups: Group[] });
-      finishObjects((d as { groups?: Group[] } | null)?.groups?.length);
+      const nGroups = (d as { groups?: Group[] } | null)?.groups?.length ?? 0;
+      finishObjects(nGroups);
+      if (nGroups) announceObjs(`Loading ${nGroups} object types…`);   // phase 3: rendering objects
+
     });
     // Collider overrides (V-tool cell tuning) — load alongside; the Supabase round-trip no longer
     // gates the world build.
@@ -603,6 +609,7 @@ export function WorldObjectsLayer({ meshColliders = false, dataDir = '/siege/wor
     const need = Math.min(READY_NEAR, nearGroups.length);   // getting cleared, so it never fired early
     if (need > 0 && mountCount >= need) {
       readyFired.current = true;
+      announceObjs(null);   // objects on screen → hide the map-load modal
       onReady?.();
     }
   }, [mountCount, nearGroups.length, onReady]);
