@@ -9,6 +9,7 @@ import { DropToWorldGlobe } from '@/components/fortress/DropToWorldGlobe';
 import { SiegeDebugOverlay } from '@/components/siege/SiegeDebugOverlay';
 import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
+import { MapLoadModal } from '@/components/siege/MapLoadModal';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { BuildToolsDock } from '@/features/objectEditor/BuildToolsDock';
@@ -948,6 +949,8 @@ export function FortressHUD(props: FortressHUDProps) {
       <SiegeTitleSplash />
       {/* Siege Worlds live debug readout (temporary) — shows only in siege. */}
       <SiegeDebugOverlay />
+      {/* Small centred modal while a map switch streams in (terrain → objects). */}
+      <MapLoadModal />
       {/* Siege Worlds quick-travel menu (Ctrl/Cmd+T) — shows only when armed. */}
       <SiegeTeleportMenu />
       {/* Terrain builder panel — shows only on editable (heightmap) siege maps. */}

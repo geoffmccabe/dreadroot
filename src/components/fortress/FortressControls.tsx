@@ -2622,9 +2622,11 @@ export function FirstPersonControls({
         beltHudThrottleRef.current = now;
         setRocketBeltAvailable(beltEquipped ? Math.floor(beltBurstsRef.current) : 0);
       }
+      // Shift+E + Q = admin overdrive: 10× ON TOP of the boost (so ~100× base) for crossing the map fast.
+      const qBoost = boostActive && keys.current.q ? 10 : 1;
       const runSpeed = godModeRef.current
-        ? (boostActive ? godSpeed * 2.5 : godSpeed)   // Shift+E super-sprint / rocket boost still speeds you up in God Mode
-        : (boostActive ? superSprintSpeed : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
+        ? (boostActive ? godSpeed * 2.5 * qBoost : godSpeed)   // Shift+E super-sprint / rocket boost still speeds you up in God Mode
+        : (boostActive ? superSprintSpeed * qBoost : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
       
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));

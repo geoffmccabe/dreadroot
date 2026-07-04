@@ -58,6 +58,7 @@ import { DamageNumbers } from './DamageNumbersLayer';
 import { GhostExplosions } from './GhostExplosion';
 import { SiegeExplosions } from './SiegeExplosion';
 import { isSiegeLoadActive, completeSiegeWorldLoad, siegeLoadNote } from './siegeInitLoad';
+import { setMapLoadStatus } from './mapLoadStatus';
 import { SiegeAssetProgress } from './SiegeAssetProgress';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
 import { useSyncExternalStore } from 'react';
@@ -97,6 +98,16 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   useEffect(() => {
     if (isSiegeLoadActive() && terrainReady && (objectsReady || isBlank)) completeSiegeWorldLoad();
   }, [terrainReady, objectsReady, isBlank]);
+  // Map-switch load modal (Cmd-J jumps): terrain first, then objects. The initial lobby load uses the
+  // full-screen init overlay instead, so stay silent while that's active.
+  const mapHasObjects = !isBlank || world.id === 'bleakrock2';
+  useEffect(() => {
+    if (isSiegeLoadActive()) { setMapLoadStatus(null); return; }
+    if (!terrainReady) setMapLoadStatus('Loading Terrain');
+    else if (mapHasObjects && !objectsReady) setMapLoadStatus('Loading Objects');
+    else setMapLoadStatus(null);
+  }, [terrainReady, objectsReady, mapHasObjects]);
+  useEffect(() => () => setMapLoadStatus(null), []);   // clear on leaving siege entirely
   return (
     <>
       {/* Ground first — signals ready so everything else mounts on top of it. */}

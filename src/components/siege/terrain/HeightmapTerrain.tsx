@@ -17,6 +17,7 @@ import {
 } from './heightField';
 import { loadMap } from './mapPersistence';
 import { setBrushState } from './terrainBrushState';
+import { setMapLoadStatus } from '../mapLoadStatus';
 import { loadTerrainTex, makeTerrainBlendMaterial } from './terrainBlend';
 
 const DEFAULT_VIEW_CELLS = 3;  // load radius in cells (3×128 = 384 m) — mobile-friendly default; world.ground.viewCells overrides
@@ -35,6 +36,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const baseY = world.ground.surfaceY ?? 0;
   const groupRef = useRef<THREE.Group>(null);
   const loaded = useRef(new Map<number, THREE.Mesh>());
+  const fieldReady = useRef(false);   // true once the saved/seed heightfield is loaded — gates streaming + onReady
 
   // Night maps (SciFi City) darken the terrain toward black so it doesn't glow under the dark city;
   // the material colour multiplies the blended textures.
@@ -73,10 +75,12 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
     let alive = true;
     setBaseline(baseY);
     clearField();
+    fieldReady.current = false;
+    setMapLoadStatus('Loading Terrain');
     setBrushState({ waterOn: false }); // reset flood until the saved map (if any) loads
     setDynamicHeightProvider(getHeight);
-    onReady?.();
-    // Load any saved version of this map (local for now; server later — see mapPersistence).
+    // Load the saved/seed heightfield FIRST, then signal ready — so the REAL terrain renders before
+    // objects mount on top (instead of the old objects → flat → real morph). Streaming waits on this.
     (async () => {
       const saved = await loadMap(world.id);
       if (!alive) return;
@@ -90,11 +94,13 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
           if (!alive) return;
           loadField(seed);
           if (seed.water) setBrushState({ waterOn: !!seed.water.on, waterLevel: seed.water.level });
-        } catch { /* seed missing → stay flat */ return; }
-      } else return;
+        } catch { /* seed missing → stay flat */ }
+      }
       // Rebuild any cells already streamed so they reflect the loaded heights.
       for (const m of loaded.current.values()) { groupRef.current?.remove(m); m.geometry.dispose(); }
       loaded.current.clear();
+      fieldReady.current = true;
+      onReady?.();
     })();
     return () => {
       alive = false;
@@ -180,7 +186,7 @@ export function HeightmapTerrain({ world, onReady }: { world: WorldDefinition; o
   const cam = useThree((s) => s.camera);
   const dropScratch = useRef<number[]>([]); // reused each frame — no per-frame array alloc
   useFrame(() => {
-    if (!groupRef.current) return;
+    if (!groupRef.current || !fieldReady.current) return;   // wait for the heightfield → no flat-then-real morph
     const ccx = cellOf(cam.position.x), ccz = cellOf(cam.position.z);
 
     // Stream in nearby cells (staggered via the budgeted work queue).
