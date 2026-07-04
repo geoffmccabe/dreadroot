@@ -2624,7 +2624,9 @@ export function FirstPersonControls({
         setRocketBeltAvailable(beltEquipped ? Math.floor(beltBurstsRef.current) : 0);
       }
       // Shift+E + Q = admin overdrive: 10× ON TOP of the boost (so ~100× base) for crossing the map fast.
-      const qBoost = boostActive && keys.current.q ? 10 : 1;
+      // While overdriving, Q is the SPEED modifier, not fly-up, and movement follows your look heading.
+      const qOverdrive = boostActive && keys.current.q;
+      const qBoost = qOverdrive ? 10 : 1;
       const runSpeed = godModeRef.current
         ? (boostActive ? godSpeed * 2.5 * qBoost : godSpeed)   // Shift+E super-sprint / rocket boost still speeds you up in God Mode
         : (boostActive ? superSprintSpeed * qBoost : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
@@ -2668,14 +2670,20 @@ export function FirstPersonControls({
       // God Mode: Q = fly up, Z = fly down, no gravity
       if (godModeRef.current) {
         if (groundHeightFn) { sdbg.isSiege = true; sdbg.playerY = camera.position.y; } // SW debug
-        // Vertical movement: Q or JUMP (space) fly up, Z flies down. Space + Shift+E/rocket boost
-        // ascend faster (runSpeed already includes the boost), so jump / rocket boots / super-speed
-        // all do something in God Mode instead of being dead.
-        if (keys.current.q || keys.current.space) {
-          deltaMovement.y += runSpeed * delta;
-        }
-        if (keys.current.z) {
-          deltaMovement.y -= runSpeed * delta;
+        if (qOverdrive) {
+          // Boost overdrive: fly in the LOOK direction (level look = level, look down = down, up = up),
+          // NOT horizontal + an upward Q. Rebuild the move along the aim; Q no longer adds lift.
+          const cp = Math.cos(pitch.current), sp = Math.sin(pitch.current);
+          const look = forwardVecRef.current.set(-Math.sin(yaw.current) * cp, sp, -Math.cos(yaw.current) * cp);
+          deltaMovement.set(0, 0, 0);
+          deltaMovement.addScaledVector(look, direction.current.z * runSpeed * moveDt);
+          deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt);
+          if (keys.current.space) deltaMovement.y += runSpeed * delta;   // deliberate straight-up only
+          if (keys.current.z) deltaMovement.y -= runSpeed * delta;
+        } else {
+          // Normal god mode: horizontal move (above) + Q/space fly up, Z fly down.
+          if (keys.current.q || keys.current.space) deltaMovement.y += runSpeed * delta;
+          if (keys.current.z) deltaMovement.y -= runSpeed * delta;
         }
         // No gravity in god mode - just apply direct movement
         velocity.current.set(0, 0, 0);
