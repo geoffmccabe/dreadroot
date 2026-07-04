@@ -249,7 +249,8 @@ function SelfBody({ char }: { char: LineupChar }) {
         if (!jetFlamesOn.current) {
           jetFlamesOn.current = true;
           const colors = TIER_COLORS[BOOT_TIER] ?? ['#FF6600'];
-          const cfg = { type: 'plume' as const, colors, size: 0.2, height: 0.5, duration: 999999, particleCount: 40, colorMode: 'static' as const };
+          // Point Fire, flipped DOWNWARD, 10× faster, thin vertical streaks → fast flame jets from the soles.
+          const cfg = { type: 'point' as const, colors, size: 0.2, height: 0.5, duration: 999999, particleCount: 40, colorMode: 'static' as const, flipY: true, speedMul: 10, particleAspect: 6 };
           flame.spawnFlame({ ...cfg, position: _footL, attachTo: JET_L });
           flame.spawnFlame({ ...cfg, position: _footR, attachTo: JET_R });
         }

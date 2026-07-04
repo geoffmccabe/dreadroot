@@ -37,6 +37,9 @@ export interface FlameConfig {
   particleCount?: number;
   attachTo?: string;
   colorMode?: FlameColorMode;
+  flipY?: boolean;      // point fire: emit DOWNWARD instead of up (e.g. rocket-boot jets)
+  speedMul?: number;    // point fire: animation-speed multiplier (10 = fast flame jets)
+  particleAspect?: number;  // point fire: per-particle height:width (1 = circle, 5-8 = thin vertical streak)
 }
 
 // Rainbow fire hue cycling speed
@@ -51,6 +54,9 @@ interface BatchedFlame {
   position: THREE.Vector3;
   attachTo?: string;
   colorMode: FlameColorMode;
+  flipY: boolean;
+  speedMul: number;
+  particleAspect: number;
   size: number;
   height: number;
   particleCount: number;
@@ -93,6 +99,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
     const colors = new Float32Array(MAX_PARTICLES * 3);
     const sizes = new Float32Array(MAX_PARTICLES);
     const alphas = new Float32Array(MAX_PARTICLES);
+    const aspects = new Float32Array(MAX_PARTICLES).fill(1);   // per-particle H:W stretch (1 = circle)
 
     // Initialize off-screen
     for (let i = 0; i < MAX_PARTICLES; i++) {
@@ -106,6 +113,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
     geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+    geometry.setAttribute('aspect', new THREE.BufferAttribute(aspects, 1));
     geometry.setDrawRange(0, 0);
 
     const material = new THREE.ShaderMaterial({
@@ -113,11 +121,14 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
         attribute float size;
         attribute float alpha;
         attribute vec3 color;
+        attribute float aspect;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vAspect;
         void main() {
           vColor = color;
           vAlpha = alpha;
+          vAspect = aspect;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = size * (300.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
@@ -126,8 +137,12 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       fragmentShader: `
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vAspect;
         void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
+          // Stretch the sprite: aspect>1 squeezes X → a thin, tall (vertical) oval/streak.
+          vec2 pc = gl_PointCoord - vec2(0.5);
+          pc.x *= vAspect;
+          float dist = length(pc);
           if (dist > 0.5) discard;
           float glow = 1.0 - (dist * 2.0);
           glow = pow(glow, 1.5);
@@ -140,7 +155,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       depthTest: true,
     });
 
-    return { positions, colors, sizes, alphas, geometry, material };
+    return { positions, colors, sizes, alphas, aspects, geometry, material };
   }, []);
 
   // Generate random seeds for a flame
@@ -190,6 +205,9 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       particleCount: userParticleCount,
       attachTo,
       colorMode = 'static',
+      flipY = false,
+      speedMul = 1,
+      particleAspect = 1,
     } = config;
 
     const totalParticles = computeParticleCount(type, userParticleCount);
@@ -211,6 +229,9 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       position: position.clone(),
       attachTo,
       colorMode,
+      flipY,
+      speedMul,
+      particleAspect,
       size,
       height,
       particleCount: totalParticles,
@@ -256,9 +277,10 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
   // Update all particles each frame
   useFrame(() => {
     const nowSec = performance.now() / 1000;
-    const { positions, colors, sizes, alphas, geometry } = particleData;
+    const { positions, colors, sizes, alphas, aspects, geometry } = particleData;
 
     let pIdx = 0;
+    aspects.fill(1);   // default every particle to a circle; point flames override their own below
 
     // Remove expired flames
     flamesRef.current = flamesRef.current.filter(f => (nowSec - f.startTime) < f.duration);
@@ -290,7 +312,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
       }
 
       if (flame.type === 'point') {
-        pIdx = renderPointFlame(flame, nowSec, elapsed, fadeOut, positions, colors, sizes, alphas, pIdx);
+        pIdx = renderPointFlame(flame, nowSec, elapsed, fadeOut, positions, colors, sizes, alphas, aspects, pIdx);
       } else if (flame.type === 'hex') {
         pIdx = renderHexFlame(flame, nowSec, elapsed, fadeOut, positions, colors, sizes, alphas, pIdx);
       } else if (flame.type === 'plume') {
@@ -306,6 +328,7 @@ export const UniversalFlameRenderer = forwardRef<UniversalFlameRendererHandle, {
     (geometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     (geometry.attributes.size as THREE.BufferAttribute).needsUpdate = true;
     (geometry.attributes.alpha as THREE.BufferAttribute).needsUpdate = true;
+    (geometry.attributes.aspect as THREE.BufferAttribute).needsUpdate = true;
   });
 
   return (
@@ -331,12 +354,16 @@ function renderPointFlame(
   colors: Float32Array,
   sizes: Float32Array,
   alphas: Float32Array,
+  aspects: Float32Array,
   startIdx: number,
 ): number {
   let pIdx = startIdx;
-  const { position, size, height, color1, color2, seeds, particleCount, colorMode } = flame;
+  const { position, size, height, color1, color2, seeds, particleCount, colorMode, flipY, speedMul, particleAspect } = flame;
   const isBlack = colorMode === 'black';
   const baseSize = isBlack ? size * 0.6 : size * 0.8;
+  const dir = flipY ? -1 : 1;         // -1 = emit downward (rocket-boot jets)
+  const sMul = speedMul || 1;         // animation-speed multiplier
+  const pAspect = particleAspect || 1;   // per-particle vertical stretch
 
   for (let i = 0; i < particleCount && pIdx < MAX_PARTICLES; i++) {
     const s0 = seeds[i * 3];
@@ -344,12 +371,12 @@ function renderPointFlame(
     const s2 = seeds[i * 3 + 2];
 
     // Particle lifecycle: each particle loops through 0->1 at different phases
-    const speed = 0.8 + s0 * 0.4;
+    const speed = (0.8 + s0 * 0.4) * sMul;
     const life = ((elapsed * speed + s0 * 10.0) % 1.5) / 1.5;
     if (life > 1.0) { pIdx++; sizes[pIdx - 1] = 0; continue; } // Gap between cycles
 
-    // Rising motion with turbulence
-    const y = position.y + life * height;
+    // Rising (or, when flipped, falling) motion with turbulence
+    const y = position.y + dir * life * height;
     const spreadAmount = life * size * 0.4;
     const turbFreq = 3.0 + s1 * 2.0;
     const x = position.x + Math.sin(s0 * 17.3 + nowSec * turbFreq) * spreadAmount;
@@ -377,6 +404,7 @@ function renderPointFlame(
 
     // Alpha: full brightness, fade at top and with global fadeOut
     alphas[pIdx] = (1.0 - life * life) * fadeOut * (isBlack ? 0.6 : 0.9);
+    aspects[pIdx] = pAspect;
 
     pIdx++;
   }
@@ -388,10 +416,10 @@ function renderPointFlame(
       const s0 = seeds[(i % particleCount) * 3];
       const s1 = seeds[(i % particleCount) * 3 + 1];
 
-      const life = ((elapsed * 0.9 + s0 * 10.0 + 0.5) % 1.5) / 1.5;
+      const life = ((elapsed * 0.9 * sMul + s0 * 10.0 + 0.5) % 1.5) / 1.5;
       if (life > 1.0) { pIdx++; sizes[pIdx - 1] = 0; continue; }
 
-      const y = position.y + life * height * 1.1;
+      const y = position.y + dir * life * height * 1.1;
       const spread = life * size * 0.5;
       const x = position.x + Math.sin(s0 * 13.1 + nowSec * 2.5) * spread;
       const z = position.z + Math.cos(s1 * 19.3 + nowSec * 2.5) * spread;
@@ -407,6 +435,7 @@ function renderPointFlame(
 
       sizes[pIdx] = size * 1.2 * (1.0 - life * 0.5);
       alphas[pIdx] = 0.3 * (1.0 - life) * fadeOut;
+      aspects[pIdx] = pAspect;
 
       pIdx++;
     }

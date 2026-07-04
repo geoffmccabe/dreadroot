@@ -13,6 +13,9 @@ export interface FlameSpawnConfig {
   particleCount?: number;
   attachTo?: string;
   colorMode?: 'static' | 'rainbow' | 'black';
+  flipY?: boolean;      // point fire downward (rocket-boot jets)
+  speedMul?: number;    // point fire animation-speed multiplier
+  particleAspect?: number;  // point fire per-particle height:width (5-8 = thin vertical streak)
 }
 export interface FlameSpawner {
   spawnFlame: (c: FlameSpawnConfig) => string;
