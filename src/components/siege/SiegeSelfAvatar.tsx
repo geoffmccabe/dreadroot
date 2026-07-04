@@ -19,6 +19,8 @@ import { CHAR_ASSET_VERSION, RIFLE_LIBRARY, ANIM_LIBRARY, LOCO_LIBRARY, LINEUP_C
 import { heldWeaponByKey } from './charlineup/weaponModels';
 import { getCharData } from './charadmin/characterStats';
 import { useSelfCharIndex, setSelfCharIndex } from './siegeSelfChar';
+import { getUniversalFlame } from '@/lib/flameBridge';
+import { TIER_COLORS } from '@/features/shombie/constants';
 
 const EYE_HEIGHT = 1.6;
 const SHOW_DIST = 0.3;   // reveal the body once the camera has pulled past this
@@ -27,6 +29,13 @@ const glbUrl = (f: string) => `${f}?a=${CHAR_ASSET_VERSION}`;
 const HOLSTER_CLIP = 'Anim_Rifle_Put_Away_NoSkin';   // played forward = holster, reversed = draw
 const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
+const _footL = new THREE.Vector3();
+const _footR = new THREE.Vector3();
+// Jet-boot flame tier. Boots aren't a real equippable yet, so default to tier 1; when they exist this
+// reads the boot's tier for its plume colour (the Jet Plume sprite from Admin/Effects/Flame).
+const BOOT_TIER = 1;
+const JET_L = 'siege_jetboot_L';
+const JET_R = 'siege_jetboot_R';
 // Coyote time: how long the player must be CONTINUOUSLY off the ground before FALLING counts as
 // airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so it
 // keeps the walk/run pose instead of snapping to the fall pose. Standard platformer/FPS technique.
@@ -116,6 +125,11 @@ function SelfBody({ char }: { char: LineupChar }) {
     return bs.sort((a, b) => a.name.localeCompare(b.name));
   }, [cloned]);
   const tailRest = useMemo(() => tailBones.map((b) => b.quaternion.clone()), [tailBones]);
+  const footBones = useMemo(() => {
+    let L: THREE.Object3D | undefined, R: THREE.Object3D | undefined;
+    cloned.traverse((o) => { if (o.name.endsWith('LeftFoot')) L = o; else if (o.name.endsWith('RightFoot')) R = o; });
+    return { L, R };
+  }, [cloned]);
   const anims = useMemo(() => [...rifleAnims, ...baseAnims, ...locoAnims], [rifleAnims, baseAnims, locoAnims]);
   const { actions } = useAnimations(anims, inner);
   const curClip = useRef('');
@@ -123,6 +137,10 @@ function SelfBody({ char }: { char: LineupChar }) {
   const prevGun = useRef(playerState.gun);
   const oneShotUntil = useRef(0);
   const airborneAt = useRef(0);   // when the player last LEFT the ground (0 = grounded), for coyote time
+  const jetFlamesOn = useRef(false);
+
+  // Make sure the jet-boot flames are removed if this avatar unmounts (e.g. character switch) mid-burn.
+  useEffect(() => () => { const f = getUniversalFlame(); f?.removeAttached(JET_L); f?.removeAttached(JET_R); }, []);
 
   useFrame((state) => {
     const g = group.current; if (!g) return;
@@ -190,10 +208,34 @@ function SelfBody({ char }: { char: LineupChar }) {
     }
     const shown = getTPDist() > SHOW_DIST;
     g.visible = shown;
+    // Jet-boot flames off when hidden (first person) or the burn ended.
+    if ((!shown || !playerState.boosting) && jetFlamesOn.current) {
+      jetFlamesOn.current = false;
+      const f = getUniversalFlame(); f?.removeAttached(JET_L); f?.removeAttached(JET_R);
+    }
     if (!shown) return;
     // Stand at the player's feet, facing the look direction (away from the camera).
     g.position.set(playerState.x, playerState.y - EYE_HEIGHT - char.minY * char.scale, playerState.z);
     g.rotation.y = Math.atan2(playerState.fx, playerState.fz);
+
+    // Jet-boot flames while boosting (air-jump): two downward Jet Plume sprites at the soles.
+    if (playerState.boosting && footBones.L && footBones.R) {
+      const flame = getUniversalFlame();
+      if (flame) {
+        g.updateWorldMatrix(true, true);
+        footBones.L.getWorldPosition(_footL);
+        footBones.R.getWorldPosition(_footR);
+        if (!jetFlamesOn.current) {
+          jetFlamesOn.current = true;
+          const colors = TIER_COLORS[BOOT_TIER] ?? ['#FF6600'];
+          const cfg = { type: 'plume' as const, colors, size: 0.2, height: 0.5, duration: 999999, particleCount: 40, colorMode: 'static' as const };
+          flame.spawnFlame({ ...cfg, position: _footL, attachTo: JET_L });
+          flame.spawnFlame({ ...cfg, position: _footR, attachTo: JET_R });
+        }
+        flame.updateAttachedPosition(JET_L, _footL);
+        flame.updateAttachedPosition(JET_R, _footR);
+      }
+    }
 
     // Procedural tail (Rajax) — ALWAYS swish (never straight); spread wider while gliding (rudder-like).
     if (tailBones.length) {

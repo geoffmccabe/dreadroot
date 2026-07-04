@@ -77,6 +77,7 @@ import { Coins } from './FortressCoins';
 import { Bullets, BulletsHandle } from './FortressBullets';
 import { BulletImpacts, BulletImpactsHandle } from './FortressImpacts';
 import { UniversalFlameRenderer, UniversalFlameRendererHandle } from './UniversalFlameRenderer';
+import { setUniversalFlame } from '@/lib/flameBridge';
 import { EffectsRoot } from '@/effects/EffectsRoot';
 import { FlameDemoSpawner } from './FlameDemoSpawner';
 import { useAdminPanel } from '@/contexts/AdminPanelContext';
@@ -1947,7 +1948,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <BulletImpacts ref={bulletImpactsRef} />
       <NebulaImpacts ref={nebulaImpactsRef} />
       <Tracers ref={tracersRef} />
-      <UniversalFlameRenderer ref={universalFlameRef} />
+      <UniversalFlameRenderer ref={(h) => { universalFlameRef.current = h; setUniversalFlame(h as unknown as import('@/lib/flameBridge').FlameSpawner | null); }} />
       {/* Floating damage popups (shared SWW system) — flame glove uses these via spawnDamageNumber.
           Siege mode already mounts its own inside SiegeWorldLayers, so only add it for DreadRoot. */}
       {!isSiege && <DamageNumbers />}
