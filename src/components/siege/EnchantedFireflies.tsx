@@ -76,8 +76,11 @@ function SpeciesPoints({ sp }: { sp: FireflySpecies }) {
     const mot = new Float32Array(n * 4), pulse = new Float32Array(n * 4);
     const flags = new Float32Array(n * 2), size = new Float32Array(n);
     const tmp = new THREE.Color();
+    // Type mix from weights: fraction of high-flyers = highFlyerWeight / (regularWeight + highFlyerWeight).
+    const wTotal = sp.regularWeight + sp.highFlyerWeight;
+    const highFrac = wTotal > 0 ? sp.highFlyerWeight / wTotal : 0;
     for (let i = 0; i < n; i++) {
-      const high = rnd() < sp.highFlyerPct;
+      const high = rnd() < highFrac;
       const yTop = sp.yMax + (high ? sp.highFlyerYBoost : 0);
       pos[i * 3] = (rnd() - 0.5) * 2 * sp.area;
       pos[i * 3 + 1] = sp.yMin + rnd() * (yTop - sp.yMin);

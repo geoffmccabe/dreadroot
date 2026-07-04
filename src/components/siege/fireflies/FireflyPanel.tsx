@@ -1,44 +1,66 @@
 // FireflyPanel — the world-builder panel for authoring a map's ambient firefly life. Opened with
-// "@FF". Modelled on the Challenge Creator (same dark-HUD chrome + card styling): a stack of cards,
-// each card = one firefly SPECIES, edited live (the GPU renderer reads the same store, so every
-// slider updates the swarm instantly). Each card carries a GLOBAL spawn code shown as "@F<code>".
+// "@FF". Uses the shared BUILDER panel styling (waterfall-card Card + theme classes + shadcn Button,
+// draggable by its title bar — same chrome as the Model Placer / Terrain panels), NOT a bespoke modal.
+// A stack of cards, each = one firefly SPECIES, edited live (the GPU renderer reads the same store, so
+// every slider updates the swarm instantly). Each card carries a GLOBAL spawn code shown as "@F<code>".
 //
-// Commands (handled here so the firefly system is self-contained):
+// The swarm splits into TYPES (Regular · High-flyers) by WEIGHT — each type is its own sub-panel with a
+// weight and a live xx.xx% share of the total. Commands:
 //   @FF        → toggle this panel
-//   @F<code>   → spawn (enable) the species with that global code — own species only, unless
-//                admin/superadmin (then any).
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+//   @F<code>   → spawn (enable) the species with that global code — own species only, unless admin.
+import { useEffect, useState } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { useDraggablePanel } from '../useDraggablePanel';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchRoles } from '../challenge/challengeStorage';
 import { FireflySpecies, useFireflyStore } from './fireflySpecies';
 
-// ── shared HUD styling (mirrors ChallengeCreatorPanel) ──────────────
-const PANEL_BG = 'hsla(222, 32%, 10%, 0.96)';
-const card: React.CSSProperties = { background: 'hsla(220, 28%, 16%, 0.8)', border: '1px solid hsla(210, 30%, 45%, 0.35)', borderRadius: 8, padding: 12 };
-const lbl: React.CSSProperties = { fontSize: 11, color: '#9fb4d0', fontWeight: 600, display: 'block', marginBottom: 3 };
-const inp: React.CSSProperties = { width: '100%', background: 'hsla(220,25%,8%,0.9)', border: '1px solid hsla(210,30%,45%,0.4)', borderRadius: 5, color: '#e8eefb', padding: '5px 7px', fontSize: 13, fontFamily: 'inherit' };
-const btn = (active = false): React.CSSProperties => ({ background: active ? '#3a6ea8' : 'hsla(220,25%,22%,0.9)', border: '1px solid hsla(210,30%,50%,0.4)', borderRadius: 6, color: '#e8eefb', padding: '6px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' });
-const section: React.CSSProperties = { fontSize: 11, fontWeight: 800, letterSpacing: 0.5, color: '#7fd0ff', textTransform: 'uppercase', margin: '12px 0 6px' };
 const isTyping = () => { const t = document.activeElement?.tagName; return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT'; };
 
-// One labelled slider with a live numeric readout. Writes through to the store on change.
-function Slider({ label, value, min, max, step, fmt, onChange }: {
-  label: string; value: number; min: number; max: number; step: number; fmt?: (v: number) => string; onChange: (v: number) => void;
+// A builder-style labelled slider: muted label + value readout on the right, full-width range below.
+function Slider({ label, val, min, max, step, suffix, pct, on }: {
+  label: string; val: number; min: number; max: number; step: number; suffix?: string; pct?: boolean; on: (v: number) => void;
 }) {
+  const shown = pct ? `${Math.round(val * 100)}%` : `${Math.round(val * 100) / 100}${suffix ?? ''}`;
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <label style={lbl}>{label}</label>
-        <span style={{ fontSize: 11, color: '#cfe0f5', fontWeight: 700 }}>{fmt ? fmt(value) : value}</span>
-      </div>
-      <input type="range" className="ff-slider" min={min} max={max} step={step} value={value}
-             onChange={(e) => onChange(parseFloat(e.target.value))} style={{ width: '100%' }} />
+    <div className="mb-1">
+      <div className="flex justify-between"><span className="text-muted-foreground">{label}</span><b className="text-foreground">{shown}</b></div>
+      <input type="range" min={min} max={max} step={step} value={val} onChange={(e) => on(parseFloat(e.target.value))} className="w-full" />
     </div>
   );
 }
 
-const pct = (v: number) => `${Math.round(v * 100)}%`;
+// A plain shared sub-panel (bordered box + bold muted title).
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-1.5 rounded border border-border/40 p-1.5">
+      <div className="mb-1 font-bold text-muted-foreground">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+// A firefly TYPE sub-panel: header shows its live share (xx.xx%) + a weight input; body holds the
+// type-specific controls. Tinted (primary/5) so the type panels read as a distinct group.
+function TypeSection({ title, weight, share, onWeight, children }: {
+  title: string; weight: number; share: string; onWeight: (v: number) => void; children?: React.ReactNode;
+}) {
+  return (
+    <div className="mt-1 rounded border border-primary/30 bg-primary/5 p-1.5">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-bold text-foreground">{title}</span>
+        <span className="flex items-center gap-1 text-muted-foreground">
+          <b className="text-foreground tabular-nums">{share}</b>
+          <span>weight ⚖</span>
+          <input type="number" min={0} step={1} value={weight} onChange={(e) => onWeight(Math.max(0, +e.target.value))}
+                 className="w-12 rounded bg-background/60 px-1 py-0.5 text-right text-[10px]" />
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 function SpeciesCard({ sp }: { sp: FireflySpecies }) {
   const { updateSpecies, removeSpecies, duplicateSpecies } = useFireflyStore();
@@ -46,60 +68,64 @@ function SpeciesCard({ sp }: { sp: FireflySpecies }) {
   const [collapsed, setCollapsed] = useState(false);
   const u = (patch: Partial<FireflySpecies>) => updateSpecies(sp.id, patch);
   const ownerId = user?.id ?? '';
+  const wTotal = sp.regularWeight + sp.highFlyerWeight;
+  const share = (w: number) => `${wTotal > 0 ? ((w / wTotal) * 100).toFixed(2) : '0.00'}%`;
 
   return (
-    <div style={{ ...card, opacity: sp.enabled ? 1 : 0.6 }}>
-      {/* card header — code badge, name, enable/dup/delete */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: collapsed ? 0 : 4 }}>
-        <span style={{ fontSize: 12, fontWeight: 900, color: '#0c1322', background: '#7fd0ff', borderRadius: 5, padding: '2px 7px', whiteSpace: 'nowrap' }}
-              title="Global spawn code — type @F then this number">@F{sp.code || '—'}</span>
-        <input style={{ ...inp, flex: 1, fontWeight: 700 }} value={sp.name} onChange={(e) => u({ name: e.target.value })} />
-        <button style={btn(sp.enabled)} title="Enable / disable" onClick={() => u({ enabled: !sp.enabled })}>{sp.enabled ? '👁' : '🚫'}</button>
-        <button style={btn()} title="Duplicate" onClick={() => duplicateSpecies(sp.id, ownerId)}>⧉</button>
-        <button style={{ ...btn(), background: '#7a2b2b' }} title="Delete" onClick={() => removeSpecies(sp.id)}>🗑</button>
-        <button style={btn()} title={collapsed ? 'Expand' : 'Collapse'} onClick={() => setCollapsed((c) => !c)}>{collapsed ? '▸' : '▾'}</button>
+    <div className="rounded border border-border/50 bg-background/40 p-2" style={{ opacity: sp.enabled ? 1 : 0.55 }}>
+      {/* header — code badge, name, enable/dup/delete/collapse */}
+      <div className="mb-1 flex items-center gap-1">
+        <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-black text-primary-foreground" title="Global spawn code — type @F then this number">@F{sp.code || '—'}</span>
+        <input className="min-w-0 flex-1 rounded bg-background/60 px-1.5 py-0.5 text-[11px] font-bold text-foreground" value={sp.name} onChange={(e) => u({ name: e.target.value })} />
+        <Button size="sm" variant={sp.enabled ? 'default' : 'outline'} className="h-6 px-1.5 text-[10px]" title="Enable / disable" onClick={() => u({ enabled: !sp.enabled })}>{sp.enabled ? '👁' : '🚫'}</Button>
+        <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title="Duplicate" onClick={() => duplicateSpecies(sp.id, ownerId)}>⧉</Button>
+        <Button size="sm" variant="destructive" className="h-6 px-1.5 text-[10px]" title="Delete" onClick={() => removeSpecies(sp.id)}>🗑</Button>
+        <Button size="sm" variant="outline" className="h-6 px-1.5 text-[10px]" title={collapsed ? 'Expand' : 'Collapse'} onClick={() => setCollapsed((c) => !c)}>{collapsed ? '▸' : '▾'}</Button>
       </div>
 
       {!collapsed && (
         <>
-          {/* density + size + colour swatch */}
-          <div style={section}>Density &amp; Colour</div>
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <Slider label="Count" value={sp.count} min={0} max={1000} step={5} onChange={(v) => u({ count: v })} />
-              <Slider label="Size" value={sp.size} min={0.3} max={4} step={0.1} fmt={(v) => v.toFixed(1)} onChange={(v) => u({ size: v })} />
-            </div>
-            <div style={{ width: 70, textAlign: 'center' }}>
-              <label style={lbl}>Base</label>
+          <Section title="Density & Colour">
+            <Slider label="Count" val={sp.count} min={0} max={1000} step={5} on={(v) => u({ count: v })} />
+            <Slider label="Size" val={sp.size} min={0.3} max={4} step={0.1} on={(v) => u({ size: v })} />
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-muted-foreground">Base colour</span>
               <input type="color" value={sp.baseColor} onChange={(e) => u({ baseColor: e.target.value })}
-                     style={{ width: 56, height: 40, border: '1px solid hsla(210,30%,45%,0.5)', borderRadius: 6, background: 'none', cursor: 'pointer' }} />
+                     className="h-6 w-10 cursor-pointer rounded border border-border bg-transparent" />
             </div>
-          </div>
-          <Slider label="Drift toward fuchsia" value={sp.towardFuchsia} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ towardFuchsia: v })} />
-          <Slider label="Drift toward blue" value={sp.towardBlue} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ towardBlue: v })} />
-          <Slider label="Fully-random colour" value={sp.randomColorPct} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ randomColorPct: v })} />
+            <Slider label="Toward fuchsia" val={sp.towardFuchsia} min={0} max={1} step={0.05} pct on={(v) => u({ towardFuchsia: v })} />
+            <Slider label="Toward blue" val={sp.towardBlue} min={0} max={1} step={0.05} pct on={(v) => u({ towardBlue: v })} />
+            <Slider label="Fully-random colour" val={sp.randomColorPct} min={0} max={1} step={0.05} pct on={(v) => u({ randomColorPct: v })} />
+          </Section>
 
-          <div style={section}>Motion</div>
-          <Slider label="Speed" value={sp.speed} min={0.05} max={3} step={0.05} fmt={(v) => v.toFixed(2)} onChange={(v) => u({ speed: v })} />
-          <Slider label="Speed variance (±)" value={sp.speedVariancePct} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ speedVariancePct: v })} />
-          <Slider label="Drift radius" value={sp.driftRadius} min={0} max={8} step={0.1} fmt={(v) => `${v.toFixed(1)} m`} onChange={(v) => u({ driftRadius: v })} />
-          <Slider label="Sine-wobble fraction" value={sp.sineWavePct} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ sineWavePct: v })} />
+          <Section title="Motion (all types)">
+            <Slider label="Speed" val={sp.speed} min={0.05} max={3} step={0.05} on={(v) => u({ speed: v })} />
+            <Slider label="Speed variance ±" val={sp.speedVariancePct} min={0} max={1} step={0.05} pct on={(v) => u({ speedVariancePct: v })} />
+            <Slider label="Drift radius" val={sp.driftRadius} min={0} max={8} step={0.1} suffix=" m" on={(v) => u({ driftRadius: v })} />
+            <Slider label="Sine-wobble fraction" val={sp.sineWavePct} min={0} max={1} step={0.05} pct on={(v) => u({ sineWavePct: v })} />
+          </Section>
 
-          <div style={section}>High-flyers</div>
-          <Slider label="High-flyer fraction" value={sp.highFlyerPct} min={0} max={1} step={0.05} fmt={pct} onChange={(v) => u({ highFlyerPct: v })} />
-          <Slider label="High-flyer speed ×" value={sp.highFlyerSpeedMul} min={1} max={6} step={0.5} fmt={(v) => `${v}×`} onChange={(v) => u({ highFlyerSpeedMul: v })} />
-          <Slider label="High-flyer Y boost" value={sp.highFlyerYBoost} min={0} max={40} step={1} fmt={(v) => `${v} m`} onChange={(v) => u({ highFlyerYBoost: v })} />
+          <div className="mb-0.5 mt-2 text-[10px] font-bold uppercase tracking-wide text-primary">Types (split by weight)</div>
+          <TypeSection title="Regular" weight={sp.regularWeight} share={share(sp.regularWeight)} onWeight={(v) => u({ regularWeight: v })}>
+            <div className="text-muted-foreground">Ordinary drifters — they use the Motion settings above.</div>
+          </TypeSection>
+          <TypeSection title="High-flyers" weight={sp.highFlyerWeight} share={share(sp.highFlyerWeight)} onWeight={(v) => u({ highFlyerWeight: v })}>
+            <Slider label="Speed ×" val={sp.highFlyerSpeedMul} min={1} max={6} step={0.5} suffix="×" on={(v) => u({ highFlyerSpeedMul: v })} />
+            <Slider label="Y boost" val={sp.highFlyerYBoost} min={0} max={40} step={1} suffix=" m" on={(v) => u({ highFlyerYBoost: v })} />
+          </TypeSection>
 
-          <div style={section}>Pulse / Blink</div>
-          <Slider label="Min lit fraction" value={sp.pulseOnFracMin} min={0.05} max={1} step={0.05} fmt={pct} onChange={(v) => u({ pulseOnFracMin: Math.min(v, sp.pulseOnFracMax) })} />
-          <Slider label="Max lit fraction" value={sp.pulseOnFracMax} min={0.05} max={1} step={0.05} fmt={pct} onChange={(v) => u({ pulseOnFracMax: Math.max(v, sp.pulseOnFracMin) })} />
-          <Slider label="Fade min" value={sp.fadeMinSec} min={0} max={2} step={0.1} fmt={(v) => `${v.toFixed(1)} s`} onChange={(v) => u({ fadeMinSec: Math.min(v, sp.fadeMaxSec) })} />
-          <Slider label="Fade max" value={sp.fadeMaxSec} min={0} max={2} step={0.1} fmt={(v) => `${v.toFixed(1)} s`} onChange={(v) => u({ fadeMaxSec: Math.max(v, sp.fadeMinSec) })} />
+          <Section title="Pulse / Blink">
+            <Slider label="Min lit fraction" val={sp.pulseOnFracMin} min={0.05} max={1} step={0.05} pct on={(v) => u({ pulseOnFracMin: Math.min(v, sp.pulseOnFracMax) })} />
+            <Slider label="Max lit fraction" val={sp.pulseOnFracMax} min={0.05} max={1} step={0.05} pct on={(v) => u({ pulseOnFracMax: Math.max(v, sp.pulseOnFracMin) })} />
+            <Slider label="Fade min" val={sp.fadeMinSec} min={0} max={2} step={0.1} suffix=" s" on={(v) => u({ fadeMinSec: Math.min(v, sp.fadeMaxSec) })} />
+            <Slider label="Fade max" val={sp.fadeMaxSec} min={0} max={2} step={0.1} suffix=" s" on={(v) => u({ fadeMaxSec: Math.max(v, sp.fadeMinSec) })} />
+          </Section>
 
-          <div style={section}>Area</div>
-          <Slider label="Swarm half-extent" value={sp.area} min={5} max={200} step={5} fmt={(v) => `${v} m`} onChange={(v) => u({ area: v })} />
-          <Slider label="Y min" value={sp.yMin} min={0} max={40} step={0.5} fmt={(v) => `${v} m`} onChange={(v) => u({ yMin: Math.min(v, sp.yMax) })} />
-          <Slider label="Y max" value={sp.yMax} min={0} max={60} step={0.5} fmt={(v) => `${v} m`} onChange={(v) => u({ yMax: Math.max(v, sp.yMin) })} />
+          <Section title="Area">
+            <Slider label="Swarm half-extent" val={sp.area} min={5} max={200} step={5} suffix=" m" on={(v) => u({ area: v })} />
+            <Slider label="Y min" val={sp.yMin} min={0} max={40} step={0.5} suffix=" m" on={(v) => u({ yMin: Math.min(v, sp.yMax) })} />
+            <Slider label="Y max" val={sp.yMax} min={0} max={60} step={0.5} suffix=" m" on={(v) => u({ yMax: Math.max(v, sp.yMin) })} />
+          </Section>
         </>
       )}
     </div>
@@ -112,6 +138,7 @@ export function FireflyPanel() {
   const [roles, setRoles] = useState<string[]>([]);
   const [toast, setToast] = useState('');
   const isAdmin = roles.includes('admin') || roles.includes('superadmin');
+  const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 360), top: 80 });
 
   useEffect(() => { if (user?.id) fetchRoles(user.id).then(setRoles); }, [user?.id]);
 
@@ -147,49 +174,30 @@ export function FireflyPanel() {
     return () => { window.removeEventListener('keydown', onKey, true); if (timer) clearTimeout(timer); };
   }, [user?.id, isAdmin, togglePanel, spawnByCode]);
 
-  if (!panelOpen) {
-    // still render the toast so @F<code> spawns give feedback with the panel closed
-    return toast ? createPortal(<Toast msg={toast} />, document.body) : null;
-  }
+  if (!panelOpen) return toast ? <Toast msg={toast} /> : null;
 
-  return createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--hud-font, Inter, sans-serif)' }}>
-      <style>{`
-        input[type=range].ff-slider { -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:hsla(220,25%,8%,0.95); border:1px solid hsla(210,30%,45%,0.5); outline:none; }
-        input[type=range].ff-slider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:14px; height:14px; border-radius:50%; background:#5cc8ff; cursor:pointer; }
-        input[type=range].ff-slider::-moz-range-thumb { width:14px; height:14px; border:none; border-radius:50%; background:#5cc8ff; cursor:pointer; }
-        .ff-scroll { scrollbar-color: hsla(210,30%,45%,0.7) hsla(220,25%,10%,0.5); scrollbar-width: thin; }
-        .ff-scroll::-webkit-scrollbar { width:10px; }
-        .ff-scroll::-webkit-scrollbar-track { background:hsla(220,25%,8%,0.5); }
-        .ff-scroll::-webkit-scrollbar-thumb { background:hsla(210,30%,42%,0.8); border-radius:5px; }
-      `}</style>
-      <div style={{ width: 'min(560px, 94vw)', height: '92vh', background: PANEL_BG, border: '1px solid hsla(210,40%,55%,0.4)', borderRadius: 12, boxShadow: '0 12px 60px #000', display: 'flex', flexDirection: 'column', color: '#e8eefb', overflow: 'hidden' }}>
-        {/* header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid hsla(210,30%,40%,0.3)' }}>
-          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>✨ Fireflies</div>
-          <button style={btn()} onClick={() => setPanelOpen(false)}>✕ Close</button>
+  return (
+    <>
+      <Card className="waterfall-card fixed z-50 flex flex-col overflow-hidden p-0 font-mono text-xs" style={{ left: pos.left, top: pos.top, width: 340, height: '86vh' }}>
+        {/* draggable title bar */}
+        <div className="flex items-center justify-between border-b border-border/40 px-2 py-1.5">
+          <span {...handleProps} className="select-none font-bold text-primary" title="Drag to move">⠿ ✨ Fireflies</span>
+          <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => setPanelOpen(false)}>✕ Close</Button>
         </div>
-        {/* card stack */}
-        <div className="ff-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* species stack */}
+        <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto p-2">
           {species.map((sp) => <SpeciesCard key={sp.id} sp={sp} />)}
-          {/* + Add Species card */}
-          <button onClick={() => addSpecies(user?.id ?? '')}
-                  style={{ ...card, border: '1px dashed hsla(210,40%,55%,0.5)', background: 'hsla(220,28%,16%,0.4)', color: '#7fd0ff', fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: 18 }}>
-            ＋ Add Species
-          </button>
+          <Button variant="outline" className="h-8 w-full text-[11px] text-primary" onClick={() => addSpecies(user?.id ?? '')}>＋ Add Species</Button>
         </div>
-      </div>
+      </Card>
       {toast && <Toast msg={toast} />}
-    </div>,
-    document.body,
+    </>
   );
 }
 
 function Toast({ msg }: { msg: string }) {
   return (
-    <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 200,
-      background: 'hsla(222,32%,12%,0.96)', border: '1px solid hsla(210,40%,55%,0.5)', borderRadius: 8,
-      color: '#e8eefb', padding: '8px 16px', fontSize: 13, fontWeight: 700, fontFamily: 'var(--hud-font, Inter, sans-serif)' }}>
+    <div className="fixed bottom-20 left-1/2 z-[200] -translate-x-1/2 rounded border border-border bg-background/95 px-3 py-1.5 font-mono text-[11px] font-bold text-foreground">
       {msg}
     </div>
   );

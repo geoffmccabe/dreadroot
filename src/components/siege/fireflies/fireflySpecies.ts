@@ -28,10 +28,12 @@ export interface FireflySpecies {
   speedVariancePct: number; // 0.5 = each point is ±50% of base speed
   driftRadius: number;    // horizontal wander amplitude (m)
   sineWavePct: number;    // 0..1 — fraction with an extra erratic sine wobble
-  // ── high-flyers (a sub-population that acts like a different species) ──
-  highFlyerPct: number;   // 0..1 — fraction that hover high + erratic Y
-  highFlyerSpeedMul: number; // their speed multiplier (×3 default)
-  highFlyerYBoost: number;   // extra Y range (m) they roam into the trees
+  // ── type mix (weights, not %) — the swarm splits between Regular and High-flyer sub-populations
+  //    in proportion to these weights; the panel shows each one's share as a live xx.xx% ──
+  regularWeight: number;     // relative weight of the ordinary drifters
+  highFlyerWeight: number;   // relative weight of the high-flyers (hover high + erratic Y)
+  highFlyerSpeedMul: number; // high-flyer speed multiplier (×3 default)
+  highFlyerYBoost: number;   // extra Y range (m) high-flyers roam into the trees
   // ── light pulse / blink ──────────────────────────────────────────
   pulseOnFracMin: number; // 0.1 = lit only 10% of its cycle (blinking) … 1 = always on
   pulseOnFracMax: number;
@@ -64,7 +66,8 @@ export function defaultSpecies(over: Partial<FireflySpecies> = {}): FireflySpeci
     speedVariancePct: 0.5,
     driftRadius: 1.4,
     sineWavePct: 0.1,
-    highFlyerPct: 0.1,
+    regularWeight: 9,       // 9 : 1 → 90.00% regular, 10.00% high-flyers (matches the old 10%)
+    highFlyerWeight: 1,
     highFlyerSpeedMul: 3,
     highFlyerYBoost: 14,
     pulseOnFracMin: 0.1,
