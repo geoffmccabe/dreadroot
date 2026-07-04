@@ -1,55 +1,91 @@
-// A placed "water" object: a flat horizontal surface with a Minecraft-ish look — shiny, animated,
-// translucent, tinted, optionally glowing. Built on MeshPhysicalMaterial so it gets real sky/
-// environment reflection for FREE (reuses the scene's IBL — no extra render passes, safe on phones).
-// An onBeforeCompile hook animates the surface normals so the reflection shimmers like moving water.
-// It's a normal placed object: moves/rotates/scales with the Arrange tools and shares via
-// world_objects. Spawn by typing *wa. (Step 2 will add an optional quarter-res every-other-frame
-// planar mirror of the actual terrain on desktop; this is the cheap tier that runs everywhere.)
+// A placed "water" object: a flat surface with a stylized-but-rich look that stays cheap (no render
+// passes, safe on phones). All the sophistication is in ONE custom shader:
+//   • layered directional waves → an analytic ripple normal (far richer than a single sin)
+//   • FRESNEL fake reflection — grazing angles reflect a procedural sky gradient, top-down shows the
+//     water tint (this "cheap reflection" reads as real water with zero extra textures/passes)
+//   • a sharp animated sun glint that sparkles off the wave normals
+// No emissive glow (the old surface was a flat over-bright teal). It's a normal placed object: moves/
+// rotates/scales with the Arrange tools and shares via world_objects. Spawn with ^wa; flood with ^wf/F.
 import { useEffect, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WorldObject } from './types';
 import { buildFloodGeometry } from './floodMesh';
 
-// Per-water look (defaults for now; Step 3 wires these to per-object pickers + a DB column).
-const TINT = '#2f8fb0';
-const GLOW = '#5fe6ff';
-const GLOW_INTENSITY = 0.35;
+const VERT = /* glsl */ `
+  varying vec3 vWorldPos;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWorldPos = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const FRAG = /* glsl */ `
+  precision highp float;
+  uniform float uTime, uOpacity, uReflect;
+  uniform vec3 uDeep, uShallow, uSkyHorizon, uSkyZenith, uSunColor, uSunDir;
+  varying vec3 vWorldPos;
+
+  void main() {
+    vec2 p = vWorldPos.xz;
+    float t = uTime;
+    // Three directional waves (+ one fine ripple). We only need the SLOPE for the normal, so use the
+    // analytic derivative of each sine — cheap and exact, no texture fetches.
+    vec2 d1 = normalize(vec2( 1.0,  0.35)); float f1 = 0.33, s1 = 1.05, a1 = 0.22;
+    vec2 d2 = normalize(vec2(-0.6,  1.0 )); float f2 = 0.61, s2 = 1.55, a2 = 0.13;
+    vec2 d3 = normalize(vec2( 0.45,-0.85)); float f3 = 1.15, s3 = 2.10, a3 = 0.07;
+    vec2 d4 = normalize(vec2(-0.9, -0.3 )); float f4 = 2.4,  s4 = 3.30, a4 = 0.03;
+    float c1 = cos(dot(p, d1) * f1 + t * s1) * a1 * f1;
+    float c2 = cos(dot(p, d2) * f2 + t * s2) * a2 * f2;
+    float c3 = cos(dot(p, d3) * f3 + t * s3) * a3 * f3;
+    float c4 = cos(dot(p, d4) * f4 + t * s4) * a4 * f4;
+    float dHdx = c1 * d1.x + c2 * d2.x + c3 * d3.x + c4 * d4.x;
+    float dHdz = c1 * d1.y + c2 * d2.y + c3 * d3.y + c4 * d4.y;
+    vec3 N = normalize(vec3(-dHdx, 1.0, -dHdz));
+    vec3 V = normalize(cameraPosition - vWorldPos);
+
+    // Fresnel: reflective at grazing angles, transparent tint looking straight down.
+    float fres = uReflect + (1.0 - uReflect) * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    fres = clamp(fres, 0.0, 1.0);
+
+    // Procedural sky reflection (no cubemap): blend horizon→zenith by the reflected ray's height.
+    vec3 R = reflect(-V, N);
+    vec3 skyCol = mix(uSkyHorizon, uSkyZenith, clamp(R.y * 0.5 + 0.5, 0.0, 1.0));
+    float sun = pow(max(dot(R, normalize(uSunDir)), 0.0), 140.0);   // tight, sparkly sun glint
+
+    vec3 water = mix(uShallow, uDeep, max(dot(N, V), 0.0));          // deeper straight down
+    vec3 col = mix(water, skyCol, fres) + uSunColor * sun;
+    float alpha = mix(uOpacity, 1.0, fres);                          // edges/glints read more solid
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
 
 export function WaterObject({ obj }: { obj: WorldObject }) {
   const { mat, uniforms } = useMemo(() => {
-    const uniforms = { uTime: { value: 0 } };
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(TINT),
-      emissive: new THREE.Color(GLOW),
-      emissiveIntensity: GLOW_INTENSITY,
-      metalness: 0.0,
-      roughness: 0.08,            // low = sharp, wet reflection of the sky/IBL
-      transparent: true,
-      opacity: 0.82,
-      envMapIntensity: 1.4,       // strength of the free sky/environment reflection
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    // Animate the surface normals so the reflection/highlights ripple like moving water.
-    mat.onBeforeCompile = (shader) => {
-      shader.uniforms.uTime = uniforms.uTime;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;\nvarying vec3 vWPos;')
-        .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
-          float w1 = sin(vWPos.x * 0.55 + uTime * 1.2) + cos(vWPos.z * 0.48 - uTime * 1.0);
-          float w2 = sin((vWPos.x + vWPos.z) * 0.37 + uTime * 1.6);
-          normal = normalize(normal + vec3(w1 * 0.10, 0.0, w2 * 0.10));`);
+    const uniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0.72 },
+      uReflect: { value: 0.06 },
+      uDeep: { value: new THREE.Color('#0e2a38') },
+      uShallow: { value: new THREE.Color('#1f6b86') },
+      uSkyHorizon: { value: new THREE.Color('#9fb6c6') },
+      uSkyZenith: { value: new THREE.Color('#41648c') },
+      uSunColor: { value: new THREE.Color('#ffe6bd') },
+      uSunDir: { value: new THREE.Vector3(0.5, 0.72, 0.4).normalize() },
     };
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: VERT, fragmentShader: FRAG, uniforms,
+      transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    });
     return { mat, uniforms };
   }, []);
   useFrame((_, dt) => { uniforms.uTime.value += dt; });
+  useEffect(() => () => mat.dispose(), [mat]);
+
   // A flooded pool: the surface is the baked shore-seeking footprint (world XZ, built at y=0). It
   // renders at the object's live height (obj.pos[1]) so wheeling raises/lowers the whole surface you
-  // see, and pressing F re-floods at exactly that level. The XZ footprint stays world-anchored.
+  // see, and re-flooding snaps the shoreline to that level. The XZ footprint stays world-anchored.
   const floodGeo = useMemo(() => (obj.flood ? buildFloodGeometry(obj.flood) : null), [obj.flood]);
   useEffect(() => () => floodGeo?.dispose(), [floodGeo]);
   if (floodGeo) {

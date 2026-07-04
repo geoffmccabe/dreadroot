@@ -209,8 +209,9 @@ export function ObjectEditController() {
       }
     };
 
-    // Known typed codes → action. (Kept tiny; add future codes here, e.g. wf for a one-shot flood.)
-    const CODES: Record<string, () => void> = { wa: spawnWater };
+    // Known typed codes → action. ^wf floods the selected water — a robust alternative to the F key,
+    // which on builder maps the Terrain brush swallows (F = lower terrain).
+    const CODES: Record<string, () => void> = { wa: spawnWater, wf: floodSelectedWater };
     // Recognise the "^" that starts a code (the '^' character, or Shift+6 across layouts). We use '^'
     // rather than '*' because the weapon-tuning lineup consumes '*' when it's open.
     const isCmdKey = (e: KeyboardEvent) =>
