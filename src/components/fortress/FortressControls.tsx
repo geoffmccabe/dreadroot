@@ -212,6 +212,7 @@ export function FirstPersonControls({
   const jetBoostNextRefillRef = useRef(0);
   const jetBoostRequestRef = useRef(false);
   const boostFlameUntilRef = useRef(0);   // while now < this, the self-avatar shows the jet-boot flames
+  const lastGroundedAtRef = useRef(0);    // last time we were on the ground (ms) — physics coyote time
   const spaceKeyEdgeRef = useRef(false); // Edge detection for space key
   // Rocket Belt forward-boost: discrete bursts (each 0.25s of fast-forward), regen 1/5s.
   const beltBurstsRef = useRef(0);          // available bursts
@@ -2752,6 +2753,16 @@ export function FirstPersonControls({
 
       const isSwimming = isInWaterRef.current;
 
+      // Physics coyote time: treat "grounded within the last PHYS_COYOTE_MS" as still grounded. The raw
+      // onGround flag flickers false for a frame on bumps / downhill / the instant you press to jump —
+      // and that flicker was making the FIRST space press fire a JET BOOST instead of a jump (the boost
+      // check reads !onGround). With the grace, the first press always jumps, and the boost only fires on
+      // a genuine airborne 2nd press. A real jump clears the grace (below) so it can't re-jump mid-air.
+      const PHYS_COYOTE_MS = 300;
+      if (onGround.current) lastGroundedAtRef.current = now;
+      const coyoteGrounded = onGround.current
+        || (lastGroundedAtRef.current > 0 && now - lastGroundedAtRef.current < PHYS_COYOTE_MS);
+
       // Gliding: HOLD G in the air to slow your fall. Held-state (gKeyHeldRef)
       // so it engages reliably even if G was already held before you walked off
       // a ledge — the old one-shot "activate only if already falling" check
@@ -2800,7 +2811,7 @@ export function FirstPersonControls({
       // Works anytime player is not on ground - jumping, falling, or gliding
       if (spaceKeyEdgeRef.current) {
         spaceKeyEdgeRef.current = false;
-        const isAirborne = !onGround.current;
+        const isAirborne = !coyoteGrounded;   // genuinely airborne (not a bump / not the jump press)
 
         if (isAirborne && jetBoostAvailRef.current > 0) {
           jetBoostAvailRef.current -= 1;
@@ -3073,13 +3084,15 @@ export function FirstPersonControls({
         deltaMovement.x *= 0.6;
         deltaMovement.z *= 0.6;
       } else {
-        // Normal ground-based jump logic
-        const canJump = onGround.current && !keys.current.ctrl;
+        // Normal ground-based jump logic. coyoteGrounded (not the raw flag) so a bump/downhill frame
+        // never eats the jump — the press reliably jumps instead of being read as an airborne boost.
+        const canJump = coyoteGrounded && !keys.current.ctrl;
 
         if (keys.current.space && canJump) {
           const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump
           velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
           onGround.current = false;
+          lastGroundedAtRef.current = 0;   // consume the grace: no mid-air re-jump; a further press boosts
         }
       }
       // Use moveDt for vertical integration (consistent timestep)

@@ -42,7 +42,7 @@ const BOOT_TIER = 1;
 // airborne. A brief unground from a bump / walking downhill (grounded flickers) stays < this, so it
 // keeps the walk/run pose instead of snapping to the fall pose. Standard platformer/FPS technique.
 // (A real JUMP bypasses this — it's detected by the upward launch speed and shows immediately.)
-const COYOTE_MS = 230;
+const COYOTE_MS = 500;   // ~0.5 s off the ground before a FALL reads as airborne (bumps stay grounded)
 const JUMP_VY = 2;   // upward speed that means "the player just jumped" → jump pose with no delay
 
 // Rifle locomotion clips (from siege_rifle_anims). Selected by movement state, cross-faded — the
@@ -170,6 +170,7 @@ function SelfBody({ char }: { char: LineupChar }) {
   const prevGun = useRef(playerState.gun);
   const oneShotUntil = useRef(0);
   const airborneAt = useRef(0);   // when the player last LEFT the ground (0 = grounded), for coyote time
+  const jumped = useRef(false);   // latched while a real jump is in the air (survives the vy≈0 apex)
 
   useFrame((state) => {
     const g = group.current; if (!g) return;
@@ -182,11 +183,14 @@ function SelfBody({ char }: { char: LineupChar }) {
     //  - a FALL (walking off a ledge, no launch) only counts after being off the ground continuously
     //    past COYOTE_MS, so a bump / downhill (grounded flickers back, resetting the timer) never trips it.
     const now = performance.now();
-    if (playerState.grounded) airborneAt.current = 0;
+    if (playerState.grounded) { airborneAt.current = 0; jumped.current = false; }
     else if (!airborneAt.current) airborneAt.current = now;
-    const jumping = playerState.vy > JUMP_VY && !playerState.boosting;   // a jet-boost isn't a jump pose
+    // A real jump LATCHES the moment we see the upward launch speed and stays latched until we land — so
+    // the jump/fall pose holds through the apex (where vy≈0) instead of flickering back to a ground pose,
+    // which read as "no jump animation". A jet-boost isn't a jump pose, so it doesn't latch.
+    if (!playerState.grounded && playerState.vy > JUMP_VY && !playerState.boosting) jumped.current = true;
     const sustainedAir = !playerState.grounded && airborneAt.current > 0 && now - airborneAt.current > COYOTE_MS;
-    const airborne = jumping || sustainedAir;
+    const airborne = jumped.current || sustainedAir;
 
     // Holster / draw one-shot: on the weapon-out state flipping, play the put-away clip forward
     // (holster) or reversed (draw), and hold off the locomotion selector until it finishes.
