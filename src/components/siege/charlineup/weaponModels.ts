@@ -43,7 +43,7 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     leftHand: { point: [-0.249, 0.061, 0.074], wrist: 0 } },
   // Tuned + baked per character (in-lineup export). Same rotation for all; grip = Rajax's fit;
   // sizeByChar = each character's AK74 ratio vs Rajax (0.87) × Rajax's own tuned size for this gun.
-  { key: 'burst_rifle',   name: 'Powerful Burst Rifle', itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9,
+  { key: 'burst_rifle',   name: 'M16',                  itemNumbers: [17],  url: '/siege/weapons/item_17.glb',  lengthM: 0.9,
     rotDeg: [-88, -9, -89], gripPos: G, animSet: 'rifle',
     gripByChar: { Rajax: [0.06, 0.34, 0.04] },
     sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04 } },
@@ -56,7 +56,7 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: { Rajax: [0.06, 0.42, 0.04] },
     sizeByChar: { Ash: 1.02, Dago: 1.24, Fluffer: 1.43, Jankz: 1.24, Rajax: 1.08, Thorn: 0.98 },
     leftHand: { point: [0.032, -0.012, 0.009], wrist: 0 } },
-  { key: 'submgun',       name: 'SubMGun',              itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6,
+  { key: 'submgun',       name: 'MP5',                  itemNumbers: [142], url: '/siege/weapons/item_142.glb', lengthM: 0.6,
     rotDeg: [-88, -9, -87], gripPos: G, animSet: 'rifle',
     gripByChar: { Rajax: [0.06, 0.24, 0.04] },
     sizeByChar: { Ash: 1.38, Dago: 1.68, Fluffer: 1.93, Jankz: 1.68, Rajax: 1.46, Thorn: 1.33 },
@@ -66,7 +66,7 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: { Rajax: [0.06, 0.38, 0.04] },
     sizeByChar: { Ash: 0.77, Dago: 0.94, Fluffer: 1.08, Jankz: 0.94, Rajax: 0.82, Thorn: 0.74 },
     leftHand: { point: [5.254, -0.952, -1.271], wrist: 0 } },
-  { key: 'plasma_sniper12',name: 'Plasma Sniper II',    itemNumbers: [12],  url: '/siege/weapons/item_12.glb',  lengthM: 1.3,
+  { key: 'plasma_sniper12',name: 'Plasma Rifle',        itemNumbers: [12],  url: '/siege/weapons/item_12.glb',  lengthM: 1.3,
     rotDeg: [-88, -9, -87], gripPos: G, animSet: 'rifle',
     gripByChar: { Rajax: [0.08, 0.28, 0.04] },
     sizeByChar: { Ash: 0.65, Dago: 0.79, Fluffer: 0.91, Jankz: 0.79, Rajax: 0.69, Thorn: 0.63 } },
