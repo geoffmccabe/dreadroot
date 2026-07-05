@@ -48,6 +48,13 @@ const SOLID_PROP_RE = /mushroom|moss_lump|tent|stalag|crate|barrel|campfire|whet
 // Also excludes leaf scatter (SM_Env_Leaves_*, Leaf_Pile, …) and toadstools/stalagmites.
 // (`leaf_` matches Leaf_Pile etc. but NOT "leafless_tree", which stays solid.)
 const NO_PLAYER_COLLIDE_RE = /mushroom.*small|small.*mushroom|toadstool|stalag|leaves|leaf_/i;
+// LOBBY ONLY (dataDir '/siege/world'): the lobby is a curated hub, so the player should collide with
+// nearly everything — trees, fountain, vault, market stalls, statues, tables, etc. Its object names
+// don't all match the structural SOLID_RE/isRock patterns, so instead we make lobby objects solid BY
+// DEFAULT and only let CLEARLY walk-through things pass: ground foliage, flat ground/paths/rugs, and
+// tiny scatter. (Trees are deliberately NOT here — you should bump into trunks.) Erring solid is the
+// safe direction: at worst you can't pass a small prop; nothing structural becomes walk-through.
+const LOBBY_WALKTHROUGH_RE = /grass|\bivy\b|flower|foxglove|bluebell|nettle|\bfern\b|\bmoss\b|\bvine\b|reed|lill?y|seaweed|coral|dandelion|\bplant\b|hedge|bush|deathcap|girolle|porcinig|shaggyinkcap|parasolmushroom|mushroomsclus|\bpath\b|road|sidewalk|cobblestone|driveway|\btiles?\b|floor_?mat|\brug\b|carpet|crop|straw_field|dirtpatch|ground_row|groundleaves|pentagram|decal|pebble|rubble|banner|drape|symbol|mural|scroll|candle|pillow|\bplate\b|\bbowl\b|cutlery|toiletroll|sm_item_/i;
 // Models textured from their OWN embedded glb material (not the shared atlas) — the geometry cache
 // can't reproduce those, so they're never cached and always decode (keeping their textures).
 const EMBEDDED_TEX_RE = /portal|gate|warp|forge|fountain|exchange|crystal|geode|gem|shard|sign/i;
@@ -195,6 +202,8 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
     // shapes in a big box) → 60%; everything else → 80%.
     const isRock = /rock|stone|boulder|cliff|mountain/i.test(fbx) || SOLID_PROP_RE.test(fbx);
     const isTerrain = /terrain/i.test(fbx);   // baked ground mesh → walkable BVH (player + heightmap baker)
+    // Lobby: solid-by-default (see LOBBY_WALKTHROUGH_RE). Only the lobby uses the '/siege/world' dir.
+    const lobbySolid = colliderKey === '/siege/world' && !LOBBY_WALKTHROUGH_RE.test(fbx);
     const organicFine = /mushroom|stalag/i.test(fbx);   // overhang shapes → finer monster boxes
     const shrinkF = 0.8;  // non-rocks: 80% box (rocks get voxelized to match their shape)
     let meshes: THREE.Mesh[] = [];
@@ -337,7 +346,7 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
       });
       let geoBox: THREE.Box3 | null = null;
       // Skip player-collision geometry for walk-through scatter (mushrooms etc.) — saves BVH heap + build.
-      if ((solid || isRock || isTerrain) && !NO_PLAYER_COLLIDE_RE.test(fbx)) {  // rocks/terrain weren't in the solid list → had NO collider; include them
+      if ((solid || isRock || isTerrain || lobbySolid) && !NO_PLAYER_COLLIDE_RE.test(fbx)) {  // rocks/terrain weren't in the solid list → had NO collider; include them. lobbySolid = solid-by-default in the hub.
         if (!src.geometry.boundingBox) src.geometry.computeBoundingBox();
         geoBox = src.geometry.boundingBox;
       }
