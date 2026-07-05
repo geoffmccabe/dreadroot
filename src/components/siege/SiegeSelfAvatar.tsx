@@ -116,15 +116,18 @@ function SelfBody({ char }: { char: LineupChar }) {
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');   // Gliding + Idle Fall clips
-  // Aiming-walk clips from loose FBX (bind by the same mixamorig: bone names as the skeleton). Rename to
-  // our keys and zero the Hips X/Z translation so they stay in-place (physics drives the movement).
+  // Aiming-walk clips from loose FBX (bind by the same mixamorig: bone names as the skeleton). These are
+  // raw Z-up Mixamo clips, so the root comes in pitched 90° face-down; undo that tilt on every Hips
+  // rotation keyframe. Drop the Hips POSITION track entirely — height/forward live in different axes in
+  // Z-up, so reusing it plants the hips in the ground. With no root translation the hips rest at their
+  // correct bind-pose standing height and the game's physics drives all movement (these are in-place).
   const walkFbx = useLoader(FBXLoader, WALK_AIM_URLS);
   const walkAimClips = useMemo(() => walkFbx.map((grp, i) => {
     const src = grp.animations?.[0]; if (!src) return null;
     const clip = src.clone(); clip.name = WALK_AIM[i].name;
+    clip.tracks = clip.tracks.filter((t) => !/Hips\.position$/i.test(t.name));
     for (const t of clip.tracks) {
-      if (/Hips\.position$/i.test(t.name)) { for (let k = 0; k < t.values.length; k += 3) { t.values[k] = 0; t.values[k + 2] = 0; } }
-      else if (/Hips\.quaternion$/i.test(t.name)) {
+      if (/Hips\.quaternion$/i.test(t.name)) {
         const v = t.values;   // undo the 90° face-down root tilt on every keyframe
         for (let k = 0; k < v.length; k += 4) {
           _q.set(v[k], v[k + 1], v[k + 2], v[k + 3]).premultiply(HIP_FIX);
