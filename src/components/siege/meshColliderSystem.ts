@@ -28,6 +28,8 @@ interface InstanceEntry {
   inverse: THREE.Matrix4;
   scale: number;
   aabb: THREE.Box3;
+  blockOnly: boolean;   // true = the player/monsters are BLOCKED by it but can't stand ON TOP of it
+                        // (furniture/props/trees — you bump into them, you don't pop onto their top).
 }
 
 const bvhByKey = new Map<string, MeshBVH>();
@@ -153,7 +155,7 @@ export function setModelDecimation(fbx: string, ratio: number): number {
   return Math.round(tris);
 }
 
-export function setGroupInstances(groupId: string, list: MeshInstanceInput[]): void {
+export function setGroupInstances(groupId: string, list: MeshInstanceInput[], blockOnly = false): void {
   const entries: InstanceEntry[] = [];
   for (const it of list) {
     if (!geoByKey.has(it.key)) continue;
@@ -165,6 +167,7 @@ export function setGroupInstances(groupId: string, list: MeshInstanceInput[]): v
       inverse: it.matrix.clone().invert(),
       scale,
       aabb: it.geoBox.clone().applyMatrix4(it.matrix),
+      blockOnly,
     });
   }
   if (entries.length) groups.set(groupId, entries);
@@ -208,6 +211,7 @@ export function meshGroundHeight(x: number, z: number, ceilingY?: number): numbe
   for (const list of groups.values()) {
     for (let i = 0; i < list.length; i++) {
       const inst = list[i];
+      if (inst.blockOnly) continue;   // props/trees: block you, but you can't stand ON TOP (no pop-up)
       if (x < inst.aabb.min.x || x > inst.aabb.max.x || z < inst.aabb.min.z || z > inst.aabb.max.z) continue;
       if (ceil < inst.aabb.min.y) continue;
       const bvh = bvhByKey.get(inst.key);

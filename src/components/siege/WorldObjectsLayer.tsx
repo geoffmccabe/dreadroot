@@ -55,6 +55,11 @@ const NO_PLAYER_COLLIDE_RE = /mushroom.*small|small.*mushroom|toadstool|stalag|l
 // tiny scatter. (Trees are deliberately NOT here — you should bump into trunks.) Erring solid is the
 // safe direction: at worst you can't pass a small prop; nothing structural becomes walk-through.
 const LOBBY_WALKTHROUGH_RE = /grass|\bivy\b|flower|foxglove|bluebell|nettle|\bfern\b|\bmoss\b|\bvine\b|reed|lill?y|seaweed|coral|dandelion|\bplant\b|hedge|bush|deathcap|girolle|porcinig|shaggyinkcap|parasolmushroom|mushroomsclus|\bpath\b|road|sidewalk|cobblestone|driveway|\btiles?\b|floor_?mat|\brug\b|carpet|crop|straw_field|dirtpatch|ground_row|groundleaves|pentagram|decal|pebble|rubble|banner|drape|symbol|mural|scroll|candle|pillow|\bplate\b|\bbowl\b|cutlery|toiletroll|sm_item_/i;
+// LOBBY ONLY: surfaces you're MEANT to walk/climb ONTO — terrain, rocks/mountains/mounds, stairs/steps/
+// ramps, cave floors, bridges, big mushrooms. Everything else solid (trees, fountain, statues, tables,
+// tents, market stalls, crates, walls…) is "block-only": you're stopped by it but can't pop up onto its
+// top. Fixes the character climbing/popping onto props instead of being blocked by them.
+const LOBBY_STANDABLE_RE = /terrain|rock|stone|boulder|cliff|mountain|mound|plateau|stair|\bstep\b|ramp|bridge|cave|mushroom|stalag|ground|\bfloor\b|\bdeck\b|\bpath\b/i;
 // Models textured from their OWN embedded glb material (not the shared atlas) — the geometry cache
 // can't reproduce those, so they're never cached and always decode (keeping their textures).
 const EMBEDDED_TEX_RE = /portal|gate|warp|forge|fountain|exchange|crystal|geode|gem|shard|sign/i;
@@ -290,6 +295,15 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
             if (m.alphaTest) m.alphaTest = 0;
             if (m.opacity >= 1) m.opacity = 0.7;
           }
+          // Lobby crystal COLUMNS bake the crystal + its rock base into ONE mesh/material, textured by
+          // the shared PP_Color_Palette swatch sheet — and the base's UVs land on a reddish swatch, so
+          // the rock base reads terra-cotta instead of grey (standalone PP rocks get force-greyed; these
+          // don't because they're on the trust path). The crystal's COLOUR comes from the emissive glow
+          // map (kept above), not the diffuse — so drop the wrong diffuse swatch and flat-grey it, matching
+          // the surrounding rocks. Lobby only; other worlds' gems keep their baked diffuse.
+          if (isGem && colliderKey === '/siege/world') {
+            m.map = null; m.color.set(STONE_GREY);
+          }
           // Trees + fern-trees: trunk shares the green leaf atlas (Synty bark texture dropped on
           // export). Re-split via the COLOR_1.b vertex mask so trunk fragments sample the bark atlas
           // (which sits in the same model folder). Big-tree trunks go brown; fern-tree trunks reappear.
@@ -428,7 +442,10 @@ function useGroupNode(scene: THREE.Object3D | null, p: GroupParams): { node: THR
     if (!meshInputs.length) return;
     const ratio = colliderOverrides.get(fbx)?.cell ?? 1;
     for (const [key, geo] of meshGeos) registerMeshGeometry(fbx, key, geo, ratio);
-    setGroupInstances(groupId, meshInputs);
+    // Lobby props/trees block the player but aren't stand-on surfaces (no pop-to-top); rocks/stairs/
+    // mounds/caves stay climbable. Other worlds keep the default (everything stand-on).
+    const blockOnly = colliderKey === '/siege/world' && !LOBBY_STANDABLE_RE.test(fbx);
+    setGroupInstances(groupId, meshInputs, blockOnly);
     return () => clearGroup(groupId);
   }, [meshInputs, meshGeos, groupId, fbx]);
   return { node, cacheable };
