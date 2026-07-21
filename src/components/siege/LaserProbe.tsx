@@ -136,7 +136,19 @@ export function LaserProbe() {
         if (tris > MAX_TRIS) m.raycast = () => {};   // skip in all raycasts
       });
       const hits = ray.intersectObjects(scene.children, true)
-        .filter((h) => (h.object as THREE.Mesh).isMesh && h.object !== dot && h.object !== box && h.object !== line);
+        .filter((h) => {
+          const o = h.object as THREE.Mesh;
+          if (!o.isMesh || o === dot || o === box || o === line) return false;
+          // Pass THROUGH nameless decorative helper quads (water sheets, glow billboards, decals) —
+          // a ≤2-triangle mesh with no fbx/name is never a selectable object, and it was stopping the
+          // beam ("unknown · 2 tris") in front of real objects like the crystals. Real props keep their
+          // userData.fbx (set by WorldObjectsLayer), so they're unaffected.
+          const ud = (o.userData || {}) as { fbx?: string };
+          if (ud.fbx || o.name) return true;
+          const g = o.geometry as THREE.BufferGeometry | undefined;
+          const tris = g ? (g.index ? g.index.count : (g.getAttribute('position')?.count ?? 0)) / 3 : 0;
+          return tris > 2;   // nameless AND ≤2 tris → skip (let the laser hit what's behind it)
+        });
       probeState.dbgMeshes = meshCount; probeState.dbgHits = hits.length;
       if (hits.length) {
         const h = hits[0];
