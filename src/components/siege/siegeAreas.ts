@@ -1,3 +1,4 @@
+import { KAIJU_LAB_SPAWN } from '@/config/worldDefinition';
 // Named areas of the Siege Worlds open-world map + teleport destinations.
 //
 // ── NAMING NOTE (we deliberately leave the legacy code as-is) ────────────────
@@ -68,7 +69,7 @@ export const SIEGE_DEMOS: SiegeDemoMap[] = [
   //   forward = (-sin(yaw), 0, -cos(yaw))). Round-tripped to zero error.
   // See docs/MINI_EARTH_P1_BUILD.md.
   { code: 'KeyY', key: 'Y', name: 'Mini Earth (Kaiju Lab)', mapId: 'kaiju-lab',
-    pos: [-138288, 79420, 12999], yaw: -1.4771, pitch: -0.5194 },
+    pos: KAIJU_LAB_SPAWN.position, yaw: KAIJU_LAB_SPAWN.yaw, pitch: KAIJU_LAB_SPAWN.pitch },
   { code: 'KeyW', key: 'W', name: 'Apocalypse City', mapId: 'apoc-city', pos: [0, 12, 0], adminOnly: true }, // converted Synty Apocalypse demo city (admin-only while in progress)
   { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 1.805, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −2.8 after the city was lowered): laser yaw 272.1°, pitch -0.7°
 

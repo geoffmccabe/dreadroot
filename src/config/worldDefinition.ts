@@ -467,6 +467,30 @@ export const isEnchantedForest = (id: string | null | undefined): boolean =>
  * every other siege map. Only SWW's place-bound scenery (Bleakrock fog, the beach ambient
  * enemies, the lobby portal) is gated off, via the same `isBlank` flag Starblink uses.
  */
+/**
+ * Mini Earth arrival: in orbit at 160,000 units (about 2.5 planet radii, which frames the whole
+ * globe) directly above HOUSTON, looking at the planet centre.
+ *
+ * ⚠ SINGLE SOURCE OF TRUTH. The Cmd-J teleport entry in siegeAreas.ts imports THIS rather than
+ * repeating the numbers. They were duplicated once and immediately drifted: the teleport was
+ * moved to Houston while this still said [0,0,160000], so the camera sat over the Pacific
+ * pointing at the Houston bearing, i.e. straight out into empty space, and the planet vanished
+ * entirely. Never write these coordinates in two places.
+ *
+ * Derived, not hand-tuned:
+ *   dir  = (cos(lat)sin(lon), sin(lat), -cos(lat)cos(lon))   lat 29.7604 N, lon 95.3698 W
+ *   pos  = dir * 160000
+ *   fwd  = -dir            (look at the planet centre)
+ *   yaw  = atan2(-fwd.x, -fwd.z),  pitch = asin(fwd.y)
+ * That is the engine's own convention: FortressControls builds the camera from
+ * THREE.Euler(pitch, yaw, 0, 'YXZ'), which round-trips these values to zero error.
+ */
+export const KAIJU_LAB_SPAWN: WorldDefinition['spawn'] = {
+  position: [-138288, 79420, 12999],
+  yaw: -1.4771,
+  pitch: -0.5194,
+};
+
 export const KAIJU_LAB_WORLD: WorldDefinition = {
   id: 'kaiju-lab',
   name: 'Kaiju Lab (Mini Earth)',
@@ -481,9 +505,7 @@ export const KAIJU_LAB_WORLD: WorldDefinition = {
   ground: { kind: 'globe', surfaceY: 0 },
   // Bright fill: there is no SWW horror fog out here, and an unlit planet reads as a black disc.
   fill: { ambient: 0.55, hemi: 0.45 },
-  // Start in orbit, well outside the atmosphere, looking back at the planet. 160,000 units is
-  // about 2.5 planet radii, which frames the whole globe.
-  spawn: { position: [0, 0, 160000], yaw: 0, pitch: 0 },
+  spawn: KAIJU_LAB_SPAWN,
   props: undefined,
 };
 
