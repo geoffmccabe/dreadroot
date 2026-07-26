@@ -18,6 +18,7 @@
 // 0.6 s). Lowering gravity on top of that reads as moon gravity, a different effect entirely.
 
 import { MONSTER_CATALOG, type MType } from '../siegeMonsterCatalog';
+import { METRES_PER_UNIT } from './cubeSphere';
 
 /**
  * Geoff's picks (2026-Jul-26): the four monsters that read as Kaiju. Skeletons, zombies,
@@ -27,12 +28,18 @@ import { MONSTER_CATALOG, type MType } from '../siegeMonsterCatalog';
 export const KAIJU_TYPES: MType[] = [17, 16, 15, 8] as MType[];
 //                                   ^Fort ^Mech ^Elem ^Red Demon
 
-/** Starting height in game units. 1 unit = 100 real metres on this map. */
-const DEFAULT_HEIGHT = 100;
+/**
+ * Starting height in GAME UNITS. On this map 1 unit = 100 real metres (METRES_PER_UNIT), so a
+ * classic 100 m Kaiju is ONE unit tall.
+ *
+ * This was 100, which is 10 km real: a Kaiju taller than Everest is high, and 113x the height of
+ * mini-Everest. The readout was correct and I had simply set the default in the wrong unit.
+ */
+const DEFAULT_HEIGHT = 1;
 /** Each keypress changes size by this fraction. */
 export const SCALE_STEP = 0.05;
-const MIN_HEIGHT = 1;
-const MAX_HEIGHT = 4000;
+const MIN_HEIGHT = 0.02;    // 2 m real, human scale
+const MAX_HEIGHT = 200;     // 20 km real, far past anything sensible
 
 export interface KaijuLabState {
   /** Index into KAIJU_TYPES. */
@@ -101,9 +108,23 @@ export function resetKaijuSize(): void {
 
 // --- derived values -------------------------------------------------------------------------
 
-/** Height relative to the model's natural size. This one number drives everything else. */
+/**
+ * Height relative to the model's natural size, comparing REAL metres to REAL metres. This one
+ * number drives speed and animation.
+ *
+ * The two sides are in DIFFERENT unit systems and must be reconciled: `height` is in mini-Earth
+ * units of 100 m, while the catalog's `baseHeight` is in DreadRoot metres (a Fort Golem is 12 m).
+ * Dividing them directly was wrong, and only looked right because the old default of 100 units
+ * happened to give the same 8.33 ratio that 1 unit gives correctly.
+ */
 export function sizeRatio(s: KaijuLabState = state): number {
-  return s.height / Math.max(0.01, s.baseHeight);
+  const realMetres = s.height * METRES_PER_UNIT;
+  return realMetres / Math.max(0.01, s.baseHeight);
+}
+
+/** The Kaiju's height in real-world metres, which is how a Kaiju is normally described. */
+export function realMetres(s: KaijuLabState = state): number {
+  return s.height * METRES_PER_UNIT;
 }
 
 /** Movement speed multiplier: sqrt(ratio). See the header. */

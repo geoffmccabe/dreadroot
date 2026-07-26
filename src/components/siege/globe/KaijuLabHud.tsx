@@ -49,16 +49,22 @@ export function KaijuLabHud() {
       </div>
 
       {row('Kaiju', `${s.name} (${s.index + 1}/${KAIJU_TYPES.length})`)}
-      {row('Height', `${s.height.toFixed(1)} u = ${fmtReal(s.height)} real`)}
-      {row('Scale', `${sizeRatio(s).toFixed(2)}x model (${s.baseHeight} u)`)}
+      {/* Real size first: that is how a Kaiju is actually described. Game units second. */}
+      {row('Height', fmtReal(s.height))}
+      {row('in units', `${s.height.toFixed(3)} u`)}
+      {row('Scale', `${sizeRatio(s).toFixed(2)}x model (${s.baseHeight} m natural)`)}
       {row('Speed', `${speedMul(s).toFixed(2)}x`)}
       {row('Animation', `${animSpeedMul(s).toFixed(2)}x`)}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
-      {row('vs Everest', `${(s.height / EVEREST_UNITS).toFixed(2)}x`)}
-      {row('Everest', `${EVEREST_UNITS.toFixed(1)} u`)}
-      {row('Avg ocean depth', `${OCEAN_UNITS.toFixed(1)} u`)}
-      {row('Planet radius', `${PLANET_RADIUS.toLocaleString()} u`)}
+      {/* Phrase the comparison whichever way round is readable, rather than always showing a
+          fraction like 0.01x when the Kaiju is (correctly) far smaller than a mountain. */}
+      {row('vs Everest', s.height >= EVEREST_UNITS
+        ? `${(s.height / EVEREST_UNITS).toFixed(2)}x taller`
+        : `Everest is ${(EVEREST_UNITS / s.height).toFixed(0)}x taller`)}
+      {row('Everest', `${EVEREST_UNITS.toFixed(1)} u = 8.85 km`)}
+      {row('Avg ocean depth', `${OCEAN_UNITS.toFixed(1)} u = 3.69 km`)}
+      {row('Planet radius', `${PLANET_RADIUS.toLocaleString()} u = 6,371 km`)}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {row('Tiles', `${tiles.cached} cached, ${tiles.inFlight} loading`)}
