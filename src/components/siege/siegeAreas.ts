@@ -61,10 +61,14 @@ export interface SiegeDemoMap { code: string; key: string; name: string; mapId: 
 export const SIEGE_DEMOS: SiegeDemoMap[] = [
   // Mini Earth / Kaiju Lab: arrive in orbit at ~2.5 planet radii, looking back at the globe.
   // 1 unit = 100 real metres here, so 160,000 units out frames the whole planet.
-  // yaw 0 = looking down -Z, which from +Z faces the planet. (yaw Math.PI pointed the camera at
-  // empty space with Earth behind the player.)
+  // Positioned directly above HOUSTON (29.7604 N, 95.3698 W) looking at the planet centre, so you
+  // arrive over land rather than the empty middle of the Pacific. Derived, not hand-tuned:
+  //   dir = (cos(lat)sin(lon), sin(lat), -cos(lat)cos(lon)); pos = dir * 160000; forward = -dir;
+  //   yaw = atan2(-fx, -fz) and pitch = asin(fy), the engine's own convention (see FortressControls,
+  //   forward = (-sin(yaw), 0, -cos(yaw))). Round-tripped to zero error.
   // See docs/MINI_EARTH_P1_BUILD.md.
-  { code: 'KeyY', key: 'Y', name: 'Mini Earth (Kaiju Lab)', mapId: 'kaiju-lab', pos: [0, 0, 160000], yaw: 0, pitch: 0 },
+  { code: 'KeyY', key: 'Y', name: 'Mini Earth (Kaiju Lab)', mapId: 'kaiju-lab',
+    pos: [-138288, 79420, 12999], yaw: -1.4771, pitch: -0.5194 },
   { code: 'KeyW', key: 'W', name: 'Apocalypse City', mapId: 'apoc-city', pos: [0, 12, 0], adminOnly: true }, // converted Synty Apocalypse demo city (admin-only while in progress)
   { code: 'KeyA', key: 'A', name: 'SciFi City',  mapId: 'city-demo',   pos: [33.028, 1.805, 10.690], yaw: 1.608, pitch: -0.012 }, // Geoff-set drop (Y −2.8 after the city was lowered): laser yaw 272.1°, pitch -0.7°
 
