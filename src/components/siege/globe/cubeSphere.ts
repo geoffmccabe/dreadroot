@@ -78,11 +78,19 @@ export function directionToFaceUv(x: number, y: number, z: number): { face: numb
   return { face, u, v };
 }
 
-/** Y-up direction to geographic latitude/longitude in degrees. Matches the Python. */
+/**
+ * Y-up direction to geographic latitude/longitude in degrees. Matches the Python tiler.
+ *
+ * ⚠ NOTE THE MINUS ON X, here and in latLonToDirection. Without it the mapping is LEFT-handed
+ * and the whole planet renders mirrored, with every continent backwards. It is an easy bug to
+ * ship because it is self-consistent: sampling a known lat/lon still returns the right
+ * elevation, so landmark spot-checks pass. The only test that catches it is handedness, that
+ * (East, North, Up) forms a right-handed triad (E x N = U) as it does on Earth.
+ */
 export function directionToLatLon(x: number, y: number, z: number): { lat: number; lon: number } {
   return {
     lat: (Math.asin(Math.max(-1, Math.min(1, y))) * 180) / Math.PI,
-    lon: (Math.atan2(x, -z) * 180) / Math.PI,
+    lon: (Math.atan2(-x, -z) * 180) / Math.PI,
   };
 }
 
@@ -90,7 +98,7 @@ export function directionToLatLon(x: number, y: number, z: number): { lat: numbe
 export function latLonToDirection(lat: number, lon: number, out: Float64Array | number[]): void {
   const la = (lat * Math.PI) / 180, lo = (lon * Math.PI) / 180;
   const c = Math.cos(la);
-  out[0] = c * Math.sin(lo);
+  out[0] = -c * Math.sin(lo);
   out[1] = Math.sin(la);
   out[2] = -c * Math.cos(lo);
 }

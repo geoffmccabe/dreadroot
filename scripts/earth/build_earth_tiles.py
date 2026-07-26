@@ -124,9 +124,16 @@ def tile_directions(face_idx, level, tx, ty):
 
 
 def directions_to_latlon(d):
-    """three.js Y-up direction -> (latitude, longitude) in degrees."""
+    """three.js Y-up direction -> (latitude, longitude) in degrees.
+
+    NOTE THE MINUS ON X. Without it the mapping is LEFT-handed and the entire planet renders
+    as its mirror image: every continent backwards. It is a nasty bug because it is
+    self-consistent, so spot-checking "does Everest come out 8,848 m" passes happily. The real
+    test is that the (East, North, Up) triad must be right-handed, E x N = U, as it is on Earth.
+    See check_cubesphere.mjs, which now asserts exactly that.
+    """
     lat = np.degrees(np.arcsin(np.clip(d[..., 1], -1.0, 1.0)))
-    lon = np.degrees(np.arctan2(d[..., 0], -d[..., 2]))
+    lon = np.degrees(np.arctan2(-d[..., 0], -d[..., 2]))
     return lat, lon
 
 

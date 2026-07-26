@@ -14,7 +14,6 @@ import { TerrainLayer } from './TerrainLayer';
 import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
-import { GlobeOcean } from './globe/GlobeOcean';
 import { GlobeCamera } from './globe/GlobeCamera';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
@@ -163,9 +162,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isGlobe && <GlobeCamera />}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {isGlobe && <KaijuLabController />}
-      {/* The globe's ocean is a sphere shell, not a flat plane, so it replaces both water layers. */}
+      {/* The globe has NO separate water layer: the sea surface is the terrain mesh clamped up to
+          sea level (see GlobeTerrain). A separate shell z-fought the terrain across the whole
+          planet, because the depth buffer at orbit range cannot separate them. */}
       {isGlobe
-        ? <GlobeOcean />
+        ? null
         : isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />

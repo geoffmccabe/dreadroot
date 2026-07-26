@@ -113,7 +113,15 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
 
       faceUvToDirection(n.face, u0 + ii * du, v0 + jj * dv, dir);
       const metres = sampleTile(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
-      const r = PLANET_RADIUS + metres / METRES_PER_UNIT - (isSkirt ? skirtDrop : 0);
+      // Sea surface is the SAME mesh as the land, clamped up to elevation 0 below the waterline.
+      // There is no separate ocean sphere any more. A shell at exactly PLANET_RADIUS z-fought the
+      // terrain catastrophically: at orbit the depth buffer resolves about 110 units, and the
+      // entire relief of the planet spans only -109 to +88 units, so sea and land landed in the
+      // same depth bucket everywhere and the blue flickered over the whole globe. Clamping one
+      // surface removes the failure mode rather than tuning around it. Colour still uses the TRUE
+      // depth, so oceans read deep, and gameplay still reads real elevation from the tiles.
+      const renderMetres = metres < 0 ? 0 : metres;
+      const r = PLANET_RADIUS + renderMetres / METRES_PER_UNIT - (isSkirt ? skirtDrop : 0);
 
       const k = (j * side + i) * 3;
       pos[k] = toRenderX(dir[0] * r);
@@ -125,7 +133,11 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
       const lat = Math.abs(dir[1]);                 // |sin(latitude)|, 1 at the poles
       const snowLine = 2600 - 2400 * lat * lat;     // metres; drops toward the poles
       let r0: number, g0: number, b0: number;
-      if (metres < 0) { r0 = 0.06; g0 = 0.12; b0 = 0.22; }
+      if (metres < 0) {
+        // Shallow shelf -> bright blue, abyss -> near-black blue. -6000 m covers most of the ocean.
+        const t = Math.min(1, -metres / 6000);
+        r0 = 0.10 - 0.07 * t; g0 = 0.32 - 0.24 * t; b0 = 0.55 - 0.32 * t;
+      }
       else if (metres > snowLine) { r0 = 0.92; g0 = 0.93; b0 = 0.96; }
       else {
         const t = Math.min(1, metres / Math.max(1, snowLine));

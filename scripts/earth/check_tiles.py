@@ -42,9 +42,12 @@ PLACES = [
 
 
 def direction(lat, lon):
+    # Must match build_earth_tiles.directions_to_latlon and cubeSphere.ts. NOTE THE MINUS ON X:
+    # without it the frame is left-handed and the planet renders mirrored (see check_cubesphere.mjs
+    # step 3b). This file had the old sign and had to be corrected along with the others.
     la, lo = np.radians(lat), np.radians(lon)
     c = np.cos(la)
-    return np.array([c * np.sin(lo), np.sin(la), -c * np.cos(lo)])
+    return np.array([-c * np.sin(lo), np.sin(la), -c * np.cos(lo)])
 
 
 def face_uv(d):
@@ -96,7 +99,34 @@ def main():
         if not ok:
             failures += 1
 
-    print("\n" + ("ALL SPOT CHECKS PASSED" if failures == 0 else f"{failures} SPOT CHECK(S) FAILED"))
+    # --- MIRROR TEST -------------------------------------------------------------------------
+    # The landmark checks above CANNOT detect a mirrored planet: mirroring maps lon -> -lon and
+    # is self-consistent, so every elevation above still reads correctly. That bug shipped once.
+    # These pairs are chosen so the true answer at +lon and -lon are OPPOSITE (one land, one
+    # ocean), which a mirrored globe gets backwards on both sides.
+    print()
+    pairs = [
+        ("Amazon basin",      0,  -60, "land", "Indian Ocean",        0,  60),
+        ("Brazil interior", -20,  -55, "land", "S Indian Ocean",    -20,  55),
+        ("E Atlantic",       20,  -25, "sea",  "Sahara",             20,  25),
+        ("Gulf of Mexico",   25,  -90, "sea",  "N India / Bengal",   25,  90),
+        ("N Atlantic",       45,  -40, "sea",  "Kazakhstan",         45,  40),
+    ]
+    mirrored = 0
+    for wn, wlat, wlon, wkind, en, elat, elon in pairs:
+        _, w = sample(wlat, wlon)
+        _, e = sample(elat, elon)
+        ok = ((w >= 0) if wkind == "land" else (w < 0)) and ((e < 0) if wkind == "land" else (e >= 0))
+        print(f"mirror check  {wn:16}{w:>8} m   {en:18}{e:>8} m   {'ok' if ok else 'WRONG'}")
+        if not ok:
+            mirrored += 1
+    if mirrored:
+        print(f"\n{mirrored} PAIR(S) WRONG: the globe is MIRRORED (east/west swapped)")
+        failures += mirrored
+    else:
+        print("\nmirror check: geography is the right way round")
+
+    print("\n" + ("ALL CHECKS PASSED" if failures == 0 else f"{failures} CHECK(S) FAILED"))
     return 1 if failures else 0
 
 

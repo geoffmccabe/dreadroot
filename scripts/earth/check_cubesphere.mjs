@@ -68,15 +68,17 @@ const fail = (msg) => { console.error('  FAIL ' + msg); failures++; };
 
 // --- 3. landmarks land on a sensible face ------------------------------------------------
 {
-  // Expected faces derived by hand from the direction each place points in, NOT guessed:
-  // Everest (lon 87) is dominated by +X, Mariana (lon 142) by +Z, Quito (lon -78) by -X.
+  // Expected faces derived by hand from the direction each place points in, NOT guessed.
+  // These flipped when the mirrored-longitude bug was fixed (see 3b): with the correct
+  // right-handed convention Everest (lon 87 E) is dominated by -X and Quito (lon 78 W) by +X.
+  // Recomputed from dir = (-cos(lat)sin(lon), sin(lat), -cos(lat)cos(lon)), not from the failure.
   const places = [
     ['North Pole',   90, 0,      'py'],
     ['South Pole',  -90, 0,      'ny'],
     ['Null Island',   0, 0,      'nz'],
-    ['Everest',   27.99, 86.93,  'px'],
+    ['Everest',   27.99, 86.93,  'nx'],
     ['Mariana',   11.35, 142.2,  'pz'],
-    ['Quito',     -0.18, -78.47, 'nx'],
+    ['Quito',     -0.18, -78.47, 'px'],
   ];
   const out = new Float64Array(3);
   for (const [name, lat, lon, expect] of places) {
@@ -87,6 +89,34 @@ const fail = (msg) => { console.error('  FAIL ' + msg); failures++; };
     console.log(`3. ${name.padEnd(12)} lat ${String(lat).padStart(7)} lon ${String(lon).padStart(8)} -> face ${got} ${ok ? '' : `(expected ${expect})`}`);
     if (!ok) fail(`${name} landed on face ${got}, expected ${expect}`);
   }
+}
+
+// --- 3b. HANDEDNESS: the bug landmark checks cannot see ------------------------------------
+// A mirrored planet is self-consistent: latLonToDirection and directionToLatLon still invert
+// each other, and sampling a known place still returns its true elevation, so every check in
+// this file up to here passes while every continent renders backwards. The only thing that
+// catches it is that (East, North, Up) must be RIGHT-handed, E x N = U, as it is on Earth.
+{
+  const out = new Float64Array(3), oe = new Float64Array(3), on = new Float64Array(3);
+  const eps = 1e-5;
+  let left = 0, total = 0;
+  for (let lat = -60; lat <= 60; lat += 30) {
+    for (let lon = -150; lon < 180; lon += 60) {
+      latLonToDirection(lat, lon, out);
+      latLonToDirection(lat, lon + eps, oe);
+      const e = [oe[0] - out[0], oe[1] - out[1], oe[2] - out[2]];
+      latLonToDirection(lat + eps, lon, on);
+      const n = [on[0] - out[0], on[1] - out[1], on[2] - out[2]];
+      // (E x N) . U must be positive
+      const cx = e[1] * n[2] - e[2] * n[1];
+      const cy = e[2] * n[0] - e[0] * n[2];
+      const cz = e[0] * n[1] - e[1] * n[0];
+      if (cx * out[0] + cy * out[1] + cz * out[2] < 0) left++;
+      total++;
+    }
+  }
+  console.log(`3b. handedness (E x N = U): ${total - left}/${total} right-handed`);
+  if (left) fail(`${left}/${total} points are LEFT-handed: the globe renders MIRRORED`);
 }
 
 // --- 4. tile indexing self-consistency ---------------------------------------------------
