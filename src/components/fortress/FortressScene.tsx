@@ -321,6 +321,39 @@ export function FortressScene({
   // Fly speed scaled by altitude above the surface: slow enough to be controllable a few
   // units off the ground, fast enough to cross a 400,750-unit planet from orbit. One set of
   // controls, no gear changes.
+  // Planet-centric movement frame for the Mini Earth (see FortressControls `moveBasis`).
+  //   up      = straight away from the planet centre
+  //   forward = where you are LOOKING, flattened onto the local surface
+  //   right   = forward x up
+  // So W/S run along the ground toward where you face, A/D strafe along it, and Q/Z rise and fall
+  // radially. Reused scratch vectors: this runs every frame.
+  const gbUp = useRef(new THREE.Vector3());
+  const gbFwd = useRef(new THREE.Vector3());
+  const gbRight = useRef(new THREE.Vector3());
+  const gbView = useRef(new THREE.Vector3());
+  const globeMoveBasis = useCallback(() => {
+    const up = gbUp.current.copy(camera.position);
+    if (up.lengthSq() < 1e-6) return null;
+    up.normalize();
+
+    camera.getWorldDirection(gbView.current);
+    // Tangent component of the view direction: the part of where you are looking that lies along
+    // the surface.
+    const fwd = gbFwd.current.copy(gbView.current).addScaledVector(up, -gbView.current.dot(up));
+
+    // Looking straight down (or straight up) leaves no tangent component, which is exactly what
+    // happens when you orbit and stare at the planet. Fall back to the camera's own up vector
+    // flattened the same way, so W still means "the direction the top of the screen points".
+    if (fwd.lengthSq() < 1e-8) {
+      fwd.copy(camera.up).addScaledVector(up, -camera.up.dot(up));
+      if (fwd.lengthSq() < 1e-8) return null;   // degenerate; leave the world-axis basis alone
+    }
+    fwd.normalize();
+
+    const right = gbRight.current.crossVectors(fwd, up).normalize();
+    return { fwd, right, up };
+  }, [camera]);
+
   const globeFlySpeedScale = useCallback(() => {
     const p = camera.position;
     const altitude = Math.hypot(p.x, p.y, p.z) - PLANET_RADIUS;
@@ -1839,6 +1872,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         groundHeightFn={isSiege ? siegeGroundHeight : undefined}
         forceFloat={isGlobeMap}
         flySpeedScale={isGlobeMap ? globeFlySpeedScale : undefined}
+        moveBasis={isGlobeMap ? globeMoveBasis : undefined}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}

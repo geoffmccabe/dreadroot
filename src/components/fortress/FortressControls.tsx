@@ -62,6 +62,7 @@ const _inspectorDir = new THREE.Vector3();
 const _inspectorDistVec = new THREE.Vector3();
 const _sdbgDir = new THREE.Vector3();   // scratch: camera look dir for the siege debug readout
 const _spreadWorldUp = new THREE.Vector3(0, 1, 0);   // constant world-up for spread basis
+const UP_Y = new THREE.Vector3(0, 1, 0);             // default vertical axis (flat maps)
 
 export function FirstPersonControls({
   onShoot,
@@ -176,7 +177,15 @@ export function FirstPersonControls({
   // altitude so one set of controls works both in orbit and just above the ground. Returns 1
   // (no change) on every other map, so this is inert unless a globe map supplies it.
   flySpeedScale,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null; flySpeedScale?: () => number }) {
+  // Mini Earth: a PLANET-CENTRIC movement basis. The mover is otherwise world-axis aligned:
+  // forward is horizontal in world XZ and Q/Z move along world +Y. That is correct on a flat map
+  // and wrong everywhere on a sphere except the north pole. Standing over Houston, world "up" is
+  // 60 degrees off local up, so W pushed you 87% straight up and Q was 87% sideways.
+  // When supplied, this returns the local tangent frame (forward/right along the surface, up
+  // radially away from the planet centre) and the mover uses it instead. Omitted everywhere else,
+  // so no other map changes by a single float.
+  moveBasis,
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null; flySpeedScale?: () => number; moveBasis?: () => { fwd: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } | null }) {
   const { camera, gl } = useThree();
   // Siege maps pass groundHeightFn — there is NO fortress there, so all fortress-position
   // systems (no-fire safe zone, vault) must be OFF (they live at the origin = siege spawn).
@@ -2642,6 +2651,12 @@ export function FirstPersonControls({
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));
       const right = rightVecRef.current.set(Math.cos(yaw.current), 0, -Math.sin(yaw.current));
+      // Planet-centric override (Mini Earth). Replaces the world-axis basis with the local tangent
+      // frame so W/S run along the surface and Q/Z go radially out/in, at ANY point on the globe.
+      const basis = moveBasis ? moveBasis() : null;
+      if (basis) { forward.copy(basis.fwd); right.copy(basis.right); }
+      // The vertical axis for Q/Z/space: local up on a planet, world +Y otherwise.
+      const upAxis = basis ? basis.up : UP_Y;
       
       const deltaMovement = deltaMovementRef.current.set(0, 0, 0);
       // Use clamped delta for movement to prevent tunneling
@@ -2682,16 +2697,20 @@ export function FirstPersonControls({
           // Boost overdrive: fly in the LOOK direction (level look = level, look down = down, up = up),
           // NOT horizontal + an upward Q. Rebuild the move along the aim; Q no longer adds lift.
           const cp = Math.cos(pitch.current), sp = Math.sin(pitch.current);
-          const look = forwardVecRef.current.set(-Math.sin(yaw.current) * cp, sp, -Math.cos(yaw.current) * cp);
+          // On a planet, "look" is the tangent forward tilted toward local up by the pitch, not a
+          // world-Y tilt (which would aim at the north celestial pole rather than at the sky).
+          const look = basis
+            ? forwardVecRef.current.copy(basis.fwd).multiplyScalar(cp).addScaledVector(basis.up, sp)
+            : forwardVecRef.current.set(-Math.sin(yaw.current) * cp, sp, -Math.cos(yaw.current) * cp);
           deltaMovement.set(0, 0, 0);
           deltaMovement.addScaledVector(look, direction.current.z * runSpeed * moveDt);
           deltaMovement.addScaledVector(right, direction.current.x * runSpeed * moveDt);
-          if (keys.current.space) deltaMovement.y += runSpeed * delta;   // deliberate straight-up only
-          if (keys.current.z) deltaMovement.y -= runSpeed * delta;
+          if (keys.current.space) deltaMovement.addScaledVector(upAxis, runSpeed * delta);   // deliberate straight-up only
+          if (keys.current.z) deltaMovement.addScaledVector(upAxis, -runSpeed * delta);
         } else {
           // Normal god mode: horizontal move (above) + Q/space fly up, Z fly down.
-          if (keys.current.q || keys.current.space) deltaMovement.y += runSpeed * delta;
-          if (keys.current.z) deltaMovement.y -= runSpeed * delta;
+          if (keys.current.q || keys.current.space) deltaMovement.addScaledVector(upAxis, runSpeed * delta);
+          if (keys.current.z) deltaMovement.addScaledVector(upAxis, -runSpeed * delta);
         }
         // No gravity in god mode - just apply direct movement
         velocity.current.set(0, 0, 0);
