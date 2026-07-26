@@ -15,7 +15,8 @@ export type Vec3 = [number, number, number];
 export type GroundKind =
   | 'flat'          // a static flat plane (size from bounds/`flatSize`)
   | 'heightmap'     // editable chunked GPU heightmap (128 m cells, 1 m samples) + brush
-  | 'gltf-terrain'; // a glTF/mesh terrain loaded from `terrainUrl` (real SW terrain)
+  | 'gltf-terrain'  // a glTF/mesh terrain loaded from `terrainUrl` (real SW terrain)
+  | 'globe';        // Mini Earth: cube-sphere quadtree of real ETOPO relief (see docs/MINI_EARTH_PLAN.md)
 
 export interface GroundConfig {
   kind: GroundKind;
@@ -453,6 +454,39 @@ export const ENCHANTED_FOREST_BAD_WORLD: WorldDefinition = {
 export const isEnchantedForest = (id: string | null | undefined): boolean =>
   id === 'enchanted-forest' || id === 'enchanted-forest-bad';
 
+/**
+ * KAIJU LAB — the Mini Earth. A 1/100-scale Earth as a real sphere: cube-sphere quadtree
+ * terrain displaced by ETOPO 2022 relief (land AND ocean floor), streamed from R2.
+ *
+ * Scale convention: 1 game unit = 100 real metres, so the planet radius is 63,710 units and
+ * it is 400,750 units around. Everest is 88.5 units tall, the average ocean 37 units deep.
+ * See docs/MINI_EARTH_PLAN.md §1 for why, and docs/MINI_EARTH_P1_BUILD.md for the build.
+ *
+ * This is a FULL Siege Worlds map, not a demo scene: weapons, jumping, jet boost, inventory,
+ * the HUD panels, crypto, coins, challenges and monster spawning all work here exactly as on
+ * every other siege map. Only SWW's place-bound scenery (Bleakrock fog, the beach ambient
+ * enemies, the lobby portal) is gated off, via the same `isBlank` flag Starblink uses.
+ */
+export const KAIJU_LAB_WORLD: WorldDefinition = {
+  id: 'kaiju-lab',
+  name: 'Kaiju Lab (Mini Earth)',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 40,
+  kind: 'siege',
+  meshColliders: false,
+  // The planet is a sphere, so square XZ bounds are meaningless here. null = unbounded, which
+  // the engine already treats as advisory rather than a hard limit.
+  bounds: null,
+  ground: { kind: 'globe', surfaceY: 0 },
+  // Bright fill: there is no SWW horror fog out here, and an unlit planet reads as a black disc.
+  fill: { ambient: 0.55, hemi: 0.45 },
+  // Start in orbit, well outside the atmosphere, looking back at the planet. 160,000 units is
+  // about 2.5 planet radii, which frames the whole globe.
+  spawn: { position: [0, 0, 160000], yaw: 0, pitch: 0 },
+  props: undefined,
+};
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [APOC_CITY_WORLD.id]: APOC_CITY_WORLD,
@@ -484,6 +518,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [KINGDOM_GRID_WORLD.id]: KINGDOM_GRID_WORLD,
   [SAMURAI_GRID_WORLD.id]: SAMURAI_GRID_WORLD,
   [MINING_GRID_WORLD.id]: MINING_GRID_WORLD,
+  [KAIJU_LAB_WORLD.id]: KAIJU_LAB_WORLD,
 };
 
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {

@@ -65,6 +65,7 @@ import { SiegeNewMonsterLineup } from '@/components/siege/SiegeNewMonsterLineup'
 import { SiegeCharacterLineup } from '@/components/siege/SiegeCharacterLineup';
 import { useWorkMode } from '@/components/siege/siegeWorkMode';
 import { getWorldDefinition } from '@/config/worldDefinition';
+import { PLANET_RADIUS } from '@/components/siege/globe/cubeSphere';
 import { sampleHeight } from '@/components/siege/terrainHeight';
 import { meshGroundHeight } from '@/components/siege/meshColliderSystem';
 import { DynamicSky, SkyHandle } from './FortressSky';
@@ -297,6 +298,20 @@ export function FortressScene({
   // is only for inspecting the real SWW open world. isSiegeReview = real SWW map only.
   const isBuilderMap = activeWorld.ground.kind === 'flat' || activeWorld.ground.kind === 'heightmap';
   const isSiegeReview = isSiege && !isBuilderMap;
+  // Mini Earth (see docs/MINI_EARTH_P1_BUILD.md). The planet is a sphere, so the flat
+  // XZ->Y ground contract does not apply yet (that is P2's tangent patch). Until then the
+  // player free-flies: forceFloat puts the controller in its existing no-gravity mode, which
+  // also avoids the y=22 sea-level fallback dropping the player into the planet's core.
+  const isGlobeMap = activeWorld.ground.kind === 'globe';
+  // Fly speed scaled by altitude above the surface: slow enough to be controllable a few
+  // units off the ground, fast enough to cross a 400,750-unit planet from orbit. One set of
+  // controls, no gear changes.
+  const globeFlySpeedScale = useCallback(() => {
+    const p = camera.position;
+    const altitude = Math.hypot(p.x, p.y, p.z) - PLANET_RADIUS;
+    // 1x at the surface up to ~200x far out; the divisor sets how fast it ramps.
+    return Math.min(200, Math.max(1, altitude / 60));
+  }, [camera]);
   // Work mode (⌘-]) gates the dev/review overlays so they don't clutter normal play.
   const workMode = useWorkMode();
   // Spawn comes from the active map's WorldDefinition (no hardcoded point).
@@ -1812,6 +1827,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         respawnPosition={worldSwapTarget ?? respawnPosition}
         onRespawnComplete={() => { setWorldSwapTarget(null); onRespawnComplete?.(); }}
         groundHeightFn={isSiege ? siegeGroundHeight : undefined}
+        forceFloat={isGlobeMap}
+        flySpeedScale={isGlobeMap ? globeFlySpeedScale : undefined}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}

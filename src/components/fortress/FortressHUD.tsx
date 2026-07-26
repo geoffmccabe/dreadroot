@@ -21,6 +21,9 @@ import { SiegeCharLineupHud } from '@/components/siege/charlineup/SiegeCharLineu
 import { startFountainPolling } from '@/components/siege/fountain/fountainState';
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
+import { KaijuLabHud } from '@/components/siege/globe/KaijuLabHud';
+import { useActiveMapId } from '@/config/activeMap';
+import { getWorldDefinition } from '@/config/worldDefinition';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
 import { useActiveGame } from '@/config/activeGame';
 import { HealthBar, JetBoostIndicator } from '@/features/shwarm';
@@ -62,6 +65,8 @@ import { isQASuppressed } from '@/config/qaGuard';
 type FortressHUDProps = any;
 
 export function FortressHUD(props: FortressHUDProps) {
+  // Mini Earth: the Kaiju Lab readout mounts only on the globe map.
+  const isGlobeMap = getWorldDefinition(useActiveMapId()).ground.kind === 'globe';
   const { openItem: openItemDetail } = useItemDetail();
   const vaultBridge = useVaultBridge();
   const {
@@ -972,6 +977,9 @@ export function FortressHUD(props: FortressHUDProps) {
           maps so you can L-point and press B(bad)/G(good) to flag assets while exploring. */}
       {isSiege && <CoordsHud />}
       {isSiege && <TriagePanel />}
+      {/* Mini Earth readout: Kaiju size in game units AND implied real-world size, so the
+          scale decision can be made by looking. Globe map only. */}
+      {isGlobeMap && <KaijuLabHud />}
       {/* Siege Worlds inspect-view animation panel (game CSS) — shows only in inspect. */}
       <SiegeAnimPanel />
       {/* Flying coin animations */}

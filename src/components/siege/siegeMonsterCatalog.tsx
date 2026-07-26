@@ -144,7 +144,16 @@ export const MONSTER_CATALOG: { id: MType; name: string; baseHeight: number; bas
   { id: 19, name: 'DF Demon',                baseHeight: 2.4,  baseHealth: 120 },
 ];
 
-export interface MonsterMods { sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number; }
+export interface MonsterMods {
+  sizeMul?: number; speedMul?: number; healthMul?: number; damageMul?: number;
+  /**
+   * Playback-rate multiplier applied ON TOP of the monster's own animSpeed. Used by the
+   * Mini Earth Kaiju scaling (docs/MINI_EARTH_P1_BUILD.md step D3): a creature N times taller
+   * plays its cycles about sqrt(N) times SLOWER, which is what actually sells "giant".
+   * Omitted = 1 = unchanged, so every existing caller behaves exactly as before.
+   */
+  animSpeedMul?: number;
+}
 
 // Every monster type that has a row in the registry (whether CFG-driven or component-driven). Use
 // this to validate challenge/spawn data BEFORE it reaches CatalogMonster, so a bad id surfaces as a
@@ -190,7 +199,7 @@ export function CatalogMonster({ type, spawn, id, onDespawn, ov, mods, color, ba
     <MonsterEnemy id={id} spawn={spawn} url={o?.url ?? m!.url} name={monsterName} riseFromGround={riseFromGround} damageMul={mods?.damageMul}
       modelHeight={o?.modelHeight ?? m!.modelHeight} height={(o?.height ?? m!.height) * sz} aggro={compAI?.aggro ?? m?.aggro ?? 400}
       speed={(o?.speed ?? m!.speed) * sp} wanderRadius={compAI?.wanderRadius ?? m?.wanderRadius ?? 6} health={(o?.health ?? m!.health) * hp}
-      animSpeed={o?.animSpeed ?? m?.animSpeed} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
+      animSpeed={(o?.animSpeed ?? m?.animSpeed ?? 1) * (mods?.animSpeedMul ?? 1)} onDespawn={onDespawn} zombie={o ? true : (m?.zombie ?? true)} gait={m?.gait ?? 'climb'}
       clips={m?.clips} caveCrawl={m?.caveCrawl}
       sizeJitter={o ? 0 : m!.sizeJitter} speedJitter={o ? 0 : m!.speedJitter}
       desat={o?.desat} hueShift={o?.hueShift} tintRed={o?.tintRed} colorMods={color}

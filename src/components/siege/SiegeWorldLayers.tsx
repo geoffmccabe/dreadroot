@@ -13,6 +13,9 @@ import { setCoinGroundSampler } from '@/features/coinDrops/coinGround';
 import { TerrainLayer } from './TerrainLayer';
 import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
+import { GlobeTerrain } from './globe/GlobeTerrain';
+import { GlobeOcean } from './globe/GlobeOcean';
+import { KaijuLabController } from './globe/KaijuLabController';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -83,7 +86,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // SWW-specific scenery/enemies/regions — just ground + spawn + the builder tools.
   const kind = world.ground.kind;
   const isHeightmap = kind === 'heightmap';
-  const isBlank = kind === 'flat' || isHeightmap;
+  // Mini Earth: a real sphere, so it has no flat ground, no XZ bounds and no SWW scenery.
+  // It counts as "blank" for gating purposes (bright fill light, none of Bleakrock's
+  // place-bound content), but it is otherwise a FULL siege map: weapons, jumping, panels,
+  // crypto, coins, challenges and @-spawn all mount exactly as on every other siege map.
+  const isGlobe = kind === 'globe';
+  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
   // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
   // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
   const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
@@ -108,11 +116,13 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           load effect and re-fires onReady. Without this, returning to the lobby left `readyWorld`
           stale on the previous map's id (TerrainLayer has no world prop / stable deps and never
           re-signals), so terrainReady stayed false forever → lobby objects never un-hid. */}
-      {isHeightmap
-        ? <HeightmapTerrain key={world.id} world={world} onReady={signalReady} />
-        : kind === 'flat'
-          ? <FlatGroundLayer key={world.id} world={world} onReady={signalReady} />
-          : <TerrainLayer key={world.id} onReady={signalReady} />}
+      {isGlobe
+        ? <GlobeTerrain key={world.id} onReady={signalReady} />
+        : isHeightmap
+          ? <HeightmapTerrain key={world.id} world={world} onReady={signalReady} />
+          : kind === 'flat'
+            ? <FlatGroundLayer key={world.id} world={world} onReady={signalReady} />
+            : <TerrainLayer key={world.id} onReady={signalReady} />}
       {/* Builder/blank maps (Starblink, City Demo) drop the SWW horror fog, so faces away
           from the sun go near-black with only the base ambient. Add bright fill light so
           all object textures read clearly (esp. the tall city buildings). */}
@@ -144,7 +154,13 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {!isBlank && <Suspense fallback={null}><SiegePortalEffect /></Suspense>}
       {/* (Magic Chest model removed — the lobby already has a chest at the spot; the open/spin
           interaction lives in MagicChestPanel and works on that existing chest.) */}
-      {isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
+      {/* Mini Earth: the Kaiju + its cycle/scale keys. Only on the globe map, so its keys
+          cannot collide with play keys anywhere else. */}
+      {isGlobe && <KaijuLabController />}
+      {/* The globe's ocean is a sphere shell, not a flat plane, so it replaces both water layers. */}
+      {isGlobe
+        ? <GlobeOcean />
+        : isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}

@@ -171,7 +171,12 @@ export function FirstPersonControls({
   // Siege Worlds: heightfield ground sampler (world Y, or null off-map/not-loaded). When
   // provided, the player walks on this terrain floor (no block colliders). Gated to siege.
   groundHeightFn,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null }) {
+  // Mini Earth: multiplies FLY (god-mode) speed only. The planet is 400,750 units around, so
+  // the normal 8-16 units/s would take hours to cross it; the globe map scales this with
+  // altitude so one set of controls works both in orbit and just above the ground. Returns 1
+  // (no change) on every other map, so this is inert unless a globe map supplies it.
+  flySpeedScale,
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null; flySpeedScale?: () => number }) {
   const { camera, gl } = useThree();
   // Siege maps pass groundHeightFn — there is NO fortress there, so all fortress-position
   // systems (no-fire safe zone, vault) must be OFF (they live at the origin = siege spawn).
@@ -2573,7 +2578,9 @@ export function FirstPersonControls({
       // Speed calculation - god mode gets faster speed
       const baseSpeed = 4.0;
       const crawlSpeed = baseSpeed * 0.6;
-      const godSpeed = keys.current.shift ? 16.0 : 8.0; // Faster in god mode
+      // Base god-mode speed, then the optional per-map fly scale (Mini Earth uses altitude;
+      // everywhere else flySpeedScale is undefined and this is exactly the old value).
+      const godSpeed = (keys.current.shift ? 16.0 : 8.0) * (flySpeedScale ? flySpeedScale() : 1);
       if (userRolesRef.current.includes('admin') || userRolesRef.current.includes('superadmin')) {
         adminEverRef.current = true;
       }

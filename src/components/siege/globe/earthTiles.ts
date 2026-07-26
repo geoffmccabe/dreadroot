@@ -1,0 +1,169 @@
+// earthTiles — fetching, decoding and caching the Mini Earth height tiles.
+//
+// Tiles live on R2 (assets.dreadroot.com), NOT in the Pages deploy: there are 2,046 of them
+// and Pages caps a deployment at 20,000 files. See docs/MINI_EARTH_P1_BUILD.md step A4.
+//
+// Wire format, produced by scripts/earth/build_earth_tiles.py:
+//   257 x 257 signed 16-bit little-endian samples, row-major, raw ELEVATION IN METRES.
+//   Metres (not game units) so the scale convention can change without rebuilding tiles.
+//
+// Design notes:
+//  • Requests are deduplicated: many quadtree nodes ask for the same tile in one frame.
+//  • The cache is a plain LRU over decoded Int16Arrays. One tile is 132 KB, so the default
+//    budget of 512 tiles is ~68 MB, which comfortably covers a full view at every level.
+//  • `getTile` is SYNCHRONOUS and returns null on a miss, kicking off a fetch. Callers must
+//    cope with "not here yet" by falling back to a coarser ancestor tile, which is exactly
+//    what the quadtree wants to do anyway.
+
+import { TILE, FACE_NAMES, tileKey } from './cubeSphere';
+import { ASSET_BASE } from '@/config/assetBase';
+
+const BASE = `${ASSET_BASE}/siege/earth`;
+const SAMPLES = TILE * TILE;
+const BYTES = SAMPLES * 2;
+
+export interface EarthManifest {
+  version: number;
+  tileSize: number;
+  maxLevel: number;
+  faces: string[];
+  scaleMetresPerUnit: number;
+  planetRadiusUnits: number;
+  minMetres: number;
+  maxMetres: number;
+  source: string;
+}
+
+let manifest: EarthManifest | null = null;
+let manifestPromise: Promise<EarthManifest> | null = null;
+
+/** Load (once) the tile-set manifest. Everything else waits on this for maxLevel. */
+export function loadManifest(): Promise<EarthManifest> {
+  if (manifest) return Promise.resolve(manifest);
+  if (!manifestPromise) {
+    manifestPromise = fetch(`${BASE}/manifest.json`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`earth manifest ${r.status}`);
+        return r.json();
+      })
+      .then((m: EarthManifest) => {
+        if (m.tileSize !== TILE) {
+          // A silent mismatch here would misplace every sample on the planet.
+          throw new Error(`earth manifest tileSize ${m.tileSize} != client TILE ${TILE}`);
+        }
+        manifest = m;
+        return m;
+      })
+      .catch((e) => { manifestPromise = null; throw e; });
+  }
+  return manifestPromise;
+}
+
+export function getManifest(): EarthManifest | null { return manifest; }
+
+// --- cache ---------------------------------------------------------------------------------
+
+const MAX_CACHED = 512;                             // ~68 MB of decoded tiles
+const cache = new Map<string, Int16Array>();        // Map preserves insertion order = LRU
+const inFlight = new Map<string, Promise<Int16Array | null>>();
+const failed = new Map<string, number>();           // key -> retry-after timestamp
+const RETRY_MS = 10_000;
+
+function touch(key: string, data: Int16Array): void {
+  cache.delete(key);
+  cache.set(key, data);
+  while (cache.size > MAX_CACHED) {
+    const oldest = cache.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
+/**
+ * Decoded tile if it is already in memory, else null (and a fetch is started).
+ * Never throws, never blocks.
+ */
+export function getTile(face: number, level: number, x: number, y: number): Int16Array | null {
+  const key = tileKey(face, level, x, y);
+  const hit = cache.get(key);
+  if (hit) { touch(key, hit); return hit; }
+  void requestTile(face, level, x, y);
+  return null;
+}
+
+/** True if the tile is resident, without triggering a fetch. */
+export function hasTile(face: number, level: number, x: number, y: number): boolean {
+  return cache.has(tileKey(face, level, x, y));
+}
+
+/** Fetch + decode a tile, deduplicated. Resolves null if the tile could not be loaded. */
+export function requestTile(
+  face: number, level: number, x: number, y: number,
+): Promise<Int16Array | null> {
+  const key = tileKey(face, level, x, y);
+
+  const cached = cache.get(key);
+  if (cached) return Promise.resolve(cached);
+
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+
+  // Back off on a tile that already failed, so a missing level does not spam the network
+  // once per frame per node.
+  const retryAt = failed.get(key);
+  if (retryAt !== undefined && Date.now() < retryAt) return Promise.resolve(null);
+
+  const url = `${BASE}/h/${FACE_NAMES[face]}/${level}/${x}_${y}.bin`;
+  const p = fetch(url)
+    .then(async (r) => {
+      if (!r.ok) throw new Error(`${r.status}`);
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength !== BYTES) {
+        throw new Error(`expected ${BYTES} bytes, got ${buf.byteLength}`);
+      }
+      // Int16Array over the buffer is a view, not a copy. The tiles are little-endian and
+      // every platform we ship to is little-endian, so no byte swapping is needed.
+      const data = new Int16Array(buf);
+      touch(key, data);
+      failed.delete(key);
+      return data;
+    })
+    .catch((e) => {
+      failed.set(key, Date.now() + RETRY_MS);
+      if (import.meta.env.DEV) console.warn(`[earth] tile ${key} failed: ${e.message}`);
+      return null;
+    })
+    .finally(() => { inFlight.delete(key); });
+
+  inFlight.set(key, p);
+  return p;
+}
+
+/** Elevation in METRES at sample (col, row) of a tile. */
+export function sampleTile(tile: Int16Array, col: number, row: number): number {
+  const c = col < 0 ? 0 : col > TILE - 1 ? TILE - 1 : col;
+  const r = row < 0 ? 0 : row > TILE - 1 ? TILE - 1 : row;
+  return tile[r * TILE + c];
+}
+
+/** Bilinear elevation in METRES at fractional tile coordinates (both in [0, TILE-1]). */
+export function sampleTileBilinear(tile: Int16Array, fx: number, fy: number): number {
+  const x0 = Math.floor(fx), y0 = Math.floor(fy);
+  const tx = fx - x0, ty = fy - y0;
+  const h00 = sampleTile(tile, x0, y0), h10 = sampleTile(tile, x0 + 1, y0);
+  const h01 = sampleTile(tile, x0, y0 + 1), h11 = sampleTile(tile, x0 + 1, y0 + 1);
+  const a = h00 * (1 - tx) + h10 * tx;
+  const b = h01 * (1 - tx) + h11 * tx;
+  return a * (1 - ty) + b * ty;
+}
+
+/** Diagnostics for the debug overlay. */
+export function earthTileStats(): { cached: number; inFlight: number; failed: number } {
+  return { cached: cache.size, inFlight: inFlight.size, failed: failed.size };
+}
+
+/** Drop everything. Called when leaving the map so the memory does not linger. */
+export function clearEarthTiles(): void {
+  cache.clear();
+  failed.clear();
+}
