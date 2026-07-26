@@ -303,6 +303,21 @@ export function FortressScene({
   // player free-flies: forceFloat puts the controller in its existing no-gravity mode, which
   // also avoids the y=22 sea-level fallback dropping the player into the planet's core.
   const isGlobeMap = activeWorld.ground.kind === 'globe';
+  // Work mode (⌘-]) gates the dev/review overlays so they don't clutter normal play.
+  const workMode = useWorkMode();
+  // Spawn comes from the active map's WorldDefinition (no hardcoded point).
+  const siegeSpawn = useMemo(() => new THREE.Vector3(...activeWorld.spawn.position), [activeWorld]);
+  // useThree() camera — MUST be declared before the live-swap effect below, which reads
+  // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
+  // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)
+  const { camera } = useThree();
+
+  // Mini Earth fly speed, scaled by altitude above the surface: slow enough to be controllable
+  // a few units off the ground, fast enough to cross a 400,750-unit planet from orbit, with one
+  // set of controls and no gear changes.
+  // MUST stay BELOW the `camera` declaration above — see that comment. Reading `camera` in a
+  // dependency array before its `const` is a temporal-dead-zone crash that white-screens the
+  // whole game, and it is not caught by `tsc --noEmit`.
   // Fly speed scaled by altitude above the surface: slow enough to be controllable a few
   // units off the ground, fast enough to cross a 400,750-unit planet from orbit. One set of
   // controls, no gear changes.
@@ -312,14 +327,6 @@ export function FortressScene({
     // 1x at the surface up to ~200x far out; the divisor sets how fast it ramps.
     return Math.min(200, Math.max(1, altitude / 60));
   }, [camera]);
-  // Work mode (⌘-]) gates the dev/review overlays so they don't clutter normal play.
-  const workMode = useWorkMode();
-  // Spawn comes from the active map's WorldDefinition (no hardcoded point).
-  const siegeSpawn = useMemo(() => new THREE.Vector3(...activeWorld.spawn.position), [activeWorld]);
-  // useThree() camera — MUST be declared before the live-swap effect below, which reads
-  // `camera` in its dependency array. (A merge had pushed this declaration below the effect,
-  // producing a "Cannot access 'Tt' before initialization" TDZ white-screen for everyone.)
-  const { camera } = useThree();
 
   // Live world-swap teleport (no page reload). When the active game changes, drop the
   // player into the new world: entering Siege → SW spawn (and remember the Dreadroot
