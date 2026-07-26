@@ -24,7 +24,11 @@ cd "$DIR"
 # NOTE: macOS ships bash 3.2, which has no `mapfile`/`readarray`. Keep this list in a file
 # and stream it, rather than in a shell array.
 LIST="$(mktemp)"
-find . -type f \( -name '*.bin' -o -name '*.json' \) | sed 's|^\./||' | sort > "$LIST"
+# -path exclusions matter: wrangler writes a .wrangler/cache/wrangler-account.json into the
+# CWD as it runs, and an unfiltered find swept that into the bucket on the first run, publishing
+# the Cloudflare account id and name at a public URL. Only ever upload tiles we generated.
+find . -type f \( -name '*.bin' -o -name 'manifest.json' \) -not -path './.wrangler/*' \
+  | sed 's|^\./||' | sort > "$LIST"
 TOTAL=$(wc -l < "$LIST" | tr -d ' ')
 echo "Uploading $TOTAL files to r2://$BUCKET/$PREFIX/ with $JOBS parallel workers"
 echo "(about 4.4 s per file serially, so expect roughly $(( TOTAL * 5 / JOBS / 60 )) minutes)"
@@ -71,4 +75,20 @@ if [ "$FAIL" -gt 0 ]; then
   echo "FAILED FILES:"; cat "$STATE/fail"; exit 1
 fi
 
-echo "Done. Verify: curl -sI https://assets.dreadroot.com/$PREFIX/h/px/0/0_0.bin"
+# VERIFY EVERY FILE, not a sample. The first run reported success while 33 tiles were missing:
+# they had exhausted their retries, and spot-checking the diagonal tile indices happened to miss
+# all of them. A partial planet renders as holes in the terrain, so this check is not optional.
+echo "Verifying all $TOTAL objects are actually readable..."
+BADF="$(mktemp)"
+xargs -P 24 -I{} sh -c \
+  'c=$(curl -s -o /dev/null -w "%{http_code}" "https://assets.dreadroot.com/'"$PREFIX"'/{}"); [ "$c" = 200 ] || echo "{} $c"' \
+  < "$LIST" > "$BADF" 2>&1
+BAD=$(wc -l < "$BADF" | tr -d ' ')
+if [ "$BAD" -gt 0 ]; then
+  echo "$BAD object(s) NOT readable after upload:"; cat "$BADF"
+  echo "Re-run this script; it is idempotent and will re-put them."
+  rm -f "$BADF"; exit 1
+fi
+rm -f "$BADF"
+echo "All $TOTAL objects verified readable at https://assets.dreadroot.com/$PREFIX/"
+
