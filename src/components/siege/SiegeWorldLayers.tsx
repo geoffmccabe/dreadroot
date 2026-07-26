@@ -16,6 +16,7 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeOcean } from './globe/GlobeOcean';
 import { GlobeCamera } from './globe/GlobeCamera';
+import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
@@ -160,6 +161,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Mini Earth: altitude-tracking near/far planes + fog off. Without this the planet is
           entirely outside the 6,000-unit far plane and fogged out on top. */}
       {isGlobe && <GlobeCamera />}
+      {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {isGlobe && <KaijuLabController />}
       {/* The globe's ocean is a sphere shell, not a flat plane, so it replaces both water layers. */}
       {isGlobe

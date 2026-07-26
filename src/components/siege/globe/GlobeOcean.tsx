@@ -24,17 +24,16 @@ export function GlobeOcean() {
   const material = useMemo(
     () => new THREE.MeshLambertMaterial({
       color: new THREE.Color(0.06, 0.22, 0.42),
-      transparent: true,
-      opacity: 0.88,
-      // The shell is a closed sphere sitting above the sea floor, so its back faces are what
-      // you see from underwater. Rendering both sides keeps it from vanishing when the camera
-      // drops below sea level.
+      // OPAQUE, and it writes depth. It was transparent at 0.88 with depthWrite off, which meant
+      // it never occluded anything: the starfield showed straight through the planet and the sea
+      // floor was visible from orbit. Real oceans hide their own floor. Underwater rendering
+      // (looking UP through the surface) is P4 and will need its own treatment rather than a
+      // globally translucent shell.
       side: THREE.DoubleSide,
-      depthWrite: false,
       fog: false,   // see GlobeTerrain: planetary distances make the sky system's fog opaque
     }),
     [],
   );
 
-  return <mesh geometry={geometry} material={material} name="globe-ocean" renderOrder={1} />;
+  return <mesh geometry={geometry} material={material} name="globe-ocean" />;
 }

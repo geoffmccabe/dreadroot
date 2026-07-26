@@ -36,10 +36,19 @@ const PATCH = 65;
 /** Data level is this many quadtree levels shallower than the render depth (see header). */
 const DATA_LAG = 2;
 
-/** Split when the patch's arc subtends more than this fraction of its distance. */
-const SPLIT_RATIO = 2.2;
+/**
+ * Split when the patch's arc subtends more than this fraction of its distance.
+ *
+ * This was 2.2, which is why the first look was blocky: from orbit the whole planet stayed at
+ * depth 0, i.e. SIX patches of 65 vertices for the entire Earth, and each patch sampled its tile
+ * at stride 4 so three quarters of the data we had was thrown away. Because a render patch is 65
+ * vertices against a 257-sample tile, depth must reach DATA_LAG (2) before a tile is shown at its
+ * true resolution. At orbit the depth-1 ratio is about 0.52, so the threshold has to sit below
+ * that for the planet to look like anything.
+ */
+const SPLIT_RATIO = 0.45;
 /** Merge only well below the split point, or nodes thrash at the boundary. */
-const MERGE_RATIO = 1.5;
+const MERGE_RATIO = 0.30;
 
 /** Re-evaluate the tree at most this often (ms). The camera cannot outrun it at these scales. */
 const REEVAL_MS = 120;

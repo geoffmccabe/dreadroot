@@ -324,8 +324,11 @@ export function FortressScene({
   const globeFlySpeedScale = useCallback(() => {
     const p = camera.position;
     const altitude = Math.hypot(p.x, p.y, p.z) - PLANET_RADIUS;
-    // 1x at the surface up to ~200x far out; the divisor sets how fast it ramps.
-    return Math.min(200, Math.max(1, altitude / 60));
+    // sqrt, NOT linear. With speed proportional to altitude the approach is exponential decay:
+    // you halve the remaining distance forever and never actually arrive, which is what made
+    // getting close to the planet feel wrong. sqrt reaches the surface in finite time and still
+    // spans the four orders of magnitude between orbit and standing on the ground.
+    return Math.min(300, Math.max(1, Math.sqrt(Math.max(0, altitude))));
   }, [camera]);
 
   // Live world-swap teleport (no page reload). When the active game changes, drop the
@@ -1900,7 +1903,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <SceneReflections />
       
       <DynamicLighting ref={lightingRef} cycleStateRef={cycleStateRef} />
-      <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} freezeCycle={lsFreezeCycle} lightingOverride={lsLightingOverride} />
+      {/* The shared sky dome is radius 640 and follows the camera in XZ only, so on the Mini
+          Earth it is a small object near the camera rather than a background. GlobeStarfield
+          replaces it there (camera-locked on all axes, depth-test off). */}
+      {!isGlobeMap && <DynamicSky ref={skyRef} weatherSettings={weatherSettings} cycleStateRef={cycleStateRef} skyTextureUrl={skyTextureUrl} freezeCycle={lsFreezeCycle} lightingOverride={lsLightingOverride} />}
 
       {!isSiege && (
         <>
