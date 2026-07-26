@@ -175,14 +175,20 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const readyFired = useRef(false);
 
   const material = useMemo(
-    () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide }),
+    // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
+    // nulls scene.fog each frame; this makes a stray frame harmless too.
+    () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: false }),
     [],
   );
 
   useEffect(() => {
     let alive = true;
     loadManifest()
-      .then(() => { if (alive) setManifestReady(true); })
+      .then((m) => {
+        if (!alive) return;
+        console.log(`[earth] manifest ok: maxLevel=${m.maxLevel} tile=${m.tileSize} radius=${m.planetRadiusUnits}u`);
+        setManifestReady(true);
+      })
       .catch((e) => console.error('[earth] manifest failed', e));
     return () => {
       alive = false;
@@ -275,6 +281,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         groupRef.current?.add(mesh);
         if (!readyFired.current && meshes.current.size >= 6) {
           readyFired.current = true;
+          console.log(`[earth] first patches built (${meshes.current.size}); planet is in the scene`);
           onReady?.();
         }
         return true;

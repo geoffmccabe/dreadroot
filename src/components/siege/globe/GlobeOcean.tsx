@@ -31,6 +31,7 @@ export function GlobeOcean() {
       // drops below sea level.
       side: THREE.DoubleSide,
       depthWrite: false,
+      fog: false,   // see GlobeTerrain: planetary distances make the sky system's fog opaque
     }),
     [],
   );

@@ -15,6 +15,7 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeOcean } from './globe/GlobeOcean';
+import { GlobeCamera } from './globe/GlobeCamera';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
@@ -156,6 +157,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           interaction lives in MagicChestPanel and works on that existing chest.) */}
       {/* Mini Earth: the Kaiju + its cycle/scale keys. Only on the globe map, so its keys
           cannot collide with play keys anywhere else. */}
+      {/* Mini Earth: altitude-tracking near/far planes + fog off. Without this the planet is
+          entirely outside the 6,000-unit far plane and fogged out on top. */}
+      {isGlobe && <GlobeCamera />}
       {isGlobe && <KaijuLabController />}
       {/* The globe's ocean is a sphere shell, not a flat plane, so it replaces both water layers. */}
       {isGlobe
