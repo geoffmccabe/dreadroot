@@ -46,11 +46,13 @@ const TURN_RATE = 2.2;
  * frame the key went down, which is why the walk cycle never matched: the legs were being asked to
  * play a run at a speed the body reached instantly and left instantly.
  *
- * Braking is quicker than accelerating, because a creature digging its heels in stops faster than
- * it gets going, and because movement that is slow to stop feels like ice.
+ * Braking is MUCH quicker than accelerating, because a creature digging its heels in stops faster
+ * than it gets going. This was 1.3 s, which coasted ~56 m after you let go — enough to read as the
+ * Kaiju sliding around on its own, which is not what "slow to slow down" asked for. At 0.5 s it
+ * still has weight without feeling like ice.
  */
 const ACCEL_SECONDS = 2.2;
-const BRAKE_SECONDS = 1.3;
+const BRAKE_SECONDS = 0.5;
 /**
  * JUMP WIND-UP: seconds spent crouching before the leap, for a 1-unit body.
  *
@@ -304,6 +306,13 @@ export function stepBodyOf(
   const rate = topSpeed / Math.max(0.05, rampSeconds * (gathering ? 3 : 1));
   if (wanted > body.moveSpeed) body.moveSpeed = Math.min(wanted, body.moveSpeed + rate * dt);
   else body.moveSpeed = Math.max(wanted, body.moveSpeed - rate * dt);
+
+  // STATIC FRICTION. Below a twentieth of walking pace with nothing asking it to move, stop dead.
+  // Without this a body can retain a vanishingly small speed indefinitely and creep across the
+  // ground — which at these distances is a Kaiju visibly sliding while standing still.
+  if (wanted === 0 && body.onGround && body.moveSpeed < walkSpeed(heightUnits) * 0.05) {
+    body.moveSpeed = 0;
+  }
   if (body.moveSpeed < 1e-4) body.moveSpeed = 0;
 
   if (body.moveSpeed > 0 && moveLen > 1e-6) {

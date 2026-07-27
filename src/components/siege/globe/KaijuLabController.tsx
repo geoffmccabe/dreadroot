@@ -7,6 +7,7 @@
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
 //   B or ; battle: drop in at Mount Everest, where three other Kaiju are waiting
+//   1-9    stage the battle somewhere else (2 = Grand Canyon, 3 = Matterhorn, ...)
 //   '      200 people, 1.8 m tall, around the Kaiju — for a sense of its scale
 //   R      roar — for testing speed-of-sound delay (1 km = 2.9 s late)
 //          (also starts on its own when you arrive at Everest with , or .)
@@ -30,6 +31,7 @@ import {
 } from './kaijuLabState';
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
+import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { KaijuCrowd, toggleCrowd } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
@@ -46,9 +48,27 @@ import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
  * Shared by the Semicolon key and by simply ARRIVING at Everest on the landmark tour, so the
  * feature does not hinge on one keypress surviving a codebase where every letter is already bound.
  */
-function startArenaHere(camera: THREE.Camera): void {
+/**
+ * Where a battle can be staged. Number keys pick one; each drops you in with the other Kaiju.
+ *
+ * Geoff: "make it so if I hit 2 after B then it goes to the grand canyon. Same thing with other
+ * Kaijus that attack." So these are full battles, not sightseeing jumps.
+ */
+export const ARENA_SITES: { key: string; name: string; lat: number; lon: number }[] = [
+  { key: 'Digit1', name: 'Mount Everest',   lat: 27.9881, lon: 86.9250 },
+  { key: 'Digit2', name: 'Grand Canyon',    lat: 36.1069, lon: -112.1129 },
+  { key: 'Digit3', name: 'Matterhorn',      lat: 45.9766, lon: 7.6585 },
+  { key: 'Digit4', name: 'Yosemite',        lat: 37.7459, lon: -119.5332 },
+  { key: 'Digit5', name: 'Torres del Paine', lat: -50.9423, lon: -73.4068 },
+  { key: 'Digit6', name: 'Fish River Canyon', lat: -27.5833, lon: 17.6167 },
+  { key: 'Digit7', name: 'Milford Sound',   lat: -44.6414, lon: 167.8974 },
+  { key: 'Digit8', name: 'Zhangjiajie',     lat: 29.3158, lon: 110.4344 },
+  { key: 'Digit9', name: 'Aoraki / Mt Cook', lat: -43.5950, lon: 170.1418 },
+];
+
+function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest'): void {
   setKaijuHeight(ARENA_HEIGHT);
-  const dir = initArena(17);
+  const dir = initArena(17, lat, lon);
   const face = new THREE.Vector3(0, 1, 0).cross(dir);
   if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
   face.normalize();
@@ -60,8 +80,22 @@ function startArenaHere(camera: THREE.Camera): void {
   camera.position.copy(surface)
     .addScaledVector(dir, ARENA_HEIGHT * 2.2)
     .addScaledVector(face, -ARENA_HEIGHT * 4.2);
+
+  // DO NOT START INSIDE THE MOUNTAIN.
+  //
+  // The chase camera sits behind and above the Kaiju, and on a peak "behind" is very often INTO
+  // the slope — at Everest it opened underground, which is disorienting and looks broken. Sample
+  // the terrain at the camera's OWN position and lift it clear if it is below ground.
+  {
+    const camDir = camera.position.clone().normalize();
+    const groundAtCam = sampleGlobeSurface(camDir.x, camDir.y, camDir.z);
+    if (groundAtCam != null) {
+      const minR = PLANET_RADIUS + groundAtCam / METRES_PER_UNIT + ARENA_HEIGHT * 0.9;
+      if (camera.position.length() < minR) camera.position.setLength(minR);
+    }
+  }
   camera.lookAt(surface.clone().addScaledVector(dir, ARENA_HEIGHT * 0.55));
-  console.log('[kaiju] battle started at Mount Everest — 4 Kaiju');
+  console.log(`[kaiju] battle started at ${siteName} — 4 Kaiju`);
 }
 
 export function KaijuLabController() {
@@ -150,6 +184,13 @@ export function KaijuLabController() {
           roar(at, camera.position, look);
           break;
         }
+        // NUMBER KEYS: stage the battle somewhere else. 1 Everest, 2 Grand Canyon, and so on.
+        case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
+        case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': {
+          const site = ARENA_SITES.find((x) => x.key === e.code);
+          if (site) startArenaHere(camera, site.lat, site.lon, site.name);
+          break;
+        }
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height
@@ -182,10 +223,17 @@ export function KaijuLabController() {
   return (
     <>
       <GlobeKaiju state={state} />
-      {/* The arena drives itself once a battle has started; before that it draws nothing. */}
-      <KaijuArenaScene playerControlled />
-      {/* 200 humans for scale, toggled with the apostrophe key. */}
-      <KaijuCrowd />
+      {/* EACH IN ITS OWN BOUNDARY.
+          These are siblings, so before this a single failing model — a 404 on a character glb, a
+          bad skeleton, a throw inside useGLTF — unmounted the whole subtree and took the PLAYER'S
+          Kaiju down with it. "No Kaiju at all, not even my own" has exactly that shape, and it is
+          worth making structurally impossible whatever the specific cause turns out to be. */}
+      <GlobeErrorBoundary label="kaiju-arena">
+        <KaijuArenaScene playerControlled />
+      </GlobeErrorBoundary>
+      <GlobeErrorBoundary label="kaiju-crowd">
+        <KaijuCrowd />
+      </GlobeErrorBoundary>
     </>
   );
 }

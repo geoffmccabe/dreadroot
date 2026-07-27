@@ -223,7 +223,10 @@ export function feetOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
  * armour, rate, speed, how well it plays and how readily it obeys. `initArena` keeps the old
  * three-Kaiju demo working by handing in three breeds.
  */
-export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies = 6): THREE.Vector3 {
+export function initArenaWith(
+  builds: KaijuBuild[], seed = 0x5EED, spreadBodies = 6,
+  lat = ARENA_LAT, lon = ARENA_LON,
+): THREE.Vector3 {
   agents.length = 0;
   events.length = 0;
   clearProjectiles();
@@ -232,7 +235,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
   seedKaiju(seed);
 
   const d = new Float64Array(3);
-  latLonToDirection(ARENA_LAT, ARENA_LON, d);
+  latLonToDirection(lat, lon, d);
   const centre = new THREE.Vector3(d[0], d[1], d[2]).normalize();
   const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), centre).normalize();
   const north = new THREE.Vector3().crossVectors(centre, east).normalize();
@@ -278,8 +281,8 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
  *
  * Agent 0 is always the player, so the list is one breed for you and three to fight.
  */
-export function initArena(_playerType?: number): THREE.Vector3 {
-  return initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]]);
+export function initArena(_playerType?: number, lat = ARENA_LAT, lon = ARENA_LON): THREE.Vector3 {
+  return initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]], 0x5EED, 6, lat, lon);
 }
 
 /** Is there ground between two points higher than the line joining them? Cheap cover test. */
@@ -782,18 +785,28 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       if (!B.alive) continue;
       const depth = capsuleOverlap(A.capsule, B.capsule, _axis);
       if (depth <= 0) continue;
+      // Never shove the body the PLAYER is driving. Being pushed by physics you did not initiate
+      // reads as the Kaiju sliding around on its own; the AI body absorbs the whole separation
+      // instead, which looks the same from outside and leaves the player's control untouched.
+      const aFixed = A.isPlayer && playerControlled;
+      const bFixed = B.isPlayer && playerControlled;
+      if (aFixed && bFixed) continue;
       // Push both apart along the surface, half each, so neither is privileged. Projected onto
       // the tangent plane: separation must not shove anybody into the ground or into the sky.
       reTangentOf(A.body, _axis);
-      const push = depth * 0.55;
-      const angA = push / Math.max(1, A.body.radius);
-      const angB = push / Math.max(1, B.body.radius);
-      _tmp.crossVectors(A.body.dir, _axis).normalize();
-      A.body.dir.applyAxisAngle(_tmp, -angA).normalize();
-      _tmp.crossVectors(B.body.dir, _axis).normalize();
-      B.body.dir.applyAxisAngle(_tmp, angB).normalize();
-      reTangentOf(A.body, A.body.forward);
-      reTangentOf(B.body, B.body.forward);
+      // Whichever body is free takes the whole push; if both are free they share it.
+      const shareA = aFixed ? 0 : bFixed ? 1.1 : 0.55;
+      const shareB = bFixed ? 0 : aFixed ? 1.1 : 0.55;
+      if (shareA > 0) {
+        _tmp.crossVectors(A.body.dir, _axis).normalize();
+        A.body.dir.applyAxisAngle(_tmp, -(depth * shareA) / Math.max(1, A.body.radius)).normalize();
+        reTangentOf(A.body, A.body.forward);
+      }
+      if (shareB > 0) {
+        _tmp.crossVectors(B.body.dir, _axis).normalize();
+        B.body.dir.applyAxisAngle(_tmp, (depth * shareB) / Math.max(1, B.body.radius)).normalize();
+        reTangentOf(B.body, B.body.forward);
+      }
     }
   }
     // Refresh after each pass, or later passes resolve against stale positions.

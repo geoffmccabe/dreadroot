@@ -10,4 +10,6 @@
 //                     redesigns, paradigm changes)
 //
 // Do NOT touch this manually — the AI bumps it on every push.
-export const APP_VERSION = '4.292.0';
+// While FINISHING a feature, bump the PATCH digit (4.292.1, .2, .3). The minor digit is for
+// starting something new — Geoff, 2026-Jul-27.
+export const APP_VERSION = '4.292.1';
