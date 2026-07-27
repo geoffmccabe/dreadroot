@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
 os.environ.setdefault("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif")
@@ -82,7 +83,12 @@ def read_glo30(lat0, lat1, lon0, lon1):
                 # progressively (connection/handle exhaustion late in a long run), and because the
                 # error was discarded it looked like missing data. Retry, then report.
                 msg = str(e)
-                for attempt in range(2):
+                # BACK OFF. The failure mode here is DNS: after sustained request volume the
+                # resolver starts returning "Could not resolve host" for the Copernicus bucket.
+                # Retrying immediately, as the first version did, just hits the same dead
+                # resolver and fails all three attempts in under a second.
+                for attempt in range(3):
+                    time.sleep((2, 6, 15)[attempt])
                     try:
                         with rasterio.open(url) as ds:
                             win = from_bounds(max(lon0, lo), max(lat0, la),
@@ -130,6 +136,8 @@ def main():
     ap.add_argument("--src", default=os.environ.get("EARTH_SRC_DIR", "/tmp/earth-src"))
     ap.add_argument("--only", default=None, help="substring filter on landmark name")
     ap.add_argument("--levels", default="7,8,9,10")
+    ap.add_argument("--no-glo30", action="store_true",
+                    help="fill from ETOPO only, skipping all GLO-30 network reads")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--skip", type=int, default=0)
     args = ap.parse_args()
@@ -153,57 +161,74 @@ def main():
 
     written = 0
     failed: list = []
-    for idx, lm in enumerate(lms, 1):
-        name, lat, lon, rkm = lm["n"], lm["lat"], lm["lon"], lm["r"]
-        # Region bounds with a margin for the feather.
-        dlat = (rkm * 1.25) / 111.32
-        dlon = dlat / max(0.15, np.cos(np.radians(lat)))
-        glo = read_glo30(lat - dlat, lat + dlat, lon - dlon, lon + dlon)
-        if glo is None:
-            why = "no GLO-30 coverage (ocean or withheld tile)" if not ERRORS[-1:] else f"READ FAILED: {ERRORS[-1]}"
-            print(f"[{idx}/{len(lms)}] {name}: {why}")
-            failed.append(name)
-            continue
-        gg, glat0, gdlat, glon0, gdlon = glo
+    todo = list(lms)
+    PASSES = 3
+    for _pass in range(PASSES):
+      if _pass:
+        if not failed:
+            break
+        # Give DNS time to recover before sweeping the stragglers.
+        print(f"\n--- pass {_pass + 1}: retrying {len(failed)} landmark(s) after a pause ---")
+        time.sleep(45)
+        todo = [l for l in lms if l["n"] in set(failed)]
+        failed = []
+      for idx, lm in enumerate(todo, 1):
+          name, lat, lon, rkm = lm["n"], lm["lat"], lm["lon"], lm["r"]
+          # Region bounds with a margin for the feather.
+          dlat = (rkm * 1.25) / 111.32
+          dlon = dlat / max(0.15, np.cos(np.radians(lat)))
+          # --no-glo30: fill from ETOPO alone. Correct for levels 5-6, whose sample spacing
+          # (1.22 km and 610 m) is at or near ETOPO's own 1.85 km, so the 30 m data adds
+          # almost nothing there while being the entire cost of the run.
+          glo = None if args.no_glo30 else read_glo30(lat - dlat, lat + dlat, lon - dlon, lon + dlon)
+          if glo is None and not args.no_glo30:
+              why = "no GLO-30 coverage (ocean or withheld tile)" if not ERRORS[-1:] else f"READ FAILED: {ERRORS[-1]}"
+              print(f"[{idx}/{len(todo)}] {name}: {why}")
+              failed.append(name)
+              continue
+          gg = None
+          if glo is not None:
+              gg, glat0, gdlat, glon0, gdlon = glo
 
-        # Angular radius of the region, for the feather weight.
-        ang = rkm / EARTH_RADIUS_KM
-        n_here = 0
-        for L in levels:
-            n = 1 << L
-            # Which tiles on which face cover this point, with a margin of one tile.
-            d0 = np.array([np.cos(np.radians(lat)) * np.sin(np.radians(lon)) * -1,
-                           np.sin(np.radians(lat)),
-                           -np.cos(np.radians(lat)) * np.cos(np.radians(lon))])
-            ax, ay, az = abs(d0[0]), abs(d0[1]), abs(d0[2])
-            if ax >= ay and ax >= az: face = 0 if d0[0] > 0 else 1
-            elif ay >= az:            face = 2 if d0[1] > 0 else 3
-            else:                     face = 4 if d0[2] > 0 else 5
-            _, o, uax, vax = FACES[face]
-            m = 1.0 / max(ax, ay, az)
-            p = d0 * m
-            cu, cv = float(np.dot(p, uax)), float(np.dot(p, vax))
-            # uv half-extent of the region (uv spans [-1,1] over 90 degrees).
-            half_uv = ang / (np.pi / 4) * 1.3
-            for ty in range(max(0, int((cv - half_uv + 1) / 2 * n)), min(n - 1, int((cv + half_uv + 1) / 2 * n)) + 1):
-                for tx in range(max(0, int((cu - half_uv + 1) / 2 * n)), min(n - 1, int((cu + half_uv + 1) / 2 * n)) + 1):
-                    dirs = tile_directions(face, L, tx, ty)
-                    tlat, tlon = directions_to_latlon(dirs)
-                    fine = bilinear_nan(gg, glat0, gdlat, glon0, gdlon, tlat, tlon)
-                    coarse = sample_bilinear(egrid, elat0, edlat, elon0, edlon, tlat, tlon)
-                    # Feather: 1 in the core, falling to 0 by the region edge, so the 30 m data
-                    # blends back into the global set instead of ending at a step.
-                    dd = np.hypot((tlat - lat), (tlon - lon) * np.cos(np.radians(lat)))
-                    t = np.clip((rkm / 111.32 - dd) / (0.30 * rkm / 111.32), 0.0, 1.0)
-                    w = t * t * (3 - 2 * t)
-                    w = np.where(np.isfinite(fine), w, 0.0)
-                    z = np.where(np.isfinite(fine), fine, 0.0) * w + coarse * (1 - w)
-                    outdir = os.path.join(args.out, "h", FACES[face][0], str(L))
-                    os.makedirs(outdir, exist_ok=True)
-                    np.rint(z).astype("<i2").tofile(os.path.join(outdir, f"{tx}_{ty}.bin"))
-                    n_here += 1
-        written += n_here
-        print(f"[{idx}/{len(lms)}] {name}: {n_here} tiles")
+          # Angular radius of the region, for the feather weight.
+          ang = rkm / EARTH_RADIUS_KM
+          n_here = 0
+          for L in levels:
+              n = 1 << L
+              # Which tiles on which face cover this point, with a margin of one tile.
+              d0 = np.array([np.cos(np.radians(lat)) * np.sin(np.radians(lon)) * -1,
+                             np.sin(np.radians(lat)),
+                             -np.cos(np.radians(lat)) * np.cos(np.radians(lon))])
+              ax, ay, az = abs(d0[0]), abs(d0[1]), abs(d0[2])
+              if ax >= ay and ax >= az: face = 0 if d0[0] > 0 else 1
+              elif ay >= az:            face = 2 if d0[1] > 0 else 3
+              else:                     face = 4 if d0[2] > 0 else 5
+              _, o, uax, vax = FACES[face]
+              m = 1.0 / max(ax, ay, az)
+              p = d0 * m
+              cu, cv = float(np.dot(p, uax)), float(np.dot(p, vax))
+              # uv half-extent of the region (uv spans [-1,1] over 90 degrees).
+              half_uv = ang / (np.pi / 4) * 1.3
+              for ty in range(max(0, int((cv - half_uv + 1) / 2 * n)), min(n - 1, int((cv + half_uv + 1) / 2 * n)) + 1):
+                  for tx in range(max(0, int((cu - half_uv + 1) / 2 * n)), min(n - 1, int((cu + half_uv + 1) / 2 * n)) + 1):
+                      dirs = tile_directions(face, L, tx, ty)
+                      tlat, tlon = directions_to_latlon(dirs)
+                      fine = (np.full(tlat.shape, np.nan, dtype="float32") if gg is None
+                              else bilinear_nan(gg, glat0, gdlat, glon0, gdlon, tlat, tlon))
+                      coarse = sample_bilinear(egrid, elat0, edlat, elon0, edlon, tlat, tlon)
+                      # Feather: 1 in the core, falling to 0 by the region edge, so the 30 m data
+                      # blends back into the global set instead of ending at a step.
+                      dd = np.hypot((tlat - lat), (tlon - lon) * np.cos(np.radians(lat)))
+                      t = np.clip((rkm / 111.32 - dd) / (0.30 * rkm / 111.32), 0.0, 1.0)
+                      w = t * t * (3 - 2 * t)
+                      w = np.where(np.isfinite(fine), w, 0.0)
+                      z = np.where(np.isfinite(fine), fine, 0.0) * w + coarse * (1 - w)
+                      outdir = os.path.join(args.out, "h", FACES[face][0], str(L))
+                      os.makedirs(outdir, exist_ok=True)
+                      np.rint(z).astype("<i2").tofile(os.path.join(outdir, f"{tx}_{ty}.bin"))
+                      n_here += 1
+          written += n_here
+          print(f"[{idx}/{len(todo)}] {name}: {n_here} tiles")
 
     print(f"\nDONE {written} tiles -> {args.out}")
     if failed:

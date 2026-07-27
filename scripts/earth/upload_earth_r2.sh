@@ -37,8 +37,7 @@ if [ "$HAVE_RCLONE" = 1 ]; then
   # into the working directory, and an earlier unfiltered upload published the Cloudflare account
   # id and name at a public URL.
   rclone copy "$DIR" "r2:$BUCKET/$PREFIX" \
-    --include '*.bin' --include 'manifest.json' \
-    --exclude '.wrangler/**' \
+    --filter '- .wrangler/**' --filter '+ *.bin' --filter '+ manifest.json' --filter '- *' \
     --transfers 32 --checkers 32 --checksum --stats-one-line --stats 10s
 else
   echo "No rclone [r2] remote; falling back to wrangler (SLOW, ~14 files/min)." >&2
@@ -59,7 +58,7 @@ if [ "$HAVE_RCLONE" = 1 ]; then
   echo
   echo "Verifying $COUNT object(s) by checksum..."
   if rclone check "$DIR" "r2:$BUCKET/$PREFIX" \
-       --include '*.bin' --include 'manifest.json' --exclude '.wrangler/**' \
+       --filter '- .wrangler/**' --filter '+ *.bin' --filter '+ manifest.json' --filter '- *' \
        --checkers 32 --one-way 2>&1 | tail -4; then
     echo "All objects verified against local checksums."
   else
