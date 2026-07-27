@@ -37,6 +37,7 @@ from build_earth_tiles import (             # noqa: E402
 )
 
 GLO_BASE = "https://copernicus-dem-30m.s3.amazonaws.com"
+ERRORS: list = []   # non-404 read failures, reported at the end rather than hidden
 EARTH_RADIUS_KM = 6371.0
 LEVELS = (7, 8, 9, 10)
 
@@ -75,8 +76,31 @@ def read_glo30(lat0, lat1, lon0, lon1):
                         continue
                     out[r0:r1, c0:c1] = a[: r1 - r0, : c1 - c0]
                     got = True
-            except Exception:
-                continue          # missing tile (ocean, or a withheld border tile)
+            except Exception as e:
+                # DO NOT swallow this silently. A first pass reported 28 landmarks as "no GLO-30
+                # coverage" that the validator had already read successfully; they were failing
+                # progressively (connection/handle exhaustion late in a long run), and because the
+                # error was discarded it looked like missing data. Retry, then report.
+                msg = str(e)
+                for attempt in range(2):
+                    try:
+                        with rasterio.open(url) as ds:
+                            win = from_bounds(max(lon0, lo), max(lat0, la),
+                                              min(lon1, lo + 1), min(lat1, la + 1), ds.transform)
+                            a = ds.read(1, window=win, boundless=True, fill_value=np.nan).astype("float32")
+                        r0 = int(round((lat1 - min(lat1, la + 1)) / res))
+                        c0 = int(round((max(lon0, lo) - lon0) / res))
+                        r1, c1 = min(h, r0 + a.shape[0]), min(w, c0 + a.shape[1])
+                        if r1 > r0 and c1 > c0:
+                            out[r0:r1, c0:c1] = a[: r1 - r0, : c1 - c0]
+                            got = True
+                        msg = None
+                        break
+                    except Exception as e2:
+                        msg = str(e2)
+                if msg and "404" not in msg:
+                    ERRORS.append(f"{t}: {msg[:80]}")
+                continue
     if not got:
         return None
     return out, lat1, -res, lon0, res
@@ -106,6 +130,8 @@ def main():
     ap.add_argument("--src", default=os.environ.get("EARTH_SRC_DIR", "/tmp/earth-src"))
     ap.add_argument("--only", default=None, help="substring filter on landmark name")
     ap.add_argument("--levels", default="7,8,9,10")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--skip", type=int, default=0)
     args = ap.parse_args()
     levels = [int(x) for x in args.levels.split(",")]
 
@@ -113,6 +139,10 @@ def main():
     lms = [l for l in lms if l.get("glo30") is not False]
     if args.only:
         lms = [l for l in lms if args.only.lower() in l["n"].lower()]
+    if args.skip:
+        lms = lms[args.skip:]
+    if args.limit:
+        lms = lms[: args.limit]
     print(f"{len(lms)} landmark(s), levels {levels}")
 
     src_files = [f for f in os.listdir(args.src) if f.endswith(".nc")]
@@ -122,6 +152,7 @@ def main():
     egrid, elat0, edlat, elon0, edlon = load_etopo(os.path.join(args.src, sorted(src_files)[0]))
 
     written = 0
+    failed: list = []
     for idx, lm in enumerate(lms, 1):
         name, lat, lon, rkm = lm["n"], lm["lat"], lm["lon"], lm["r"]
         # Region bounds with a margin for the feather.
@@ -129,7 +160,9 @@ def main():
         dlon = dlat / max(0.15, np.cos(np.radians(lat)))
         glo = read_glo30(lat - dlat, lat + dlat, lon - dlon, lon + dlon)
         if glo is None:
-            print(f"[{idx}/{len(lms)}] {name}: no GLO-30 coverage, skipped")
+            why = "no GLO-30 coverage (ocean or withheld tile)" if not ERRORS[-1:] else f"READ FAILED: {ERRORS[-1]}"
+            print(f"[{idx}/{len(lms)}] {name}: {why}")
+            failed.append(name)
             continue
         gg, glat0, gdlat, glon0, gdlon = glo
 
@@ -173,6 +206,12 @@ def main():
         print(f"[{idx}/{len(lms)}] {name}: {n_here} tiles")
 
     print(f"\nDONE {written} tiles -> {args.out}")
+    if failed:
+        print(f"\n{len(failed)} landmark(s) produced nothing:")
+        for f in failed:
+            print(f"  {f}")
+        print("Re-run with --only to retry a specific one; transient read failures are common "
+              "late in a long run and are NOT the same as missing coverage.")
     return 0
 
 
