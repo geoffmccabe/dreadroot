@@ -321,6 +321,15 @@ export function FortressScene({
   // Fly speed scaled by altitude above the surface: slow enough to be controllable a few
   // units off the ground, fast enough to cross a 400,750-unit planet from orbit. One set of
   // controls, no gear changes.
+  // Local up at the camera, so the Mini Earth camera yaws about the axis running from the planet
+  // centre through the camera rather than about world Y (see FortressControls `cameraUpFn`).
+  const gbCamUp = useRef(new THREE.Vector3());
+  const globeCameraUp = useCallback(() => {
+    const p = camera.position;
+    if (p.lengthSq() < 1e-6) return null;
+    return gbCamUp.current.copy(p).normalize();
+  }, [camera]);
+
   // Planet-centric movement frame for the Mini Earth (see FortressControls `moveBasis`).
   //   up      = straight away from the planet centre
   //   forward = where you are LOOKING, flattened onto the local surface
@@ -1881,6 +1890,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         forceFloat={isGlobeMap}
         flySpeedScale={isGlobeMap ? globeFlySpeedScale : undefined}
         moveBasis={isGlobeMap ? globeMoveBasis : undefined}
+        cameraUpFn={isGlobeMap ? globeCameraUp : undefined}
         isOwnedTreeAtPosition={isOwnedTreeAtPosition}
         onTreeChopComplete={onTreeChopComplete}
         onTreeChopProgress={onTreeChopProgress}

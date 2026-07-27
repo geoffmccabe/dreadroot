@@ -30,6 +30,8 @@ const CAM_UP = 1.7;
 const CAM_LERP = 6;
 /** Mouse sensitivity for the orbit. */
 const LOOK_SENS = 0.0022;
+/** Eye height as a fraction of body height. A 300 m Kaiju sees from about 270 m. */
+const EYE_FRAC = 0.9;
 
 let walkActive = false;
 const listeners = new Set<() => void>();
@@ -71,6 +73,9 @@ export function KaijuWalkController() {
   const haveFwd = useRef(false);
   const orbitPitch = useRef(0.25);
   const pendingYaw = useRef(0);
+  /** First person puts the camera at the Kaiju's own eye height, which is what "eye level" means
+   *  for a body this size: about 270 m up for a 300 m Kaiju. Third person stays the default. */
+  const firstPerson = useRef(false);
   const camPos = useRef(new THREE.Vector3());
   const haveCam = useRef(false);
 
@@ -104,6 +109,7 @@ export function KaijuWalkController() {
         return;
       }
       if (!walkActive) return;
+      if (e.code === 'KeyV') { firstPerson.current = !firstPerson.current; haveCam.current = false; e.preventDefault(); return; }
       keys.current.add(e.code);
     };
     const up = (e: KeyboardEvent) => keys.current.delete(e.code);
@@ -160,16 +166,21 @@ export function KaijuWalkController() {
     camFwd.current.applyQuaternion(body.lastMoveQuat);
     reTangent(camFwd.current);
 
-    // --- third-person camera -------------------------------------------------------------
+    // --- camera ---------------------------------------------------------------------------
     feet.current.copy(body.dir).multiplyScalar(body.radius);
     const cp = Math.cos(orbitPitch.current), sp = Math.sin(orbitPitch.current);
     want.current.copy(camFwd.current).multiplyScalar(-cp)
       .addScaledVector(body.dir, sp)
       .normalize();
 
-    target.current.copy(feet.current)
-      .addScaledVector(want.current, h * CAM_BACK)
-      .addScaledVector(body.dir, h * CAM_UP);
+    if (firstPerson.current) {
+      // Sit at the Kaiju's own eye height rather than behind it.
+      target.current.copy(feet.current).addScaledVector(body.dir, h * EYE_FRAC);
+    } else {
+      target.current.copy(feet.current)
+        .addScaledVector(want.current, h * CAM_BACK)
+        .addScaledVector(body.dir, h * CAM_UP);
+    }
 
     // Do not let the camera end up underground on a slope.
     const gr = groundRadius();
@@ -182,9 +193,16 @@ export function KaijuWalkController() {
     camPos.current.lerp(target.current, Math.min(1, CAM_LERP * dt));
     camera.position.copy(camPos.current);
 
-    // Look at the Kaiju's centre of mass, and keep the horizon level by using local up.
-    target.current.copy(feet.current).addScaledVector(body.dir, h * 0.55);
+    // Look along the heading (first person) or at the body (third person). camera.up is local up
+    // either way, which is what keeps the horizon level on a sphere.
     camera.up.copy(body.dir);
+    if (firstPerson.current) {
+      target.current.copy(camera.position)
+        .addScaledVector(camFwd.current, h * 4)
+        .addScaledVector(body.dir, Math.tan(-orbitPitch.current) * h * 4);
+    } else {
+      target.current.copy(feet.current).addScaledVector(body.dir, h * 0.55);
+    }
     camera.lookAt(target.current);
   }, 1);   // priority 1: run AFTER the shared controller so the camera write wins
 

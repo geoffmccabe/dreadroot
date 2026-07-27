@@ -4,7 +4,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
 import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
 import { isSiegeIntroActive } from '@/components/siege/spawnintro/siegeSpawnIntro'; // SW spawn cinematic owns the camera
-import { isKaijuWalkActive } from '@/components/siege/globe/KaijuWalkController'; // Mini Earth walk mode owns the camera
+import { isKaijuWalkActive, enterWalkMode as enterKaijuWalkMode } from '@/components/siege/globe/KaijuWalkController'; // Mini Earth walk mode owns the camera
 import { getTPDist, nudgeTPDist } from '@/components/siege/siegeThirdPerson'; // SW third-person camera pull-back (Alt+wheel)
 import { playerState as siegePlayerPose } from '@/components/siege/playerState'; // publish the true player eye for the self-avatar
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
@@ -64,6 +64,11 @@ const _inspectorDistVec = new THREE.Vector3();
 const _sdbgDir = new THREE.Vector3();   // scratch: camera look dir for the siege debug readout
 const _spreadWorldUp = new THREE.Vector3(0, 1, 0);   // constant world-up for spread basis
 const UP_Y = new THREE.Vector3(0, 1, 0);             // default vertical axis (flat maps)
+// Scratch for the spherical camera basis (cameraUpFn path). Module-level so the hot path allocates nothing.
+const WORLD_Y_CAM = new THREE.Vector3(0, 1, 0);
+const _cuEast = new THREE.Vector3(), _cuNorth = new THREE.Vector3(), _cuFwd = new THREE.Vector3();
+const _cuRight = new THREE.Vector3(), _cuUp = new THREE.Vector3();
+const _cuMat = new THREE.Matrix4();
 
 export function FirstPersonControls({
   onShoot,
@@ -178,6 +183,15 @@ export function FirstPersonControls({
   // altitude so one set of controls works both in orbit and just above the ground. Returns 1
   // (no change) on every other map, so this is inert unless a globe map supplies it.
   flySpeedScale,
+  // Mini Earth: the local UP at the camera. When supplied, the camera's rotation is built in that
+  // frame instead of around world Y.
+  //
+  // The engine composes the camera as Euler(pitch, yaw, 0, 'YXZ'), i.e. yaw about WORLD Y. That is
+  // correct on a flat map and wrong on a sphere everywhere except the north pole: yawing about
+  // world Y while standing over Texas swings the camera around an axis 60 degrees off local up,
+  // which rolls the horizon instead of turning. Mouse-left/right should rotate about the axis
+  // running from the planet centre through the camera.
+  cameraUpFn,
   // Mini Earth: a PLANET-CENTRIC movement basis. The mover is otherwise world-axis aligned:
   // forward is horizontal in world XZ and Q/Z move along world +Y. That is correct on a flat map
   // and wrong everywhere on a sphere except the north pole. Standing over Houston, world "up" is
@@ -186,7 +200,7 @@ export function FirstPersonControls({
   // radially away from the planet centre) and the mover uses it instead. Omitted everywhere else,
   // so no other map changes by a single float.
   moveBasis,
-}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null; flySpeedScale?: () => number; moveBasis?: () => { fwd: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } | null }) {
+}: FirstPersonControlsProps & { onGodModeChange?: (enabled: boolean) => void; forceFloat?: boolean; groundHeightFn?: (x: number, z: number) => number | null; flySpeedScale?: () => number; moveBasis?: () => { fwd: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } | null; cameraUpFn?: () => THREE.Vector3 | null }) {
   const { camera, gl } = useThree();
   // Siege maps pass groundHeightFn — there is NO fortress there, so all fortress-position
   // systems (no-fire safe zone, vault) must be OFF (they live at the origin = siege spawn).
@@ -797,6 +811,14 @@ export function FirstPersonControls({
         // must always be able to turn it OFF).
         if (godModeRef.current || adminEverRef.current ||
             userRoles.includes('admin') || userRoles.includes('superadmin')) {
+          // Spherical world: the flat mover has no valid ground here (its sampler is XZ->Y and
+          // returns null, so it falls back to SWW's sea level and drops you through the planet).
+          // Leaving god mode means "become the character", which is the walk controller's job.
+          if (cameraUpFn && godModeRef.current) {
+            enterKaijuWalkMode(camera);
+            event.preventDefault();
+            break;
+          }
           godModeRef.current = !godModeRef.current;
           setGodModeEnabled(godModeRef.current);
           onGodModeChange?.(godModeRef.current);
@@ -2143,8 +2165,28 @@ export function FirstPersonControls({
           console.warn(`[LOOKSNAP] pitch jumped ${(prevAppliedPitchDbg.current).toFixed(2)}→${appliedPitch.toFixed(2)} | base pitch=${pitch.current.toFixed(2)} recoil=${recoilPitchRef.current.toFixed(2)} | last mouse dY=${lm ? lm.y : 'n/a'}  (recoil big=weapon/kick · base+big dY=mouse · base jumped+tiny dY=programmatic)`);
         }
         prevAppliedPitchDbg.current = appliedPitch;
-        eulerRef.current.set(appliedPitch, yaw.current + recoilYawRef.current, 0);
-        camera.quaternion.setFromEuler(eulerRef.current);
+        const localUp = cameraUpFn ? cameraUpFn() : null;
+        if (localUp) {
+          // Spherical world: build the orientation in the LOCAL frame so yaw turns about local up
+          // and the horizon stays level wherever you stand.
+          const y = yaw.current + recoilYawRef.current;
+          _cuEast.crossVectors(WORLD_Y_CAM, localUp);
+          if (_cuEast.lengthSq() < 1e-8) _cuEast.set(1, 0, 0);
+          _cuEast.normalize();
+          _cuNorth.crossVectors(localUp, _cuEast).normalize();
+          // Heading in the tangent plane, then tilted toward local up by pitch.
+          _cuFwd.copy(_cuNorth).multiplyScalar(-Math.cos(y)).addScaledVector(_cuEast, -Math.sin(y));
+          _cuFwd.multiplyScalar(Math.cos(appliedPitch)).addScaledVector(localUp, Math.sin(appliedPitch));
+          _cuFwd.normalize();
+          _cuRight.crossVectors(_cuFwd, localUp).normalize();
+          _cuUp.crossVectors(_cuRight, _cuFwd).normalize();
+          _cuMat.makeBasis(_cuRight, _cuUp, _cuFwd.clone().negate());
+          camera.quaternion.setFromRotationMatrix(_cuMat);
+          camera.up.copy(localUp);
+        } else {
+          eulerRef.current.set(appliedPitch, yaw.current + recoilYawRef.current, 0);
+          camera.quaternion.setFromEuler(eulerRef.current);
+        }
         needsCameraUpdate.current = false;
       }
 

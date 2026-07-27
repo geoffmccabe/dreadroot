@@ -95,7 +95,7 @@ export function KaijuLabHud() {
 
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
-        , . fly to landmark · K LAND (starts walking) · G toggle<br />
+        , . fly to landmark · K LAND (starts walking) · G toggle · V view<br />
         WASD move · Shift run<br />
         Space jump / swim up · Z swim down
       </div>
