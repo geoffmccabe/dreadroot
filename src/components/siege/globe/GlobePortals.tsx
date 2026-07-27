@@ -1,25 +1,54 @@
-// GlobePortals — one portal per Divi node location, on the Mini Earth.
+// GlobePortals — the SWW lobby warpgate, one per Divi node, clustered at each node location.
 //
 // This is the hook that makes the game a Divi product rather than a game with a crypto skin: the
 // board is decided by where people actually run nodes. No node, no portal, no foothold.
 //
-// The registry is a snapshot published to R2 by scripts/earth/build_node_portals.py, taken from
-// the 30-day rolling peer list DD69 already maintains. It carries an opaque id, a coarse location
-// and a city label; node IP addresses never reach the client.
+// The registry is a snapshot published to R2 by scripts/earth/build_node_portals.py, from the
+// 30-day rolling peer list DD69 already maintains. It carries an opaque id, a coarse location and
+// a city label; node IP addresses never reach the client.
 //
-// RENDERING AT PLANETARY SCALE is the interesting constraint. A portal has to be findable from
-// 160,000 units away in orbit AND look like a structure when you are standing next to it at 300 m
-// tall. A fixed-size mesh fails at one end or the other, so the beam scales with distance to the
-// camera: it holds a roughly constant angular size far away, acting as a map marker, and settles
-// to a real physical size once you are close. Instanced into two draw calls regardless of how many
-// portals exist, since the node count is expected to grow.
+// CLUSTER GEOMETRY (Geoff's spec). One node is a single gate. Two face each other with their ramps
+// pointing away. Three make a triangle, four a plus, five or more a pentagon, hexagon and so on,
+// with the ring growing as nodes are added, so Dallas at 15 nodes becomes a large ring you fly
+// into. Those are all the same rule: a regular n-gon with every gate facing the centre and its
+// ramp pointing outward. "Two facing each other" is just the n=2 case, and "a plus" the n=4 case,
+// so one formula covers the lot rather than four special cases.
+//
+// SCALE. The gate renders 6.83 units tall in the SWW lobby (830x683x827 model units at the root
+// node's 0.01 scale). Here it is scaled to 10 units, i.e. 1,000 m, so a 300-500 m Kaiju walks
+// through it with clearance rather than stepping over it.
+//
+// RENDERING AT PLANETARY SCALE. A cluster must be findable from 160,000 units in orbit and read as
+// architecture when you stand beside it. The gates themselves stay at true physical size, and a
+// separate marker beam holds a minimum ANGULAR size so the site is visible from space. Everything
+// is instanced, so the cost is a couple of draw calls no matter how many nodes join.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
+import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { ASSET_BASE } from '@/config/assetBase';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+
+const GATE_URL = `${ASSET_BASE}/siege/scifi/meadow_SM_Bld_Warpgate_01.glb`;
+
+/** Target gate height in game units. 10 u = 1,000 m, per Geoff. */
+const GATE_HEIGHT_UNITS = 10;
+/** Measured rendered height of the source model (model 682.94 units x 0.01 root scale). */
+const MODEL_HEIGHT_UNITS = 6.8294;
+/** Measured rendered width, used to space the ring so gates never intersect. */
+const MODEL_WIDTH_UNITS = 8.3069;
+/** Gap between neighbouring gates, as a multiple of gate width. */
+const RING_SPACING = 1.55;
+/** Never build a ring tighter than this many gate widths in radius. */
+const MIN_RING_WIDTHS = 1.15;
+/** Cap on gates drawn per site, so one enormous datacentre cannot dominate the frame budget. */
+const MAX_GATES_PER_SITE = 24;
+
+/** Marker beam: minimum angular size so a site is findable from orbit. */
+const MARKER_MIN_ANGULAR = 0.008;
+const MARKER_MAX_SCALE = 1200;
 
 export interface Portal {
   id: string;
@@ -27,16 +56,9 @@ export interface Portal {
   lon: number;
   city: string | null;
   cc: string | null;
-  /** How many nodes share this location. Busier sites read brighter and taller. */
+  /** How many nodes share this location. Sets how many gates the ring has. */
   nodes: number;
 }
-
-/** Physical height of a portal beam at close range, in game units (1 unit = 100 m). */
-const BEAM_UNITS = 12;
-/** Minimum angular size far away, so a portal stays visible from orbit. */
-const MIN_ANGULAR = 0.010;
-/** Cap on how much the beam may be inflated, so it never swamps the planet. */
-const MAX_SCALE = 900;
 
 let cache: Portal[] | null = null;
 let inflight: Promise<Portal[]> | null = null;
@@ -52,112 +74,183 @@ export function loadPortals(): Promise<Portal[]> {
   return inflight;
 }
 
-/** Portal world positions, resolved against the terrain so they sit ON the ground. */
-export function portalPositions(list: Portal[]): { portal: Portal; pos: THREE.Vector3; up: THREE.Vector3 }[] {
-  const dir = new Float64Array(3);
-  return list.map((portal) => {
-    latLonToDirection(portal.lat, portal.lon, dir);
-    const up = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
-    const m = sampleGlobeSurface(up.x, up.y, up.z);
-    // Portals in the sea sit at sea level rather than on the seabed: they are gateways, not
-    // buildings, and a beam rising out of open ocean is the intended look.
-    const groundM = m == null ? 0 : Math.max(0, m);
-    const r = PLANET_RADIUS + groundM / METRES_PER_UNIT;
-    return { portal, pos: up.clone().multiplyScalar(r), up };
-  });
+export interface GateInstance { matrix: THREE.Matrix4; site: THREE.Vector3 }
+
+/** Ring radius in units for `n` gates: big enough that neighbours never intersect. */
+export function ringRadius(n: number): number {
+  const gateW = MODEL_WIDTH_UNITS * (GATE_HEIGHT_UNITS / MODEL_HEIGHT_UNITS);
+  if (n <= 1) return 0;
+  // Circumference must fit n gates with spacing between them.
+  const byCircumference = (n * gateW * RING_SPACING) / (2 * Math.PI);
+  return Math.max(gateW * MIN_RING_WIDTHS, byCircumference);
+}
+
+/**
+ * Build the gate transforms for one site.
+ *
+ * Every gate stands on the terrain with its local +Y along the surface normal, and its local +Z
+ * pointing at the ring centre, which puts the ramp (which extends along model -Z) outward.
+ */
+export function buildSite(p: Portal, out: GateInstance[]): void {
+  const n = Math.max(1, Math.min(MAX_GATES_PER_SITE, p.nodes));
+  const scale = GATE_HEIGHT_UNITS / MODEL_HEIGHT_UNITS;
+
+  const d = new Float64Array(3);
+  latLonToDirection(p.lat, p.lon, d);
+  const up = new THREE.Vector3(d[0], d[1], d[2]).normalize();
+
+  // Tangent frame at the site. Any pair will do; the ring is rotationally symmetric anyway.
+  const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), up);
+  if (east.lengthSq() < 1e-8) east.set(1, 0, 0);
+  east.normalize();
+  const north = new THREE.Vector3().crossVectors(up, east).normalize();
+
+  const centreM = sampleGlobeSurface(up.x, up.y, up.z);
+  const centreR = PLANET_RADIUS + Math.max(0, centreM ?? 0) / METRES_PER_UNIT;
+  const centre = up.clone().multiplyScalar(centreR);
+
+  const R = ringRadius(n);
+  const xAxis = new THREE.Vector3(), zAxis = new THREE.Vector3(), yAxis = new THREE.Vector3();
+  const pos = new THREE.Vector3();
+
+  for (let i = 0; i < n; i++) {
+    if (n === 1) {
+      pos.copy(centre);
+      zAxis.copy(north);          // a lone gate faces local north; nothing to face toward
+    } else {
+      const a = (i / n) * Math.PI * 2;
+      const off = east.clone().multiplyScalar(Math.cos(a) * R)
+        .addScaledVector(north, Math.sin(a) * R);
+      pos.copy(centre).add(off);
+      // Re-ground each gate individually: a 4 km ring can span real relief.
+      const gd = pos.clone().normalize();
+      const gm = sampleGlobeSurface(gd.x, gd.y, gd.z);
+      pos.copy(gd).multiplyScalar(PLANET_RADIUS + Math.max(0, gm ?? 0) / METRES_PER_UNIT);
+      // Face the ring centre: ramp (model -Z) therefore points outward.
+      zAxis.copy(centre).sub(pos);
+      yAxis.copy(gd);
+      zAxis.addScaledVector(yAxis, -zAxis.dot(yAxis));   // flatten onto the local ground
+      if (zAxis.lengthSq() < 1e-8) zAxis.copy(north);
+      zAxis.normalize();
+    }
+    yAxis.copy(pos).normalize();
+    xAxis.crossVectors(yAxis, zAxis).normalize();        // right-handed: X = Y x Z
+    zAxis.crossVectors(xAxis, yAxis).normalize();        // re-orthogonalise
+
+    const m = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+    m.scale(new THREE.Vector3(scale, scale, scale));
+    m.setPosition(pos);
+    out.push({ matrix: m, site: centre.clone() });
+  }
 }
 
 export function GlobePortals() {
   const camera = useThree((s) => s.camera);
   const [portals, setPortals] = useState<Portal[]>([]);
-  const beamRef = useRef<THREE.InstancedMesh>(null);
-  const baseRef = useRef<THREE.InstancedMesh>(null);
-  const placed = useRef<{ portal: Portal; pos: THREE.Vector3; up: THREE.Vector3 }[]>([]);
-  const regrounded = useRef(false);
+  const { scene: gateScene } = useGLTF(GATE_URL);
+  const groupRef = useRef<THREE.Group>(null);
+  const instances = useRef<GateInstance[]>([]);
+  const built = useRef(false);
+  const markerRef = useRef<THREE.InstancedMesh>(null);
 
   useEffect(() => { loadPortals().then(setPortals); }, []);
 
-  const beamGeo = useMemo(() => {
-    // Cone pointing up its local +Y, origin at the base.
-    const g = new THREE.ConeGeometry(0.16, 1, 6, 1, true);
+  /** One InstancedMesh per sub-mesh of the gate, so the whole model instances in 2-3 draw calls. */
+  const subMeshes = useMemo(() => {
+    const out: { geometry: THREE.BufferGeometry; material: THREE.Material }[] = [];
+    gateScene.updateMatrixWorld(true);
+    gateScene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      // Bake each sub-mesh's transform relative to the model root, so instancing one matrix per
+      // gate reproduces the assembled model rather than a pile of parts at the origin.
+      const geo = mesh.geometry.clone();
+      geo.applyMatrix4(mesh.matrixWorld);
+      const mat = (mesh.material as THREE.Material).clone();
+      (mat as THREE.MeshStandardMaterial).fog = false;
+      out.push({ geometry: geo, material: mat });
+    });
+    return out;
+  }, [gateScene]);
+
+  const markerGeo = useMemo(() => {
+    const g = new THREE.ConeGeometry(0.10, 1, 6, 1, true);
     g.translate(0, 0.5, 0);
     return g;
   }, []);
-  const baseGeo = useMemo(() => {
-    const g = new THREE.CylinderGeometry(0.42, 0.42, 0.08, 12);
-    g.translate(0, 0.04, 0);
-    return g;
-  }, []);
-
-  const beamMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.35, 0.85, 1.0),
-    transparent: true, opacity: 0.55, depthWrite: false, fog: false,
-    blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  const markerMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0.4, 0.9, 1.0), transparent: true, opacity: 0.4,
+    depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
   }), []);
-  const baseMat = useMemo(() => new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.15, 0.55, 0.9), fog: false, transparent: true, opacity: 0.9,
-  }), []);
-
-  useEffect(() => {
-    if (!portals.length) return;
-    placed.current = portalPositions(portals);
-    regrounded.current = false;
-  }, [portals]);
 
   useEffect(() => () => {
-    beamGeo.dispose(); baseGeo.dispose(); beamMat.dispose(); baseMat.dispose();
-  }, [beamGeo, baseGeo, beamMat, baseMat]);
+    subMeshes.forEach((s) => { s.geometry.dispose(); s.material.dispose(); });
+    markerGeo.dispose(); markerMat.dispose();
+  }, [subMeshes, markerGeo, markerMat]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const q = useMemo(() => new THREE.Quaternion(), []);
   const UP = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
   useFrame(() => {
-    const beam = beamRef.current, base = baseRef.current;
-    if (!beam || !base || !placed.current.length) return;
+    if (!portals.length || !groupRef.current) return;
 
-    // Terrain streams in after the portals are first placed, so re-resolve their ground height
-    // once tiles are available. Without this they sit at sea level over land forever.
-    if (!regrounded.current && placed.current.length) {
-      const p0 = placed.current[0];
-      if (sampleGlobeSurface(p0.up.x, p0.up.y, p0.up.z) != null) {
-        placed.current = portalPositions(placed.current.map((p) => p.portal));
-        regrounded.current = true;
+    // Terrain streams in after the registry loads, so build the transforms once ground heights
+    // are actually available; otherwise every gate sits at sea level, buried or floating.
+    if (!built.current) {
+      const d = new Float64Array(3);
+      latLonToDirection(portals[0].lat, portals[0].lon, d);
+      if (sampleGlobeSurface(d[0], d[1], d[2]) == null) return;
+      const list: GateInstance[] = [];
+      for (const p of portals) buildSite(p, list);
+      instances.current = list;
+      built.current = true;
+
+      groupRef.current.clear();
+      for (const sm of subMeshes) {
+        const im = new THREE.InstancedMesh(sm.geometry, sm.material, list.length);
+        im.frustumCulled = false;
+        for (let i = 0; i < list.length; i++) im.setMatrixAt(i, list[i].matrix);
+        im.instanceMatrix.needsUpdate = true;
+        groupRef.current.add(im);
       }
     }
 
-    for (let i = 0; i < placed.current.length; i++) {
-      const { portal, pos, up } = placed.current[i];
-      const dist = camera.position.distanceTo(pos);
-
-      // Angular sizing: keep a floor on apparent size so a portal is still a visible mark from
-      // orbit, then let it settle to its true physical height as you approach.
-      const wanted = Math.max(BEAM_UNITS, dist * MIN_ANGULAR);
-      const scale = Math.min(BEAM_UNITS * MAX_SCALE, wanted);
-      const busy = 1 + Math.min(1.4, Math.log2(1 + portal.nodes) * 0.35);
-
-      q.setFromUnitVectors(UP, up);
-      dummy.position.copy(pos);
-      dummy.quaternion.copy(q);
-      dummy.scale.set(scale * 0.5 * busy, scale * busy, scale * 0.5 * busy);
-      dummy.updateMatrix();
-      beam.setMatrixAt(i, dummy.matrix);
-
-      dummy.scale.set(scale * busy, scale * 0.25 * busy, scale * busy);
-      dummy.updateMatrix();
-      base.setMatrixAt(i, dummy.matrix);
+    // Marker beams keep each SITE findable from orbit; the gates themselves stay true size.
+    const marker = markerRef.current;
+    if (marker && instances.current.length) {
+      let i = 0;
+      const seen = new Set<string>();
+      for (const p of portals) {
+        const d = new Float64Array(3);
+        latLonToDirection(p.lat, p.lon, d);
+        const up = new THREE.Vector3(d[0], d[1], d[2]).normalize();
+        const m = sampleGlobeSurface(up.x, up.y, up.z);
+        const pos = up.clone().multiplyScalar(PLANET_RADIUS + Math.max(0, m ?? 0) / METRES_PER_UNIT);
+        const dist = camera.position.distanceTo(pos);
+        const scale = Math.min(GATE_HEIGHT_UNITS * MARKER_MAX_SCALE,
+          Math.max(GATE_HEIGHT_UNITS * 2, dist * MARKER_MIN_ANGULAR));
+        q.setFromUnitVectors(UP, up);
+        dummy.position.copy(pos);
+        dummy.quaternion.copy(q);
+        dummy.scale.set(scale * 0.5, scale, scale * 0.5);
+        dummy.updateMatrix();
+        marker.setMatrixAt(i++, dummy.matrix);
+        seen.add(p.id);
+      }
+      marker.count = i;
+      marker.instanceMatrix.needsUpdate = true;
     }
-    beam.count = placed.current.length;
-    base.count = placed.current.length;
-    beam.instanceMatrix.needsUpdate = true;
-    base.instanceMatrix.needsUpdate = true;
   });
 
   if (!portals.length) return null;
   return (
     <group name="globe-portals">
-      <instancedMesh ref={baseRef} args={[baseGeo, baseMat, portals.length]} frustumCulled={false} />
-      <instancedMesh ref={beamRef} args={[beamGeo, beamMat, portals.length]} frustumCulled={false} renderOrder={3} />
+      <group ref={groupRef} />
+      <instancedMesh ref={markerRef} args={[markerGeo, markerMat, portals.length]}
+                     frustumCulled={false} renderOrder={3} />
     </group>
   );
 }
+
+useGLTF.preload(GATE_URL);
