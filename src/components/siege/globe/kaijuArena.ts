@@ -24,7 +24,7 @@ import {
   type ActionId, type ActionScore, type Perception,
 } from './kaijuBrain';
 import {
-  BREEDS, derive, describeBuild,
+  BREEDS, derive, describeBuild, STAT_NAMES,
   type KaijuBuild, type DerivedStats,
 } from './kaijuStats';
 import { seedKaiju, rand } from './kaijuRandom';
@@ -33,7 +33,10 @@ import { seedKaiju, rand } from './kaijuRandom';
 export const ARENA_LAT = 27.9881;
 export const ARENA_LON = 86.9250;
 
-export const MAX_HEALTH = 1000;
+// NOTE: there is deliberately no MAX_HEALTH constant any more. Health comes from each Kaiju's
+// Vigour stat, so it differs per build (a Bastion has 840, a Reaver 560). A shared constant was
+// left behind after the stat system landed and made the tracker report everyone's health out of
+// 1000, which is wrong for every build. Read `agent.maxHealth`.
 /** All three start identical, per Geoff: same size, same health, different weapons. */
 export const ARENA_HEIGHT = 3;      // units = 300 m
 
@@ -76,6 +79,16 @@ export interface Agent {
   /** Strafe direction, flipped occasionally so circling is not perfectly predictable. */
   strafeSign: number;
   wanderTurn: number;
+  /**
+   * Movement the behaviour tree asked for this tick.
+   *
+   * The tree writes intent; `stepArena` performs a single integration from it. See the note on
+   * `move` in makeBoard for why the tree must not move the body itself.
+   */
+  intentMove: boolean;
+  intentDir: THREE.Vector3;
+  intentRun: boolean;
+  intentSpeedMul: number;
 }
 
 export interface ArenaEvent { t: number; text: string }
@@ -172,6 +185,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       shotsFired: 0, hitsLanded: 0, killedBy: null,
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
+      intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
     });
   });
 
@@ -268,13 +282,26 @@ function makeBoard(a: Agent) {
   // `dt` is refreshed by the caller each step. Mistreevous binds this object at construction, so
   // it must be stable for the life of the tree rather than rebuilt per frame.
   const ctx = { dt: 1 / 60 };
+  /**
+   * Record where this Kaiju wants to go. It does NOT move the body.
+   *
+   * The tree used to integrate the body itself, and then `stepArena` integrated it AGAIN to apply
+   * gravity — so a moving agent was stepped twice per tick. That was harmless before the body had
+   * momentum (the second call had no input, so it did nothing horizontally) but once the body
+   * carried speed between frames the second call coasted it forward a second time. Measured
+   * result: AI Kaiju travelled 1.72x too far and fell under gravity twice.
+   *
+   * So movement is now an INTENT the tree writes and `stepArena` acts on exactly once.
+   */
   const move = (dirWorld: THREE.Vector3, run: boolean, closing = false) => {
     reTangentOf(a.body, dirWorld);
-    // Speed scales movement by stretching the timestep, which keeps the sphere-rotation maths in
-    // stepBodyOf untouched. Sprinter adds a burst, but only while closing on an enemy — that is
-    // what makes it a short-range fighter's ability rather than just more Speed.
-    const mul = a.d.moveMul * (closing && a.build.abilities.includes('sprinter') ? 1.35 : 1);
-    stepBodyOf(a.body, ctx.dt * mul, 1, 0, false, run, ARENA_HEIGHT, dirWorld);
+    a.intentDir.copy(dirWorld);
+    a.intentMove = true;
+    a.intentRun = run;
+    // Speed scales the step, which leaves the sphere-rotation maths in stepBodyOf untouched.
+    // Sprinter adds a burst, but only while closing on an enemy — that is what makes it a
+    // short-range fighter's ability rather than simply more Speed.
+    a.intentSpeedMul = a.d.moveMul * (closing && a.build.abilities.includes('sprinter') ? 1.35 : 1);
   };
   const faceTarget = () => {
     const t = targetOf(a);
@@ -489,6 +516,12 @@ export function stepArena(dt: number, playerControlled: boolean): void {
 
     if (a.isPlayer && playerControlled) continue;   // AI does not drive the player's body
 
+    // Fresh intent every tick: a tree that asks for nothing this frame means "stand still", not
+    // "keep doing whatever you asked for last frame".
+    a.intentMove = false;
+    a.intentRun = false;
+    a.intentSpeedMul = 1;
+
     if (!a.board) a.board = makeBoard(a);
     a.board.ctx.dt = dt;
     if (a.treeAction !== a.action || !a.tree) {
@@ -510,8 +543,14 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       }
     }
 
-    // Gravity/ground even when the tree did not move it.
-    stepBodyOf(a.body, dt, 0, 0, false, false, ARENA_HEIGHT, null);
+    // THE ONE AND ONLY body integration for this agent this tick. Whether the tree asked for
+    // movement or not, the body advances exactly once, so gravity is applied exactly once.
+    stepBodyOf(
+      a.body, dt * (a.intentMove ? a.intentSpeedMul : 1),
+      a.intentMove ? 1 : 0, 0, false,
+      a.intentMove && a.intentRun, ARENA_HEIGHT,
+      a.intentMove ? a.intentDir : null,
+    );
   }
 
   const hits = stepProjectiles(dt, hitTargets(), (p) => {
@@ -553,14 +592,18 @@ export function playerAgent(): Agent | null { return agents.find((x) => x.isPlay
 export function arenaReport(): string {
   const L: string[] = [];
   L.push(`KAIJU ARENA REPORT  t=${clock.toFixed(1)}s  (Mount Everest ${ARENA_LAT}, ${ARENA_LON})`);
-  L.push(`all agents: height ${ARENA_HEIGHT} u = ${ARENA_HEIGHT * METRES_PER_UNIT} m, health ${MAX_HEALTH}`);
+  L.push(`all agents: height ${ARENA_HEIGHT} u = ${ARENA_HEIGHT * METRES_PER_UNIT} m`);
   L.push('');
   for (const a of agents) {
     const p = a.perception;
     L.push(`== ${a.name} [${a.id}]${a.isPlayer ? ' (PLAYER)' : ''} ==`);
     L.push(`   weapon      ${WEAPONS[a.weapon].name} (range ${WEAPONS[a.weapon].rangeBodies} bodies, ` +
            `${WEAPONS[a.weapon].damage} dmg, ${WEAPONS[a.weapon].cooldown}s cd)`);
-    L.push(`   health      ${Math.round(a.health)}/${MAX_HEALTH}${a.alive ? '' : `  DEAD (killed by ${a.killedBy})`}`);
+    L.push(`   stats       ${STAT_NAMES.map((k) => `${k} ${a.build.stats[k]}`).join('  ')}`);
+    L.push(`   abilities   ${a.build.abilities.join(', ') || 'none'}   obedience ${a.build.obedience}`);
+    L.push(`   health      ${Math.round(a.health)}/${Math.round(a.maxHealth)}`
+      + `  (armour cuts ${(a.d.damageReduction * 100).toFixed(0)}% of incoming)`
+      + `${a.alive ? '' : `  DEAD (killed by ${a.killedBy})`}`);
     L.push(`   dealt/taken ${Math.round(a.damageDealt)} / ${Math.round(a.damageTaken)}`);
     L.push(`   fired/hit   ${a.shotsFired} attacks, ${a.hitsLanded} connected`);
     L.push(`   action      ${a.action ?? '-'}   tree=${a.lastTreeState}`);

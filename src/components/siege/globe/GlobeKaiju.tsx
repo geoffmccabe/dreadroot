@@ -195,13 +195,15 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
 
       // The pre-jump crouch. Sink the model and compress it slightly, so the gather is visible even
       // on models with no crouch clip of their own.
-      if (b.crouchFrac > 0) {
-        const squat = b.crouchFrac * h * 0.18;
-        g.position.addScaledVector(bUp, -squat);
-        g.scale.set(1, 1 - b.crouchFrac * 0.12, 1);
-      } else if (g.scale.y !== 1) {
-        g.scale.set(1, 1, 1);
-      }
+      //
+      // The squash must be applied WITHIN the Kaiju's own scale, not instead of it. This group
+      // already carries `state.height / modelHeight` from the JSX prop, so writing a raw 1 here
+      // shrank a 300 m Kaiju down to its model's natural size the moment it crouched — and left
+      // it there, because a frame-loop write is not undone by re-rendering.
+      const baseScale = h / Math.max(0.01, modelHeight);
+      const squash = b.crouchFrac > 0 ? 1 - b.crouchFrac * 0.12 : 1;
+      g.scale.set(baseScale, baseScale * squash, baseScale);
+      if (b.crouchFrac > 0) g.position.addScaledVector(bUp, -b.crouchFrac * h * 0.18);
       return;
     }
 

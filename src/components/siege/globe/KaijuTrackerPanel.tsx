@@ -8,11 +8,11 @@
 // Deliberately NOT a pretty combat HUD. It is a diagnostic, and the value is in showing the
 // losing options' scores too, since "why did it not do X" is usually the question.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
 import {
-  getAgents, getEvents, arenaClock, arenaStarted, arenaReport, resetArena, MAX_HEALTH,
-  type Agent,
+  getAgents, getEvents, arenaClock, arenaStarted, arenaReport, resetArena,
+  subscribeArena, arenaVersion, type Agent,
 } from './kaijuArena';
 import { WEAPONS } from './kaijuWeapons';
 
@@ -49,7 +49,8 @@ function bar(frac: number, colour: string) {
 
 function AgentBlock({ a }: { a: Agent }) {
   const p = a.perception;
-  const hp = a.health / MAX_HEALTH;
+  // Health is per-build (Vigour decides it), so never divide by a shared constant.
+  const hp = a.health / Math.max(1, a.maxHealth);
   const hpColour = hp > 0.5 ? '#5fd35f' : hp > 0.2 ? '#e0c04a' : '#e05a4a';
 
   return (
@@ -63,7 +64,7 @@ function AgentBlock({ a }: { a: Agent }) {
 
       {bar(hp, hpColour)}
       <div style={{ display: 'flex', justifyContent: 'space-between', opacity: 0.75, fontSize: '0.9em' }}>
-        <span>{a.alive ? `${Math.round(a.health)} / ${MAX_HEALTH} health` : `killed by ${a.killedBy ?? '?'}`}</span>
+        <span>{a.alive ? `${Math.round(a.health)} / ${Math.round(a.maxHealth)} health` : `killed by ${a.killedBy ?? '?'}`}</span>
         <span>{Math.round(a.damageDealt)} dealt</span>
       </div>
 
@@ -116,8 +117,9 @@ export function KaijuTrackerPanel() {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(true);
 
-  // Repaint a few times a second. The simulation runs at frame rate; re-rendering this panel that
-  // often would cost more than the fight does.
+  // Appear the instant a battle starts, then repaint a few times a second. The simulation runs at
+  // frame rate; re-rendering this panel that often would cost more than the fight does.
+  useSyncExternalStore(subscribeArena, arenaVersion, arenaVersion);
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 250);
     return () => clearInterval(id);

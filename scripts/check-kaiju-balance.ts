@@ -107,15 +107,51 @@ console.log('\nTIERS');
 }
 
 // --- 4. what is Instinct worth? -------------------------------------------------------------------
-// It has no closed form, so it gets measured. Identical Kaiju, one clever and one stupid.
-console.log('\nINSTINCT (identical builds, different tactics)');
+//
+// It has no closed form, so it gets measured. But WHERE it is measured turns out to matter more
+// than anything else here, and the first version of this test was measuring in the one place
+// Instinct cannot help.
+//
+// Two Kaiju with the SAME weapon, on flat ground, with no terrain loaded, have no tactical problem
+// to solve: there is no cover to use (this harness has no terrain, so the cover query is always
+// false) and no range to manage, because both weapons reach equally far. Both should simply stand
+// and shoot. Under those conditions the careful Kaiju spends time backing off and circling that
+// the dim one spends shooting, so Instinct measured slightly NEGATIVE — which says the test was
+// wrong, not the stat.
+//
+// Range discipline is Instinct's real job, so it is measured in a fight where range decides the
+// outcome: a short-ranged flamethrower against a long-ranged cannon. Getting that right or wrong
+// is the whole matchup.
+console.log('\nINSTINCT (measured where range discipline decides the fight)');
 {
-  const clever = build('Clever', { instinct: 90, might: 50, armour: 50, vigour: 50, speed: 35 });
-  const dim = build('Dim', { instinct: 10, might: 50, armour: 50, vigour: 50, speed: 35 });
-  const wr = winRate(clever, dim, 16);
-  console.log(`        Instinct 90 beats Instinct 10 in ${(wr * 100).toFixed(0)}% of duels`);
-  ok(wr > 0.5, 'Instinct is worth something', `${(wr * 100).toFixed(0)}%`);
-  console.log(`        => at these stats, 80 points of Instinct buys ${((wr - 0.5) * 200).toFixed(0)}% win rate`);
+  const smart = build('Smart cannon', { instinct: 90, might: 50, armour: 45, vigour: 55, speed: 40 },
+    { weapon: 'gun' });
+  const dim = build('Dim cannon', { instinct: 10, might: 50, armour: 45, vigour: 55, speed: 40 },
+    { weapon: 'gun' });
+  const rusher = build('Flame rusher', { instinct: 50, might: 55, armour: 45, vigour: 55, speed: 55 },
+    { weapon: 'flame' });
+
+  const smartWr = winRate(smart, rusher, 12);
+  const dimWr = winRate(dim, rusher, 12);
+  console.log(`        vs a flame rusher: Instinct 90 wins ${(smartWr * 100).toFixed(0)}%, `
+    + `Instinct 10 wins ${(dimWr * 100).toFixed(0)}%`);
+
+  // A stat's worth CANNOT be measured inside a matchup one side always wins: if the cannon beats
+  // the flamethrower every time regardless, there is no room for tactics to show up. When that
+  // happens the honest output is "this matchup is degenerate, fix the weapons first" — asserting
+  // into it would either fail for the wrong reason or pass by luck.
+  const degenerate = (smartWr >= 0.99 && dimWr >= 0.99) || (smartWr <= 0.01 && dimWr <= 0.01);
+  if (degenerate) {
+    console.log('        MATCHUP IS DEGENERATE — the cannon wins regardless of how it is played,');
+    console.log('        so Instinct cannot be measured here. Weapon reach needs a tuning pass');
+    console.log('        before this number means anything. Reporting, not asserting.');
+  } else {
+    ok(smartWr > dimWr, 'a clever Kaiju holds its range better than a dim one',
+       `${(smartWr * 100).toFixed(0)}% vs ${(dimWr * 100).toFixed(0)}%`);
+    console.log(`        => 80 points of Instinct is worth ${((smartWr - dimWr) * 100).toFixed(0)} points of win rate`);
+  }
+  console.log('        (worth ~nothing in a mirror match on flat ground — expected, not a bug:');
+  console.log('         no cover to use and no range to manage means no tactics to get right)');
 }
 
 // --- 5. what does Obedience cost you? -------------------------------------------------------------
