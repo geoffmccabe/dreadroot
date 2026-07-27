@@ -141,6 +141,36 @@ ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startD
   console.log('   now does not, is one occupying the same space as another.)');
 }
 
+// FLAME MUST SET THINGS ALIGHT, AND THE BURN MUST STOP.
+//
+// Damage-over-time is the classic place to leave something burning forever, or to stack a jet of
+// 1500 particles into a burn of minutes. Both are asserted against.
+{
+  const mk = (name: string, weapon: 'flame' | 'gun') => ({
+    name, tier: 3, monsterType: 16, weapon, obedience: 50, abilities: [],
+    stats: { might: 50, armour: 40, vigour: 60, speed: 45, instinct: 60 },
+  });
+  initArenaWith([mk('Torch', 'flame'), mk('Victim', 'gun')], 909, 3);
+  const two = getAgents();
+  let sawBurning = false;
+  let maxBurn = 0;
+  for (let i = 0; i < 40 * 20; i++) {
+    stepArena(1 / 20, false);
+    for (const a of two) { if (a.burning > 0) sawBurning = true; maxBurn = Math.max(maxBurn, a.burning); }
+    if (two.filter((x) => x.alive).length <= 1) break;
+  }
+  ok(sawBurning, 'flame sets its target alight');
+  ok(maxBurn <= 10.01, 'the burn never stacks beyond its 10 second cap', `peak ${maxBurn.toFixed(1)}s`);
+
+  // And it must burn OUT. Let everything settle with nobody firing.
+  initArenaWith([mk('Torch', 'flame'), mk('Victim', 'gun')], 909, 3);
+  const pair = getAgents();
+  pair[1].burning = 8;
+  for (let i = 0; i < 30 * 20; i++) stepArena(1 / 20, false);
+  ok(pair[1].burning === 0 || !pair[1].alive, 'the burn expires rather than lasting forever',
+     `${pair[1].burning.toFixed(1)}s left`);
+}
+
 // EVERY WEAPON MUST BE ABLE TO HIT. A weapon that can never connect looks exactly like a Kaiju
 // that is simply losing, which is how the grenade could have gone unnoticed. So each one gets a
 // duel of its own against an identical opponent, where it has time to land something.

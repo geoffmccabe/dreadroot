@@ -22,7 +22,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
-import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps } from './kaijuAudio';
+import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
 /** Clip preferences per gait, matching GlobeKaiju so both look the same. */
@@ -149,6 +149,13 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     // Footsteps, positioned in the world — so an enemy Kaiju crossing behind you is something you
     // hear before you see, which at this scale is most of the drama.
     camera.getWorldDirection(look.current);
+
+    // It cries out when set alight. The flag is set by the simulation and cleared here, so the
+    // sound fires exactly once however many burning particles landed that frame.
+    if (agent.screamed) {
+      agent.screamed = false;
+      scream(g.position, camera.position, look.current);
+    }
     updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true);
     applyFlash(model, flashIntensity(agent.ackFlash));
   });
@@ -170,7 +177,7 @@ function Projectiles() {
   // 1600, not 400. The flame alone keeps about 1000 alive; at 400 the jet was silently truncated
   // to its first fraction, which is part of why it looked like a blob rather than a stream.
   // One instanced draw either way — the cost is the buffer, not the count.
-  const MAX = 1600;
+  const MAX = 2000;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colour = useMemo(() => new THREE.Color(), []);
 
@@ -194,15 +201,19 @@ function Projectiles() {
         // particle GROWING as it burns. Tight at the mouth, eight times wider by the tip — which
         // is how a real flame jet looks and is far cheaper than emitting a wider spread and
         // hoping the shape falls out.
-        dummy.scale.setScalar(p.size * (0.5 + age * age * 6.0));
+        // Each stream stays a THREAD: much less growth than a single cone needed, because the
+        // shape now comes from six separate jets rather than from one particle fanning out.
+        dummy.scale.setScalar(p.size * (0.55 + age * age * 2.6));
         // White-hot at the mouth, orange through the body, dim red smoke as it dies. Squaring the
         // fade keeps the core bright much longer, so the jet has a hot centre and a cooling tail
         // rather than a uniform wash.
+        // YELLOW into ORANGE, not white into red. Bright yellow at the mouth, orange through the
+        // body, dim red as it dies — which is the palette of burning gas rather than of a spark.
         colour.setRGB(
           1.0,
-          0.95 - age * 0.70,
-          0.80 - age * 0.78,
-        ).multiplyScalar(Math.max(0.05, 1 - age * age * 0.95));
+          0.88 - age * 0.55,
+          0.30 - age * 0.28,
+        ).multiplyScalar(Math.max(0.06, 1 - age * age * 0.9));
       } else {
         dummy.scale.setScalar(p.size);
         colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);

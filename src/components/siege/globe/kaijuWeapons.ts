@@ -53,6 +53,16 @@ export interface WeaponSpec {
   gravityScale: number;
   colour: [number, number, number];
   size: number;
+  /**
+   * Split the output into this many parallel STREAMS arranged in a hexagon around the aim axis.
+   *
+   * One wide cone reads as a cloud however many particles are in it. A bundle of narrow jets reads
+   * as pressure — you can see the individual streams and follow them — which is what a flamethrower
+   * actually looks like and what Geoff asked for.
+   */
+  streams?: number;
+  /** How far off-axis each stream sits, in radians. The radius of the honeycomb. */
+  streamSpread?: number;
 }
 
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
@@ -74,9 +84,10 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   // Damage per particle drops in step with the count, so the weapon's damage per second is
   // unchanged and the balance work still holds.
   flame: {
-    id: 'flame', name: 'Flamethrower', rangeBodies: 12, cooldown: 0.15, damage: 0.28,
-    speed: 11.5, spread: 0.09, count: 48, life: 3.2, blastBodies: 0, gravityScale: 0.05,
-    colour: [1.0, 0.55, 0.12], size: 0.09,
+    id: 'flame', name: 'Flamethrower', rangeBodies: 18, cooldown: 0.15, damage: 0.19,
+    speed: 17, spread: 0.022, count: 72, life: 3.2, blastBodies: 0, gravityScale: 0.05,
+    colour: [1.0, 0.55, 0.12], size: 0.05,
+    streams: 6, streamSpread: 0.030,
   },
   // Long reach, flat trajectory, modest damage. The ranged-attacker's weapon.
   gun: {
@@ -119,6 +130,10 @@ export function getProjectiles(): Projectile[] { return projectiles; }
 const _dir = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _side = new THREE.Vector3();
+const _axisDir = new THREE.Vector3();
+const _refUp = new THREE.Vector3();
+const _sideA = new THREE.Vector3();
+const _sideB = new THREE.Vector3();
 
 /**
  * Fire a weapon from `origin` toward `aim`.
@@ -133,14 +148,30 @@ export function fireWeapon(
   const w = WEAPONS[weapon];
   if (w.speed <= 0) return;                     // melee is resolved directly, not as a projectile
 
+  // Build a stable frame around the aim axis ONCE, so all six streams share it and the honeycomb
+  // holds its shape instead of each particle picking its own basis.
+  _axisDir.copy(aim).normalize();
+  _refUp.set(0, 1, 0);
+  if (Math.abs(_axisDir.y) > 0.9) _refUp.set(1, 0, 0);
+  _sideA.crossVectors(_axisDir, _refUp).normalize();
+  _sideB.crossVectors(_axisDir, _sideA).normalize();
+
   for (let i = 0; i < w.count; i++) {
-    _dir.copy(aim).normalize();
+    _dir.copy(_axisDir);
+
+    // THE HONEYCOMB. Six streams evenly around the axis, each particle assigned to one by index so
+    // every stream gets an equal share. Their tight individual spread keeps each one a distinct
+    // thread rather than letting them blur into a single cone.
+    if (w.streams && w.streams > 1) {
+      const stream = i % w.streams;
+      const a = (stream / w.streams) * Math.PI * 2;
+      const r = w.streamSpread ?? 0.03;
+      _dir.addScaledVector(_sideA, Math.cos(a) * r).addScaledVector(_sideB, Math.sin(a) * r).normalize();
+    }
     if (w.spread > 0) {
       // Random direction inside the cone: pick two perpendicular axes and tilt.
-      _up.set(0, 1, 0);
-      if (Math.abs(_dir.y) > 0.9) _up.set(1, 0, 0);
-      _side.crossVectors(_dir, _up).normalize();
-      _up.crossVectors(_dir, _side).normalize();
+      _side.copy(_sideA);
+      _up.copy(_sideB);
       const a = rand() * Math.PI * 2;
       const r = rand() * w.spread;
       _dir.addScaledVector(_side, Math.cos(a) * r).addScaledVector(_up, Math.sin(a) * r).normalize();

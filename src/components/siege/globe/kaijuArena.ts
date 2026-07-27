@@ -122,6 +122,12 @@ export interface Agent {
   knock: THREE.Vector3;
   /** Seconds of staggering left, during which it cannot act. */
   stagger: number;
+  /** Seconds a Kaiju keeps burning after being hit by flame. */
+  burning: number;
+  /** Guards the scream so 1500 flame particles do not trigger 1500 screams. */
+  screamCooldown: number;
+  /** Set for one frame when it should cry out; the renderer plays it and clears it. */
+  screamed: boolean;
   /** Seconds left in a melee swing. The renderer plays the attack clip while this runs. */
   swingTimer: number;
   /** Whether this swing has already delivered its blow. */
@@ -256,7 +262,8 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
       order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
       capsule: torsoCapsule(dir, body.radius, ARENA_HEIGHT),
-      knock: new THREE.Vector3(), stagger: 0, swingTimer: 0, swingLanded: false,
+      knock: new THREE.Vector3(), stagger: 0, burning: 0, screamCooldown: 0, screamed: false,
+      swingTimer: 0, swingLanded: false,
     });
   });
 
@@ -569,6 +576,18 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
       // makes a melee exchange read as a real trade rather than two loops running side by side.
       if (share > 0.5 && h.weapon === 'melee') t.stagger = Math.max(t.stagger, 0.7);
     }
+
+    // SET ALIGHT. Flame is the only weapon that keeps hurting after it stops touching you, which
+    // is what makes a short-range weapon worth closing for. 5-10 seconds, refreshed by further
+    // hits rather than stacked — otherwise a jet of 1500 particles would set a burn of minutes.
+    if (h.weapon === 'flame') {
+      t.burning = Math.max(t.burning, 5 + rand() * 5);
+      // One scream, not fifteen hundred. The guard is the whole reason this is not deafening.
+      if (t.screamCooldown <= 0) {
+        t.screamCooldown = 3.5;
+        t.screamed = true;
+      }
+    }
     if (t.health <= 0) {
       t.alive = false;
       t.killedBy = src?.name ?? null;
@@ -651,6 +670,21 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       }
     }
     if (a.ackFlash > 0) a.ackFlash = Math.max(0, a.ackFlash - dt);
+    if (a.screamCooldown > 0) a.screamCooldown = Math.max(0, a.screamCooldown - dt);
+
+    // BURNING. Damage over time while alight, at 1.6% of its own maximum health per second, so a
+    // full 10-second burn costs about a sixth of a Kaiju regardless of how tough it is. Counted as
+    // damage dealt by nobody, since attributing it would need the fire to remember who lit it.
+    if (a.burning > 0) {
+      a.burning = Math.max(0, a.burning - dt);
+      a.health = Math.max(0, a.health - a.maxHealth * 0.016 * dt);
+      a.timeSinceHit = 0;
+      if (a.health <= 0) {
+        a.alive = false;
+        a.killedBy = a.killedBy ?? 'fire';
+        log(`${a.name} burned to death`);
+      }
+    }
 
     // Carry knockback: slide along the surface and bleed off. Applied before the tree runs so a
     // staggered Kaiju is still visibly pushed around while it cannot act.

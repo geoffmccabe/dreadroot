@@ -195,6 +195,19 @@ export function roar(worldPos: THREE.Vector3, listenerPos: THREE.Vector3, listen
   });
 }
 
+/**
+ * The cry when something is set on fire. Same asset as the roar for now — it is the only scream we
+ * have — but pitched down and louder, so it reads as pain rather than as a challenge.
+ */
+export function scream(worldPos: THREE.Vector3, listenerPos: THREE.Vector3, listenerDir: THREE.Vector3): void {
+  void playKaijuSound(ROAR_URL, worldPos, listenerPos, listenerDir, {
+    volume: 1.0 * (1 + (rand() * 2 - 1) * VARY),
+    rate: 0.82 * (1 + (rand() * 2 - 1) * VARY),
+    refUnits: 30,
+    maxUnits: 700,
+  });
+}
+
 export function stopKaijuFootsteps(id: string): void {
   strideAccum.delete(id);
   _prev.delete(id);
