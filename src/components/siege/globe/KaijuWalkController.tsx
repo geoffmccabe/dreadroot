@@ -54,6 +54,23 @@ export function enterWalkMode(camera: THREE.Camera): void {
   setWalkActive(true);
 }
 
+/**
+ * Drop the Kaiju in at a specific place on the planet and hand over control.
+ *
+ * `dropHeights` puts it that many body-heights ABOVE the ground so it visibly falls, which is the
+ * point: it demonstrates that gravity and ground contact are actually running rather than leaving
+ * you to wonder. Used by the landmark jump.
+ */
+export function dropKaijuAt(dir: THREE.Vector3, forward: THREE.Vector3, dropHeights = 3): void {
+  placeOnSurface(dir.clone().normalize(), forward);
+  const h = getKaijuLab().height;
+  body.radius += h * dropHeights;
+  body.vertVel = 0;
+  body.onGround = false;
+  pendingEnter = true;
+  setWalkActive(true);
+}
+
 /** Set when walk mode is entered externally, so the controller resets its camera on the next frame. */
 let pendingEnter = false;
 

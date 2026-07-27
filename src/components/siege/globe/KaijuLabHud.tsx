@@ -72,7 +72,11 @@ export function KaijuLabHud() {
       {row('Walk / run', `${(walkSpeed(s.height) * 100).toFixed(0)} / ${(runSpeed(s.height) * 100).toFixed(0)} m/s`)}
       {walking && row('State', kaijuBody.submerged
         ? `SWIMMING, ${Math.round(kaijuBody.depthMetres)} m deep`
-        : kaijuBody.onGround ? 'on ground' : 'airborne')}
+        : kaijuBody.onGround
+          ? 'on ground'
+          // Falls are genuinely slow at this scale (real gravity, 300 m body), so show the speed:
+          // without it a 7.8 second descent looks like being stuck rather than falling.
+          : `FALLING ${Math.round(Math.abs(kaijuBody.vertVel) * 100)} m/s`)}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {/* Phrase the comparison whichever way round is readable, rather than always showing a

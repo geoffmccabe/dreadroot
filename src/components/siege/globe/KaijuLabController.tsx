@@ -19,7 +19,7 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { latLonToDirection } from './cubeSphere';
 import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
-import { enterWalkMode } from './KaijuWalkController';
+import { enterWalkMode, dropKaijuAt } from './KaijuWalkController';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab,
 } from './kaijuLabState';
@@ -65,12 +65,22 @@ export function KaijuLabController() {
           const side = new THREE.Vector3(0, 1, 0).cross(up);
           if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
           side.normalize();
-          const standoff = Math.max(30, lm.r * 0.6);      // r is in km; units are 100 m each
+          // Drop the Kaiju in AT the landmark and hand over control, rather than parking the
+          // camera above it in fly mode. Flying is what made the Kaiju appear to slide across the
+          // ground when the mouse moved and never fall: in fly mode it is carried by the camera
+          // with no gravity, by design. Arriving somewhere should mean standing there.
+          const face = side.clone();                       // any tangent will do as an initial facing
+          // ONE body height, not three. Gravity is real 9.81 m/s^2, so at this scale a 3-body
+          // drop (900 m) falls for 13.5 seconds; one body height is 300 m and 7.8 seconds, which
+          // still reads unmistakably as falling without a long wait before you can move.
+          dropKaijuAt(up, face, 1);
+          // Put the camera roughly where the chase camera will settle, so the handover does not
+          // start with a long lerp across the sky.
           camera.position.copy(surface)
-            .addScaledVector(up, standoff * 0.5 + h * 2)
-            .addScaledVector(side, standoff);
-          camera.lookAt(surface);
-          console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon})`);
+            .addScaledVector(up, h * 2.2)
+            .addScaledVector(face, -h * 4.2);
+          camera.lookAt(surface.clone().addScaledVector(up, h * 0.55));
+          console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon}) — dropping in`);
           break;
         }
         case 'KeyK': {
