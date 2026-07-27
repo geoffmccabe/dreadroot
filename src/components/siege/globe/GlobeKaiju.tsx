@@ -33,6 +33,7 @@ import { APP_VERSION } from '@/version';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { animSpeedMul, type KaijuLabState } from './kaijuLabState';
+import { kaijuDiag } from './kaijuDiag';
 import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
 import { isKaijuWalkActive } from './KaijuWalkController';
 
@@ -90,6 +91,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   }, [scene]);
 
   const { actions, names, mixer } = useAnimations(animations, group);
+  useEffect(() => { kaijuDiag.loaded = true; return () => { kaijuDiag.loaded = false; }; }, []);
   const gait = useRef<Gait>('glide');
   const current = useRef<THREE.AnimationAction | null>(null);
   const landTimer = useRef(0);
@@ -259,6 +261,16 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       ? Math.min(2.5, Math.max(0.35, speed / (h * 1.6)))
       : 1;
     mixer.timeScale = animSpeedMul(state) * strideRate;
+
+    // Publish what actually happened, so the HUD can say whether it is loaded, where it is, and
+    // whether it is in front of the camera at all.
+    const p = g.position;
+    kaijuDiag.finite = Number.isFinite(p.x + p.y + p.z);
+    kaijuDiag.dist = camera.position.distanceTo(p);
+    kaijuDiag.height = h;
+    const toK = target.current.copy(p).sub(camera.position);
+    kaijuDiag.offAxisDeg = toK.lengthSq() > 1e-9
+      ? THREE.MathUtils.radToDeg(toK.normalize().angleTo(view.current)) : 0;
   });
 
   // Scale so the model stands `state.height` units tall.

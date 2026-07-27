@@ -109,6 +109,28 @@ function sharedIndex(): THREE.BufferAttribute {
   return _index;
 }
 
+/**
+ * Lower the outer ring toward the planet centre, AFTER normals are computed.
+ *
+ * The skirt hides cracks where neighbouring patches sit at different LOD levels. It has to exist,
+ * but it must not participate in normal calculation: its near-vertical triangles drag the edge
+ * normals sideways, and since both patches at a boundary do the same thing the result is a bright
+ * or dark crease along every patch edge across the whole planet.
+ */
+function dropSkirt(pos: Float32Array, side: number, drop: number): void {
+  for (let j = 0; j < side; j++) {
+    for (let i = 0; i < side; i++) {
+      if (j !== 0 && j !== side - 1 && i !== 0 && i !== side - 1) continue;
+      const k = (j * side + i) * 3;
+      const x = pos[k], y = pos[k + 1], z = pos[k + 2];
+      const len = Math.hypot(x, y, z);
+      if (len < 1e-6) continue;
+      const f = (len - drop) / len;
+      pos[k] = x * f; pos[k + 1] = y * f; pos[k + 2] = z * f;
+    }
+  }
+}
+
 /** Dispose a patch WITHOUT freeing the shared index, which every other patch still uses. */
 function disposePatch(geo: THREE.BufferGeometry): void {
   geo.setIndex(null);
@@ -123,8 +145,33 @@ function disposePatch(geo: THREE.BufferGeometry): void {
  * than one texel per vertex and must sample the tile bilinearly at fractional coordinates.
  * Integer indexing there silently reads undefined and produces NaN geometry.
  */
-function dataFor(n: NodeId, maxLevel: number) {
-  const level = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
+/**
+ * The deepest RESIDENT tile covering this node, walking up until one is found.
+ *
+ * Levels 5-10 exist only inside the 225 landmark regions, so outside them level 5 simply 404s.
+ * Refusing to subdivide when the ideal tile is missing capped the whole rest of the planet at
+ * depth 6, i.e. one vertex every 2.44 km, which is why everywhere except a landmark rendered
+ * perfectly flat. Procedural detail needs NO tiles, so the mesh must be free to subdivide past
+ * the data and let a coarser tile supply the base shape at a finer stride.
+ */
+function resolveLevel(n: NodeId, maxLevel: number): number {
+  const ideal = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
+  for (let level = ideal; level > 0; level--) {
+    const shift = n.depth - level;
+    if (hasTile(n.face, level, n.x >> shift, n.y >> shift)) {
+      // Nudge the ideal tile into the cache so detail sharpens once it arrives.
+      if (level < ideal) {
+        const s2 = n.depth - ideal;
+        void requestTile(n.face, ideal, n.x >> s2, n.y >> s2);
+      }
+      return level;
+    }
+  }
+  return 0;
+}
+
+function dataFor(n: NodeId, maxLevel: number, level = -1) {
+  if (level < 0) level = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
   const shift = n.depth - level;              // how many quadtree steps the tile is above us
   const tx = n.x >> shift, ty = n.y >> shift;
   const span = (TILE - 1) / Math.pow(2, shift);   // samples of the tile this patch covers
@@ -146,7 +193,7 @@ function nodeCentre(n: NodeId, out: Float64Array): void {
  * height/latitude ramp so the planet reads as Earth before the biome work of P3.
  */
 function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeometry; water: THREE.BufferGeometry | null } | null {
-  const d = dataFor(n, maxLevel);
+  const d = dataFor(n, maxLevel, resolveLevel(n, maxLevel));
   const tile = getTile(n.face, d.level, d.tx, d.ty);
   if (!tile) return null;
 
@@ -192,7 +239,11 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
       // over. It used to be clamped up to sea level to stop an OPAQUE ocean shell z-fighting it,
       // but that shell is gone. The water surface is now built as a separate translucent layer in
       // this same patch (see below) which never writes depth, so it cannot fight anything.
-      const r = PLANET_RADIUS + metres / METRES_PER_UNIT - (isSkirt ? skirtDrop : 0);
+      // NOTE: no skirt drop here. The skirt ring is lowered AFTER normals are computed, because
+      // including near-vertical skirt triangles in computeVertexNormals corrupts the normal of
+      // every edge vertex, and a wrong normal on both sides of a patch boundary is exactly the
+      // visible seam that appears across the planet at each LOD level.
+      const r = PLANET_RADIUS + metres / METRES_PER_UNIT;
 
       const k = (j * side + i) * 3;
       pos[k] = toRenderX(dir[0] * r);
@@ -260,7 +311,7 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
       // Water vertex: always at sea level. Alpha ramps from clear at the shoreline to nearly
       // opaque by ~120 m depth, which gives soft beaches instead of a hard blue edge, and hides
       // the seafloor from orbit the way a real ocean does.
-      const wr = PLANET_RADIUS - (isSkirt ? skirtDrop : 0);
+      const wr = PLANET_RADIUS;
       wpos[k] = toRenderX(dir[0] * wr);
       wpos[k + 1] = toRenderY(dir[1] * wr);
       wpos[k + 2] = toRenderZ(dir[2] * wr);
@@ -282,7 +333,8 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setIndex(index);
-  geo.computeVertexNormals();
+  geo.computeVertexNormals();      // on the TRUE surface, before the skirt is lowered
+  dropSkirt(pos, side, skirtDrop);
   geo.computeBoundingSphere();
 
   let water: THREE.BufferGeometry | null = null;
@@ -292,22 +344,32 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
     water.setAttribute('color', new THREE.BufferAttribute(wcol, 4));
     water.setIndex(index);
     water.computeVertexNormals();
+    dropSkirt(wpos, side, skirtDrop);
     water.computeBoundingSphere();
   }
   return { geo, water };
 }
 
-/** True once every data tile the four children need is resident. */
+/**
+ * May this node split?
+ *
+ * Only requires that SOME tile covers each child, which resolveLevel guarantees once level 0 is
+ * in. The ideal (finest) tiles are requested so real detail sharpens in when it arrives, but a
+ * missing one no longer blocks subdivision: procedural detail does not need tiles, and blocking
+ * on them is what made the entire planet outside the landmark regions render flat.
+ */
 function childrenReady(n: NodeId, maxLevel: number): boolean {
+  let ready = true;
   for (let c = 0; c < 4; c++) {
     const child: NodeId = { face: n.face, depth: n.depth + 1, x: n.x * 2 + (c & 1), y: n.y * 2 + (c >> 1) };
-    const d = dataFor(child, maxLevel);
-    if (!hasTile(child.face, d.level, d.tx, d.ty)) {
-      void requestTile(child.face, d.level, d.tx, d.ty);
-      return false;
+    const ideal = dataFor(child, maxLevel);
+    if (!hasTile(child.face, ideal.level, ideal.tx, ideal.ty)) {
+      void requestTile(child.face, ideal.level, ideal.tx, ideal.ty);
+      // Fall back to any coarser resident tile rather than refusing to split.
+      if (resolveLevel(child, maxLevel) < 0) ready = false;
     }
   }
-  return true;
+  return ready;
 }
 
 export function GlobeTerrain({ onReady }: { onReady?: () => void }) {

@@ -164,7 +164,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           entirely outside the 6,000-unit far plane and fogged out on top. */}
       {isGlobe && <GlobeCamera />}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
-      {isGlobe && <KaijuLabController />}
+      {/* Kaiju: suspends while its model loads, so it needs its own Suspense boundary. Without
+          one the suspension propagates up and can take neighbouring layers with it, and an error
+          would white-screen the game as the warpgate did. */}
+      {isGlobe && (
+        <GlobeErrorBoundary label="kaiju">
+          <Suspense fallback={null}><KaijuLabController /></Suspense>
+        </GlobeErrorBoundary>
+      )}
       {isGlobe && <KaijuWalkController />}
       {/* One portal per Divi node location: the game board is decided by where nodes run.
           Wrapped: a decorative asset must never be able to take the whole game down, which is

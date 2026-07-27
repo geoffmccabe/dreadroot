@@ -12,6 +12,7 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
+import { kaijuDiag } from './kaijuDiag';
 import {
   getKaijuLab, subscribeKaijuLab, sizeRatio, animSpeedMul, SCALE_STEP, KAIJU_TYPES,
 } from './kaijuLabState';
@@ -76,6 +77,11 @@ export function KaijuLabHud() {
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {row('Tiles', `${tiles.cached} cached, ${tiles.inFlight} loading`)}
+      {/* Diagnostic: turns "I can't see it" into something measurable. */}
+      {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}
+      {row('Kaiju at', kaijuDiag.finite
+        ? `${kaijuDiag.dist.toFixed(1)} u, ${kaijuDiag.offAxisDeg.toFixed(0)}° off centre`
+        : 'INVALID POSITION (NaN)')}
 
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
