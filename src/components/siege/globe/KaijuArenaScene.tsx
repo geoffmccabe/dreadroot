@@ -167,7 +167,10 @@ function AgentAvatar({ agent }: { agent: Agent }) {
 /** Every projectile as a single instanced draw, because the flamethrower emits a lot of them. */
 function Projectiles() {
   const mesh = useRef<THREE.InstancedMesh>(null);
-  const MAX = 400;
+  // 1600, not 400. The flame alone keeps about 1000 alive; at 400 the jet was silently truncated
+  // to its first fraction, which is part of why it looked like a blob rather than a stream.
+  // One instanced draw either way — the cost is the buffer, not the count.
+  const MAX = 1600;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colour = useMemo(() => new THREE.Color(), []);
 
@@ -185,13 +188,21 @@ function Projectiles() {
       // `age` runs 0 (just fired) to 1 (about to die).
       const age = 1 - Math.max(0, Math.min(1, p.life / Math.max(0.01, p.maxLife)));
       if (p.weapon === 'flame') {
-        dummy.scale.setScalar(p.size * (0.45 + age * 1.9));
-        // White-hot at the muzzle, deep orange in the middle, dim red as it dies.
+        // THE CONE IS MADE HERE, not by the firing spread.
+        //
+        // A 5-degree spread alone gives a narrow straight jet; what turns it into a cone is each
+        // particle GROWING as it burns. Tight at the mouth, eight times wider by the tip — which
+        // is how a real flame jet looks and is far cheaper than emitting a wider spread and
+        // hoping the shape falls out.
+        dummy.scale.setScalar(p.size * (0.5 + age * age * 6.0));
+        // White-hot at the mouth, orange through the body, dim red smoke as it dies. Squaring the
+        // fade keeps the core bright much longer, so the jet has a hot centre and a cooling tail
+        // rather than a uniform wash.
         colour.setRGB(
           1.0,
-          0.92 - age * 0.62,
-          0.75 - age * 0.72,
-        ).multiplyScalar(1 - age * 0.65);
+          0.95 - age * 0.70,
+          0.80 - age * 0.78,
+        ).multiplyScalar(Math.max(0.05, 1 - age * age * 0.95));
       } else {
         dummy.scale.setScalar(p.size);
         colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);

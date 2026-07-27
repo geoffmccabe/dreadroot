@@ -57,19 +57,26 @@ export interface WeaponSpec {
 
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   // Continuous, close, and the highest damage per second if you can stay in range.
-  // SCALED FOR A 300 M CREATURE, AND DELIBERATELY SLOW.
+  // A JET, NOT A PUFF.
   //
-  // The first pass used human-flamethrower numbers scaled by nothing: 900 m/s muzzle speed across
-  // a 660 m reach, so a burst crossed the whole range in a quarter of a second and was gone before
-  // the eye caught it. At this size fire should behave like fire in a slow-motion shot — a huge
-  // billowing mass that takes a beat to arrive and then hangs in the air.
+  // The previous pass was wrong in every way Geoff described: six enormous particles moving so
+  // slowly they never left the Kaiju, so it read as one white ball sitting on its own chest.
   //
-  // 320 m/s over 660 m is about two seconds of travel, which is long enough to watch, to aim, and
-  // to walk out of. Low gravity on it so the plume drifts and rises rather than falling like grit.
+  // What makes a flamethrower look like a flamethrower is the SHAPE — a narrow, fast jet that
+  // starts tight at the mouth and widens as it burns out. So:
+  //   spread 0.09 rad (5 degrees), not 0.34 (20) — a jet, not a spray
+  //   speed 11.5 u/s, enough to actually cross its own range within its lifetime
+  //   count 48 per burst, which at a 0.15 s cooldown and 3.2 s life keeps ~1000 alive
+  //   size small at the mouth; the renderer grows each particle over its life, and THAT is what
+  //     forms the cone — a fixed size cannot make a cone however you aim it
+  //   range 12 bodies = 3.6 km, about 5.5x the old reach, as asked
+  //
+  // Damage per particle drops in step with the count, so the weapon's damage per second is
+  // unchanged and the balance work still holds.
   flame: {
-    id: 'flame', name: 'Flamethrower', rangeBodies: 2.2, cooldown: 0.15, damage: 2,
-    speed: 3.2, spread: 0.34, count: 6, life: 2.6, blastBodies: 0, gravityScale: 0.12,
-    colour: [1.0, 0.55, 0.12], size: 0.55,
+    id: 'flame', name: 'Flamethrower', rangeBodies: 12, cooldown: 0.15, damage: 0.28,
+    speed: 11.5, spread: 0.09, count: 48, life: 3.2, blastBodies: 0, gravityScale: 0.05,
+    colour: [1.0, 0.55, 0.12], size: 0.09,
   },
   // Long reach, flat trajectory, modest damage. The ranged-attacker's weapon.
   gun: {
@@ -193,8 +200,15 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
     let detonate = false;
 
     // Ground contact.
-    const gr = groundRadiusAt(p.pos);
-    if (gr != null && p.pos.length() <= gr) detonate = true;
+    //
+    // SKIPPED FOR FLAME. It is life-limited, barely affected by gravity, and there are about a
+    // thousand of them: sampling the terrain per particle per frame would be 60,000 height
+    // lookups a second to decide something invisible. The ballistic weapons, which genuinely arc
+    // into the ground, still test it.
+    if (p.weapon !== 'flame') {
+      const gr = groundRadiusAt(p.pos);
+      if (gr != null && p.pos.length() <= gr) detonate = true;
+    }
 
     // Direct hit. Skip the firer so nobody shoots themselves point blank.
     if (!detonate) {
