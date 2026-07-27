@@ -85,6 +85,19 @@ const SKIRT_FRAC = 0.03;
 interface NodeId { face: number; depth: number; x: number; y: number }
 const idKey = (n: NodeId) => `${n.face}:${n.depth}:${n.x}:${n.y}`;
 
+function parseKey(k: string): NodeId {
+  const [face, depth, x, y] = k.split(':').map(Number);
+  return { face, depth, x, y };
+}
+
+/** Do these two nodes cover any of the same ground? True when one contains the other. */
+function overlaps(a: NodeId, b: NodeId): boolean {
+  if (a.face !== b.face) return false;
+  const [hi, lo] = a.depth <= b.depth ? [a, b] : [b, a];
+  const shift = lo.depth - hi.depth;
+  return (lo.x >> shift) === hi.x && (lo.y >> shift) === hi.y;
+}
+
 /**
  * ONE index buffer, shared by every patch and both layers.
  *
@@ -494,9 +507,29 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     const wanted = new Set(next.map(idKey));
     leafKeys.current = wanted;
 
-    // Retire meshes that are no longer leaves.
+    // Retire meshes that are no longer leaves, BUT ONLY once whatever replaces them exists.
+    //
+    // This is what made squares vanish into space while approaching the planet. A node that
+    // splits stops being a leaf immediately, but its four children are built through the shared
+    // 2 ms/frame budget and take several frames to appear. Removing the parent at once left
+    // nothing covering that ground in between, and diving toward the surface splits many nodes at
+    // once, so a whole neighbourhood of holes opened at exactly the moment you were looking at it.
+    //
+    // Holding the old patch until its replacements are ready costs a little transient memory and
+    // some overdraw for a few frames. A hole through the planet costs the illusion entirely.
     for (const [key, mesh] of meshes.current) {
       if (wanted.has(key)) continue;
+      const stale = parseKey(key);
+      let replaced = true;
+      for (const leaf of next) {
+        if (leaf.face !== stale.face || !overlaps(leaf, stale)) continue;
+        if (!meshes.current.has(idKey(leaf))) { replaced = false; break; }
+      }
+      // Safety valve: transitional patches are held, not leaked. If they pile up beyond the
+      // budget (a very fast descent, or a patch that never builds), retire the oldest anyway
+      // rather than run the GPU out of memory, which is what caused the earlier white screen.
+      const overBudget = meshes.current.size > MAX_LEAVES * 1.6;
+      if (!replaced && !overBudget) continue;   // keep it on screen; replacement still building
       groupRef.current.remove(mesh);
       disposePatch(mesh.geometry);
       meshes.current.delete(key);
@@ -504,10 +537,21 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       if (w) { groupRef.current.remove(w); disposePatch(w.geometry); waters.current.delete(key); }
     }
 
-    // Build missing leaves through the shared budget so a burst never stalls a frame.
-    for (const n of next) {
+    // Build missing leaves NEAREST FIRST. The budget only builds a couple of patches per frame,
+    // so the order decides which ground is complete while you are looking at it.
+    const pending = next.filter((n) => {
       const key = idKey(n);
-      if (meshes.current.has(key) || building.current.has(key)) continue;
+      return !meshes.current.has(key) && !building.current.has(key);
+    });
+    pending.sort((a, b) => {
+      nodeCentre(a, centre);
+      const da = Math.hypot(cam.x - centre[0] * PLANET_RADIUS, cam.y - centre[1] * PLANET_RADIUS, cam.z - centre[2] * PLANET_RADIUS);
+      nodeCentre(b, centre);
+      const db = Math.hypot(cam.x - centre[0] * PLANET_RADIUS, cam.y - centre[1] * PLANET_RADIUS, cam.z - centre[2] * PLANET_RADIUS);
+      return da - db;
+    });
+    for (const n of pending) {
+      const key = idKey(n);
       const d = dataFor(n, mf.maxLevel);
       if (!hasTile(n.face, d.level, d.tx, d.ty)) { void requestTile(n.face, d.level, d.tx, d.ty); continue; }
 
