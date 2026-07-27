@@ -6,6 +6,7 @@
 //   -  =   scale the current one down/up in 5% steps
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
+//   , .    previous / next of the 226 real landmarks, flying you straight there
 //
 // Keys are chosen because they are unused elsewhere, and this component only mounts on the
 // globe map, so it cannot interfere with play keys on any other map.
@@ -16,6 +17,8 @@ import * as THREE from 'three';
 import { isTypingTarget } from '@/lib/isTypingTarget';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+import { latLonToDirection } from './cubeSphere';
+import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab,
 } from './kaijuLabState';
@@ -30,6 +33,8 @@ export function KaijuLabController() {
   const state = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
   const camera = useThree((s) => s.camera);
 
+  useEffect(() => { void loadLandmarks(); }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
@@ -41,6 +46,32 @@ export function KaijuLabController() {
         case 'Minus':        scaleKaiju(-1); break;
         case 'Equal':        scaleKaiju(1); break;
         case 'Digit0':       resetKaijuSize(); break;
+        case 'Comma':
+        case 'Period': {
+          // Jump to a real landmark. The spawn is over Houston, which is flat coastal plain, so
+          // judging the terrain from there judges ground that genuinely has no relief.
+          const lm = stepLandmark(e.code === 'Period' ? 1 : -1);
+          if (!lm) break;
+          const dir = new Float64Array(3);
+          latLonToDirection(lm.lat, lm.lon, dir);
+          const up = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
+          const groundMetres = sampleGlobeSurface(up.x, up.y, up.z) ?? 0;
+          const h = getKaijuLab().height;
+          // Stand off by a few kilometres so the whole formation is in frame, then look down at it.
+          const surface = up.clone().multiplyScalar(
+            PLANET_RADIUS + groundMetres / METRES_PER_UNIT,
+          );
+          const side = new THREE.Vector3(0, 1, 0).cross(up);
+          if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+          side.normalize();
+          const standoff = Math.max(30, lm.r * 0.6);      // r is in km; units are 100 m each
+          camera.position.copy(surface)
+            .addScaledVector(up, standoff * 0.5 + h * 2)
+            .addScaledVector(side, standoff);
+          camera.lookAt(surface);
+          console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon})`);
+          break;
+        }
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height

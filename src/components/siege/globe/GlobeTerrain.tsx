@@ -156,7 +156,13 @@ function disposePatch(geo: THREE.BufferGeometry): void {
  */
 function resolveLevel(n: NodeId, maxLevel: number): number {
   const ideal = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
-  for (let level = ideal; level > 0; level--) {
+  // NOTE `level >= 0`, and -1 when nothing is resident.
+  //
+  // The first version stopped at level > 0 and then returned 0 unconditionally, so it claimed a
+  // tile was available even when level 0 had not loaded. childrenReady believed it, split anyway,
+  // and the children had no data to build from: whole patches simply vanished, leaving square
+  // holes in the planet.
+  for (let level = ideal; level >= 0; level--) {
     const shift = n.depth - level;
     if (hasTile(n.face, level, n.x >> shift, n.y >> shift)) {
       // Nudge the ideal tile into the cache so detail sharpens once it arrives.
@@ -167,7 +173,10 @@ function resolveLevel(n: NodeId, maxLevel: number): number {
       return level;
     }
   }
-  return 0;
+  // Nothing covers this node yet. Ask for the coarsest tile and report failure so the parent
+  // keeps rendering instead of splitting into holes.
+  void requestTile(n.face, 0, 0, 0);
+  return -1;
 }
 
 function dataFor(n: NodeId, maxLevel: number, level = -1) {
@@ -193,7 +202,9 @@ function nodeCentre(n: NodeId, out: Float64Array): void {
  * height/latitude ramp so the planet reads as Earth before the biome work of P3.
  */
 function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeometry; water: THREE.BufferGeometry | null } | null {
-  const d = dataFor(n, maxLevel, resolveLevel(n, maxLevel));
+  const lvl = resolveLevel(n, maxLevel);
+  if (lvl < 0) return null;                       // nothing resident yet; try again next pass
+  const d = dataFor(n, maxLevel, lvl);
   const tile = getTile(n.face, d.level, d.tx, d.ty);
   if (!tile) return null;
 
