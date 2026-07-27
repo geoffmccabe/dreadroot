@@ -159,7 +159,14 @@ export function facingVector(out: THREE.Vector3): THREE.Vector3 {
   return out.copy(body.forward);
 }
 
-/** Rotate a tangent vector about the local up by `radians` (positive = toward body-right). */
+/**
+ * Rotate a tangent vector about the local up.
+ *
+ * POSITIVE turns LEFT (counter-clockwise seen from above), which is what a right-handed rotation
+ * about local up does. The mouse handler therefore NEGATES movementX, matching the engine's
+ * `yaw += -movementX`. An earlier comment here claimed positive was rightward, which was wrong and
+ * would have sent the next person fixing "inverted" controls in exactly the wrong direction.
+ */
 export function turnTangent(v: THREE.Vector3, radians: number): THREE.Vector3 {
   return v.applyAxisAngle(body.dir, radians).normalize();
 }

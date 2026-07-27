@@ -2175,7 +2175,16 @@ export function FirstPersonControls({
           _cuEast.normalize();
           _cuNorth.crossVectors(localUp, _cuEast).normalize();
           // Heading in the tangent plane, then tilted toward local up by pitch.
-          _cuFwd.copy(_cuNorth).multiplyScalar(-Math.cos(y)).addScaledVector(_cuEast, -Math.sin(y));
+          // forward = north*cos(yaw) - east*sin(yaw)
+          //
+          // The signs are not a matter of taste: at the north pole this MUST reduce exactly to the
+          // engine's flat basis, (-sin(yaw), 0, -cos(yaw)), or the mouse feels inverted relative to
+          // every other map. There, east falls back to +X and north to -Z, so the expression gives
+          // -Z at yaw 0 and -X at yaw 90, matching the flat case term for term. My first version had
+          // -north*cos(yaw), which is 180 degrees out and mirrored the turn direction, which is what
+          // made sliding the mouse move the world the wrong way.
+          // scripts/earth/check_lookcontrols.mjs asserts the equivalence numerically.
+          _cuFwd.copy(_cuNorth).multiplyScalar(Math.cos(y)).addScaledVector(_cuEast, -Math.sin(y));
           _cuFwd.multiplyScalar(Math.cos(appliedPitch)).addScaledVector(localUp, Math.sin(appliedPitch));
           _cuFwd.normalize();
           _cuRight.crossVectors(_cuFwd, localUp).normalize();
