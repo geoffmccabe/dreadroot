@@ -502,8 +502,12 @@ function makeBoard(a: Agent) {
       if (a.weapon === 'grenade' || a.weapon === 'gun') {
         const dist = a.perception?.targetDistBodies ?? 1;
         _up.copy(a.body.dir);
-        const lift = a.weapon === 'grenade' ? 0.32 : 0.05;
-        _aim.addScaledVector(_up, Math.min(0.6, (dist / WEAPONS[a.weapon].rangeBodies) * lift)).normalize();
+        const frac = Math.min(1, dist / WEAPONS[a.weapon].rangeBodies);
+        // A grenade is THROWN, so it launches near 45 degrees — up as much as forward at full
+        // range — rather than being nudged a few degrees off flat. The old 0.32 lift produced a
+        // barely-bent line, which is why it never looked lobbed.
+        const lift = a.weapon === 'grenade' ? 0.25 + frac * 0.75 : frac * 0.05;
+        _aim.addScaledVector(_up, lift).normalize();
       }
       fireWeapon(a.id, a.weapon, from.addScaledVector(a.body.forward, ARENA_HEIGHT * 0.35), _aim, ARENA_HEIGHT);
       return State.SUCCEEDED;

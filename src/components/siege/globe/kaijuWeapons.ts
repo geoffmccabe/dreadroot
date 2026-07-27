@@ -95,11 +95,20 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
     speed: 60, spread: 0.02, count: 1, life: 3.0, blastBodies: 0, gravityScale: 1,
     colour: [1.0, 0.95, 0.5], size: 0.10,
   },
-  // Arcs, lands, explodes. Good against a group or someone in cover, bad at close range.
+  // LOBBED, not fired. Arcs high, falls, and detonates on whatever it touches.
+  //
+  // WHY ITS GRAVITY IS 12x REAL, which is a deliberate lie and the only one in this file. At true
+  // gravity the distances here make a lob absurd: a 1.3 km throw needs 113 m/s and spends SIXTEEN
+  // SECONDS in the air, and 2 km takes over twenty. Nobody can aim that and nothing about it reads
+  // as a throw. Scaling projectile gravity is what every game does for exactly this reason.
+  //
+  // At 12x, a 1.3 km lob is a 4.7 second flight peaking at 325 m — just over the Kaiju's own head,
+  // so the arc is legible against the creature that threw it. The trajectory is still fully
+  // simulated and still curves toward the planet centre; only the constant is dramatised.
   grenade: {
-    id: 'grenade', name: 'Grenade', rangeBodies: 7, cooldown: 2.4, damage: 90,
-    speed: 22, spread: 0.05, count: 1, life: 4.0, blastBodies: 1.6, gravityScale: 1,
-    colour: [0.5, 1.0, 0.4], size: 0.22,
+    id: 'grenade', name: 'Grenade', rangeBodies: 4.5, cooldown: 2.4, damage: 90,
+    speed: 4.0, spread: 0.04, count: 1, life: 8.0, blastBodies: 1.6, gravityScale: 12,
+    colour: [0.55, 1.0, 0.42], size: 0.22,
   },
   melee: {
     id: 'melee', name: 'Melee', rangeBodies: 0.9, cooldown: 1.5, damage: 55,
@@ -122,6 +131,8 @@ export interface Projectile {
   colour: [number, number, number];
   size: number;
   dead: boolean;
+  /** How the renderer should draw it. 'blast' is explosion debris, not a weapon. */
+  visual: WeaponId | 'blast';
 }
 
 const projectiles: Projectile[] = [];
@@ -190,6 +201,7 @@ export function fireWeapon(
       colour: w.colour,
       size: w.size * heightUnits,
       dead: false,
+      visual: weapon,
     });
   }
 }
@@ -265,6 +277,8 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
           }
         }
       }
+      // The visible blast, for anything that actually goes off. Flame particles simply expire.
+      if (p.visual === 'grenade' && detonate) spawnExplosion(p.pos, Math.max(p.blast, 1.2));
       p.dead = true;
     }
   }
@@ -291,6 +305,52 @@ export function resolveMelee(
     out.push({ targetId: t.id, ownerId, weapon: 'melee', damage: w.damage });
   }
   return out;
+}
+
+/**
+ * Blow a hole in the air: a few hundred particles of wildly varying size and speed.
+ *
+ * At this scale a "simple explosion" — one expanding sphere, or a dozen puffs — looks like a
+ * firework beside something 300 m tall. What sells a blast of this size is the SPREAD OF SCALES
+ * in it: a bright fast core, a mass of mid-sized fire, and slow heavy chunks that lag behind and
+ * fall. So sizes and speeds are drawn from a wide range rather than jittered around one value,
+ * and the slowest particles live longest, which is what leaves a rolling cloud behind.
+ *
+ * These carry NO damage. The blast has already been resolved by the weapon's radius; this is
+ * purely what it looks like, and making the debris damaging would double-count it.
+ */
+export function spawnExplosion(at: THREE.Vector3, radiusUnits: number, count = 420): void {
+  const up = _up.copy(at).normalize();
+  for (let i = 0; i < count; i++) {
+    // Uniform on a sphere, so the burst is round rather than banded at the poles.
+    const z = rand() * 2 - 1;
+    const a = rand() * Math.PI * 2;
+    const r = Math.sqrt(Math.max(0, 1 - z * z));
+    _dir.set(r * Math.cos(a), r * Math.sin(a), z);
+
+    // THE SPREAD OF SCALES. A cubed random gives many small fragments and a few big ones, which is
+    // both what a real blast throws and what stops the cloud looking uniform.
+    const t = rand();
+    const bigness = t * t * t;
+    const speed = (0.35 + rand() * 2.4) * radiusUnits * (1 - bigness * 0.65);
+
+    projectiles.push({
+      pos: at.clone().addScaledVector(_dir, radiusUnits * 0.12 * rand()),
+      // A slight upward bias, so the fireball climbs the way a real one does.
+      vel: _dir.clone().multiplyScalar(speed).addScaledVector(up, speed * 0.28),
+      ownerId: '',
+      weapon: 'grenade',
+      // Heavy fragments hang around; light fast ones burn out immediately.
+      life: 0.5 + bigness * 2.6 + rand() * 0.8,
+      maxLife: 3.9,
+      damage: 0,
+      blast: 0,
+      colour: [1, 0.8, 0.35],
+      size: radiusUnits * (0.02 + bigness * 0.20),
+      dead: false,
+      visual: 'blast',
+    });
+  }
 }
 
 export function clearProjectiles(): void { projectiles.length = 0; }

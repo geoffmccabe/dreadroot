@@ -177,7 +177,9 @@ function Projectiles() {
   // 1600, not 400. The flame alone keeps about 1000 alive; at 400 the jet was silently truncated
   // to its first fraction, which is part of why it looked like a blob rather than a stream.
   // One instanced draw either way — the cost is the buffer, not the count.
-  const MAX = 2000;
+  // 3000. A grenade throws 420 debris particles and several can be in the air at once; on top of
+  // ~1500 flame particles the old cap would have clipped the explosion away entirely.
+  const MAX = 3000;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colour = useMemo(() => new THREE.Color(), []);
 
@@ -214,6 +216,21 @@ function Projectiles() {
           0.88 - age * 0.55,
           0.30 - age * 0.28,
         ).multiplyScalar(Math.max(0.06, 1 - age * age * 0.9));
+      } else if (p.visual === 'blast') {
+        // EXPLOSION DEBRIS. Each fragment expands as it burns and cools through the same sequence
+        // a real fireball does: white-hot, orange, then dark smoke that lingers. Because the sizes
+        // and lifetimes were drawn from a wide range, the cloud has fast bright motes tearing
+        // outward and slow dark chunks still tumbling long after — which is what makes it read as
+        // enormous rather than as a firework.
+        dummy.scale.setScalar(p.size * (1 + age * 2.2));
+        if (age < 0.28) {
+          const u = age / 0.28;                       // white-hot core, very brief
+          colour.setRGB(1, 0.95 - u * 0.12, 0.72 - u * 0.42);
+        } else {
+          const u = (age - 0.28) / 0.72;              // orange fire into cooling smoke
+          colour.setRGB(1 - u * 0.82, 0.83 - u * 0.72, 0.30 - u * 0.22)
+            .multiplyScalar(Math.max(0.08, 1 - u * u * 0.85));
+        }
       } else {
         dummy.scale.setScalar(p.size);
         colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);

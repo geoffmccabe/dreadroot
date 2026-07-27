@@ -141,6 +141,40 @@ ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startD
   console.log('   now does not, is one occupying the same space as another.)');
 }
 
+// THE GRENADE MUST ARC, AND EXPLODE INTO SOMETHING BIG.
+//
+// A projectile with gravity that never visibly rises is just a slow bullet. This fires one and
+// records the height profile of its flight, then counts what the detonation leaves behind.
+{
+  initArenaWith([
+    { name: 'Thrower', tier: 3, monsterType: 15, weapon: 'grenade', obedience: 50, abilities: [],
+      stats: { might: 50, armour: 40, vigour: 60, speed: 45, instinct: 60 } },
+    { name: 'Target', tier: 3, monsterType: 16, weapon: 'gun', obedience: 50, abilities: [],
+      stats: { might: 50, armour: 40, vigour: 60, speed: 45, instinct: 60 } },
+  ], 31337, 3);
+
+  let apex = 0;
+  let sawGrenade = false;
+  let peakDebris = 0;
+  for (let i = 0; i < 40 * 30; i++) {
+    stepArena(1 / 30, false);
+    let debris = 0;
+    for (const p of getProjectiles()) {
+      if (p.visual === 'grenade') {
+        sawGrenade = true;
+        apex = Math.max(apex, (p.pos.length() - 63710) * 100);   // metres above sea level
+      }
+      if (p.visual === 'blast') debris++;
+    }
+    peakDebris = Math.max(peakDebris, debris);
+  }
+  console.log(`\n  grenade apex ${apex.toFixed(0)} m (the Kaiju is 300 m tall)`);
+  console.log(`  peak explosion debris in flight: ${peakDebris} particles`);
+  ok(sawGrenade, 'a grenade was actually thrown');
+  ok(apex > 300, 'it arcs ABOVE the thrower rather than flying flat', `${apex.toFixed(0)} m`);
+  ok(peakDebris > 200, 'the explosion is hundreds of particles, not a puff', `${peakDebris}`);
+}
+
 // FLAME MUST SET THINGS ALIGHT, AND THE BURN MUST STOP.
 //
 // Damage-over-time is the classic place to leave something burning forever, or to stack a jet of
