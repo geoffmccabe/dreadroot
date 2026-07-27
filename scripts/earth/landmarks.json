@@ -1,0 +1,1369 @@
+{
+ "_comment": "Famous geographical landmarks to render at Copernicus GLO-30 (30 m) detail on the Mini Earth. radiusKm is the half-width of the square region tiled around the point. Copernicus DEM is LAND ONLY, so purely underwater features (reefs, trenches) are deliberately absent. Coordinates are validated by scripts/earth/check_landmarks.py, which samples GLO-30 at each point and flags anything with implausible elevation or no relief.",
+ "landmarks": [
+  {
+   "n": "Grand Canyon",
+   "lat": 36.1,
+   "lon": -112.095,
+   "r": 45
+  },
+  {
+   "n": "Yosemite Valley / Half Dome",
+   "lat": 37.745,
+   "lon": -119.533,
+   "r": 25
+  },
+  {
+   "n": "Denali",
+   "lat": 63.069,
+   "lon": -151.007,
+   "r": 30
+  },
+  {
+   "n": "Mount Rainier",
+   "lat": 46.853,
+   "lon": -121.76,
+   "r": 25
+  },
+  {
+   "n": "Crater Lake",
+   "lat": 42.945,
+   "lon": -122.109,
+   "r": 20,
+   "flat": true
+  },
+  {
+   "n": "Devils Tower",
+   "lat": 44.59,
+   "lon": -104.715,
+   "r": 15
+  },
+  {
+   "n": "Monument Valley",
+   "lat": 36.983,
+   "lon": -110.113,
+   "r": 25
+  },
+  {
+   "n": "Bryce Canyon",
+   "lat": 37.593,
+   "lon": -112.187,
+   "r": 20
+  },
+  {
+   "n": "Zion Canyon",
+   "lat": 37.298,
+   "lon": -112.948,
+   "r": 20
+  },
+  {
+   "n": "Arches / Delicate Arch",
+   "lat": 38.744,
+   "lon": -109.499,
+   "r": 20
+  },
+  {
+   "n": "Death Valley",
+   "lat": 36.23,
+   "lon": -116.767,
+   "r": 45
+  },
+  {
+   "n": "Mount Whitney",
+   "lat": 36.578,
+   "lon": -118.292,
+   "r": 20
+  },
+  {
+   "n": "Yellowstone",
+   "lat": 44.525,
+   "lon": -110.838,
+   "r": 35
+  },
+  {
+   "n": "Grand Teton",
+   "lat": 43.741,
+   "lon": -110.802,
+   "r": 25
+  },
+  {
+   "n": "Niagara Falls",
+   "lat": 43.078,
+   "lon": -79.075,
+   "r": 15
+  },
+  {
+   "n": "Mount St Helens",
+   "lat": 46.191,
+   "lon": -122.195,
+   "r": 20
+  },
+  {
+   "n": "Longs Peak",
+   "lat": 40.255,
+   "lon": -105.615,
+   "r": 20
+  },
+  {
+   "n": "Great Sand Dunes",
+   "lat": 37.733,
+   "lon": -105.512,
+   "r": 20
+  },
+  {
+   "n": "Meteor Crater",
+   "lat": 35.027,
+   "lon": -111.022,
+   "r": 12
+  },
+  {
+   "n": "Shiprock",
+   "lat": 36.687,
+   "lon": -108.836,
+   "r": 15
+  },
+  {
+   "n": "Mount Shasta",
+   "lat": 41.409,
+   "lon": -122.195,
+   "r": 20
+  },
+  {
+   "n": "Lake Tahoe",
+   "lat": 39.096,
+   "lon": -120.032,
+   "r": 30,
+   "flat": true
+  },
+  {
+   "n": "Columbia River Gorge",
+   "lat": 45.7,
+   "lon": -121.9,
+   "r": 30
+  },
+  {
+   "n": "Badlands",
+   "lat": 43.855,
+   "lon": -102.339,
+   "r": 25
+  },
+  {
+   "n": "Mount Katahdin",
+   "lat": 45.904,
+   "lon": -68.921,
+   "r": 15
+  },
+  {
+   "n": "Columbia Icefield",
+   "lat": 52.19,
+   "lon": -117.23,
+   "r": 25
+  },
+  {
+   "n": "Moraine Lake / Lake Louise",
+   "lat": 51.417,
+   "lon": -116.183,
+   "r": 20
+  },
+  {
+   "n": "Mount Robson",
+   "lat": 53.108,
+   "lon": -119.156,
+   "r": 20
+  },
+  {
+   "n": "Gros Morne",
+   "lat": 49.595,
+   "lon": -57.75,
+   "r": 25
+  },
+  {
+   "n": "Mount Thor / Baffin",
+   "lat": 66.533,
+   "lon": -65.325,
+   "r": 20
+  },
+  {
+   "n": "Popocatepetl",
+   "lat": 19.023,
+   "lon": -98.628,
+   "r": 20
+  },
+  {
+   "n": "Pico de Orizaba",
+   "lat": 19.03,
+   "lon": -97.269,
+   "r": 20
+  },
+  {
+   "n": "Copper Canyon",
+   "lat": 27.5,
+   "lon": -107.7,
+   "r": 40
+  },
+  {
+   "n": "Glacier NP / Logan Pass",
+   "lat": 48.7,
+   "lon": -113.72,
+   "r": 30
+  },
+  {
+   "n": "Olympic / Mount Olympus WA",
+   "lat": 47.8,
+   "lon": -123.7,
+   "r": 30
+  },
+  {
+   "n": "Mauna Kea",
+   "lat": 19.821,
+   "lon": -155.468,
+   "r": 30
+  },
+  {
+   "n": "Kilauea",
+   "lat": 19.406,
+   "lon": -155.283,
+   "r": 20
+  },
+  {
+   "n": "Haleakala",
+   "lat": 20.709,
+   "lon": -156.253,
+   "r": 20
+  },
+  {
+   "n": "Na Pali Coast",
+   "lat": 22.18,
+   "lon": -159.64,
+   "r": 15
+  },
+  {
+   "n": "Canyonlands",
+   "lat": 38.2,
+   "lon": -109.93,
+   "r": 30
+  },
+  {
+   "n": "Grand Staircase Escalante",
+   "lat": 37.5,
+   "lon": -111.5,
+   "r": 40
+  },
+  {
+   "n": "Sedona Red Rocks",
+   "lat": 34.862,
+   "lon": -111.796,
+   "r": 18
+  },
+  {
+   "n": "Mount Hood",
+   "lat": 45.374,
+   "lon": -121.696,
+   "r": 18
+  },
+  {
+   "n": "Half Moon / Sawtooths",
+   "lat": 43.98,
+   "lon": -114.92,
+   "r": 25
+  },
+  {
+   "n": "Chisos / Big Bend",
+   "lat": 29.27,
+   "lon": -103.3,
+   "r": 30
+  },
+  {
+   "n": "White Sands",
+   "lat": 32.78,
+   "lon": -106.33,
+   "r": 25
+  },
+  {
+   "n": "Palo Duro Canyon",
+   "lat": 34.938,
+   "lon": -101.68,
+   "r": 20
+  },
+  {
+   "n": "Hell's Canyon",
+   "lat": 45.25,
+   "lon": -116.7,
+   "r": 30
+  },
+  {
+   "n": "Mount Logan",
+   "lat": 60.567,
+   "lon": -140.405,
+   "r": 30
+  },
+  {
+   "n": "Athabasca Falls / Jasper",
+   "lat": 52.665,
+   "lon": -117.885,
+   "r": 25
+  },
+  {
+   "n": "Aconcagua",
+   "lat": -32.653,
+   "lon": -70.011,
+   "r": 25
+  },
+  {
+   "n": "Machu Picchu",
+   "lat": -13.163,
+   "lon": -72.545,
+   "r": 18
+  },
+  {
+   "n": "Angel Falls",
+   "lat": 5.969,
+   "lon": -62.536,
+   "r": 18
+  },
+  {
+   "n": "Iguazu Falls",
+   "lat": -25.686,
+   "lon": -54.445,
+   "r": 15
+  },
+  {
+   "n": "Torres del Paine",
+   "lat": -50.943,
+   "lon": -73.407,
+   "r": 25
+  },
+  {
+   "n": "Perito Moreno Glacier",
+   "lat": -50.497,
+   "lon": -73.137,
+   "r": 20
+  },
+  {
+   "n": "Fitz Roy",
+   "lat": -49.271,
+   "lon": -73.044,
+   "r": 20
+  },
+  {
+   "n": "Salar de Uyuni",
+   "lat": -20.133,
+   "lon": -67.489,
+   "r": 50,
+   "flat": true
+  },
+  {
+   "n": "Valle de la Luna / Atacama",
+   "lat": -22.911,
+   "lon": -68.281,
+   "r": 30
+  },
+  {
+   "n": "Cotopaxi",
+   "lat": -0.684,
+   "lon": -78.436,
+   "r": 20
+  },
+  {
+   "n": "Chimborazo",
+   "lat": -1.469,
+   "lon": -78.817,
+   "r": 20
+  },
+  {
+   "n": "Sugarloaf / Rio",
+   "lat": -22.949,
+   "lon": -43.157,
+   "r": 15
+  },
+  {
+   "n": "Lake Titicaca",
+   "lat": -15.8,
+   "lon": -69.35,
+   "r": 45,
+   "flat": true
+  },
+  {
+   "n": "Colca Canyon",
+   "lat": -15.61,
+   "lon": -71.93,
+   "r": 30
+  },
+  {
+   "n": "Mount Roraima",
+   "lat": 5.143,
+   "lon": -60.762,
+   "r": 20
+  },
+  {
+   "n": "General Carrera / Marble Caves",
+   "lat": -46.65,
+   "lon": -72.3,
+   "r": 25
+  },
+  {
+   "n": "Huascaran",
+   "lat": -9.121,
+   "lon": -77.604,
+   "r": 25
+  },
+  {
+   "n": "Ojos del Salado",
+   "lat": -27.109,
+   "lon": -68.541,
+   "r": 25
+  },
+  {
+   "n": "Cerro Fitz / Cochamo",
+   "lat": -41.5,
+   "lon": -72.2,
+   "r": 25
+  },
+  {
+   "n": "Chapada Diamantina",
+   "lat": -12.6,
+   "lon": -41.4,
+   "r": 30
+  },
+  {
+   "n": "Lencois Maranhenses",
+   "lat": -2.5,
+   "lon": -43.13,
+   "r": 30
+  },
+  {
+   "n": "Cerro Autana",
+   "lat": 4.833,
+   "lon": -67.45,
+   "r": 15
+  },
+  {
+   "n": "Villarrica",
+   "lat": -39.42,
+   "lon": -71.939,
+   "r": 18
+  },
+  {
+   "n": "Osorno",
+   "lat": -41.1,
+   "lon": -72.493,
+   "r": 18
+  },
+  {
+   "n": "Cordillera Huayhuash",
+   "lat": -10.27,
+   "lon": -76.9,
+   "r": 25
+  },
+  {
+   "n": "Matterhorn",
+   "lat": 45.977,
+   "lon": 7.658,
+   "r": 20
+  },
+  {
+   "n": "Mont Blanc",
+   "lat": 45.833,
+   "lon": 6.865,
+   "r": 25
+  },
+  {
+   "n": "Eiger / Jungfrau",
+   "lat": 46.577,
+   "lon": 8.005,
+   "r": 20
+  },
+  {
+   "n": "Tre Cime / Dolomites",
+   "lat": 46.618,
+   "lon": 12.305,
+   "r": 22
+  },
+  {
+   "n": "Grossglockner",
+   "lat": 47.074,
+   "lon": 12.694,
+   "r": 20
+  },
+  {
+   "n": "Vesuvius",
+   "lat": 40.822,
+   "lon": 14.426,
+   "r": 15
+  },
+  {
+   "n": "Mount Etna",
+   "lat": 37.751,
+   "lon": 14.993,
+   "r": 25
+  },
+  {
+   "n": "Stromboli",
+   "lat": 38.789,
+   "lon": 15.213,
+   "r": 10
+  },
+  {
+   "n": "Santorini",
+   "lat": 36.404,
+   "lon": 25.396,
+   "r": 15
+  },
+  {
+   "n": "Meteora",
+   "lat": 39.721,
+   "lon": 21.63,
+   "r": 12
+  },
+  {
+   "n": "Mount Olympus",
+   "lat": 40.085,
+   "lon": 22.359,
+   "r": 20
+  },
+  {
+   "n": "Cliffs of Moher",
+   "lat": 52.973,
+   "lon": -9.426,
+   "r": 15
+  },
+  {
+   "n": "Giant's Causeway",
+   "lat": 55.241,
+   "lon": -6.512,
+   "r": 12
+  },
+  {
+   "n": "Quiraing / Skye",
+   "lat": 57.641,
+   "lon": -6.281,
+   "r": 20
+  },
+  {
+   "n": "Ben Nevis",
+   "lat": 56.797,
+   "lon": -5.004,
+   "r": 18
+  },
+  {
+   "n": "Preikestolen",
+   "lat": 58.986,
+   "lon": 6.19,
+   "r": 20
+  },
+  {
+   "n": "Trolltunga",
+   "lat": 60.124,
+   "lon": 6.74,
+   "r": 20
+  },
+  {
+   "n": "Geirangerfjord",
+   "lat": 62.101,
+   "lon": 7.005,
+   "r": 25
+  },
+  {
+   "n": "Lofoten",
+   "lat": 68.15,
+   "lon": 13.7,
+   "r": 35
+  },
+  {
+   "n": "Jostedalsbreen",
+   "lat": 61.66,
+   "lon": 7.0,
+   "r": 30
+  },
+  {
+   "n": "Eyjafjallajokull",
+   "lat": 63.633,
+   "lon": -19.617,
+   "r": 20
+  },
+  {
+   "n": "Vatnajokull",
+   "lat": 64.4,
+   "lon": -16.8,
+   "r": 45
+  },
+  {
+   "n": "Dettifoss",
+   "lat": 65.814,
+   "lon": -16.385,
+   "r": 15
+  },
+  {
+   "n": "Gullfoss / Geysir",
+   "lat": 64.327,
+   "lon": -20.121,
+   "r": 15
+  },
+  {
+   "n": "Landmannalaugar",
+   "lat": 63.983,
+   "lon": -19.06,
+   "r": 20
+  },
+  {
+   "n": "Plitvice Lakes",
+   "lat": 44.881,
+   "lon": 15.616,
+   "r": 15
+  },
+  {
+   "n": "Ordesa / Monte Perdido",
+   "lat": 42.65,
+   "lon": -0.05,
+   "r": 25
+  },
+  {
+   "n": "Picos de Europa",
+   "lat": 43.19,
+   "lon": -4.85,
+   "r": 25
+  },
+  {
+   "n": "Mount Teide",
+   "lat": 28.272,
+   "lon": -16.642,
+   "r": 25
+  },
+  {
+   "n": "Rock of Gibraltar",
+   "lat": 36.143,
+   "lon": -5.345,
+   "r": 10
+  },
+  {
+   "n": "Verdon Gorge",
+   "lat": 43.75,
+   "lon": 6.35,
+   "r": 20
+  },
+  {
+   "n": "Rysy / High Tatras",
+   "lat": 49.179,
+   "lon": 20.088,
+   "r": 20
+  },
+  {
+   "n": "Mount Elbrus",
+   "lat": 43.355,
+   "lon": 42.439,
+   "r": 25
+  },
+  {
+   "n": "Mount Kazbek",
+   "lat": 42.697,
+   "lon": 44.518,
+   "r": 20
+  },
+  {
+   "n": "Durmitor",
+   "lat": 43.14,
+   "lon": 19.05,
+   "r": 22
+  },
+  {
+   "n": "Bastei / Saxon Switzerland",
+   "lat": 50.961,
+   "lon": 14.073,
+   "r": 15
+  },
+  {
+   "n": "Zugspitze",
+   "lat": 47.421,
+   "lon": 10.985,
+   "r": 18
+  },
+  {
+   "n": "Sorvagsvatn / Faroes",
+   "lat": 62.07,
+   "lon": -7.32,
+   "r": 20
+  },
+  {
+   "n": "Nordkapp",
+   "lat": 71.17,
+   "lon": 25.784,
+   "r": 18
+  },
+  {
+   "n": "Triglav",
+   "lat": 46.379,
+   "lon": 13.837,
+   "r": 20
+  },
+  {
+   "n": "Cinque Terre",
+   "lat": 44.128,
+   "lon": 9.713,
+   "r": 15
+  },
+  {
+   "n": "Mount Vesuvius / Amalfi",
+   "lat": 40.63,
+   "lon": 14.6,
+   "r": 20
+  },
+  {
+   "n": "Sognefjord",
+   "lat": 61.1,
+   "lon": 6.7,
+   "r": 35
+  },
+  {
+   "n": "Askja / Highlands",
+   "lat": 65.03,
+   "lon": -16.75,
+   "r": 25
+  },
+  {
+   "n": "Snowdon",
+   "lat": 53.068,
+   "lon": -4.076,
+   "r": 15
+  },
+  {
+   "n": "Etretat Cliffs",
+   "lat": 49.707,
+   "lon": 0.203,
+   "r": 12
+  },
+  {
+   "n": "Mount Vitosha / Rila",
+   "lat": 42.134,
+   "lon": 23.556,
+   "r": 22
+  },
+  {
+   "n": "Kilimanjaro",
+   "lat": -3.066,
+   "lon": 37.355,
+   "r": 30
+  },
+  {
+   "n": "Mount Kenya",
+   "lat": -0.152,
+   "lon": 37.308,
+   "r": 20
+  },
+  {
+   "n": "Ngorongoro Crater",
+   "lat": -3.17,
+   "lon": 35.58,
+   "r": 25
+  },
+  {
+   "n": "Victoria Falls",
+   "lat": -17.925,
+   "lon": 25.858,
+   "r": 18
+  },
+  {
+   "n": "Table Mountain",
+   "lat": -33.957,
+   "lon": 18.403,
+   "r": 15
+  },
+  {
+   "n": "Cape of Good Hope",
+   "lat": -34.357,
+   "lon": 18.472,
+   "r": 15
+  },
+  {
+   "n": "Drakensberg Amphitheatre",
+   "lat": -28.75,
+   "lon": 28.9,
+   "r": 25
+  },
+  {
+   "n": "Blyde River Canyon",
+   "lat": -24.58,
+   "lon": 30.8,
+   "r": 25
+  },
+  {
+   "n": "Sossusvlei Dunes",
+   "lat": -24.73,
+   "lon": 15.29,
+   "r": 30
+  },
+  {
+   "n": "Fish River Canyon",
+   "lat": -27.6,
+   "lon": 17.6,
+   "r": 30
+  },
+  {
+   "n": "Erg Chebbi",
+   "lat": 31.1,
+   "lon": -4.0,
+   "r": 25
+  },
+  {
+   "n": "Toubkal / High Atlas",
+   "lat": 31.061,
+   "lon": -7.915,
+   "r": 22
+  },
+  {
+   "n": "Tassili n'Ajjer",
+   "lat": 25.5,
+   "lon": 9.0,
+   "r": 40
+  },
+  {
+   "n": "Assekrem / Hoggar",
+   "lat": 23.267,
+   "lon": 5.633,
+   "r": 25
+  },
+  {
+   "n": "Erta Ale / Danakil",
+   "lat": 13.6,
+   "lon": 40.67,
+   "r": 25
+  },
+  {
+   "n": "Ras Dashen / Simien",
+   "lat": 13.24,
+   "lon": 38.37,
+   "r": 25
+  },
+  {
+   "n": "Blue Nile Falls",
+   "lat": 11.49,
+   "lon": 37.59,
+   "r": 12
+  },
+  {
+   "n": "Nyiragongo",
+   "lat": -1.52,
+   "lon": 29.25,
+   "r": 18
+  },
+  {
+   "n": "Rwenzori / Margherita",
+   "lat": 0.385,
+   "lon": 29.873,
+   "r": 20
+  },
+  {
+   "n": "Richat Structure",
+   "lat": 21.124,
+   "lon": -11.401,
+   "r": 25
+  },
+  {
+   "n": "Tsingy de Bemaraha",
+   "lat": -18.7,
+   "lon": 44.75,
+   "r": 25
+  },
+  {
+   "n": "Ennedi / Aloba Arch",
+   "lat": 16.9,
+   "lon": 22.2,
+   "r": 30
+  },
+  {
+   "n": "Mount Cameroon",
+   "lat": 4.203,
+   "lon": 9.17,
+   "r": 22
+  },
+  {
+   "n": "Lake Malawi Escarpment",
+   "lat": -10.4,
+   "lon": 34.3,
+   "r": 40,
+   "flat": true
+  },
+  {
+   "n": "Ahaggar Tahat",
+   "lat": 23.298,
+   "lon": 5.532,
+   "r": 22
+  },
+  {
+   "n": "Bandiagara Escarpment",
+   "lat": 14.35,
+   "lon": -3.6,
+   "r": 25
+  },
+  {
+   "n": "Ol Doinyo Lengai",
+   "lat": -2.764,
+   "lon": 35.914,
+   "r": 18
+  },
+  {
+   "n": "Semien Bale / Tullu Dimtu",
+   "lat": 6.87,
+   "lon": 39.76,
+   "r": 22
+  },
+  {
+   "n": "Mount Everest",
+   "lat": 27.988,
+   "lon": 86.925,
+   "r": 35
+  },
+  {
+   "n": "K2",
+   "lat": 35.881,
+   "lon": 76.513,
+   "r": 25
+  },
+  {
+   "n": "Annapurna",
+   "lat": 28.596,
+   "lon": 83.82,
+   "r": 25
+  },
+  {
+   "n": "Kangchenjunga",
+   "lat": 27.703,
+   "lon": 88.148,
+   "r": 25
+  },
+  {
+   "n": "Nanga Parbat",
+   "lat": 35.238,
+   "lon": 74.589,
+   "r": 25
+  },
+  {
+   "n": "Baltoro / Trango Towers",
+   "lat": 35.75,
+   "lon": 76.4,
+   "r": 30
+  },
+  {
+   "n": "Tiger Leaping Gorge",
+   "lat": 27.18,
+   "lon": 100.13,
+   "r": 25
+  },
+  {
+   "n": "Zhangjiajie",
+   "lat": 29.315,
+   "lon": 110.435,
+   "r": 20
+  },
+  {
+   "n": "Guilin / Li River",
+   "lat": 25.24,
+   "lon": 110.47,
+   "r": 30
+  },
+  {
+   "n": "Huangshan",
+   "lat": 30.135,
+   "lon": 118.165,
+   "r": 20
+  },
+  {
+   "n": "Zhangye Danxia",
+   "lat": 38.915,
+   "lon": 100.13,
+   "r": 20
+  },
+  {
+   "n": "Three Gorges",
+   "lat": 31.05,
+   "lon": 110.7,
+   "r": 40
+  },
+  {
+   "n": "Mount Fuji",
+   "lat": 35.361,
+   "lon": 138.728,
+   "r": 25
+  },
+  {
+   "n": "Sakurajima",
+   "lat": 31.585,
+   "lon": 130.657,
+   "r": 18
+  },
+  {
+   "n": "Mount Aso",
+   "lat": 32.884,
+   "lon": 131.104,
+   "r": 20
+  },
+  {
+   "n": "Hallasan / Jeju",
+   "lat": 33.362,
+   "lon": 126.533,
+   "r": 20
+  },
+  {
+   "n": "Changbaishan / Baekdu",
+   "lat": 42.006,
+   "lon": 128.056,
+   "r": 22
+  },
+  {
+   "n": "Klyuchevskaya Sopka",
+   "lat": 56.056,
+   "lon": 160.642,
+   "r": 30
+  },
+  {
+   "n": "Lake Baikal Shore",
+   "lat": 51.9,
+   "lon": 105.0,
+   "r": 45
+  },
+  {
+   "n": "Belukha / Altai",
+   "lat": 49.807,
+   "lon": 86.59,
+   "r": 25
+  },
+  {
+   "n": "Khan Tengri / Tian Shan",
+   "lat": 42.211,
+   "lon": 80.176,
+   "r": 25
+  },
+  {
+   "n": "Ismoil Somoni / Pamir",
+   "lat": 38.943,
+   "lon": 72.016,
+   "r": 25
+  },
+  {
+   "n": "Dead Sea",
+   "lat": 31.5,
+   "lon": 35.47,
+   "r": 30,
+   "flat": true
+  },
+  {
+   "n": "Petra",
+   "lat": 30.329,
+   "lon": 35.444,
+   "r": 18
+  },
+  {
+   "n": "Wadi Rum",
+   "lat": 29.575,
+   "lon": 35.42,
+   "r": 25
+  },
+  {
+   "n": "Mount Sinai",
+   "lat": 28.539,
+   "lon": 33.975,
+   "r": 20
+  },
+  {
+   "n": "Socotra",
+   "lat": 12.5,
+   "lon": 53.9,
+   "r": 35
+  },
+  {
+   "n": "Rub al Khali Dunes",
+   "lat": 19.5,
+   "lon": 51.5,
+   "r": 45
+  },
+  {
+   "n": "Kaluts / Lut Desert",
+   "lat": 30.9,
+   "lon": 58.5,
+   "r": 35
+  },
+  {
+   "n": "Mount Ararat",
+   "lat": 39.702,
+   "lon": 44.298,
+   "r": 25,
+   "glo30": false
+  },
+  {
+   "n": "Cappadocia",
+   "lat": 38.643,
+   "lon": 34.831,
+   "r": 20
+  },
+  {
+   "n": "Pamukkale",
+   "lat": 37.921,
+   "lon": 29.124,
+   "r": 12
+  },
+  {
+   "n": "Mount Damavand",
+   "lat": 35.955,
+   "lon": 52.109,
+   "r": 25
+  },
+  {
+   "n": "Ha Long Bay",
+   "lat": 20.91,
+   "lon": 107.18,
+   "r": 30
+  },
+  {
+   "n": "Phang Nga Bay",
+   "lat": 8.27,
+   "lon": 98.5,
+   "r": 22
+  },
+  {
+   "n": "Mount Bromo",
+   "lat": -7.942,
+   "lon": 112.953,
+   "r": 18
+  },
+  {
+   "n": "Krakatoa",
+   "lat": -6.102,
+   "lon": 105.423,
+   "r": 15
+  },
+  {
+   "n": "Mount Rinjani",
+   "lat": -8.411,
+   "lon": 116.457,
+   "r": 20
+  },
+  {
+   "n": "Puncak Jaya",
+   "lat": -4.079,
+   "lon": 137.158,
+   "r": 22
+  },
+  {
+   "n": "Mount Mayon",
+   "lat": 13.257,
+   "lon": 123.685,
+   "r": 18
+  },
+  {
+   "n": "Chocolate Hills",
+   "lat": 9.917,
+   "lon": 124.17,
+   "r": 15
+  },
+  {
+   "n": "Banaue Rice Terraces",
+   "lat": 16.93,
+   "lon": 121.13,
+   "r": 18
+  },
+  {
+   "n": "Yarlung Tsangpo Canyon",
+   "lat": 29.63,
+   "lon": 95.06,
+   "r": 40
+  },
+  {
+   "n": "Mount Kailash",
+   "lat": 31.067,
+   "lon": 81.312,
+   "r": 25
+  },
+  {
+   "n": "Pangong / Ladakh",
+   "lat": 33.7,
+   "lon": 78.8,
+   "r": 30
+  },
+  {
+   "n": "Turpan Depression",
+   "lat": 42.7,
+   "lon": 89.2,
+   "r": 30,
+   "flat": true
+  },
+  {
+   "n": "Khongoryn Els / Gobi",
+   "lat": 43.76,
+   "lon": 102.3,
+   "r": 30
+  },
+  {
+   "n": "Taklamakan Dunes",
+   "lat": 38.5,
+   "lon": 82.5,
+   "r": 45
+  },
+  {
+   "n": "Mount Kinabalu",
+   "lat": 6.075,
+   "lon": 116.558,
+   "r": 20
+  },
+  {
+   "n": "Mount Paektu Caldera",
+   "lat": 41.993,
+   "lon": 128.077,
+   "r": 18
+  },
+  {
+   "n": "Cliffs of Cappadocia / Ihlara",
+   "lat": 38.265,
+   "lon": 34.31,
+   "r": 15
+  },
+  {
+   "n": "Jiuzhaigou",
+   "lat": 33.26,
+   "lon": 103.92,
+   "r": 25
+  },
+  {
+   "n": "Mount Emei",
+   "lat": 29.52,
+   "lon": 103.337,
+   "r": 20
+  },
+  {
+   "n": "Uluru / Kata Tjuta",
+   "lat": -25.345,
+   "lon": 131.037,
+   "r": 25
+  },
+  {
+   "n": "Three Sisters / Blue Mountains",
+   "lat": -33.732,
+   "lon": 150.312,
+   "r": 20
+  },
+  {
+   "n": "Twelve Apostles",
+   "lat": -38.665,
+   "lon": 143.105,
+   "r": 15
+  },
+  {
+   "n": "Jim Jim Falls / Kakadu",
+   "lat": -13.28,
+   "lon": 132.84,
+   "r": 25
+  },
+  {
+   "n": "Bungle Bungles",
+   "lat": -17.5,
+   "lon": 128.38,
+   "r": 25
+  },
+  {
+   "n": "Wave Rock",
+   "lat": -32.443,
+   "lon": 118.898,
+   "r": 12
+  },
+  {
+   "n": "Aoraki / Mount Cook",
+   "lat": -43.595,
+   "lon": 170.142,
+   "r": 25
+  },
+  {
+   "n": "Milford Sound",
+   "lat": -44.671,
+   "lon": 167.926,
+   "r": 25
+  },
+  {
+   "n": "Franz Josef Glacier",
+   "lat": -43.466,
+   "lon": 170.183,
+   "r": 20
+  },
+  {
+   "n": "Tongariro / Ngauruhoe",
+   "lat": -39.157,
+   "lon": 175.632,
+   "r": 20
+  },
+  {
+   "n": "Mount Taranaki",
+   "lat": -39.296,
+   "lon": 174.064,
+   "r": 20
+  },
+  {
+   "n": "Rotorua Geothermal",
+   "lat": -38.137,
+   "lon": 176.251,
+   "r": 20
+  },
+  {
+   "n": "Bora Bora",
+   "lat": -16.5,
+   "lon": -151.741,
+   "r": 15
+  },
+  {
+   "n": "Moorea",
+   "lat": -17.537,
+   "lon": -149.83,
+   "r": 15
+  },
+  {
+   "n": "Rapa Nui / Easter Island",
+   "lat": -27.113,
+   "lon": -109.366,
+   "r": 15
+  },
+  {
+   "n": "Mount Wilhelm",
+   "lat": -5.783,
+   "lon": 145.03,
+   "r": 20
+  },
+  {
+   "n": "Nullarbor Cliffs",
+   "lat": -31.6,
+   "lon": 130.5,
+   "r": 30
+  },
+  {
+   "n": "Flinders Ranges / Wilpena",
+   "lat": -31.52,
+   "lon": 138.6,
+   "r": 25
+  },
+  {
+   "n": "Mount Yasur / Tanna",
+   "lat": -19.532,
+   "lon": 169.442,
+   "r": 12
+  },
+  {
+   "n": "Fiordland / Doubtful Sound",
+   "lat": -45.32,
+   "lon": 167.0,
+   "r": 30
+  },
+  {
+   "n": "Mount Vinson",
+   "lat": -78.525,
+   "lon": -85.617,
+   "r": 30
+  },
+  {
+   "n": "Mount Erebus",
+   "lat": -77.529,
+   "lon": 167.153,
+   "r": 25
+  },
+  {
+   "n": "McMurdo Dry Valleys",
+   "lat": -77.5,
+   "lon": 162.5,
+   "r": 40
+  }
+ ]
+}
