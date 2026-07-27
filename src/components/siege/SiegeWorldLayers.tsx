@@ -17,6 +17,7 @@ import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeCamera } from './globe/GlobeCamera';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
+import { KaijuWalkController } from './globe/KaijuWalkController';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -162,6 +163,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isGlobe && <GlobeCamera />}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {isGlobe && <KaijuLabController />}
+      {isGlobe && <KaijuWalkController />}
       {/* The globe has NO separate water layer: the sea surface is the terrain mesh clamped up to
           sea level (see GlobeTerrain). A separate shell z-fought the terrain across the whole
           planet, because the depth buffer at orbit range cannot separate them. */}

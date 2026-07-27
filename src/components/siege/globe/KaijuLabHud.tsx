@@ -10,8 +10,10 @@ import { useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
+import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
+import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import {
-  getKaijuLab, subscribeKaijuLab, sizeRatio, speedMul, animSpeedMul, SCALE_STEP, KAIJU_TYPES,
+  getKaijuLab, subscribeKaijuLab, sizeRatio, animSpeedMul, SCALE_STEP, KAIJU_TYPES,
 } from './kaijuLabState';
 
 /** Reference values, in game units, so sizes can be judged against something real. */
@@ -25,6 +27,7 @@ function fmtReal(units: number): string {
 
 export function KaijuLabHud() {
   const s = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
+  const walking = useSyncExternalStore(subscribeKaijuWalk, isKaijuWalkActive, isKaijuWalkActive);
   const { pos, handleProps } = useDraggablePanel({ left: 16, top: 90 });
   const tiles = earthTileStats();
 
@@ -53,8 +56,11 @@ export function KaijuLabHud() {
       {row('Height', fmtReal(s.height))}
       {row('in units', `${s.height.toFixed(3)} u`)}
       {row('Scale', `${sizeRatio(s).toFixed(2)}x model (${s.baseHeight} m natural)`)}
-      {row('Speed', `${speedMul(s).toFixed(2)}x`)}
       {row('Animation', `${animSpeedMul(s).toFixed(2)}x`)}
+      {row('Mode', walking ? 'WALK (G to fly)' : 'FLY (G to walk)')}
+      {/* Speeds shown in REAL m/s, since units/sec at this scale are unintuitively tiny. */}
+      {row('Walk / run', `${(walkSpeed(s.height) * 100).toFixed(0)} / ${(runSpeed(s.height) * 100).toFixed(0)} m/s`)}
+      {walking && row('On ground', kaijuBody.onGround ? 'yes' : 'airborne')}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {/* Phrase the comparison whichever way round is readable, rather than always showing a
@@ -70,7 +76,8 @@ export function KaijuLabHud() {
       {row('Tiles', `${tiles.cached} cached, ${tiles.inFlight} loading`)}
 
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
-        [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset · K go to Kaiju
+        [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
+        G walk/fly · K land here · WASD move · Shift run · Space jump
       </div>
     </div>
   );

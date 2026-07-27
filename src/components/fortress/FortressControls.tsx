@@ -4,6 +4,7 @@ import { frameLoop } from '@/lib/frameLoop';
 import { sdbg } from '@/components/siege/siegeDebug'; // SW debug readout (temporary)
 import { isSiegePlayerDead } from '@/components/siege/siegePlayerState'; // stop weapons the instant the player dies
 import { isSiegeIntroActive } from '@/components/siege/spawnintro/siegeSpawnIntro'; // SW spawn cinematic owns the camera
+import { isKaijuWalkActive } from '@/components/siege/globe/KaijuWalkController'; // Mini Earth walk mode owns the camera
 import { getTPDist, nudgeTPDist } from '@/components/siege/siegeThirdPerson'; // SW third-person camera pull-back (Alt+wheel)
 import { playerState as siegePlayerPose } from '@/components/siege/playerState'; // publish the true player eye for the self-avatar
 import { corpseSlow } from '@/components/siege/siegeCorpses'; // SW: half-speed wade over monster corpses (no-op in DreadRoot)
@@ -2096,6 +2097,10 @@ export function FirstPersonControls({
       // Siege-only flag (never set in voxel play), so this is a no-op in DreadRoot. Zero velocity so
       // accumulated gravity doesn't jolt the player on handoff back to the controller.
       if (isSiegeIntroActive()) { velocity.current.set(0, 0, 0); return; }
+      // Mini Earth WALK mode: KaijuWalkController drives the camera third-person around the
+      // simulated body. Two movers writing one camera is the failure mode here, so this one
+      // yields entirely, exactly as it does for the spawn cinematic above.
+      if (isKaijuWalkActive()) { velocity.current.set(0, 0, 0); return; }
       // Third-person (siege): smoothly track the target pull-back distance, then RESTORE the true eye
       // (undoing last frame's render offset) so all movement/collision/aim below use the real player
       // position. The pull-back is re-applied at the very END of this loop. First-person (0) = no-op.

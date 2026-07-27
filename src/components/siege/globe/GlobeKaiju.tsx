@@ -33,6 +33,8 @@ import { APP_VERSION } from '@/version';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { animSpeedMul, type KaijuLabState } from './kaijuLabState';
+import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
+import { isKaijuWalkActive } from './KaijuWalkController';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -57,6 +59,12 @@ const CLIPS: Record<Gait, string[]> = {
   run:   ['run', 'walk', 'walking'],
   idle:  ['breathidle', 'idle'],
 };
+
+/** Ground radius under the body, tolerant of tiles that have not streamed in yet. */
+function groundRadiusCached(b: typeof kaijuBodyState): number | null {
+  const m = sampleGlobeSurface(b.dir.x, b.dir.y, b.dir.z);
+  return m == null ? null : PLANET_RADIUS + m / METRES_PER_UNIT;
+}
 
 export function GlobeKaiju({ state }: { state: KaijuLabState }) {
   const cfg = CFG[state.type];
@@ -126,6 +134,40 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     if (!g) return;
     const dt = Math.min(rawDt, 0.05);
     const h = state.height;   // Kaiju height in game units
+
+    // WALK MODE: the body is simulated, so read its transform instead of deriving one from the
+    // camera. Everything below (gait, animation rate, scale) is shared between the two modes.
+    if (isKaijuWalkActive()) {
+      const b = kaijuBodyState;
+      g.position.copy(b.dir).multiplyScalar(b.radius);
+      const bUp = up.current.copy(b.dir);
+      const bFwd = fwd.current;
+      facingVector(bFwd);
+      const bRight = new THREE.Vector3().crossVectors(bFwd, bUp).normalize();
+      const trueF = new THREE.Vector3().crossVectors(bUp, bRight).normalize();
+      basis.current.makeBasis(bRight, bUp, trueF.negate());
+      g.quaternion.setFromRotationMatrix(basis.current);
+
+      const alt = b.radius - (groundRadiusCached(b) ?? b.radius);
+      const altH = alt / Math.max(0.001, h);
+      if (landTimer.current > 0) landTimer.current -= dt;
+      else if (!b.onGround && altH > GLIDE_ALT) play('glide');
+      else if (!b.onGround && gait.current === 'glide') { play('land'); landTimer.current = 0.7; }
+      else if (b.onGround) {
+        // Thresholds must be RELATIVE to this body's own speeds. A 300 m Kaiju walks at 0.27
+        // units/sec and runs at 0.86; the fixed values used in fly mode (12 and 0.6, tuned for
+        // camera flight) would classify a walk as standing still and a run as a walk.
+        const wS = walkSpeed(h), rS = runSpeed(h);
+        play(b.speed > (wS + rS) * 0.5 ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
+      }
+
+      // Stride rate relative to this body's natural walk speed, so the feet roughly keep up with
+      // the ground instead of always sitting at the clamp.
+      const stride = gait.current === 'walk' || gait.current === 'run'
+        ? Math.min(3, Math.max(0.4, b.speed / Math.max(1e-4, walkSpeed(h)))) : 1;
+      mixer.timeScale = animSpeedMul(state) * stride;
+      return;
+    }
 
     // Local frame at the camera.
     up.current.copy(camera.position);
