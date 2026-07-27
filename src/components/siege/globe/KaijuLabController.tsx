@@ -5,8 +5,7 @@
 //   [  ]   cycle through the four Kaiju candidates
 //   -  =   scale the current one down/up in 5% steps
 //   0      reset to the default size
-//   K      snap the camera to just above the Kaiju (it is a speck on a 63,710-unit planet,
-//          so without this it is genuinely hard to find)
+//   K      land: drop to just above the ground where you are
 //
 // Keys are chosen because they are unused elsewhere, and this component only mounts on the
 // globe map, so it cannot interfere with play keys on any other map.
@@ -15,19 +14,17 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isTypingTarget } from '@/lib/isTypingTarget';
-import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
-import { sampleGlobeElevation } from './globeGround';
+import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
+import { sampleGlobeSurface } from './globeGround';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab,
 } from './kaijuLabState';
-import { KaijuDisplay } from './KaijuDisplay';
+import { GlobeKaiju } from './GlobeKaiju';
 
-/**
- * Where the Kaiju stands. Chosen to be somewhere unmistakable from orbit and clearly on land:
- * the Himalaya, so the surrounding terrain is dramatic at any scale.
- */
-export const KAIJU_LAT = 28.0;
-export const KAIJU_LON = 86.9;
+// The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
+// is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
+// what you actually want while flying around.
+
 
 export function KaijuLabController() {
   const state = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
@@ -45,21 +42,18 @@ export function KaijuLabController() {
         case 'Equal':        scaleKaiju(1); break;
         case 'Digit0':       resetKaijuSize(); break;
         case 'KeyK': {
-          // Put the camera a few Kaiju-heights back and up, looking at it.
-          const dir = new Float64Array(3);
-          latLonToDirection(KAIJU_LAT, KAIJU_LON, dir);
-          const up = new THREE.Vector3(dir[0], dir[1], dir[2]).normalize();
-          const groundMetres = sampleGlobeElevation(up.x, up.y, up.z) ?? 0;
-          const surface = up.clone().multiplyScalar(PLANET_RADIUS + groundMetres / METRES_PER_UNIT);
+          // Land here: drop straight down to just above the ground at the current position.
+          // Descending by hand from orbit takes over a minute, and stopping at the right height
+          // by eye is fiddly, so this is the shortcut to actually standing on the planet.
+          const up = camera.position.clone();
+          if (up.lengthSq() < 1e-6) break;
+          up.normalize();
+          const groundMetres = sampleGlobeSurface(up.x, up.y, up.z) ?? 0;
           const h = getKaijuLab().height;
-          // Offset along any direction perpendicular to up, so we look at it side-on.
-          const side = new THREE.Vector3(0, 1, 0).cross(up);
-          if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
-          side.normalize();
-          camera.position.copy(surface)
-            .addScaledVector(up, h * 0.9)
-            .addScaledVector(side, h * 2.2);
-          camera.lookAt(surface.clone().addScaledVector(up, h * 0.5));
+          // Sit a couple of Kaiju heights up, so it is in frame below and ahead of the camera.
+          camera.position.copy(up).multiplyScalar(
+            PLANET_RADIUS + groundMetres / METRES_PER_UNIT + h * 2.0,
+          );
           break;
         }
         default: return;
@@ -71,5 +65,5 @@ export function KaijuLabController() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [camera]);
 
-  return <KaijuDisplay state={state} lat={KAIJU_LAT} lon={KAIJU_LON} />;
+  return <GlobeKaiju state={state} />;
 }

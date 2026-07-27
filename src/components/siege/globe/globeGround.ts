@@ -14,6 +14,8 @@ import {
   TILE, directionToFaceUv, uvToTileIndex, tileUvRange,
 } from './cubeSphere';
 import { getManifest, getTile, sampleTileBilinear } from './earthTiles';
+import { detailMetres } from './globeDetail';
+import { PLANET_RADIUS } from './cubeSphere';
 
 /**
  * Elevation in METRES for a unit direction from the planet centre.
@@ -39,4 +41,18 @@ export function sampleGlobeElevation(x: number, y: number, z: number): number | 
     return sampleTileBilinear(tile, fx, fy);
   }
   return null;
+}
+
+/**
+ * Elevation in METRES including procedural amplification: the surface as RENDERED.
+ *
+ * Anything that stands on the ground must use this, not sampleGlobeElevation. The measured data
+ * alone is up to a few hundred metres away from the visible surface once detail is added, which
+ * would leave a Kaiju hovering or buried. `spacingUnits` matches the finest render depth so the
+ * ground agrees with the most detailed mesh the player can be standing on.
+ */
+export function sampleGlobeSurface(x: number, y: number, z: number, spacingUnits = 3): number | null {
+  const base = sampleGlobeElevation(x, y, z);
+  if (base == null) return null;
+  return base + detailMetres(x, y, z, PLANET_RADIUS, base, spacingUnits);
 }

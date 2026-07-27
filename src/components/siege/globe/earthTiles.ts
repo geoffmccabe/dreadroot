@@ -19,6 +19,19 @@ import { TILE, FACE_NAMES, tileKey } from './cubeSphere';
 import { ASSET_BASE } from '@/config/assetBase';
 
 const BASE = `${ASSET_BASE}/siege/earth`;
+
+/**
+ * Cache-busting epoch for the tile set. BUMP THIS WHENEVER THE TILES ARE REGENERATED.
+ *
+ * R2 is fronted by the Cloudflare CDN with max-age=14400 (4 hours), and browsers cache on top of
+ * that. When the mirrored-longitude bug was fixed, every tile changed, but any tile a player had
+ * already flown past would have kept serving the OLD mirrored data from cache for hours, so the
+ * fix would have looked like it had not worked. Same pattern the monster loader already uses
+ * (`${c.url}?v=${APP_VERSION}`).
+ *
+ * epoch 2 = the un-mirrored rebuild (2026-Jul-26).
+ */
+const TILE_EPOCH = 2;
 const SAMPLES = TILE * TILE;
 const BYTES = SAMPLES * 2;
 
@@ -41,7 +54,7 @@ let manifestPromise: Promise<EarthManifest> | null = null;
 export function loadManifest(): Promise<EarthManifest> {
   if (manifest) return Promise.resolve(manifest);
   if (!manifestPromise) {
-    manifestPromise = fetch(`${BASE}/manifest.json`)
+    manifestPromise = fetch(`${BASE}/manifest.json?v=${TILE_EPOCH}`)
       .then((r) => {
         if (!r.ok) throw new Error(`earth manifest ${r.status}`);
         return r.json();
@@ -113,7 +126,7 @@ export function requestTile(
   const retryAt = failed.get(key);
   if (retryAt !== undefined && Date.now() < retryAt) return Promise.resolve(null);
 
-  const url = `${BASE}/h/${FACE_NAMES[face]}/${level}/${x}_${y}.bin`;
+  const url = `${BASE}/h/${FACE_NAMES[face]}/${level}/${x}_${y}.bin?v=${TILE_EPOCH}`;
   const p = fetch(url)
     .then(async (r) => {
       if (!r.ok) throw new Error(`${r.status}`);

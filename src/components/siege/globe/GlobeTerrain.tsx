@@ -26,10 +26,12 @@ import { enqueueJob } from '@/lib/budgetedWork';
 import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import {
   TILE, PLANET_RADIUS, METRES_PER_UNIT, faceUvToDirection, tileArcUnits, tileUvRange,
+  sampleSpacingUnits,
 } from './cubeSphere';
 import {
-  loadManifest, getManifest, getTile, hasTile, requestTile, sampleTile, clearEarthTiles,
+  loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
+import { detailMetres } from './globeDetail';
 
 /** Vertices per patch side. 65 = 64 quads = 8,192 triangles. */
 const PATCH = 65;
@@ -56,21 +58,39 @@ const REEVAL_MS = 120;
 /** Runaway-subdivision backstop. The distance test should keep leaves in the low hundreds. */
 const MAX_LEAVES = 600;
 
+/**
+ * How deep the RENDER tree may go, independent of how deep the DATA goes.
+ *
+ * Data stops at level 4 (2.44 km per sample), but procedural detail keeps producing relief far
+ * below that, so the mesh has to be allowed to subdivide past the data or none of it is visible.
+ * At depth 9 the vertex spacing is about 3 units (305 real metres), which resolves procedural
+ * features roughly twice the height of a 300 m Kaiju. Deeper costs triangles for detail the
+ * amplifier is not yet generating.
+ */
+const MAX_RENDER_DEPTH = 9;
+
 /** Skirt depth as a fraction of patch arc: hides cracks where LOD levels meet. */
 const SKIRT_FRAC = 0.03;
 
 interface NodeId { face: number; depth: number; x: number; y: number }
 const idKey = (n: NodeId) => `${n.face}:${n.depth}:${n.x}:${n.y}`;
 
-/** Data level, tile index and sub-rectangle for a render node. */
+/**
+ * Data level, tile index and sub-rectangle for a render node.
+ *
+ * `span` and `stride` are FLOATS. Once the render tree goes deeper than the data pyramid plus
+ * DATA_LAG (which it now does, so procedural detail has somewhere to live), a patch covers less
+ * than one texel per vertex and must sample the tile bilinearly at fractional coordinates.
+ * Integer indexing there silently reads undefined and produces NaN geometry.
+ */
 function dataFor(n: NodeId, maxLevel: number) {
   const level = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
   const shift = n.depth - level;              // how many quadtree steps the tile is above us
   const tx = n.x >> shift, ty = n.y >> shift;
-  const span = (TILE - 1) >> shift;           // samples of the tile this patch covers
-  const stride = span / (PATCH - 1);          // >= 1 while depth - level <= DATA_LAG
-  const ox = (n.x - (tx << shift)) * span;
-  const oy = (n.y - (ty << shift)) * span;
+  const span = (TILE - 1) / Math.pow(2, shift);   // samples of the tile this patch covers
+  const stride = span / (PATCH - 1);
+  const ox = (n.x - (tx * Math.pow(2, shift))) * span;
+  const oy = (n.y - (ty * Math.pow(2, shift))) * span;
   return { level, tx, ty, ox, oy, stride };
 }
 
@@ -102,6 +122,8 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
   const col = new Float32Array(count * 3);
   const dir = new Float64Array(3);
   const skirtDrop = tileArcUnits(n.depth) * SKIRT_FRAC;
+  // Vertex spacing of THIS patch, which band-limits the procedural octaves.
+  const patchSpacing = tileArcUnits(n.depth) / (PATCH - 1);
 
   for (let j = 0; j < side; j++) {
     // Clamp into the patch for the skirt ring, so skirt verts sit under the true edge.
@@ -112,7 +134,12 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
       const isSkirt = isSkirtRow || i === 0 || i === side - 1;
 
       faceUvToDirection(n.face, u0 + ii * du, v0 + jj * dv, dir);
-      const metres = sampleTile(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
+      const baseM = sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
+      // Procedural amplification: the measured data is one sample per 2.44 km, which is a flat
+      // plane at creature scale. This adds the detail no global dataset can supply, band-limited
+      // to what this patch can represent. Same function the ground sampler uses, so the Kaiju
+      // stands on exactly the surface you can see.
+      const metres = baseM + detailMetres(dir[0], dir[1], dir[2], PLANET_RADIUS, baseM, patchSpacing);
       // Sea surface is the SAME mesh as the land, clamped up to elevation 0 below the waterline.
       // There is no separate ocean sphere any more. A shell at exactly PLANET_RADIUS z-fought the
       // terrain catastrophically: at orbit the depth buffer resolves about 110 units, and the
@@ -236,7 +263,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     if (now - lastEval.current < REEVAL_MS) return;
     lastEval.current = now;
 
-    const maxDepth = mf.maxLevel + DATA_LAG;
+    const maxDepth = Math.max(mf.maxLevel + DATA_LAG, MAX_RENDER_DEPTH);
     const cam = camera.position;
     const centre = new Float64Array(3);
     const next: NodeId[] = [];

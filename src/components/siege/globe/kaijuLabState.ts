@@ -34,8 +34,9 @@ export const KAIJU_TYPES: MType[] = [17, 16, 15, 8] as MType[];
  *
  * This was 100, which is 10 km real: a Kaiju taller than Everest is high, and 113x the height of
  * mini-Everest. The readout was correct and I had simply set the default in the wrong unit.
+ * Now 3 units = 300 m, the medium size Geoff picked after seeing 100 m read as too small.
  */
-const DEFAULT_HEIGHT = 1;
+const DEFAULT_HEIGHT = 3;   // 300 m real, Geoff's chosen medium size
 /** Each keypress changes size by this fraction. */
 export const SCALE_STEP = 0.05;
 const MIN_HEIGHT = 0.02;    // 2 m real, human scale
