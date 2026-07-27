@@ -25,7 +25,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
 import { ASSET_BASE } from '@/config/assetBase';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
@@ -147,7 +147,22 @@ export function buildSite(p: Portal, out: GateInstance[]): void {
 export function GlobePortals() {
   const camera = useThree((s) => s.camera);
   const [portals, setPortals] = useState<Portal[]>([]);
-  const { scene: gateScene } = useGLTF(GATE_URL);
+  // Load the gate EXPLICITLY rather than via useGLTF.
+  //
+  // useGLTF throws into Suspense, and a throw with no error boundary above it unmounts the whole
+  // React tree: one unreachable decorative asset white-screened the entire game. A portal model
+  // failing to arrive must degrade to "no gates rendered", never to "no game".
+  const [gateScene, setGateScene] = useState<THREE.Group | null>(null);
+  useEffect(() => {
+    let alive = true;
+    new GLTFLoader().load(
+      GATE_URL,
+      (g) => { if (alive) setGateScene(g.scene); },
+      undefined,
+      (e) => console.warn('[earth] warpgate model unavailable; portals will show markers only', e),
+    );
+    return () => { alive = false; };
+  }, []);
   const groupRef = useRef<THREE.Group>(null);
   const instances = useRef<GateInstance[]>([]);
   const built = useRef(false);
@@ -158,6 +173,7 @@ export function GlobePortals() {
   /** One InstancedMesh per sub-mesh of the gate, so the whole model instances in 2-3 draw calls. */
   const subMeshes = useMemo(() => {
     const out: { geometry: THREE.BufferGeometry; material: THREE.Material }[] = [];
+    if (!gateScene) return out;
     gateScene.updateMatrixWorld(true);
     gateScene.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -197,7 +213,7 @@ export function GlobePortals() {
 
     // Terrain streams in after the registry loads, so build the transforms once ground heights
     // are actually available; otherwise every gate sits at sea level, buried or floating.
-    if (!built.current) {
+    if (!built.current && subMeshes.length) {
       const d = new Float64Array(3);
       latLonToDirection(portals[0].lat, portals[0].lon, d);
       if (sampleGlobeSurface(d[0], d[1], d[2]) == null) return;
@@ -253,4 +269,3 @@ export function GlobePortals() {
   );
 }
 
-useGLTF.preload(GATE_URL);

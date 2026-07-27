@@ -55,8 +55,14 @@ const MERGE_RATIO = 0.30;
 /** Re-evaluate the tree at most this often (ms). The camera cannot outrun it at these scales. */
 const REEVAL_MS = 120;
 
-/** Runaway-subdivision backstop. The distance test should keep leaves in the low hundreds. */
-const MAX_LEAVES = 600;
+/**
+ * Hard cap on visible patches.
+ *
+ * Lowered from 600 after the water layer roughly DOUBLED per-patch memory: at 600 leaves that was
+ * ~315 MB of GPU buffers, which exhausted the WebGL context and crashed the map to a white screen.
+ * With the shared index and this cap it is about 80 MB.
+ */
+const MAX_LEAVES = 300;
 
 /**
  * How deep the RENDER tree may go, independent of how deep the DATA goes.
@@ -78,6 +84,36 @@ const SKIRT_FRAC = 0.03;
 
 interface NodeId { face: number; depth: number; x: number; y: number }
 const idKey = (n: NodeId) => `${n.face}:${n.depth}:${n.x}:${n.y}`;
+
+/**
+ * ONE index buffer, shared by every patch and both layers.
+ *
+ * Every patch has identical topology, so this used to upload the same 102 KB triangle list once
+ * per patch. At the leaf cap with terrain and water that was 120 MB of duplicated GPU memory,
+ * a large part of what exhausted the WebGL context and crashed the map to white.
+ */
+let _index: THREE.BufferAttribute | null = null;
+function sharedIndex(): THREE.BufferAttribute {
+  if (_index) return _index;
+  const side = PATCH + 2;
+  const a = new Uint32Array((side - 1) * (side - 1) * 6);
+  let w = 0;
+  for (let j = 0; j < side - 1; j++) {
+    for (let i = 0; i < side - 1; i++) {
+      const v = j * side + i, b = v + 1, c = v + side, e = c + 1;
+      a[w++] = v; a[w++] = c; a[w++] = b;
+      a[w++] = b; a[w++] = c; a[w++] = e;
+    }
+  }
+  _index = new THREE.BufferAttribute(a, 1);
+  return _index;
+}
+
+/** Dispose a patch WITHOUT freeing the shared index, which every other patch still uses. */
+function disposePatch(geo: THREE.BufferGeometry): void {
+  geo.setIndex(null);
+  geo.dispose();
+}
 
 /**
  * Data level, tile index and sub-rectangle for a render node.
@@ -240,20 +276,12 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
     }
   }
 
-  const idx = new Uint32Array((side - 1) * (side - 1) * 6);
-  let w = 0;
-  for (let j = 0; j < side - 1; j++) {
-    for (let i = 0; i < side - 1; i++) {
-      const a = j * side + i, b = a + 1, c = a + side, e = c + 1;
-      idx[w++] = a; idx[w++] = c; idx[w++] = b;
-      idx[w++] = b; idx[w++] = c; idx[w++] = e;
-    }
-  }
+  const index = sharedIndex();
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  geo.setIndex(index);
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
 
@@ -262,7 +290,7 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
     water = new THREE.BufferGeometry();
     water.setAttribute('position', new THREE.BufferAttribute(wpos, 3));
     water.setAttribute('color', new THREE.BufferAttribute(wcol, 4));
-    water.setIndex(new THREE.BufferAttribute(idx, 1));
+    water.setIndex(index);
     water.computeVertexNormals();
     water.computeBoundingSphere();
   }
@@ -334,11 +362,11 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   // Drop every mesh on unmount so leaving the map does not leak GPU memory.
   useEffect(() => () => {
     for (const m of meshes.current.values()) {
-      m.geometry.dispose();
+      disposePatch(m.geometry);
       groupRef.current?.remove(m);
     }
     for (const m of waters.current.values()) {
-      m.geometry.dispose();
+      disposePatch(m.geometry);
       groupRef.current?.remove(m);
     }
     meshes.current.clear();
@@ -397,10 +425,10 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     for (const [key, mesh] of meshes.current) {
       if (wanted.has(key)) continue;
       groupRef.current.remove(mesh);
-      mesh.geometry.dispose();
+      disposePatch(mesh.geometry);
       meshes.current.delete(key);
       const w = waters.current.get(key);
-      if (w) { groupRef.current.remove(w); w.geometry.dispose(); waters.current.delete(key); }
+      if (w) { groupRef.current.remove(w); disposePatch(w.geometry); waters.current.delete(key); }
     }
 
     // Build missing leaves through the shared budget so a burst never stalls a frame.

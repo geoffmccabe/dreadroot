@@ -19,6 +19,7 @@ import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
 import { GlobePortals } from './globe/GlobePortals';
+import { GlobeErrorBoundary } from './globe/GlobeErrorBoundary';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -165,8 +166,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {isGlobe && <KaijuLabController />}
       {isGlobe && <KaijuWalkController />}
-      {/* One portal per Divi node location: the game board is decided by where nodes run. */}
-      {isGlobe && <GlobePortals />}
+      {/* One portal per Divi node location: the game board is decided by where nodes run.
+          Wrapped: a decorative asset must never be able to take the whole game down, which is
+          exactly what happened when the warpgate model failed to fetch. */}
+      {isGlobe && (
+        <GlobeErrorBoundary label="portals">
+          <GlobePortals />
+        </GlobeErrorBoundary>
+      )}
       {/* The globe has NO separate water layer: the sea surface is the terrain mesh clamped up to
           sea level (see GlobeTerrain). A separate shell z-fought the terrain across the whole
           planet, because the depth buffer at orbit range cannot separate them. */}
