@@ -7,6 +7,7 @@
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
 //   ;      battle: drop in at Mount Everest, where three other Kaiju are waiting
+//   '      200 people, 1.8 m tall, around the Kaiju — for a sense of its scale
 //          (also starts on its own when you arrive at Everest with , or .)
 //   , .    previous / next of the 226 real landmarks, flying you straight there
 //
@@ -28,6 +29,7 @@ import {
 } from './kaijuLabState';
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
+import { KaijuCrowd, toggleCrowd } from './KaijuCrowd';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
@@ -131,6 +133,11 @@ export function KaijuLabController() {
           startArenaHere(camera);
           break;
         }
+        // APOSTROPHE — the crowd. Verified unbound across the whole codebase before choosing it,
+        // which is the lesson from B silently being the SciFi Space teleport.
+        case 'Quote':
+          toggleCrowd();
+          break;
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height
@@ -163,8 +170,10 @@ export function KaijuLabController() {
   return (
     <>
       <GlobeKaiju state={state} />
-      {/* The arena drives itself once B has been pressed; before that it draws nothing. */}
+      {/* The arena drives itself once a battle has started; before that it draws nothing. */}
       <KaijuArenaScene playerControlled />
+      {/* 200 humans for scale, toggled with the apostrophe key. */}
+      <KaijuCrowd />
     </>
   );
 }
