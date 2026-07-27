@@ -107,6 +107,40 @@ ok(agents.some((a) => !a.alive), 'somebody died within 90s',
 ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startDist[i]) > 0.5),
    'agents moved relative to each other');
 
+// THEY MUST NOT STAND INSIDE EACH OTHER.
+//
+// Geoff: "The Red demon is just standing inside me walking in circles." Before body separation
+// existed, two 300 m creatures could occupy exactly the same space and circle there indefinitely.
+// This runs a fight and records the CLOSEST any two ever get, measured centre to centre.
+{
+  initArena(17);
+  const four = getAgents();
+  let closest = Infinity;
+  let overlapTicks = 0;
+  for (let i = 0; i < 60 * 30; i++) {
+    stepArena(1 / 30, false);
+    for (let x = 0; x < four.length; x++) {
+      for (let y = x + 1; y < four.length; y++) {
+        if (!four[x].alive || !four[y].alive) continue;
+        const px = four[x].body.dir.clone().multiplyScalar(four[x].body.radius);
+        const py = four[y].body.dir.clone().multiplyScalar(four[y].body.radius);
+        const d = px.distanceTo(py);
+        if (d < closest) closest = d;
+        // Torso radius is a quarter of body height each, so their combined width is half a
+        // height. TOUCHING at exactly that is correct — two bodies in contact is what a brawl
+        // looks like. What must never happen is one standing INSIDE the other, so this allows a
+        // 10% contact tolerance and fails on anything deeper.
+        if (d < ARENA_HEIGHT * 0.5 * 0.90) overlapTicks++;
+      }
+    }
+  }
+  console.log(`\n  closest two Kaiju ever came: ${closest.toFixed(2)} units `
+    + `(${(closest * 100).toFixed(0)} m; their combined width is ${(ARENA_HEIGHT * 0.5 * 100).toFixed(0)} m)`);
+  ok(overlapTicks === 0, 'no Kaiju ever stood inside another', `${overlapTicks} ticks interpenetrating`);
+  console.log('  (they touch, which is correct — a brawl has contact. What must not happen, and');
+  console.log('   now does not, is one occupying the same space as another.)');
+}
+
 // EVERY WEAPON MUST BE ABLE TO HIT. A weapon that can never connect looks exactly like a Kaiju
 // that is simply losing, which is how the grenade could have gone unnoticed. So each one gets a
 // duel of its own against an identical opponent, where it has time to land something.

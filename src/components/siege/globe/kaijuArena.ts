@@ -32,6 +32,9 @@ import {
 } from './kaijuStats';
 import { seedKaiju, rand } from './kaijuRandom';
 import { FLASH_SECONDS } from './kaijuFlash';
+import {
+  torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, type Capsule,
+} from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
 export const ARENA_LAT = 27.9881;
@@ -107,6 +110,18 @@ export interface Agent {
   refusing: boolean;
   /** Whether it has answered the current order yet (agreed or refused). */
   orderAnswered: boolean;
+  /** Reusable body capsule, refreshed each tick. */
+  capsule: Capsule;
+  /**
+   * Tangent knockback velocity, in units/sec, decaying over time.
+   *
+   * A 300 m creature taking a hit should be MOVED by it. Without this a blow was a number on a
+   * health bar and nothing else, which is the main reason the fight read as two models overlapping
+   * rather than as anything physical.
+   */
+  knock: THREE.Vector3;
+  /** Seconds of staggering left, during which it cannot act. */
+  stagger: number;
   /**
    * Seconds left in the "I heard you" flash.
    *
@@ -161,6 +176,13 @@ const _up = new THREE.Vector3();
 const _tmp = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
+const _kb = new THREE.Vector3();
+const _axis = new THREE.Vector3();
+
+/** Peak knockback speed, units/sec, for a blow worth ~8% of the victim's health. */
+const KNOCK_SPEED = 0.55;
+/** How fast knockback bleeds off (per second). */
+const KNOCK_DECAY = 3.2;
 
 function centreOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
@@ -214,6 +236,8 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
       order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
+      capsule: torsoCapsule(dir, body.radius, ARENA_HEIGHT),
+      knock: new THREE.Vector3(), stagger: 0,
     });
   });
 
@@ -508,6 +532,18 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
     t.damageTaken += dmg;
     t.timeSinceHit = 0;
     if (src) { src.damageDealt += dmg; src.hitsLanded++; }
+
+    // KNOCKBACK. A blow should move a body, not just decrement a number. Scaled by damage
+    // relative to the victim's own health, so a scratch nudges and a heavy hit visibly throws it.
+    if (src) {
+      _kb.copy(centreOf(t, _tmp)).sub(centreOf(src, new THREE.Vector3()));
+      reTangentOf(t.body, _kb);
+      const share = Math.min(1, dmg / Math.max(1, t.maxHealth * 0.08));
+      t.knock.addScaledVector(_kb, share * KNOCK_SPEED);
+      // Heavy blows also interrupt: a staggered Kaiju cannot act for a moment, which is what
+      // makes a melee exchange read as a real trade rather than two loops running side by side.
+      if (share > 0.5 && h.weapon === 'melee') t.stagger = Math.max(t.stagger, 0.7);
+    }
     if (t.health <= 0) {
       t.alive = false;
       t.killedBy = src?.name ?? null;
@@ -591,6 +627,19 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     }
     if (a.ackFlash > 0) a.ackFlash = Math.max(0, a.ackFlash - dt);
 
+    // Carry knockback: slide along the surface and bleed off. Applied before the tree runs so a
+    // staggered Kaiju is still visibly pushed around while it cannot act.
+    if (a.knock.lengthSq() > 1e-8) {
+      reTangentOf(a.body, a.knock);
+      const speed = a.knock.length();
+      _tmp.crossVectors(a.body.dir, a.knock).normalize();
+      a.body.dir.applyAxisAngle(_tmp, -(speed * dt) / Math.max(1, a.body.radius)).normalize();
+      reTangentOf(a.body, a.body.forward);
+      a.knock.multiplyScalar(Math.max(0, 1 - KNOCK_DECAY * dt));
+      if (a.knock.lengthSq() < 1e-8) a.knock.set(0, 0, 0);
+    }
+    if (a.stagger > 0) { a.stagger = Math.max(0, a.stagger - dt); continue; }
+
     // WHO DRIVES THE PLAYER'S KAIJU.
     //
     // Normally you do, directly, with the movement keys. But the moment you give it an ORDER it
@@ -634,6 +683,48 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       a.intentMove && a.intentRun, ARENA_HEIGHT,
       a.intentMove ? a.intentDir : null,
     );
+  }
+
+  // --- BODY SEPARATION -------------------------------------------------------------------------
+  //
+  // Run AFTER every body has moved, so it resolves the positions that actually exist rather than
+  // half of this tick's and half of last tick's. Two 300 m creatures must not occupy one space;
+  // without this they walked straight through each other and circled while overlapping, which is
+  // exactly what "spinning in circles inside each other" looks like.
+  for (const a of agents) {
+    if (!a.alive) continue;
+    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule);
+  }
+  // Several relaxation passes, because resolving one pair can push a body into another. A single
+  // pass left them touching at about 97% of their combined width — visibly clipping. Three passes
+  // is enough for four bodies and costs nothing at this count.
+  for (let pass = 0; pass < 3; pass++) {
+  for (let i = 0; i < agents.length; i++) {
+    const A = agents[i];
+    if (!A.alive) continue;
+    for (let j = i + 1; j < agents.length; j++) {
+      const B = agents[j];
+      if (!B.alive) continue;
+      const depth = capsuleOverlap(A.capsule, B.capsule, _axis);
+      if (depth <= 0) continue;
+      // Push both apart along the surface, half each, so neither is privileged. Projected onto
+      // the tangent plane: separation must not shove anybody into the ground or into the sky.
+      reTangentOf(A.body, _axis);
+      const push = depth * 0.55;
+      const angA = push / Math.max(1, A.body.radius);
+      const angB = push / Math.max(1, B.body.radius);
+      _tmp.crossVectors(A.body.dir, _axis).normalize();
+      A.body.dir.applyAxisAngle(_tmp, -angA).normalize();
+      _tmp.crossVectors(B.body.dir, _axis).normalize();
+      B.body.dir.applyAxisAngle(_tmp, angB).normalize();
+      reTangentOf(A.body, A.body.forward);
+      reTangentOf(B.body, B.body.forward);
+    }
+  }
+    // Refresh after each pass, or later passes resolve against stale positions.
+    for (const a of agents) {
+      if (a.alive) torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule);
+    }
   }
 
   const hits = stepProjectiles(dt, hitTargets(), (p) => {
