@@ -31,6 +31,7 @@ import {
   type KaijuBuild, type DerivedStats,
 } from './kaijuStats';
 import { seedKaiju, rand } from './kaijuRandom';
+import { FLASH_SECONDS } from './kaijuFlash';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
 export const ARENA_LAT = 27.9881;
@@ -102,6 +103,14 @@ export interface Agent {
   refusing: boolean;
   /** Whether it has answered the current order yet (agreed or refused). */
   orderAnswered: boolean;
+  /**
+   * Seconds left in the "I heard you" flash.
+   *
+   * Set the moment a command is UNDERSTOOD, regardless of whether the Kaiju goes on to obey it.
+   * That distinction is the point: hearing you and agreeing with you are different things, and the
+   * flash answers the first while the spoken reply answers the second.
+   */
+  ackFlash: number;
 }
 
 export interface ArenaEvent { t: number; text: string }
@@ -199,7 +208,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
-      order: null, reply: '', replyTimer: 0, refusing: false, orderAnswered: false,
+      order: null, reply: '', replyTimer: 0, refusing: false, orderAnswered: false, ackFlash: 0,
     });
   });
 
@@ -578,6 +587,7 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       }
     }
     if (a.replyTimer > 0) a.replyTimer = Math.max(0, a.replyTimer - dt);
+    if (a.ackFlash > 0) a.ackFlash = Math.max(0, a.ackFlash - dt);
 
     // WHO DRIVES THE PLAYER'S KAIJU.
     //
@@ -681,6 +691,8 @@ export function commandKaiju(text: string, agentId?: string): OrderResult {
 
 /** Attach an already-parsed order (from the grammar, the model, or a map click). */
 export function applyOrder(a: Agent, order: Order): Order {
+  // Acknowledge FIRST, before any judgement about whether to comply.
+  a.ackFlash = FLASH_SECONDS;
   if (order.type === 'free') {
     a.order = null;
     a.refusing = false;
@@ -706,6 +718,12 @@ export function orderGoTo(dir: THREE.Vector3, agentId?: string): void {
     type: 'goTo', targetId: null, destination: dir.clone().normalize(),
     said: 'go there', age: 0, standing: false,
   });
+}
+
+/** Seconds left in a Kaiju's acknowledgement flash, for the renderers. */
+export function ackFlashRemaining(id: string): number {
+  const a = id === 'player' ? agents.find((x) => x.isPlayer) : agents.find((x) => x.id === id);
+  return a?.ackFlash ?? 0;
 }
 
 /** The player's Kaiju, its order and its answer — for the command panel. */

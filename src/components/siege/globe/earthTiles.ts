@@ -145,7 +145,12 @@ export function requestTile(
     })
     .catch((e) => {
       failed.set(key, Date.now() + RETRY_MS);
-      if (import.meta.env.DEV) console.warn(`[earth] tile ${key} failed: ${e.message}`);
+      // `import.meta.env` is injected by Vite and is undefined outside it, so reaching straight
+      // into it threw here whenever a tile 404'd under the headless terrain checks — turning a
+      // handled miss into a crash, in the one code path whose whole job is handling misses.
+      if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+        console.warn(`[earth] tile ${key} failed: ${e.message}`);
+      }
       return null;
     })
     .finally(() => { inFlight.delete(key); });

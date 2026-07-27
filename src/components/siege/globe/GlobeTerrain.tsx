@@ -57,6 +57,14 @@ const MERGE_RATIO = 0.30;
 const REEVAL_MS = 120;
 
 /**
+ * Longest a superseded patch may be held on screen while its replacements build.
+ *
+ * Long enough to cover a normal build (a few frames), short enough that a replacement which never
+ * arrives cannot leave a smoothed copy of the landscape sitting over the real one indefinitely.
+ */
+const STALE_HOLD_MS = 2500;
+
+/**
  * Hard cap on visible patches.
  *
  * Lowered from 600 after the water layer roughly DOUBLED per-patch memory: at 600 leaves that was
@@ -413,6 +421,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const splitNodes = useRef(new Set<string>());
   const building = useRef(new Set<string>());
   const lastEval = useRef(0);
+  /** When each superseded patch first became stale, so it can be retired on a deadline. */
+  const staleSince = useRef(new Map<string, number>());
   const readyFired = useRef(false);
 
   const material = useMemo(
@@ -558,7 +568,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     // Holding the old patch until its replacements are ready costs a little transient memory and
     // some overdraw for a few frames. A hole through the planet costs the illusion entirely.
     for (const [key, mesh] of meshes.current) {
-      if (wanted.has(key)) continue;
+      if (wanted.has(key)) { staleSince.current.delete(key); continue; }
       const stale = parseKey(key);
       let replaced = true;
       for (const leaf of next) {
@@ -569,7 +579,23 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       // budget (a very fast descent, or a patch that never builds), retire the oldest anyway
       // rather than run the GPU out of memory, which is what caused the earlier white screen.
       const overBudget = meshes.current.size > MAX_LEAVES * 1.6;
-      if (!replaced && !overBudget) continue;   // keep it on screen; replacement still building
+
+      // AND A DEADLINE, which is the important half.
+      //
+      // "Hold until every replacement exists" has no upper bound: if even ONE overlapping child
+      // never builds — its data never resolves, or it is outside the leaf budget — the coarse
+      // parent is held forever. A held parent is a SMOOTHED version of the same ground, so it
+      // sits above the valleys and below the peaks of the real surface underneath it. That is
+      // precisely what Geoff was seeing: a flat featureless plain with the true mountains reduced
+      // to short bumps poking through, and a Kaiju that walks DOWN OFF the mountain and
+      // disappears underneath the plain. The terrain was correct all along; a stale coarse copy
+      // was being drawn over it indefinitely.
+      const since = staleSince.current.get(key);
+      if (since === undefined) staleSince.current.set(key, now);
+      const heldTooLong = since !== undefined && now - since > STALE_HOLD_MS;
+
+      if (!replaced && !overBudget && !heldTooLong) continue;   // replacement still building
+      staleSince.current.delete(key);
       groupRef.current.remove(mesh);
       disposePatch(mesh.geometry);
       meshes.current.delete(key);

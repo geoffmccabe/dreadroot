@@ -9,7 +9,7 @@
 // player renderer — which is shared with the other Claude on this branch — this is its own module.
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
@@ -21,6 +21,8 @@ import {
   ARENA_HEIGHT, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
+import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps } from './kaijuAudio';
+import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
 /** Clip preferences per gait, matching GlobeKaiju so both look the same. */
 const CLIPS: Record<string, string[]> = {
@@ -38,6 +40,8 @@ function animRate(b: KaijuBody, h: number): number {
 }
 
 function AgentAvatar({ agent }: { agent: Agent }) {
+  const camera = useThree((s) => s.camera);
+  const look = useRef(new THREE.Vector3());
   const cfg = CFG[agent.monsterType as keyof typeof CFG];
   const url = cfg?.url;
   const modelHeight = cfg?.modelHeight ?? 2;
@@ -49,8 +53,10 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const model = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
     c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    prepareFlash(c);
     return c;
   }, [scene]);
+  useEffect(() => () => releaseFlash(model), [model]);
 
   const { actions, names, mixer } = useAnimations(animations, model);
   const gait = useRef<string>('idle');
@@ -95,11 +101,19 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
 
-    if (!agent.alive) { play('dead'); mixer.timeScale = 1; return; }
+    if (!agent.alive) { play('dead'); mixer.timeScale = 1; stopKaijuFootsteps(agent.id); return; }
     const wS = walkSpeed(ARENA_HEIGHT), rS = runSpeed(ARENA_HEIGHT);
     play(b.speed > (wS + rS) * 0.5 ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
     mixer.timeScale = animRate(b, ARENA_HEIGHT);
+
+    // Footsteps, positioned in the world — so an enemy Kaiju crossing behind you is something you
+    // hear before you see, which at this scale is most of the drama.
+    camera.getWorldDirection(look.current);
+    updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true);
+    applyFlash(model, flashIntensity(agent.ackFlash));
   });
+
+  useEffect(() => () => stopKaijuFootsteps(agent.id), [agent.id]);
 
   if (!url) return null;
   const scale = ARENA_HEIGHT / Math.max(0.01, modelHeight);
@@ -181,6 +195,8 @@ export function KaijuArenaScene({ playerControlled }: { playerControlled: boolea
       window.removeEventListener('keydown', key);
     };
   }, []);
+
+  useEffect(() => () => stopAllKaijuFootsteps(), []);
 
   useFrame((_, rawDt) => {
     if (!arenaStarted()) return;

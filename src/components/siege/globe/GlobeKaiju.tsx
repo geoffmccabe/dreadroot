@@ -37,6 +37,9 @@ import { animSpeedMul, type KaijuLabState } from './kaijuLabState';
 import { kaijuDiag } from './kaijuDiag';
 import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
 import { isKaijuWalkActive } from './KaijuWalkController';
+import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
+import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
+import { ackFlashRemaining } from './kaijuArena';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -93,12 +96,19 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const model = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
     c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    // Own copies of the materials, so tinting THIS Kaiju does not tint every Kaiju sharing the
+    // model. Two of the four in the demo fight would otherwise flash together.
+    prepareFlash(c);
     return c;
   }, [scene]);
+  useEffect(() => () => releaseFlash(model), [model]);
 
   // Bind the mixer to the CLONE, so the clips drive the clone's own bones.
   const { actions, names, mixer } = useAnimations(animations, model);
-  useEffect(() => { kaijuDiag.loaded = true; return () => { kaijuDiag.loaded = false; }; }, []);
+  useEffect(() => {
+    kaijuDiag.loaded = true;
+    return () => { kaijuDiag.loaded = false; stopKaijuFootsteps('player'); };
+  }, []);
   const gait = useRef<Gait>('glide');
   const current = useRef<THREE.AnimationAction | null>(null);
   const landTimer = useRef(0);
@@ -154,6 +164,13 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     if (isKaijuWalkActive()) {
       const b = kaijuBodyState;
       g.position.copy(b.dir).multiplyScalar(b.radius);
+
+      // Footsteps. Only while walking: in fly mode the Kaiju is carried by the camera rather than
+      // simulated, so it has no real gait to match and stomping would be a lie.
+      camera.getWorldDirection(view.current);
+      updateKaijuFootsteps('player', b, h, camera.position, view.current, true);
+      // "I heard you": three vivid pulses in one second whenever a command is understood.
+      applyFlash(model, flashIntensity(ackFlashRemaining('player')));
       const bUp = up.current.copy(b.dir);
       const bFwd = fwd.current;
       facingVector(bFwd);
