@@ -131,8 +131,11 @@ export function KaijuWalkController() {
       if (steer.current.lengthSq() > 1e-8) desired = reTangent(steer.current);
     }
 
-    stepBody(dt, fwd, right, jump, running, h, desired);
-    if (jump) k.delete('Space');   // edge-trigger, so holding space does not pogo
+    // Underwater the same keys mean vertical thrust rather than a jump: Space rises, Z or Ctrl
+    // dives. Held, not edge-triggered, because swimming up is continuous.
+    const up = (k.has('Space') ? 1 : 0) - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
+    stepBody(dt, fwd, right, jump && !body.submerged, running, h, desired, up);
+    if (jump && !body.submerged) k.delete('Space');   // edge-trigger the jump only
 
     // Transport the camera heading by the SAME rotation the body just underwent, so it stays
     // tangent and keeps its bearing relative to the ground as the planet curves away.

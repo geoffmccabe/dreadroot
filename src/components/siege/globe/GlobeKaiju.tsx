@@ -49,7 +49,7 @@ const RUN_SPEED = 12;
 /** Speed below which it is standing still. */
 const STILL_SPEED = 0.6;
 
-type Gait = 'glide' | 'land' | 'walk' | 'run' | 'idle';
+type Gait = 'glide' | 'land' | 'walk' | 'run' | 'idle' | 'swim';
 
 /** Preferred clip per gait, in priority order. Models differ (Red Demon uses Mixamo names). */
 const CLIPS: Record<Gait, string[]> = {
@@ -58,6 +58,10 @@ const CLIPS: Record<Gait, string[]> = {
   walk:  ['walk', 'walking'],
   run:   ['run', 'walk', 'walking'],
   idle:  ['breathidle', 'idle'],
+  // No model has a swim clip yet, so reuse the limbs-out 'flex' that also serves as the glide
+  // pose. It reads as moving through a medium rather than standing, which is the point. A real
+  // swim cycle is part of the animation work in P13.
+  swim:  ['flex', 'crawl', 'idle'],
 };
 
 /** Ground radius under the body, tolerant of tiles that have not streamed in yet. */
@@ -150,6 +154,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
 
       const alt = b.radius - (groundRadiusCached(b) ?? b.radius);
       const altH = alt / Math.max(0.001, h);
+      if (b.submerged) { play('swim'); mixer.timeScale = animSpeedMul(state) * 0.7; return; }
       if (landTimer.current > 0) landTimer.current -= dt;
       else if (!b.onGround && altH > GLIDE_ALT) play('glide');
       else if (!b.onGround && gait.current === 'glide') { play('land'); landTimer.current = 0.7; }

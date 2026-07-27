@@ -40,6 +40,17 @@ const JUMP_BODY_FRAC = 0.45;
 const TURN_RATE = 2.2;
 /** Ground stickiness: snap to the surface when within this many body-heights of it. */
 const SNAP_FRAC = 0.06;
+/**
+ * Swimming (Geoff's spec: "water could just be movement-restricting to 50% normal and also the
+ * Kaiju can move around in 3D rather than walking").
+ */
+const SWIM_SPEED_FRAC = 0.5;
+/** Vertical swim speed as a fraction of the horizontal swim speed. */
+const SWIM_VERT_FRAC = 0.8;
+/** Residual sink/float while submerged, as a fraction of gravity. Slightly buoyant. */
+const BUOYANCY = -0.12;
+/** Water drag: fraction of vertical velocity bled off per second when submerged. */
+const WATER_DRAG = 3.0;
 
 export interface KaijuBody {
   /** Unit direction from the planet centre. With `radius`, this IS the position. */
@@ -63,6 +74,10 @@ export interface KaijuBody {
   speed: number;
   /** Rotation the last move applied to `dir`. Transport any tangent vector with this to keep it valid. */
   lastMoveQuat: THREE.Quaternion;
+  /** True while the body's centre is below sea level. */
+  submerged: boolean;
+  /** Metres below sea level (0 on land or at the surface). */
+  depthMetres: number;
 }
 
 export const body: KaijuBody = {
@@ -74,6 +89,8 @@ export const body: KaijuBody = {
   speed: 0,
   /** Rotation applied to `dir` by the last move, so callers can transport their own vectors with it. */
   lastMoveQuat: new THREE.Quaternion(),
+  submerged: false,
+  depthMetres: 0,
 };
 
 /** Gravity in game units/s^2. */
@@ -161,6 +178,7 @@ export function turnTangent(v: THREE.Vector3, radians: number): THREE.Vector3 {
 export function stepBody(
   dt: number, inputFwd: number, inputRight: number, wantJump: boolean,
   running: boolean, heightUnits: number, desiredForward: THREE.Vector3 | null,
+  inputUp = 0,
 ): void {
   const g = gravityUnits();
   body.lastMoveQuat.identity();
@@ -188,7 +206,13 @@ export function stepBody(
   // what keeps the body exactly on the sphere however far it walks, and `forward` is rotated by
   // the SAME rotation (parallel transport) so a straight walk stays on one great circle even
   // over a pole.
-  const speed = running ? runSpeed(heightUnits) : walkSpeed(heightUnits);
+  // Submerged when the body's MIDPOINT is below sea level: waist-deep wading still walks.
+  const midRadius = body.radius + heightUnits * 0.5;
+  body.submerged = midRadius < PLANET_RADIUS;
+  body.depthMetres = body.submerged ? (PLANET_RADIUS - midRadius) * METRES_PER_UNIT : 0;
+
+  const speed = (running ? runSpeed(heightUnits) : walkSpeed(heightUnits))
+    * (body.submerged ? SWIM_SPEED_FRAC : 1);
   rightVector(_right);
   _move.set(0, 0, 0)
     .addScaledVector(body.forward, inputFwd)
@@ -218,13 +242,28 @@ export function stepBody(
     return;
   }
 
-  if (wantJump && body.onGround) {
-    body.vertVel = jumpVelocity(heightUnits);
-    body.onGround = false;
+  if (body.submerged) {
+    // SWIMMING: full 3D. Vertical is driven directly rather than by gravity, with drag so it
+    // settles instead of oscillating, and a slight upward bias so an idle body drifts to the
+    // surface rather than sinking forever.
+    const vSpeed = speed * SWIM_VERT_FRAC;
+    if (inputUp !== 0) {
+      body.vertVel += (inputUp * vSpeed - body.vertVel) * Math.min(1, WATER_DRAG * dt);
+    } else {
+      body.vertVel += (g * BUOYANCY - body.vertVel) * Math.min(1, WATER_DRAG * dt);
+    }
+    body.radius += body.vertVel * dt;
+    // Do not breach the surface under swim power; you surface, you do not launch.
+    const surface = PLANET_RADIUS - heightUnits * 0.5;
+    if (body.radius > surface && body.vertVel > 0) { body.radius = surface; body.vertVel = 0; }
+  } else {
+    if (wantJump && body.onGround) {
+      body.vertVel = jumpVelocity(heightUnits);
+      body.onGround = false;
+    }
+    body.vertVel -= g * dt;
+    body.radius += body.vertVel * dt;
   }
-
-  body.vertVel -= g * dt;
-  body.radius += body.vertVel * dt;
 
   const snap = heightUnits * SNAP_FRAC;
   if (body.radius <= gr + snap) {

@@ -60,7 +60,9 @@ export function KaijuLabHud() {
       {row('Mode', walking ? 'WALK (G to fly)' : 'FLY (G to walk)')}
       {/* Speeds shown in REAL m/s, since units/sec at this scale are unintuitively tiny. */}
       {row('Walk / run', `${(walkSpeed(s.height) * 100).toFixed(0)} / ${(runSpeed(s.height) * 100).toFixed(0)} m/s`)}
-      {walking && row('On ground', kaijuBody.onGround ? 'yes' : 'airborne')}
+      {walking && row('State', kaijuBody.submerged
+        ? `SWIMMING, ${Math.round(kaijuBody.depthMetres)} m deep`
+        : kaijuBody.onGround ? 'on ground' : 'airborne')}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {/* Phrase the comparison whichever way round is readable, rather than always showing a
@@ -77,7 +79,8 @@ export function KaijuLabHud() {
 
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
-        G walk/fly · K land here · WASD move · Shift run · Space jump
+        G walk/fly · K land here · WASD move · Shift run<br />
+        Space jump / swim up · Z swim down
       </div>
     </div>
   );

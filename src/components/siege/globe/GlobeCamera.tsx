@@ -21,7 +21,7 @@
 import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PLANET_RADIUS } from './cubeSphere';
+import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 
 /** Extra margin past the horizon so the planet's limb and the far side of terrain stay in view. */
 const FAR_MARGIN = 1.6;
@@ -45,6 +45,7 @@ export function GlobeCamera() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const scene = useThree((s) => s.scene);
   const saved = useRef<{ near: number; far: number; fog: THREE.Scene['fog']; bg: THREE.Scene['background'] } | null>(null);
+  const underwaterCol = useRef(new THREE.Color());
 
   useEffect(() => {
     saved.current = { near: camera.near, far: camera.far, fog: scene.fog, bg: scene.background };
@@ -60,13 +61,33 @@ export function GlobeCamera() {
   }, [camera, scene]);
 
   useFrame(() => {
-    // Re-assert every frame: FortressScene's sky/fog system writes scene.fog continuously, so a
-    // one-shot clear in an effect gets overwritten. (Same pattern NightDimmer already uses.)
-    if (scene.fog) scene.fog = null;
-
     const p = camera.position;
     const d = Math.hypot(p.x, p.y, p.z);              // distance from the planet centre
     const altitude = d - PLANET_RADIUS;
+
+    // UNDERWATER: murk that thickens with depth. Above water there is no fog at all, because the
+    // sky system's exponential fog is opaque at planetary distances (see the header). This is the
+    // one place fog is wanted, so it is set here rather than in a second component that would
+    // fight GlobeCamera for scene.fog every frame.
+    if (altitude < 0) {
+      const depthM = -altitude * METRES_PER_UNIT;
+      const t = Math.min(1, depthM / 3000);                 // full darkness by ~3 km down
+      const col = underwaterCol.current.setRGB(
+        0.02 + 0.06 * (1 - t), 0.10 + 0.22 * (1 - t), 0.20 + 0.38 * (1 - t),
+      );
+      const visibility = 900 - 700 * t;                     // units of clear sight
+      const f = scene.fog as THREE.FogExp2 | null;
+      if (f && (f as THREE.FogExp2).isFogExp2) {
+        f.color.copy(col);
+        (f as THREE.FogExp2).density = 1 / Math.max(20, visibility);
+      } else {
+        scene.fog = new THREE.FogExp2(col.getHex(), 1 / Math.max(20, visibility));
+      }
+      scene.background = col;
+    } else {
+      if (scene.fog) scene.fog = null;
+      if (scene.background) scene.background = null;
+    }
 
     // Distance to the horizon from here: the tangent line to a sphere of radius R from distance d.
     // Inside the planet this is imaginary, hence the max(0, ...).

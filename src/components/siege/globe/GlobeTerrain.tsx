@@ -109,7 +109,7 @@ function nodeCentre(n: NodeId, out: Float64Array): void {
  * Build one patch's geometry. Elevation comes from the data tile; colour is a simple
  * height/latitude ramp so the planet reads as Earth before the biome work of P3.
  */
-function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry | null {
+function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeometry; water: THREE.BufferGeometry | null } | null {
   const d = dataFor(n, maxLevel);
   const tile = getTile(n.face, d.level, d.tx, d.ty);
   if (!tile) return null;
@@ -124,6 +124,11 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
   const count = side * side;
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
+  // Water layer: same lattice at sea level, alpha fading out across the coastline. Built here so
+  // it shares the patch's directions and lifetime rather than needing a second quadtree.
+  const wpos = new Float32Array(count * 3);
+  const wcol = new Float32Array(count * 4);   // RGBA: alpha carries the coastline fade
+  let anyOcean = false;
   const dir = new Float64Array(3);
   const skirtDrop = tileArcUnits(n.depth) * SKIRT_FRAC;
   // Vertex spacing of THIS patch, which band-limits the procedural octaves.
@@ -144,15 +149,11 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
       // to what this patch can represent. Same function the ground sampler uses, so the Kaiju
       // stands on exactly the surface you can see.
       const metres = baseM + detailMetres(dir[0], dir[1], dir[2], PLANET_RADIUS, baseM, patchSpacing);
-      // Sea surface is the SAME mesh as the land, clamped up to elevation 0 below the waterline.
-      // There is no separate ocean sphere any more. A shell at exactly PLANET_RADIUS z-fought the
-      // terrain catastrophically: at orbit the depth buffer resolves about 110 units, and the
-      // entire relief of the planet spans only -109 to +88 units, so sea and land landed in the
-      // same depth bucket everywhere and the blue flickered over the whole globe. Clamping one
-      // surface removes the failure mode rather than tuning around it. Colour still uses the TRUE
-      // depth, so oceans read deep, and gameplay still reads real elevation from the tiles.
-      const renderMetres = metres < 0 ? 0 : metres;
-      const r = PLANET_RADIUS + renderMetres / METRES_PER_UNIT - (isSkirt ? skirtDrop : 0);
+      // TRUE elevation, including below sea level: the seafloor is real geometry you can swim
+      // over. It used to be clamped up to sea level to stop an OPAQUE ocean shell z-fighting it,
+      // but that shell is gone. The water surface is now built as a separate translucent layer in
+      // this same patch (see below) which never writes depth, so it cannot fight anything.
+      const r = PLANET_RADIUS + metres / METRES_PER_UNIT - (isSkirt ? skirtDrop : 0);
 
       const k = (j * side + i) * 3;
       pos[k] = toRenderX(dir[0] * r);
@@ -176,6 +177,23 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
         if (lat > 0.86) { const p = (lat - 0.86) / 0.14; r0 += (0.92 - r0) * p; g0 += (0.93 - g0) * p; b0 += (0.96 - b0) * p; }
       }
       col[k] = r0; col[k + 1] = g0; col[k + 2] = b0;
+
+      // Water vertex: always at sea level. Alpha ramps from clear at the shoreline to nearly
+      // opaque by ~120 m depth, which gives soft beaches instead of a hard blue edge, and hides
+      // the seafloor from orbit the way a real ocean does.
+      const wr = PLANET_RADIUS - (isSkirt ? skirtDrop : 0);
+      wpos[k] = toRenderX(dir[0] * wr);
+      wpos[k + 1] = toRenderY(dir[1] * wr);
+      wpos[k + 2] = toRenderZ(dir[2] * wr);
+      const depth = -metres;
+      if (depth > 0) anyOcean = true;
+      const wa = depth <= 0 ? 0 : Math.min(0.94, depth / 120 * 0.94);
+      const deep = Math.min(1, depth / 4000);
+      const wk = (j * side + i) * 4;
+      wcol[wk] = 0.10 - 0.06 * deep;
+      wcol[wk + 1] = 0.34 - 0.24 * deep;
+      wcol[wk + 2] = 0.62 - 0.30 * deep;
+      wcol[wk + 3] = wa;
     }
   }
 
@@ -195,7 +213,17 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): THREE.BufferGeometry |
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
-  return geo;
+
+  let water: THREE.BufferGeometry | null = null;
+  if (anyOcean) {
+    water = new THREE.BufferGeometry();
+    water.setAttribute('position', new THREE.BufferAttribute(wpos, 3));
+    water.setAttribute('color', new THREE.BufferAttribute(wcol, 4));
+    water.setIndex(new THREE.BufferAttribute(idx, 1));
+    water.computeVertexNormals();
+    water.computeBoundingSphere();
+  }
+  return { geo, water };
 }
 
 /** True once every data tile the four children need is resident. */
@@ -217,6 +245,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const [manifestReady, setManifestReady] = useState(false);
 
   const meshes = useRef(new Map<string, THREE.Mesh>());
+  const waters = useRef(new Map<string, THREE.Mesh>());
   const leafKeys = useRef(new Set<string>());
   // Nodes that were SPLIT last evaluation. Hysteresis needs to know the previous state:
   // a split node stays split until it falls below MERGE_RATIO, while a leaf only splits
@@ -230,6 +259,17 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
     // nulls scene.fog each frame; this makes a stray frame harmless too.
     () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: false }),
+    [],
+  );
+
+  // Water. transparent + depthWrite:false is the whole trick: it blends over the seafloor and can
+  // never fight it for depth, which is what made the first opaque ocean shell flicker across the
+  // entire planet. DoubleSide so it is still there when you are underneath looking up.
+  const waterMat = useMemo(
+    () => new THREE.MeshLambertMaterial({
+      vertexColors: true, transparent: true, depthWrite: false,
+      side: THREE.DoubleSide, fog: false,
+    }),
     [],
   );
 
@@ -254,9 +294,15 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       m.geometry.dispose();
       groupRef.current?.remove(m);
     }
+    for (const m of waters.current.values()) {
+      m.geometry.dispose();
+      groupRef.current?.remove(m);
+    }
     meshes.current.clear();
+    waters.current.clear();
     material.dispose();
-  }, [material]);
+    waterMat.dispose();
+  }, [material, waterMat]);
 
   useFrame(() => {
     if (!manifestReady || !groupRef.current) return;
@@ -310,6 +356,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       groupRef.current.remove(mesh);
       mesh.geometry.dispose();
       meshes.current.delete(key);
+      const w = waters.current.get(key);
+      if (w) { groupRef.current.remove(w); w.geometry.dispose(); waters.current.delete(key); }
     }
 
     // Build missing leaves through the shared budget so a burst never stalls a frame.
@@ -325,12 +373,19 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         // The node may have merged away while queued. Set lookup, not a scan: this runs
         // once per queued patch and a linear search would make it quadratic.
         if (!leafKeys.current.has(key)) return true;
-        const geo = buildPatchGeometry(n, mf.maxLevel);
-        if (!geo) return true;
-        const mesh = new THREE.Mesh(geo, material);
+        const built = buildPatchGeometry(n, mf.maxLevel);
+        if (!built) return true;
+        const mesh = new THREE.Mesh(built.geo, material);
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
         groupRef.current?.add(mesh);
+        if (built.water) {
+          const wm = new THREE.Mesh(built.water, waterMat);
+          wm.frustumCulled = true;
+          wm.renderOrder = 2;          // after opaque terrain
+          waters.current.set(key, wm);
+          groupRef.current?.add(wm);
+        }
         if (!readyFired.current && meshes.current.size >= 6) {
           readyFired.current = true;
           console.log(`[earth] first patches built (${meshes.current.size}); planet is in the scene`);
