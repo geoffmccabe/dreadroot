@@ -336,21 +336,29 @@ export function FortressScene({
     if (up.lengthSq() < 1e-6) return null;
     up.normalize();
 
-    camera.getWorldDirection(gbView.current);
-    // Tangent component of the view direction: the part of where you are looking that lies along
-    // the surface.
-    const fwd = gbFwd.current.copy(gbView.current).addScaledVector(up, -gbView.current.dot(up));
-
-    // Looking straight down (or straight up) leaves no tangent component, which is exactly what
-    // happens when you orbit and stare at the planet. Fall back to the camera's own up vector
-    // flattened the same way, so W still means "the direction the top of the screen points".
-    if (fwd.lengthSq() < 1e-8) {
-      fwd.copy(camera.up).addScaledVector(up, -camera.up.dot(up));
-      if (fwd.lengthSq() < 1e-8) return null;   // degenerate; leave the world-axis basis alone
+    // Derive the frame from the camera's RIGHT axis, not its forward.
+    //
+    // Deriving from forward breaks exactly when you look straight down at the planet, which is the
+    // normal way to approach it: the tangent component of the view vanishes and the frame becomes
+    // arbitrary, so W sent you in a direction unrelated to the screen and which way it went
+    // depended on how you had rotated. The old fallback made it worse by using `camera.up`, which
+    // in three.js is the world up HINT (0,1,0), not the camera's actual up axis.
+    //
+    // The camera's right axis is never degenerate: it is always perpendicular to the view and
+    // always points at screen-right. Anchoring on it means A and D match the screen at every
+    // orientation, and W is then simply "away from the camera along the ground".
+    const camRight = gbRight.current.setFromMatrixColumn(camera.matrixWorld, 0);
+    const right = camRight.addScaledVector(up, -camRight.dot(up));
+    if (right.lengthSq() < 1e-10) {
+      // Only when the camera is rolled so its right axis is straight up/down. Use its up axis.
+      const camUp = gbView.current.setFromMatrixColumn(camera.matrixWorld, 1);
+      right.copy(camUp).addScaledVector(up, -camUp.dot(up));
+      if (right.lengthSq() < 1e-10) return null;
     }
-    fwd.normalize();
+    right.normalize();
 
-    const right = gbRight.current.crossVectors(fwd, up).normalize();
+    // cross(up, right) points away from the viewer along the ground: forward.
+    const fwd = gbFwd.current.crossVectors(up, right).normalize();
     return { fwd, right, up };
   }, [camera]);
 

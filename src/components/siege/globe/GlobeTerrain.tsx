@@ -133,6 +133,9 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
   const skirtDrop = tileArcUnits(n.depth) * SKIRT_FRAC;
   // Vertex spacing of THIS patch, which band-limits the procedural octaves.
   const patchSpacing = tileArcUnits(n.depth) / (PATCH - 1);
+  // Same spacing in real metres, used to turn a height difference into a slope for shading.
+  const spacingM = patchSpacing * METRES_PER_UNIT;
+  let prevM = 0;
 
   for (let j = 0; j < side; j++) {
     // Clamp into the patch for the skirt ring, so skirt verts sit under the true edge.
@@ -160,21 +163,61 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
       pos[k + 1] = toRenderY(dir[1] * r);
       pos[k + 2] = toRenderZ(dir[2] * r);
 
-      // Land ramp: green lowland -> brown upland -> grey rock -> white peaks/ice.
-      // Below sea level stays dark, mostly hidden by the ocean shell.
-      const lat = Math.abs(dir[1]);                 // |sin(latitude)|, 1 at the poles
-      const snowLine = 2600 - 2400 * lat * lat;     // metres; drops toward the poles
+      // --- surface colour -------------------------------------------------------------------
+      // There are no texture maps yet (that is the biome work in P3), so all of the visual
+      // variety has to come from per-vertex colour. Flat elevation banding alone reads as poster
+      // paint, so this combines four signals: LATITUDE for the biome, ELEVATION for treeline and
+      // snow, SLOPE so cliffs go to bare rock, and a little NOISE so nothing is a flat plate.
+      const sinLat = dir[1];
+      const absLat = Math.abs(sinLat);
       let r0: number, g0: number, b0: number;
+
       if (metres < 0) {
-        // Shallow shelf -> bright blue, abyss -> near-black blue. -6000 m covers most of the ocean.
+        // Shallow shelf -> bright blue, abyss -> near-black. -6000 m covers most of the ocean.
         const t = Math.min(1, -metres / 6000);
         r0 = 0.10 - 0.07 * t; g0 = 0.32 - 0.24 * t; b0 = 0.55 - 0.32 * t;
-      }
-      else if (metres > snowLine) { r0 = 0.92; g0 = 0.93; b0 = 0.96; }
-      else {
-        const t = Math.min(1, metres / Math.max(1, snowLine));
-        r0 = 0.24 + 0.34 * t; g0 = 0.42 - 0.10 * t; b0 = 0.20 + 0.10 * t;
-        if (lat > 0.86) { const p = (lat - 0.86) / 0.14; r0 += (0.92 - r0) * p; g0 += (0.93 - g0) * p; b0 += (0.96 - b0) * p; }
+      } else {
+        // Biome by latitude band, roughly Earth's: rainforest, desert belt, temperate, boreal, ice.
+        const l = Math.asin(Math.min(1, absLat)) * 180 / Math.PI;
+        let br: number, bg: number, bb: number;
+        if (l < 12)      { br = 0.16; bg = 0.38; bb = 0.14; }        // equatorial forest
+        else if (l < 32) { const t = (l - 12) / 20; br = 0.16 + 0.50 * t; bg = 0.38 + 0.20 * t; bb = 0.14 + 0.16 * t; }  // -> desert
+        else if (l < 48) { const t = (l - 32) / 16; br = 0.66 - 0.42 * t; bg = 0.58 - 0.14 * t; bb = 0.30 - 0.12 * t; }  // -> temperate
+        else if (l < 66) { const t = (l - 48) / 18; br = 0.24 - 0.06 * t; bg = 0.44 - 0.10 * t; bb = 0.18 + 0.02 * t; }  // -> boreal
+        else             { const t = Math.min(1, (l - 66) / 14); br = 0.18 + 0.72 * t; bg = 0.34 + 0.58 * t; bb = 0.20 + 0.74 * t; } // -> ice
+
+        // Slope from the height difference to the neighbour already computed this row. Steep
+        // ground loses its vegetation and goes to bare rock, which is what actually makes
+        // mountains read as mountains rather than green lumps.
+        const dh = Math.abs(metres - prevM);
+        prevM = metres;
+        const slope = Math.min(1, dh / Math.max(1, spacingM * 0.55));
+        const rock = slope * 0.85;
+        br = br * (1 - rock) + 0.42 * rock;
+        bg = bg * (1 - rock) + 0.39 * rock;
+        bb = bb * (1 - rock) + 0.36 * rock;
+
+        // Treeline then snowline, both dropping toward the poles.
+        const treeLine = 3200 - 2600 * absLat * absLat;
+        const snowLine = 4600 - 4100 * absLat * absLat;
+        if (metres > treeLine) {
+          const t = Math.min(1, (metres - treeLine) / Math.max(1, snowLine - treeLine));
+          br = br * (1 - t) + 0.46 * t; bg = bg * (1 - t) + 0.43 * t; bb = bb * (1 - t) + 0.40 * t;
+        }
+        if (metres > snowLine) {
+          const t = Math.min(1, (metres - snowLine) / 900);
+          br = br * (1 - t) + 0.95 * t; bg = bg * (1 - t) + 0.96 * t; bb = bb * (1 - t) + 0.98 * t;
+        }
+
+        // Fine variation so large flat regions are not one solid colour. Cheap hash on the
+        // direction; deterministic, so it does not shimmer between frames or LOD levels.
+        const nx = (dir[0] * 8192) | 0, ny = (dir[1] * 8192) | 0, nz = (dir[2] * 8192) | 0;
+        let hsh = Math.imul(nx * 374761393 + ny * 668265263 + nz * 2147483647, 1274126177);
+        hsh = (hsh ^ (hsh >>> 15)) >>> 0;
+        const v = 1 + ((hsh / 4294967295) - 0.5) * 0.16;
+        br *= v; bg *= v; bb *= v;
+
+        r0 = br; g0 = bg; b0 = bb;
       }
       col[k] = r0; col[k + 1] = g0; col[k + 2] = b0;
 

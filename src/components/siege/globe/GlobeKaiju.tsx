@@ -99,6 +99,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   // Scratch, reused every frame.
   const up = useRef(new THREE.Vector3());
   const view = useRef(new THREE.Vector3());
+  const camUp = useRef(new THREE.Vector3());
   const fwd = useRef(new THREE.Vector3());
   const target = useRef(new THREE.Vector3());
   const quat = useRef(new THREE.Quaternion());
@@ -174,27 +175,38 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       return;
     }
 
-    // Local frame at the camera.
-    up.current.copy(camera.position);
+    // Place it relative to the CAMERA'S OWN axes, so it is always in frame.
+    //
+    // This previously used the local tangent frame, which is degenerate exactly when you look
+    // straight down at the planet: the arrival view. The fallback then used `camera.up`, which in
+    // three.js is the world up HINT (0,1,0), not the camera's up axis, and put the Kaiju 90
+    // degrees off the view direction. With a 70 degree FOV that is 55 degrees outside the screen,
+    // which is why it was never visible.
+    camera.getWorldDirection(view.current);
+    camUp.current.setFromMatrixColumn(camera.matrixWorld, 1).normalize();   // the REAL up axis
+
+    target.current.copy(camera.position)
+      .addScaledVector(view.current, h * AHEAD)
+      .addScaledVector(camUp.current, -h * BELOW);
+
+    // Local up AT THE KAIJU, for standing it upright on the planet.
+    up.current.copy(target.current);
     if (up.current.lengthSq() < 1e-6) return;
     up.current.normalize();
-    camera.getWorldDirection(view.current);
+
+    // Facing: the view flattened onto the ground. Falls back to the camera's real up flattened,
+    // which when looking straight down is the direction the top of the screen points at, so the
+    // Kaiju faces "up the screen" rather than somewhere arbitrary.
     fwd.current.copy(view.current).addScaledVector(up.current, -view.current.dot(up.current));
     if (fwd.current.lengthSq() < 1e-8) {
-      fwd.current.copy(camera.up).addScaledVector(up.current, -camera.up.dot(up.current));
+      fwd.current.copy(camUp.current).addScaledVector(up.current, -camUp.current.dot(up.current));
       if (fwd.current.lengthSq() < 1e-8) return;
     }
     fwd.current.normalize();
 
-    // Stand it ahead of and below the camera, then drop it onto the ground there.
-    target.current.copy(camera.position)
-      .addScaledVector(fwd.current, h * AHEAD)
-      .addScaledVector(up.current, -h * BELOW);
-
-    // Direction of that point from the planet centre = its own local up.
     const tLen = target.current.length();
     if (tLen < 1e-6) return;
-    const tux = target.current.x / tLen, tuy = target.current.y / tLen, tuz = target.current.z / tLen;
+    const tux = up.current.x, tuy = up.current.y, tuz = up.current.z;
 
     // Ground height at the Kaiju's own position, including procedural detail, so it stands on the
     // surface you can actually see rather than on the raw data.
