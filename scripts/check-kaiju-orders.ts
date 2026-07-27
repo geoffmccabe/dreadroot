@@ -9,7 +9,7 @@
  */
 
 import {
-  parseOrder, orderFromModel, orderWeight, orderExpired, ORDER_ACTION,
+  parseOrder, orderFromModel, orderWeight, orderExpired, ORDER_ACTION, ORDER_LABEL,
   type OrderType,
 } from '../src/components/siege/globe/kaijuOrders';
 import { scoreActions, chooseAction, refusalReason, type Perception } from '../src/components/siege/globe/kaijuBrain';
@@ -80,6 +80,39 @@ ok(orderFromModel('sure, I think it should probably attack', 'x') === null,
    'a chatty model reply is REJECTED rather than parsed loosely');
 ok(orderFromModel('none', 'x') === null, 'the model can say it does not know');
 
+// --- 1b. the command shown on screen must be the RIGHT command ------------------------------------
+//
+// This is the confirmation Geoff actually asked for: not that the creature acknowledged something,
+// but that his words became one specific, named command. A flash that fires on the wrong parse is
+// worse than no flash, because it reports success while doing the wrong thing — so the word itself
+// is what gets shown, and this checks the word is right.
+console.log('\nTHE WORD SHOWN ON SCREEN');
+{
+  const shown: [string, string][] = [
+    ['kill that thing', 'ATTACK'],
+    ['back off', 'BACK OFF'],
+    ['run away', 'RETREAT'],
+    ['hide behind something', 'TAKE COVER'],
+    ['wait', 'HOLD'],
+    ['follow me', 'FOLLOW ME'],
+    ['go over there', 'GO THERE'],
+    ['do what you want', 'STAND DOWN'],
+  ];
+  let right = 0;
+  for (const [said, want] of shown) {
+    const o = parseOrder(said);
+    const label = o ? ORDER_LABEL[o.type] : '(nothing)';
+    if (label === want) right++;
+    else console.log(`        "${said}" showed ${label}, expected ${want}`);
+  }
+  ok(right === shown.length, 'every command displays its correct word', `${right}/${shown.length}`);
+  for (const [said] of shown.slice(0, 4)) {
+    console.log(`        "${said}"  ->  ${ORDER_LABEL[parseOrder(said)!.type]}`);
+  }
+  // Nothing understood must show nothing at all. A flash on a failed parse would be a lie.
+  ok(parseOrder('mumble mumble') === null, 'unrecognised speech shows NO command word');
+}
+
 // --- 2. obedience is a real dial ------------------------------------------------------------------
 console.log('\nOBEDIENCE (how heavy the thumb on the scale is)');
 ok(orderWeight(1) > orderWeight(0) * 3, 'an obedient Kaiju weighs orders far more heavily',
@@ -108,8 +141,11 @@ const base = (over: Partial<Perception>): Perception => ({
   const c = chooseAction(scores, null);
   ok(c.action !== 'engage', 'nearly dead + "attack" => it REFUSES', `chose ${c.action}`);
   const why = refusalReason(scores, 'engage', c.action);
-  ok(!!why && why.startsWith('No'), 'and it explains itself', why ?? 'no reason given');
-  console.log(`        it says: "${why}"`);
+  // A STATE, not speech: no first person, no punctuation, no sentence. Kaiju do not talk, and the
+  // useful thing is the reading that beat the order.
+  ok(!!why && !/[.!?]$/.test(why) && !/\bI\b|'m\b/.test(why),
+     'the reason is a state, not dialogue', why ?? 'none');
+  console.log(`        state shown: ${why}`);
 }
 
 // The same situation, but a fanatically obedient Kaiju: it goes anyway. This is what Obedience
@@ -162,7 +198,8 @@ console.log('\nIN A REAL FIGHT');
   ok(me.order?.type === 'attack', 'and attached to my Kaiju');
 
   for (let i = 0; i < 90; i++) stepArena(1 / 30, true);
-  console.log(`        my Kaiju is now: ${me.action}, and says "${me.reply || '(nothing yet)'}"`);
+  console.log(`        my Kaiju is now: ${me.action}`
+    + `${me.refusing ? ` — REFUSING (${me.refusalNote})` : ' — carrying it out'}`);
   ok(me.action === 'engage' || me.refusing, 'it either obeyed or explicitly refused',
      `action=${me.action} refusing=${me.refusing}`);
 

@@ -18,6 +18,7 @@ import {
   commandKaiju, playerOrderState, arenaStarted, subscribeArena, arenaVersion, getAgents,
 } from './kaijuArena';
 import { ORDER_ACTION } from './kaijuOrders';
+import { flashIntensity } from './kaijuFlash';
 
 /** Minimal typing for the browser speech API, which TypeScript's DOM lib still does not ship. */
 interface SpeechRecognitionLike {
@@ -68,10 +69,12 @@ export function KaijuCommandPanel() {
   const voiceSupported = useRef<boolean>(false);
 
   useEffect(() => { voiceSupported.current = makeRecogniser('en-US') != null; }, []);
-  // Repaint a few times a second so the Kaiju's reply appears promptly without re-rendering at
-  // frame rate, which would cost more than the fight itself.
+  // 20 Hz, not 5 Hz. The acknowledgement is three pulses inside one second, so sampling it five
+  // times would render it as a couple of arbitrary brightness steps rather than as three flashes —
+  // the signal would be there and unreadable. A small panel at 20 Hz costs nothing next to the
+  // scene, and it is still far below frame rate.
   useEffect(() => {
-    const id = setInterval(() => tick((n) => n + 1), 200);
+    const id = setInterval(() => tick((n) => n + 1), 50);
     return () => clearInterval(id);
   }, []);
 
@@ -111,8 +114,11 @@ export function KaijuCommandPanel() {
   };
 
   if (!arenaStarted()) return null;
-  const { order, reply, refusing } = playerOrderState();
+  const { order, label, flash, refusing, refusalNote } = playerOrderState();
   const me = getAgents().find((a) => a.isPlayer);
+  // Same three-pulses-in-one-second curve the Kaiju itself uses, so the word on the panel and the
+  // creature in the world flash together rather than as two unrelated effects.
+  const pulse = flashIntensity(flash);
 
   const btn: React.CSSProperties = {
     background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.25)',
@@ -172,15 +178,29 @@ export function KaijuCommandPanel() {
         </span>
       </div>
 
-      {/* Its answer. The single most important line here: an order you cannot tell was received,
-          accepted or refused is worse than no order at all. */}
-      {reply && (
+      {/* THE PARSED COMMAND, in words, flashing.
+          This is the confirmation that matters. Not "did the creature reply" — it is a monster and
+          it does not talk — but "did my words become a specific command the system knows". Seeing
+          the right word appear is the whole answer, and seeing the WRONG word appear is far more
+          useful than a generic acknowledgement would have been. Pulses in step with the Kaiju's
+          own flash, so the panel and the creature are visibly saying the same thing. */}
+      {label && (
         <div style={{
-          marginTop: 6, padding: '4px 7px', borderRadius: 4,
-          background: refusing ? 'rgba(224,90,74,0.20)' : 'rgba(95,211,95,0.16)',
-          border: `1px solid ${refusing ? 'rgba(224,90,74,0.45)' : 'rgba(95,211,95,0.40)'}`,
+          marginTop: 7, padding: '7px 9px', borderRadius: 5, textAlign: 'center',
+          background: `rgba(110,170,255,${0.10 + 0.42 * pulse})`,
+          border: `1px solid rgba(140,190,255,${0.30 + 0.60 * pulse})`,
+          transition: 'none',
         }}>
-          <strong>{me?.name ?? 'It'}:</strong> {reply}
+          <div style={{
+            fontSize: '1.45em', fontWeight: 700, letterSpacing: '0.09em', lineHeight: 1.15,
+            color: `rgb(${210 + 45 * pulse}, ${228 + 27 * pulse}, 255)`,
+          }}>
+            {label}
+          </div>
+          {/* Whether it is actually doing it — a state, not a sentence. */}
+          <div style={{ fontSize: '0.86em', opacity: 0.8, marginTop: 2 }}>
+            {refusing ? `refusing — ${refusalNote}` : 'carrying it out'}
+          </div>
         </div>
       )}
 

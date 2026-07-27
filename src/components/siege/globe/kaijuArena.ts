@@ -24,7 +24,7 @@ import {
   type ActionId, type ActionScore, type Perception,
 } from './kaijuBrain';
 import {
-  parseOrder, orderWeight, orderExpired, ORDER_ACTION, ORDER_ACK, type Order,
+  parseOrder, orderWeight, orderExpired, ORDER_ACTION, ORDER_LABEL, type Order,
 } from './kaijuOrders';
 import {
   BREEDS, derive, describeBuild, STAT_NAMES,
@@ -95,10 +95,14 @@ export interface Agent {
   intentSpeedMul: number;
   /** What the player last told this Kaiju to do, if anything. */
   order: Order | null;
-  /** Its answer: an acknowledgement if it complied, a reason if it refused. Shown as a subtitle. */
-  reply: string;
-  /** Seconds the reply stays on screen. */
-  replyTimer: number;
+  /**
+   * Why it is not complying, as a STATE not a sentence — 'too hurt', 'outmatched'.
+   *
+   * Kaiju do not talk. This used to be dialogue ("No — I'm too hurt.") which was wrong for a
+   * monster and, more to the point, answered the wrong question: what needs confirming is that
+   * the system parsed your words, not that the creature has a personality.
+   */
+  refusalNote: string;
   /** True while the Kaiju is disobeying a live order. */
   refusing: boolean;
   /** Whether it has answered the current order yet (agreed or refused). */
@@ -108,7 +112,8 @@ export interface Agent {
    *
    * Set the moment a command is UNDERSTOOD, regardless of whether the Kaiju goes on to obey it.
    * That distinction is the point: hearing you and agreeing with you are different things, and the
-   * flash answers the first while the spoken reply answers the second.
+   * flash and the command word on screen confirm the first; whether it then obeys is a separate
+   * matter, shown as its state rather than spoken. Kaiju do not talk.
    */
   ackFlash: number;
 }
@@ -208,7 +213,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
-      order: null, reply: '', replyTimer: 0, refusing: false, orderAnswered: false, ackFlash: 0,
+      order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
     });
   });
 
@@ -578,15 +583,12 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       if (refusing !== a.refusing || !a.orderAnswered) {
         a.orderAnswered = true;
         a.refusing = refusing;
-        const line = refusing
-          ? refusalReason(a.scores, wanted, a.action) ?? 'No.'
-          : ORDER_ACK[a.order.type];
-        a.reply = line;
-        a.replyTimer = 4;
-        log(`${a.name}: "${line}"  (told to ${a.order.type})`);
+        a.refusalNote = refusing ? (refusalReason(a.scores, wanted, a.action) ?? 'unwilling') : '';
+        log(refusing
+          ? `${a.name} REFUSES ${ORDER_LABEL[a.order.type]} — ${a.refusalNote}`
+          : `${a.name} obeys ${ORDER_LABEL[a.order.type]}`);
       }
     }
-    if (a.replyTimer > 0) a.replyTimer = Math.max(0, a.replyTimer - dt);
     if (a.ackFlash > 0) a.ackFlash = Math.max(0, a.ackFlash - dt);
 
     // WHO DRIVES THE PLAYER'S KAIJU.
@@ -696,17 +698,16 @@ export function applyOrder(a: Agent, order: Order): Order {
   if (order.type === 'free') {
     a.order = null;
     a.refusing = false;
-    a.reply = ORDER_ACK.free;
-    a.replyTimer = 4;
-    log(`${a.name} released: "${order.said}"`);
+    a.refusalNote = '';
+    log(`${ORDER_LABEL.free} — ${a.name} is on its own judgement again ("${order.said}")`);
     return order;
   }
   a.order = order;
   a.refusing = false;
   a.orderAnswered = false;
-  // Deliberately no reply yet: the acknowledgement or the refusal is emitted next tick, once the
-  // Kaiju has actually weighed the order. Saying "going!" before deciding would be a lie.
-  log(`You: "${order.said}" -> ${a.name} (${order.type})`);
+  // Compliance is decided next tick, once the order has been weighed against everything else.
+  // Only the PARSE is confirmed here, which is the thing that needed confirming.
+  log(`heard "${order.said}" -> parsed as ${ORDER_LABEL[order.type]}`);
   return order;
 }
 
@@ -726,10 +727,21 @@ export function ackFlashRemaining(id: string): number {
   return a?.ackFlash ?? 0;
 }
 
-/** The player's Kaiju, its order and its answer — for the command panel. */
-export function playerOrderState(): { order: Order | null; reply: string; refusing: boolean } {
+/**
+ * What the command panel needs: the parsed command, how long its flash has left, and whether the
+ * Kaiju is actually doing it.
+ */
+export function playerOrderState(): {
+  order: Order | null; label: string; flash: number; refusing: boolean; refusalNote: string;
+} {
   const a = agents.find((x) => x.isPlayer);
-  return { order: a?.order ?? null, reply: a && a.replyTimer > 0 ? a.reply : '', refusing: !!a?.refusing };
+  return {
+    order: a?.order ?? null,
+    label: a?.order ? ORDER_LABEL[a.order.type] : '',
+    flash: a?.ackFlash ?? 0,
+    refusing: !!a?.refusing,
+    refusalNote: a?.refusalNote ?? '',
+  };
 }
 
 /** Human-readable dump for the tracker's copy button. */

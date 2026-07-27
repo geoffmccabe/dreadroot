@@ -279,18 +279,20 @@ export function refusalReason(scores: ActionScore[], ordered: ActionId | null, c
   const top = winner.considerations
     .filter((c) => c.name !== 'youOrderedThis')
     .slice().sort((a, b) => b.score - a.score)[0];
+  // Phrased as a STATE, not as speech. Kaiju do not talk, and what is worth surfacing is the
+  // reading that beat the order, not a personality.
   const why: Record<string, string> = {
-    healthFrac: "I'm too hurt",
-    hurtEnough: "I'm too hurt",
-    powerRatio: "it's stronger than me",
-    powerIfClosed: "I'd lose that fight",
-    distBodies: "it's too far",
-    threatCount: "there are too many",
-    coverNearby: 'I need cover',
-    weaponRange: 'my weapon will not reach',
-    hasTarget: "there's nothing there",
+    healthFrac: 'too hurt',
+    hurtEnough: 'too hurt',
+    powerRatio: 'outmatched',
+    powerIfClosed: 'would lose up close',
+    distBodies: 'too far away',
+    threatCount: 'outnumbered',
+    coverNearby: 'needs cover',
+    weaponRange: 'out of weapon range',
+    hasTarget: 'no target',
   };
-  return top ? `No — ${why[top.name] ?? top.name}.` : 'No.';
+  return top ? (why[top.name] ?? top.name) : 'unwilling';
 }
 
 /** Hysteresis: do not switch action unless the challenger is meaningfully better. */

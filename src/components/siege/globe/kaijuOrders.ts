@@ -68,16 +68,24 @@ export const ORDER_ACTION: Record<OrderType, string | null> = {
   free: null,
 };
 
-/** How the Kaiju acknowledges, in plain words, for the subtitle line. */
-export const ORDER_ACK: Record<OrderType, string> = {
-  attack: 'Going for it.',
-  backOff: 'Backing off.',
-  retreat: 'Falling back.',
-  takeCover: 'Finding cover.',
-  hold: 'Holding here.',
-  goTo: 'On my way.',
-  follow: 'With you.',
-  free: 'My call, then.',
+/**
+ * The parsed command, as a word to put on screen.
+ *
+ * NOT dialogue. An earlier version had the Kaiju answer in sentences ("Going for it.") and that
+ * was wrong twice over: these are monsters, and more importantly it answered the wrong question.
+ * What is worth showing is not personality but PROOF OF PARSING — that the sounds you made became
+ * one specific known command. So the display is the command itself, in the system's own words, and
+ * seeing the right word appear is the confirmation.
+ */
+export const ORDER_LABEL: Record<OrderType, string> = {
+  attack: 'ATTACK',
+  backOff: 'BACK OFF',
+  retreat: 'RETREAT',
+  takeCover: 'TAKE COVER',
+  hold: 'HOLD',
+  goTo: 'GO THERE',
+  follow: 'FOLLOW ME',
+  free: 'STAND DOWN',
 };
 
 // --- the local grammar ---------------------------------------------------------------------------
