@@ -3,11 +3,18 @@
 Research answer to Geoff's question (2026-Jul-27): can sound arrive at the real speed of sound, and
 bounce off the mountains, without paying for full acoustic simulation?
 
-**Short answer: yes, and the most dramatic 80% of it is nearly free.** The expensive part of
-acoustics is not delay or echo — it is diffraction and late reverberation. Those are the parts to
-approximate or skip. And this project has an unusual advantage: the terrain is a *deterministic
-height function*, so we can query it directly instead of ray-tracing scene geometry, which is what
-makes real engines expensive.
+**Short answer: yes — but multi-bounce reverberation between peaks needs a different trick from
+the single echoes, and it is worth being precise about which does which.**
+
+- **Delay** (sound arriving late) is nearly free.
+- **A single slap off one cliff** is cheap: first-order image-source.
+- **Sound rattling between several mountains and decaying into a roll** is NOT more of the same
+  trick. Doing it bounce-by-bounce explodes. It needs a *feedback delay network* whose decay is
+  measured from the terrain — see section 3, which is the answer to the question actually asked.
+
+This project has one unusual advantage throughout: the terrain is a *deterministic height
+function*, so we can query it directly instead of ray-tracing scene geometry, which is what makes
+real engines expensive.
 
 ---
 
@@ -73,22 +80,68 @@ That is 8–16 cheap height lookups a few times per second, not per frame. The r
 slapback off a cliff that changes as you walk — which is exactly the effect worth having, and it is
 strongest in precisely the places that look most dramatic: canyons, valleys, cirques.
 
-### 3. Late reverberation — approximate, never simulate
+### 3. Late reverberation — where multi-bounce echo actually comes from
+
+**A correction to layer 2, because Geoff asked exactly the right question:** "if there's multiple
+mountains then they need to bounce off each other and reverberate. Will your tricks do that?"
+
+**First-order reflections alone will NOT do that.** They give one slap per cliff and stop. Sound
+rattling between three peaks and decaying into a roll is *higher-order* reflection, and computing
+it bounce-by-bounce is precisely the part that explodes: reflection paths multiply with every
+order, which is why nobody does it that way past order two or three.
+
+The resolution is not to compute more bounces. It is to **switch models at the point where bounces
+stop being individually audible**, which is the standard decomposition and the reason it exists:
+
+| | What it is | How to get it |
+|---|---|---|
+| **Early reflections** (first ~80 ms) | A handful of distinct echoes you can point at | Image-source, order 1–2. Directional and discrete. |
+| **Late reverberation** (after that) | Thousands of overlapping bounces, none separable by ear | A **feedback delay network**. Synthesised, not computed. |
+
+A feedback delay network feeds copies of the signal through several delay lines that feed back into
+each other, with attenuation filters shaping the decay. Because the delay lines recirculate, it
+produces an effectively infinite series of ever-denser reflections — which *is* sound bouncing
+between surfaces, arriving at the right density and dying at the right rate. You do not trace it;
+you get it for the cost of a few delay lines.
+
+The ear cannot resolve individual reflections in a tail anyway. What it judges is how long the tail
+lasts, how quickly it thickens, and how the high frequencies die relative to the low. Those are
+exactly the FDN's parameters.
+
+### The bit that makes it *our* mountains rather than a preset
+
+Here is the technique worth taking, and it is what Steam Audio, Wwise and Meta's acoustic ray
+tracing all do in some form:
+
+> **Trace a small number of rays with MANY bounces, at a LOW rate, and use the result to set the
+> reverb's parameters — not to generate audio.**
+
+Concretely: a few hundred rays from the listener, each bounced 5–10 times, gathered into an
+energy-versus-time histogram. From that curve you read the decay time (RT60) and the early/late
+balance, and you feed those into the FDN. Trace a few times a second, not per frame, and
+interpolate.
+
+That is affordable because **the rays are measuring the space, not carrying the sound.** A few
+hundred rays a few times a second is trivial; the same rays used to synthesise audio sample by
+sample would not be.
+
+And on this map it is cheaper still: our "ray trace" is marching over a deterministic height
+function, not intersecting scene geometry. Standing in a cirque with peaks on three sides, the rays
+come back short and numerous, RT60 goes long, the tail thickens — and it will genuinely sound
+different from the same Kaiju on an open plain, because the number driving it was measured from the
+terrain actually around you.
+
+**Worth knowing about:** the *Scattering Delay Network* (Aalborg/De Sena, presented at AES and
+written up explicitly for computer games) sits between the two — it renders early reflections
+accurately *and* produces an RT60 consistent with the acoustic equations, in one structure. If the
+early/late seam ever sounds like a seam, that is the thing to reach for.
+
+### What NOT to do
 
 Do **not** use a convolution reverb per source. `ConvolverNode` is high quality and expensive, and
-the Web Audio guidance is explicit that a delay-line/all-pass/low-pass reverb gets a convincing
-effect far more cheaply.
-
-Drive **one shared reverb send** from a terrain-derived "how enclosed am I" number, computed from
-the same ring of rays as the echoes:
-
-- open plain → almost no wet signal, long pre-delay
-- valley floor → moderate wet, medium decay
-- deep canyon → high wet, long decay
-
-One reverb for the whole scene, its parameters lerped as you move. Sources feed it by distance.
-This is the standard approach and it is convincing because *changes* in reverb read as changes in
-space, even when the reverb itself is not physically derived.
+the Web Audio performance guidance says plainly that a delay-line/all-pass/low-pass reverb achieves
+a very convincing effect far more cheaply. One shared FDN for the scene, fed by distance, with its
+parameters lerped as you move.
 
 ---
 
@@ -114,8 +167,9 @@ than reaching for simulation.
    scale reads immediately. Schedule from the emitter's position *at emission time*.
 2. **First-order terrain echo**, 8–16 height-field rays a few times a second, two or three delayed
    copies. This is "bounces off the mountains".
-3. **One shared delay-line reverb**, its wet/decay driven by the enclosure number the same rays
-   already produce.
+3. **One shared feedback-delay-network reverb**, its decay time and density set from a low-rate,
+   many-bounce ray sweep of the terrain. THIS is what makes sound reverberate between mountains;
+   the first-order echoes in step 2 only ever give one slap each.
 4. Only if it is ever missed: diffraction (sound bending around a ridge you are behind). It is the
    expensive one and the least noticed.
 
@@ -139,3 +193,7 @@ it can be tuned by feel rather than by physics, the same way film does.
 - Web Audio convolution architecture - https://webaudio.github.io/web-audio-api/convolution.html
 - Fast algorithm for moving sound sources (2025) - https://arxiv.org/pdf/2508.03065
 - Learning acoustic scattering fields for dynamic sound propagation - https://arxiv.org/pdf/2010.04865
+- Room reverberation using parametrised feedback delay networks - https://projekter.aau.dk/projekter/files/334638099/dstrub18_Room_Reverberation_Simulation_using_Parametrised_FDNs.pdf
+- Scattering Delay Network: an interactive reverberator for computer games - https://www.desena.org/sdn/AES_41_2011_SDN.pdf
+- How ray-traced audio works, for reverb - https://lese.io/blog/how-raytraced-audio-works-for-reverb/
+- Meta acoustic ray tracing - https://developers.meta.com/horizon/documentation/unreal/meta-xr-acoustic-ray-tracing-unreal-getting-started/
