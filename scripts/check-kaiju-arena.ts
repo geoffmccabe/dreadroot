@@ -1,0 +1,146 @@
+/**
+ * check-kaiju-arena — run the Everest fight headless and assert it is actually a fight.
+ *
+ * This exists because of how this project has gone so far: things that "should" work have
+ * repeatedly turned out to be doing nothing on screen, and there was no way to tell without
+ * Geoff loading the game. A three-way Kaiju battle is entirely simulable without a renderer, so
+ * it gets simulated here.
+ *
+ * What it proves, without a browser:
+ *   - every behaviour tree parses and steps without throwing (a State returned from a condition
+ *     throws in Mistreevous and silently freezes the agent)
+ *   - the utility layer actually changes its mind as the fight develops
+ *   - projectiles connect, damage lands, and somebody eventually dies
+ *   - low health flips an agent to flee, which is Geoff's headline example rule
+ *
+ * Terrain tiles are not resident in node, so the bodies walk on the sea-level sphere. That does
+ * not affect any of the above: it only removes the cover query, which is asserted separately.
+ *
+ * Run: npm run check:kaiju-arena
+ */
+
+import {
+  initArena, stepArena, getAgents, getEvents, arenaReport, MAX_HEALTH, ARENA_HEIGHT,
+} from '../src/components/siege/globe/kaijuArena';
+import { getProjectiles } from '../src/components/siege/globe/kaijuWeapons';
+import { scoreActions, chooseAction } from '../src/components/siege/globe/kaijuBrain';
+import * as THREE from 'three';
+import {
+  createKaijuBody, placeBodyOnSurface, reTangentOf, stepBodyOf,
+} from '../src/components/siege/globe/kaijuBody';
+
+let failures = 0;
+function ok(cond: boolean, label: string, detail = ''): void {
+  if (cond) { console.log(`  PASS  ${label}`); }
+  else { console.log(`  FAIL  ${label}${detail ? `  (${detail})` : ''}`); failures++; }
+}
+
+console.log('\n== Kaiju arena: headless three-way fight ==\n');
+
+// Steering, first, because everything above it is meaningless if a body cannot turn toward a
+// heading. This regression exists because `stepBodyOf` used to turn the body AWAY from its
+// steering direction: the sign of the turn was inverted. It never showed up in a straight-line
+// test, since a body already facing its target never turns at all. Three Kaiju told to charge
+// each other and slowly drifting apart is what exposed it.
+{
+  let bad = 0;
+  for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0], [0.6, 0.8], [-0.6, -0.8]]) {
+    const b = createKaijuBody();
+    placeBodyOnSurface(b, new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));
+    const want = new THREE.Vector3(dx, dy, 0).normalize();
+    for (let i = 0; i < 40; i++) {
+      const w = want.clone();
+      reTangentOf(b, w);
+      stepBodyOf(b, 1 / 30, 1, 0, false, false, 3, w);
+    }
+    if (b.forward.dot(want) <= 0.9) bad++;
+  }
+  ok(bad === 0, 'a steered body turns TOWARD its heading from every direction', `${bad} failed`);
+}
+
+initArena(17);
+const agents = getAgents();
+ok(agents.length === 3, 'three agents spawned');
+ok(new Set(agents.map((a) => a.monsterType)).size === 3, 'three DIFFERENT monster models');
+ok(new Set(agents.map((a) => a.weapon)).size === 3, 'three different weapons');
+ok(agents.filter((a) => a.isPlayer).length === 1, 'exactly one player agent');
+ok(agents.find((a) => a.isPlayer)?.weapon === 'flame', "player's Kaiju has the flamethrower");
+ok(agents.every((a) => a.health === MAX_HEALTH), 'all start on equal health');
+
+// Everyone starts within sight of everyone else.
+const startDist = agents.map((a) => a.perception?.targetDistBodies ?? 999);
+
+// Run 90 seconds at 30 Hz with the player under AI control too, so all three fight.
+const DT = 1 / 30;
+const actionsSeen = new Set<string>();
+let maxProjectiles = 0;
+let steps = 0;
+for (let i = 0; i < 90 * 30; i++) {
+  stepArena(DT, false);
+  steps++;
+  for (const a of agents) if (a.action) actionsSeen.add(a.action);
+  maxProjectiles = Math.max(maxProjectiles, getProjectiles().length);
+  if (agents.filter((a) => a.alive).length <= 1) break;
+}
+console.log(`\n  simulated ${(steps * DT).toFixed(1)}s over ${steps} steps\n`);
+
+ok(agents.every((a) => a.lastTreeState !== 'ERROR'), 'no behaviour tree threw',
+   agents.map((a) => `${a.name}=${a.lastTreeState}`).join(' '));
+ok(maxProjectiles > 0, 'projectiles were fired', `peak ${maxProjectiles}`);
+ok(agents.some((a) => a.damageDealt > 0), 'damage was dealt',
+   agents.map((a) => `${a.name} dealt ${Math.round(a.damageDealt)}`).join(', '));
+ok(agents.every((a) => a.damageDealt > 0), 'ALL THREE landed hits — nobody is inert',
+   agents.map((a) => `${a.name}=${Math.round(a.damageDealt)}`).join(', '));
+ok(actionsSeen.size >= 2, 'the utility layer changed its mind at least once',
+   [...actionsSeen].join(', '));
+ok(agents.some((a) => !a.alive), 'somebody died within 90s',
+   agents.map((a) => `${a.name}=${Math.round(a.health)}`).join(', '));
+
+// Agents must move: a frozen Kaiju is the exact failure mode we keep hitting.
+ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startDist[i]) > 0.5),
+   'agents moved relative to each other');
+
+// The headline rule, tested directly on the brain rather than via the fight, so it is
+// deterministic: "under 10% health, turn and run".
+const dying = {
+  selfId: 'x', healthFrac: 0.05, targetId: 'y', targetDistBodies: 3, powerRatio: 1.2,
+  powerRatioClosed: 1.2, threatCount: 1, weaponRangeBodies: 2.2, weapon: 'flame' as const,
+  coverNearby: false, timeSinceHit: 0.2,
+};
+const fleeChoice = chooseAction(scoreActions(dying), 'engage');
+ok(fleeChoice.action === 'flee', 'at 5% health the brain chooses flee', `chose ${fleeChoice.action}`);
+
+const healthy = { ...dying, healthFrac: 1, powerRatio: 0.8, powerRatioClosed: 0.8 };
+const healthyChoice = chooseAction(scoreActions(healthy), null);
+ok(healthyChoice.action !== 'flee', 'at full health it does NOT flee', `chose ${healthyChoice.action}`);
+
+// A short-range fighter that is outgunned AT RANGE but wins UP CLOSE must charge. This is the
+// exact case that made the flamethrower Kaiju wander away from the fight for 90 seconds.
+const outranged = {
+  ...dying, healthFrac: 1, targetDistBodies: 10, powerRatio: 2.4, powerRatioClosed: 0.5,
+  weaponRangeBodies: 2.2,
+};
+const charge = chooseAction(scoreActions(outranged), null);
+ok(charge.action === 'engage', 'outranged but stronger up close => charges', `chose ${charge.action}`);
+
+// Cover-seeking must be vetoed outright when there is no cover, not merely scored low.
+const noCover = { ...dying, healthFrac: 0.5, powerRatio: 1.6, powerRatioClosed: 1.6, coverNearby: false };
+const coverScore = scoreActions(noCover).find((s) => s.action === 'takeCover');
+ok(coverScore?.score === 0, 'no cover nearby vetoes takeCover entirely', `score ${coverScore?.score}`);
+const withCover = { ...noCover, coverNearby: true };
+const coverScore2 = scoreActions(withCover).find((s) => s.action === 'takeCover');
+ok((coverScore2?.score ?? 0) > 0, 'with cover available takeCover becomes possible',
+   `score ${coverScore2?.score}`);
+
+// The report is what Geoff copies to us, so it must actually contain the useful things.
+const report = arenaReport();
+for (const need of ['KAIJU ARENA REPORT', 'PERCEIVES', 'SCORES', 'EVENTS', 'Flamethrower']) {
+  ok(report.includes(need), `report contains "${need}"`);
+}
+ok(getEvents().length > 1, 'events were logged', `${getEvents().length} events`);
+
+console.log('\n--- last 30 lines of the report, as Geoff would see it ---');
+console.log(report.split('\n').slice(-30).join('\n'));
+
+console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
+process.exit(failures === 0 ? 0 : 1);

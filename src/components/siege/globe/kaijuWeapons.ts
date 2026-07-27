@@ -1,0 +1,237 @@
+// kaijuWeapons — flame, gun, grenade and melee for Kaiju-scale combat, with real ballistics.
+//
+// WHY NOT REUSE THE SPRAY SYSTEM DIRECTLY. src/components/siege/spray is exactly the right shape
+// (a parameterised breath weapon: cone, muzzle speed, gravity, per-particle damage) but its hit
+// test is hard-wired to the PLAYER. Kaiju need to hit each other, so the projectile model here is
+// modelled on it and the hit test is against agents. Same physics, different target set.
+//
+// SCALE. 1 game unit = 100 real metres and a Kaiju is 3 units (300 m), so nothing here uses
+// human-weapon numbers. Ranges are expressed in BODY HEIGHTS and converted, which keeps them
+// sensible if the Kaiju size changes:
+//   melee    0.9 bodies   contact
+//   flame    2.2 bodies   short, wide, continuous, high total damage
+//   gun      14  bodies   long, accurate, low damage per shot
+//   grenade  7   bodies   arcing, area damage, slow
+//
+// BALANCE, as damage per second at a range where the weapon can actually reach:
+//   flame   ~67   the reward for closing to two body-lengths
+//   grenade ~38   plus area damage, so better against a group
+//   gun     ~35   the only one that works at all beyond seven bodies
+//   melee   ~37   available to everyone, so nobody is ever harmless
+// These were set by running scripts/check-kaiju-arena.ts, not by guessing: the first pass had
+// flame at 175 dps, which made every other Kaiju flee on sight and ended the fight instantly.
+//
+// Projectiles integrate under the map's real gravity (9.81 m/s^2 = 0.0981 units/s^2), so a
+// grenade genuinely arcs and a gun round genuinely drops over distance.
+
+import * as THREE from 'three';
+import { gravityUnits } from './kaijuBody';
+
+export type WeaponId = 'flame' | 'gun' | 'grenade' | 'melee';
+
+export interface WeaponSpec {
+  id: WeaponId;
+  name: string;
+  /** Effective range, in body heights. */
+  rangeBodies: number;
+  /** Seconds between uses. */
+  cooldown: number;
+  /** Damage per hit (per particle for flame). */
+  damage: number;
+  /** Muzzle speed in units/sec, 0 for hitscan-like melee. */
+  speed: number;
+  /** Half-angle of the firing cone, radians. */
+  spread: number;
+  /** Projectiles per use. */
+  count: number;
+  /** Seconds a projectile lives. */
+  life: number;
+  /** Blast radius in body heights (0 = point hit). */
+  blastBodies: number;
+  /** How strongly gravity acts on it, as a fraction of real gravity. */
+  gravityScale: number;
+  colour: [number, number, number];
+  size: number;
+}
+
+export const WEAPONS: Record<WeaponId, WeaponSpec> = {
+  // Continuous, close, and the highest damage per second if you can stay in range.
+  flame: {
+    id: 'flame', name: 'Flamethrower', rangeBodies: 2.2, cooldown: 0.15, damage: 2,
+    speed: 9, spread: 0.30, count: 5, life: 1.1, blastBodies: 0, gravityScale: 0.35,
+    colour: [1.0, 0.55, 0.12], size: 0.16,
+  },
+  // Long reach, flat trajectory, modest damage. The ranged-attacker's weapon.
+  gun: {
+    id: 'gun', name: 'Cannon', rangeBodies: 14, cooldown: 0.75, damage: 26,
+    speed: 60, spread: 0.02, count: 1, life: 3.0, blastBodies: 0, gravityScale: 1,
+    colour: [1.0, 0.95, 0.5], size: 0.10,
+  },
+  // Arcs, lands, explodes. Good against a group or someone in cover, bad at close range.
+  grenade: {
+    id: 'grenade', name: 'Grenade', rangeBodies: 7, cooldown: 2.4, damage: 90,
+    speed: 22, spread: 0.05, count: 1, life: 4.0, blastBodies: 1.6, gravityScale: 1,
+    colour: [0.5, 1.0, 0.4], size: 0.22,
+  },
+  melee: {
+    id: 'melee', name: 'Melee', rangeBodies: 0.9, cooldown: 1.5, damage: 55,
+    speed: 0, spread: 0.6, count: 1, life: 0, blastBodies: 0, gravityScale: 0,
+    colour: [1, 1, 1], size: 0,
+  },
+};
+
+export interface Projectile {
+  pos: THREE.Vector3;
+  vel: THREE.Vector3;
+  /** Local up at launch, so gravity pulls toward the planet centre rather than world -Y. */
+  ownerId: string;
+  weapon: WeaponId;
+  life: number;
+  damage: number;
+  blast: number;
+  colour: [number, number, number];
+  size: number;
+  dead: boolean;
+}
+
+const projectiles: Projectile[] = [];
+export function getProjectiles(): Projectile[] { return projectiles; }
+
+const _dir = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _side = new THREE.Vector3();
+
+/**
+ * Fire a weapon from `origin` toward `aim`.
+ *
+ * Gravity on this map points at the planet centre, so a projectile's "down" is its own position
+ * direction rather than world -Y. Firing sideways across a curved surface therefore drops the
+ * round toward the ground under it, not toward the south pole.
+ */
+export function fireWeapon(
+  ownerId: string, weapon: WeaponId, origin: THREE.Vector3, aim: THREE.Vector3, heightUnits: number,
+): void {
+  const w = WEAPONS[weapon];
+  if (w.speed <= 0) return;                     // melee is resolved directly, not as a projectile
+
+  for (let i = 0; i < w.count; i++) {
+    _dir.copy(aim).normalize();
+    if (w.spread > 0) {
+      // Random direction inside the cone: pick two perpendicular axes and tilt.
+      _up.set(0, 1, 0);
+      if (Math.abs(_dir.y) > 0.9) _up.set(1, 0, 0);
+      _side.crossVectors(_dir, _up).normalize();
+      _up.crossVectors(_dir, _side).normalize();
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * w.spread;
+      _dir.addScaledVector(_side, Math.cos(a) * r).addScaledVector(_up, Math.sin(a) * r).normalize();
+    }
+    const speed = w.speed * (0.9 + Math.random() * 0.2);
+    projectiles.push({
+      pos: origin.clone(),
+      vel: _dir.clone().multiplyScalar(speed),
+      ownerId,
+      weapon,
+      life: w.life,
+      damage: w.damage,
+      blast: w.blastBodies * heightUnits,
+      colour: w.colour,
+      size: w.size * heightUnits,
+      dead: false,
+    });
+  }
+}
+
+export interface HitTarget {
+  id: string;
+  /** Centre of mass, roughly half body height above the feet. */
+  centre: THREE.Vector3;
+  /** Hit radius in units. */
+  radius: number;
+  alive: boolean;
+}
+
+export interface HitEvent { targetId: string; ownerId: string; weapon: WeaponId; damage: number }
+
+/**
+ * Advance every projectile and report hits.
+ *
+ * Gravity is applied along the projectile's OWN local up (toward the planet centre), which is what
+ * makes ballistics behave correctly on a sphere over the distances a Kaiju cannon covers.
+ */
+export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt: (p: THREE.Vector3) => number | null): HitEvent[] {
+  const hits: HitEvent[] = [];
+  const g = gravityUnits();
+
+  for (const p of projectiles) {
+    if (p.dead) continue;
+    const spec = WEAPONS[p.weapon];
+
+    // Gravity toward the planet centre.
+    const len = p.pos.length();
+    if (len > 1e-6) {
+      _up.copy(p.pos).multiplyScalar(1 / len);
+      p.vel.addScaledVector(_up, -g * spec.gravityScale * dt);
+    }
+    p.pos.addScaledVector(p.vel, dt);
+    p.life -= dt;
+
+    let detonate = false;
+
+    // Ground contact.
+    const gr = groundRadiusAt(p.pos);
+    if (gr != null && p.pos.length() <= gr) detonate = true;
+
+    // Direct hit. Skip the firer so nobody shoots themselves point blank.
+    if (!detonate) {
+      for (const t of targets) {
+        if (!t.alive || t.id === p.ownerId) continue;
+        if (p.pos.distanceTo(t.centre) <= t.radius + p.size) {
+          if (p.blast <= 0) hits.push({ targetId: t.id, ownerId: p.ownerId, weapon: p.weapon, damage: p.damage });
+          detonate = true;
+          break;
+        }
+      }
+    }
+
+    if (detonate || p.life <= 0) {
+      // Area damage falls off linearly to the blast edge.
+      if (p.blast > 0 && (detonate || p.life <= 0)) {
+        for (const t of targets) {
+          if (!t.alive || t.id === p.ownerId) continue;
+          const d = p.pos.distanceTo(t.centre);
+          if (d <= p.blast + t.radius) {
+            const falloff = 1 - Math.min(1, d / (p.blast + t.radius));
+            hits.push({ targetId: t.id, ownerId: p.ownerId, weapon: p.weapon, damage: p.damage * falloff });
+          }
+        }
+      }
+      p.dead = true;
+    }
+  }
+
+  // Compact the list rather than splicing inside the loop.
+  for (let i = projectiles.length - 1; i >= 0; i--) if (projectiles[i].dead) projectiles.splice(i, 1);
+  return hits;
+}
+
+/** Melee is resolved immediately: a cone in front, within reach. */
+export function resolveMelee(
+  ownerId: string, origin: THREE.Vector3, facing: THREE.Vector3, heightUnits: number, targets: HitTarget[],
+): HitEvent[] {
+  const w = WEAPONS.melee;
+  const reach = w.rangeBodies * heightUnits;
+  const out: HitEvent[] = [];
+  for (const t of targets) {
+    if (!t.alive || t.id === ownerId) continue;
+    _dir.copy(t.centre).sub(origin);
+    const d = _dir.length();
+    if (d > reach + t.radius) continue;
+    _dir.multiplyScalar(1 / Math.max(1e-6, d));
+    if (_dir.dot(facing) < Math.cos(w.spread)) continue;    // must be in front
+    out.push({ targetId: t.id, ownerId, weapon: 'melee', damage: w.damage });
+  }
+  return out;
+}
+
+export function clearProjectiles(): void { projectiles.length = 0; }

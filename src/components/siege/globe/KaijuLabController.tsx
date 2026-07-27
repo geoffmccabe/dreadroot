@@ -6,6 +6,7 @@
 //   -  =   scale the current one down/up in 5% steps
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
+//   B      battle: drop in at Mount Everest, where two other Kaiju are waiting
 //   , .    previous / next of the 226 real landmarks, flying you straight there
 //
 // Keys are chosen because they are unused elsewhere, and this component only mounts on the
@@ -21,9 +22,11 @@ import { latLonToDirection } from './cubeSphere';
 import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
 import { enterWalkMode, dropKaijuAt } from './KaijuWalkController';
 import {
-  cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab,
+  cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab, setKaijuHeight,
 } from './kaijuLabState';
 import { GlobeKaiju } from './GlobeKaiju';
+import { KaijuArenaScene } from './KaijuArenaScene';
+import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
@@ -83,6 +86,27 @@ export function KaijuLabController() {
           console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon}) — dropping in`);
           break;
         }
+        case 'KeyB': {
+          // BATTLE. Drop in at Mount Everest with two other Kaiju already there, all three the
+          // same size and health, and let the AI fight. See docs/KAIJU_AI_RESEARCH.md.
+          setKaijuHeight(ARENA_HEIGHT);
+          const dir = initArena(17);
+          const face = new THREE.Vector3(0, 1, 0).cross(dir);
+          if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
+          face.normalize();
+          // Drop from one body height, the same as arriving at a landmark: unmistakably a fall,
+          // without a long wait before you can move.
+          dropKaijuAt(dir, face, 1);
+          const surface = dir.clone().multiplyScalar(
+            PLANET_RADIUS + (sampleGlobeSurface(dir.x, dir.y, dir.z) ?? 0) / METRES_PER_UNIT,
+          );
+          camera.position.copy(surface)
+            .addScaledVector(dir, ARENA_HEIGHT * 2.2)
+            .addScaledVector(face, -ARENA_HEIGHT * 4.2);
+          camera.lookAt(surface.clone().addScaledVector(dir, ARENA_HEIGHT * 0.55));
+          console.log('[kaiju] battle started at Mount Everest');
+          break;
+        }
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height
@@ -112,5 +136,11 @@ export function KaijuLabController() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [camera]);
 
-  return <GlobeKaiju state={state} />;
+  return (
+    <>
+      <GlobeKaiju state={state} />
+      {/* The arena drives itself once B has been pressed; before that it draws nothing. */}
+      <KaijuArenaScene playerControlled />
+    </>
+  );
 }

@@ -80,18 +80,29 @@ export interface KaijuBody {
   depthMetres: number;
 }
 
-export const body: KaijuBody = {
-  dir: new THREE.Vector3(0, 0, 1),
-  radius: PLANET_RADIUS + 1,
-  vertVel: 0,
-  forward: new THREE.Vector3(0, 1, 0),
-  onGround: false,
-  speed: 0,
-  /** Rotation applied to `dir` by the last move, so callers can transport their own vectors with it. */
-  lastMoveQuat: new THREE.Quaternion(),
-  submerged: false,
-  depthMetres: 0,
-};
+/**
+ * Make a new body. Every Kaiju gets one: the player's, and each AI agent's.
+ *
+ * This started as a single module-level object because there was only ever one Kaiju. `body` below
+ * is still that one, so the walk controller and HUD are unchanged, but the physics now takes the
+ * body as an argument so any number of agents can share it.
+ */
+export function createKaijuBody(): KaijuBody {
+  return {
+    dir: new THREE.Vector3(0, 0, 1),
+    radius: PLANET_RADIUS + 1,
+    vertVel: 0,
+    forward: new THREE.Vector3(0, 1, 0),
+    onGround: false,
+    speed: 0,
+    lastMoveQuat: new THREE.Quaternion(),
+    submerged: false,
+    depthMetres: 0,
+  };
+}
+
+/** The PLAYER's body. AI agents each hold their own from createKaijuBody(). */
+export const body: KaijuBody = createKaijuBody();
 
 /** Gravity in game units/s^2. */
 export const gravityUnits = () => G_REAL / METRES_PER_UNIT;
@@ -117,21 +128,24 @@ export function feetPosition(out: THREE.Vector3): THREE.Vector3 {
 }
 
 /** Terrain radius (planet centre to ground) under the body, or null if tiles are not loaded. */
-export function groundRadius(): number | null {
-  const m = sampleGlobeSurface(body.dir.x, body.dir.y, body.dir.z);
+export function groundRadiusOf(b: KaijuBody): number | null {
+  const m = sampleGlobeSurface(b.dir.x, b.dir.y, b.dir.z);
   return m == null ? null : PLANET_RADIUS + m / METRES_PER_UNIT;
 }
+export const groundRadius = () => groundRadiusOf(body);
 
 /** Place the body at a lat/lon-derived direction, standing on the ground. */
-export function placeOnSurface(dir: THREE.Vector3, forward?: THREE.Vector3): void {
-  body.dir.copy(dir).normalize();
-  if (forward) body.forward.copy(forward);
-  reTangent(body.forward);
-  const g = groundRadius();
-  body.radius = (g ?? PLANET_RADIUS) + 0.01;
-  body.vertVel = 0;
-  body.onGround = true;
+export function placeBodyOnSurface(b: KaijuBody, dir: THREE.Vector3, forward?: THREE.Vector3): void {
+  b.dir.copy(dir).normalize();
+  if (forward) b.forward.copy(forward);
+  reTangentOf(b, b.forward);
+  const g = groundRadiusOf(b);
+  b.radius = (g ?? PLANET_RADIUS) + 0.01;
+  b.vertVel = 0;
+  b.onGround = true;
 }
+export const placeOnSurface = (dir: THREE.Vector3, forward?: THREE.Vector3) =>
+  placeBodyOnSurface(body, dir, forward);
 
 const _move = new THREE.Vector3();
 const _axis = new THREE.Vector3();
@@ -139,20 +153,24 @@ const _right = new THREE.Vector3();
 const WORLD_Y = new THREE.Vector3(0, 1, 0);
 
 /** Re-project `v` onto the tangent plane at the body and normalise. Kills accumulated drift. */
-export function reTangent(v: THREE.Vector3): THREE.Vector3 {
-  v.addScaledVector(body.dir, -v.dot(body.dir));
+export function reTangentOf(b: KaijuBody, v: THREE.Vector3): THREE.Vector3 {
+  v.addScaledVector(b.dir, -v.dot(b.dir));
   if (v.lengthSq() < 1e-12) {
     // Degenerate only if v was parallel to up; pick any tangent direction.
-    v.crossVectors(body.dir, WORLD_Y);
-    if (v.lengthSq() < 1e-12) v.crossVectors(body.dir, new THREE.Vector3(1, 0, 0));
+    v.crossVectors(b.dir, WORLD_Y);
+    if (v.lengthSq() < 1e-12) v.crossVectors(b.dir, new THREE.Vector3(1, 0, 0));
   }
   return v.normalize();
 }
 
+/** Convenience wrappers bound to the player's body, so existing call sites are untouched. */
+export const reTangent = (v: THREE.Vector3) => reTangentOf(body, v);
+
 /** Body-right = forward x up. Tangent, unit. */
-export function rightVector(out: THREE.Vector3): THREE.Vector3 {
-  return out.crossVectors(body.forward, body.dir).normalize();
+export function rightVectorOf(b: KaijuBody, out: THREE.Vector3): THREE.Vector3 {
+  return out.crossVectors(b.forward, b.dir).normalize();
 }
+export const rightVector = (out: THREE.Vector3) => rightVectorOf(body, out);
 
 /** The direction the body is facing, in world space. */
 export function facingVector(out: THREE.Vector3): THREE.Vector3 {
@@ -167,9 +185,10 @@ export function facingVector(out: THREE.Vector3): THREE.Vector3 {
  * `yaw += -movementX`. An earlier comment here claimed positive was rightward, which was wrong and
  * would have sent the next person fixing "inverted" controls in exactly the wrong direction.
  */
-export function turnTangent(v: THREE.Vector3, radians: number): THREE.Vector3 {
-  return v.applyAxisAngle(body.dir, radians).normalize();
+export function turnTangentOf(b: KaijuBody, v: THREE.Vector3, radians: number): THREE.Vector3 {
+  return v.applyAxisAngle(b.dir, radians).normalize();
 }
+export const turnTangent = (v: THREE.Vector3, radians: number) => turnTangentOf(body, v, radians);
 
 /**
  * Advance the simulation.
@@ -182,7 +201,8 @@ export function turnTangent(v: THREE.Vector3, radians: number): THREE.Vector3 {
  * @param heightUnits the Kaiju's height, which sets every speed
  * @param desiredHeading where the camera wants the body to face; it turns toward this
  */
-export function stepBody(
+export function stepBodyOf(
+  body: KaijuBody,
   dt: number, inputFwd: number, inputRight: number, wantJump: boolean,
   running: boolean, heightUnits: number, desiredForward: THREE.Vector3 | null,
   inputUp = 0,
@@ -191,21 +211,27 @@ export function stepBody(
   body.lastMoveQuat.identity();
 
   // Keep `forward` exactly tangent; floating point slowly tilts it out of the plane.
-  reTangent(body.forward);
+  reTangentOf(body, body.forward);
 
   // Turn toward the steering direction at a finite rate, so a 300 m body has visible inertia
   // instead of pivoting like a turret.
   if (desiredForward && (inputFwd !== 0 || inputRight !== 0)) {
     _move.copy(desiredForward);
-    reTangent(_move);
+    reTangentOf(body, _move);
     const cos = Math.max(-1, Math.min(1, body.forward.dot(_move)));
     let angle = Math.acos(cos);
     if (angle > 1e-5) {
       // Sign from which side of `forward` the target lies on.
-      rightVector(_right);
-      const sign = _move.dot(_right) >= 0 ? 1 : -1;
+      //
+      // NOTE THE MINUS. `turnTangentOf` rotates about `dir` by the right-hand rule, and
+      // body-right is `forward x dir`, so a POSITIVE rotation swings `forward` toward
+      // MINUS right. Getting this backwards makes a body steer away from wherever it is
+      // aiming: it looks like drifting rather than like a broken turn, which is why it
+      // survived until the Kaiju arena made three agents chase each other and separate.
+      rightVectorOf(body, _right);
+      const sign = _move.dot(_right) >= 0 ? -1 : 1;
       angle = Math.min(angle, TURN_RATE * dt);
-      turnTangent(body.forward, sign * angle);
+      turnTangentOf(body, body.forward, sign * angle);
     }
   }
 
@@ -220,7 +246,7 @@ export function stepBody(
 
   const speed = (running ? runSpeed(heightUnits) : walkSpeed(heightUnits))
     * (body.submerged ? SWIM_SPEED_FRAC : 1);
-  rightVector(_right);
+  rightVectorOf(body, _right);
   _move.set(0, 0, 0)
     .addScaledVector(body.forward, inputFwd)
     .addScaledVector(_right, inputRight);
@@ -234,14 +260,14 @@ export function stepBody(
     body.lastMoveQuat.setFromAxisAngle(_axis, angle);
     body.dir.applyQuaternion(body.lastMoveQuat).normalize();
     body.forward.applyQuaternion(body.lastMoveQuat);
-    reTangent(body.forward);
+    reTangentOf(body, body.forward);
     body.speed = dist / dt;
   } else {
     body.speed = 0;
   }
 
   // Vertical: gravity, jump, ground contact.
-  const gr = groundRadius();
+  const gr = groundRadiusOf(body);
   if (gr == null) {
     // Tiles not loaded here yet. HOLD rather than fall, or the body sinks toward the planet
     // centre while streaming, which is unrecoverable.
@@ -280,4 +306,13 @@ export function stepBody(
   } else {
     body.onGround = false;
   }
+}
+
+/** Step the PLAYER's body. AI agents call stepBodyOf with their own. */
+export function stepBody(
+  dt: number, inputFwd: number, inputRight: number, wantJump: boolean,
+  running: boolean, heightUnits: number, desiredForward: THREE.Vector3 | null,
+  inputUp = 0,
+): void {
+  stepBodyOf(body, dt, inputFwd, inputRight, wantJump, running, heightUnits, desiredForward, inputUp);
 }

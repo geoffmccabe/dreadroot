@@ -22,6 +22,7 @@ import { startFountainPolling } from '@/components/siege/fountain/fountainState'
 import { CoordsHud } from '@/components/siege/CoordsHud';
 import { TriagePanel } from '@/components/siege/TriagePanel';
 import { KaijuLabHud } from '@/components/siege/globe/KaijuLabHud';
+import { KaijuTrackerPanel } from '@/components/siege/globe/KaijuTrackerPanel';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
@@ -980,6 +981,8 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Mini Earth readout: Kaiju size in game units AND implied real-world size, so the
           scale decision can be made by looking. Globe map only. */}
       {isGlobeMap && <KaijuLabHud />}
+      {/* Only renders once a battle has been started with B. */}
+      {isGlobeMap && <KaijuTrackerPanel />}
       {/* Siege Worlds inspect-view animation panel (game CSS) — shows only in inspect. */}
       <SiegeAnimPanel />
       {/* Flying coin animations */}

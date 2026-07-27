@@ -18,7 +18,8 @@
     "check:game-instance": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-game-instance.ts",
     "check:behavior-tree": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-behavior-tree.ts",
     "check:pathfinding": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfinding.ts",
-    "smoke:do": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-do-client.ts"
+    "smoke:do": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-do-client.ts",
+    "check:kaiju-arena": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-arena.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -64,6 +65,7 @@
     "input-otp": "^1.4.2",
     "ktx2-encoder": "^0.5.3",
     "lucide-react": "^0.462.0",
+    "mistreevous": "^4.3.1",
     "next-themes": "^0.3.0",
     "r3f-perf": "^7.2.3",
     "react": "^18.3.1",

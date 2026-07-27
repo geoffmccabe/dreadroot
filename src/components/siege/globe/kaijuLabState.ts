@@ -103,6 +103,12 @@ export function setKaijuGravityMul(g: number): void {
   emit({ ...state, gravityMul: Math.max(0, g), generation: state.generation + 1 });
 }
 
+/** Set an exact height in units. Used by the arena, where all three Kaiju must match. */
+export function setKaijuHeight(units: number): void {
+  const h = Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, units));
+  emit({ ...state, height: h, generation: state.generation + 1 });
+}
+
 export function resetKaijuSize(): void {
   emit({ ...state, height: DEFAULT_HEIGHT, generation: state.generation + 1 });
 }
