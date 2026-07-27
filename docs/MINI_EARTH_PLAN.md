@@ -1202,6 +1202,97 @@ answers the only question that matters.
 
 ---
 
+---
+
+# NEXT PHASES (rewritten 2026-Jul-27, after the first playable build)
+
+## Where this actually stands
+
+Built and shipped: the cube-sphere planet from real ETOPO relief, 225 landmark regions at
+Copernicus 30 m, procedural amplification, an ocean with swimming, a Kaiju with genuine spherical
+physics, and 39 portals at real Divi node locations.
+
+**Confirmed working by Geoff: the portals, and only the portals.** Everything else is written,
+type-checked, unit-tested where it is testable, and unverified on screen. The last several rounds
+were not new features, they were basic defects found only because Geoff looked: a mirrored planet,
+a 180-degree-wrong spawn, an invisible Kaiju, flat terrain, vanishing patches, a white screen.
+
+That ratio is the single most important fact for planning. The bottleneck is not building things,
+it is that they are built blind.
+
+## P0 - SEE THE THING (do this before any more features)
+
+Every expensive mistake in this project so far was visual and would have been obvious in one
+screenshot. Playwright 1.57 and Chromium are already installed, headless WebGL works, and the app
+loads clean. The only blocker is that the game sits behind a login.
+
+Build a **dev-only harness route** (`/globe-test`, gated to dev builds) that mounts the globe
+layers in a bare Canvas with no auth, no lobby, no game shell:
+  - fixed camera positions: orbit, 5 km above the Grand Canyon, standing at Kaiju height
+  - a query string to pick the landmark and the mode
+  - deterministic: no day/night, no random spawn
+
+Then a script that screenshots those views and writes them to a folder. That converts every
+question in this project from "ask Geoff and wait" into a check I can run in twenty seconds:
+  - is there relief at the Grand Canyon?
+  - is the Kaiju on screen?
+  - are there seams between patches?
+  - did the last change break the planet?
+
+Everything below is faster and safer once this exists. It is the highest-value work available and
+it is not close.
+
+## P1 - CLOSE OUT THE PLANET
+
+Only after P0, and each item verified by screenshot:
+
+1. **Terrain relief actually visible.** The remaining open question. If the Grand Canyon still
+   reads flat, the displacement is not reaching the mesh and that is a narrow, findable bug.
+2. **Lighting.** Relief is invisible without directional shading regardless of geometry. Confirm
+   the sun is lighting the planet sensibly at every point on the globe, not just near the origin.
+3. **Seams.** The skirt-normal fix is in but unverified.
+4. **LOD popping** as patches split, which no test can catch.
+5. **Textures.** Still none: colour is per-vertex only. The Synty nature biome sets are already
+   converted in this repo and map onto the ESA WorldCover classes, which is the cheap route to
+   ground that reads as ground.
+
+## P2 - THE GAME LOOP (the first thing that is actually a game)
+
+In order, each playable on its own:
+
+1. **Territory.** Claim ground by walking on it, on the cube-sphere quadtree cells (level 7,
+   about 720 m). Ownership rendered as colour on the globe, which doubles as the strategy view.
+2. **Spawning from portals.** Points, a per-portal budget, choose a species. The portal ring is
+   already built and placed.
+3. **Autonomous Kaiju.** One order, then it acts alone, on the existing behaviour-tree AI. This
+   is the design risk: the player cannot steer, so behaviour must be predictable enough to read
+   as intent rather than as a bug.
+4. **Miners.** Fragile, valuable, and the reason Kaiju must defend rather than only advance.
+5. **Combat.** Kaiju versus Kaiju, through the existing EnemyCombatRegistry.
+
+Stop after this and decide whether the loop is fun BEFORE spending anything on infrastructure.
+
+## P3 - MAKE IT REAL
+
+1. **Live node registry.** Today's portals are a snapshot read out of DD69's local storage. A
+   service that polls a node and publishes continuously is what makes new nodes appear as new
+   portals.
+2. **Proof of node.** Sign a challenge with the node's key, verify against the live registry.
+   This is the actual product hook: no node, no portal.
+3. **Server simulation.** The war has to continue when nobody is watching, which means a headless
+   tick. Terrain needs no storage or sync because the generator is deterministic.
+4. **Multiplayer**, then the points economy and scoring.
+
+## P4 - PRODUCTION
+
+Synty Kaiju pack and its animation retargeting (the Crab is the known hard one), performance work
+for many Kaiju on screen, balance, launch.
+
+## The one process change
+
+Nothing here should be built without a way to look at it. P0 is not overhead, it is the fix for
+the actual failure mode of this project so far.
+
 ## Sources
 - ETOPO 2022 Global Relief Model - https://www.ncei.noaa.gov/products/etopo-global-relief-model
 - ETOPO 2022 User Guide - https://www.ngdc.noaa.gov/mgg/global/relief/ETOPO2022/docs/1.2%20ETOPO%202022%20User%20Guide.pdf
