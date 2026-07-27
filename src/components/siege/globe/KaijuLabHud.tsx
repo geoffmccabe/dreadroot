@@ -60,7 +60,14 @@ export function KaijuLabHud() {
       {row('in units', `${s.height.toFixed(3)} u`)}
       {row('Scale', `${sizeRatio(s).toFixed(2)}x model (${s.baseHeight} m natural)`)}
       {row('Animation', `${animSpeedMul(s).toFixed(2)}x`)}
-      {row('Mode', walking ? 'WALK (G to fly)' : 'FLY (G to walk)')}
+      <div style={{
+        margin: '6px 0', padding: '3px 6px', borderRadius: 4, fontWeight: 700,
+        background: walking ? 'rgba(60,180,90,0.28)' : 'rgba(90,140,220,0.28)',
+      }}>
+        {walking
+          ? 'WALK MODE — gravity + ground contact on'
+          : 'FLY MODE — no gravity (press K to land)'}
+      </div>
       {/* Speeds shown in REAL m/s, since units/sec at this scale are unintuitively tiny. */}
       {row('Walk / run', `${(walkSpeed(s.height) * 100).toFixed(0)} / ${(runSpeed(s.height) * 100).toFixed(0)} m/s`)}
       {walking && row('State', kaijuBody.submerged
@@ -88,7 +95,7 @@ export function KaijuLabHud() {
 
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
-        , . fly to landmark · G walk/fly · K land here<br />
+        , . fly to landmark · K LAND (starts walking) · G toggle<br />
         WASD move · Shift run<br />
         Space jump / swim up · Z swim down
       </div>

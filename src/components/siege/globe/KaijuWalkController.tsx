@@ -38,6 +38,23 @@ export function isKaijuWalkActive(): boolean { return walkActive; }
 export function subscribeKaijuWalk(fn: () => void): () => void {
   listeners.add(fn); return () => { listeners.delete(fn); };
 }
+/**
+ * Enter walk mode from outside (the "land here" key), placing the body under the camera and
+ * facing the way you were looking.
+ */
+export function enterWalkMode(camera: THREE.Camera): void {
+  const d = camera.position.clone();
+  if (d.lengthSq() < 1e-6) return;
+  const look = new THREE.Vector3();
+  camera.getWorldDirection(look);
+  placeOnSurface(d.normalize(), look);
+  pendingEnter = true;
+  setWalkActive(true);
+}
+
+/** Set when walk mode is entered externally, so the controller resets its camera on the next frame. */
+let pendingEnter = false;
+
 function setWalkActive(v: boolean) {
   if (walkActive === v) return;
   walkActive = v;
@@ -107,6 +124,7 @@ export function KaijuWalkController() {
 
   useFrame((_, rawDt) => {
     if (!walkActive) return;
+    if (pendingEnter) { pendingEnter = false; haveCam.current = false; haveFwd.current = false; }
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
     const h = getKaijuLab().height;

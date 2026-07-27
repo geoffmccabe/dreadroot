@@ -19,6 +19,7 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { latLonToDirection } from './cubeSphere';
 import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
+import { enterWalkMode } from './KaijuWalkController';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab,
 } from './kaijuLabState';
@@ -85,6 +86,11 @@ export function KaijuLabController() {
           camera.position.copy(up).multiplyScalar(
             PLANET_RADIUS + groundMetres / METRES_PER_UNIT + h * 2.0,
           );
+          // ...and HAND OVER THE CHARACTER. Landing while still in fly mode is what made the
+          // Kaiju feel broken: in fly mode it is carried by the camera with no gravity and no
+          // ground contact by design, so moving the mouse slid it through the air. "Land" should
+          // mean you are now standing on the planet, which is walk mode.
+          enterWalkMode(camera);
           break;
         }
         default: return;

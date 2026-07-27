@@ -402,6 +402,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const [manifestReady, setManifestReady] = useState(false);
 
   const meshes = useRef(new Map<string, THREE.Mesh>());
+  /** Data level each built patch actually used, so it can be rebuilt when a better tile lands. */
+  const builtLevel = useRef(new Map<string, number>());
   const waters = useRef(new Map<string, THREE.Mesh>());
   const leafKeys = useRef(new Set<string>());
   // Nodes that were SPLIT last evaluation. Hysteresis needs to know the previous state:
@@ -533,8 +535,48 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       groupRef.current.remove(mesh);
       disposePatch(mesh.geometry);
       meshes.current.delete(key);
+      builtLevel.current.delete(key);
       const w = waters.current.get(key);
       if (w) { groupRef.current.remove(w); disposePatch(w.geometry); waters.current.delete(key); }
+    }
+
+    // REBUILD patches that were built from a coarser fallback and can now do better.
+    //
+    // resolveLevel deliberately falls back to whatever tile is resident so the mesh can subdivide
+    // before the ideal tile arrives. But nothing ever revisited that decision: a patch built from
+    // level 4 while the level 10 tile was still downloading stayed at level 4 forever. Over the
+    // Grand Canyon that means a smooth surface bridging the gorge, which is exactly the "canyon
+    // filled with flat colour" it renders as. The real 1,424 m of relief is in the tile the client
+    // already fetched; the mesh was simply never rebuilt from it.
+    for (const n of next) {
+      const rk = idKey(n);
+      if (!meshes.current.has(rk) || building.current.has(rk)) continue;
+      const was = builtLevel.current.get(rk);
+      const now = resolveLevel(n, mf.maxLevel);
+      if (was === undefined || now <= was) continue;
+      building.current.add(rk);
+      enqueueJob(`earth:rebuild:${rk}:${now}`, () => {
+        building.current.delete(rk);
+        if (!leafKeys.current.has(rk)) return true;
+        const rebuilt = buildPatchGeometry(n, mf.maxLevel);
+        if (!rebuilt) return true;
+        const prev = meshes.current.get(rk);
+        if (prev) { groupRef.current?.remove(prev); disposePatch(prev.geometry); }
+        const mesh = new THREE.Mesh(rebuilt.geo, material);
+        mesh.frustumCulled = true;
+        meshes.current.set(rk, mesh);
+        groupRef.current?.add(mesh);
+        const prevW = waters.current.get(rk);
+        if (prevW) { groupRef.current?.remove(prevW); disposePatch(prevW.geometry); waters.current.delete(rk); }
+        if (rebuilt.water) {
+          const wm = new THREE.Mesh(rebuilt.water, waterMat);
+          wm.frustumCulled = true; wm.renderOrder = 2;
+          waters.current.set(rk, wm);
+          groupRef.current?.add(wm);
+        }
+        builtLevel.current.set(rk, now);
+        return true;
+      });
     }
 
     // Build missing leaves NEAREST FIRST. The budget only builds a couple of patches per frame,
@@ -566,6 +608,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const mesh = new THREE.Mesh(built.geo, material);
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
+        builtLevel.current.set(key, resolveLevel(n, mf.maxLevel));
         groupRef.current?.add(mesh);
         if (built.water) {
           const wm = new THREE.Mesh(built.water, waterMat);
