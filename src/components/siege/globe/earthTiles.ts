@@ -30,8 +30,10 @@ const BASE = `${ASSET_BASE}/siege/earth`;
  * (`${c.url}?v=${APP_VERSION}`).
  *
  * epoch 2 = the un-mirrored rebuild (2026-Jul-26).
+ * epoch 3 = adds levels 5-10 over 225 landmark regions at Copernicus GLO-30 (30 m), and raises
+ *           the advertised maxLevel to 10 so those levels are requested at all.
  */
-const TILE_EPOCH = 2;
+const TILE_EPOCH = 3;
 const SAMPLES = TILE * TILE;
 const BYTES = SAMPLES * 2;
 

@@ -61,13 +61,17 @@ const MAX_LEAVES = 600;
 /**
  * How deep the RENDER tree may go, independent of how deep the DATA goes.
  *
- * Data stops at level 4 (2.44 km per sample), but procedural detail keeps producing relief far
- * below that, so the mesh has to be allowed to subdivide past the data or none of it is visible.
- * At depth 9 the vertex spacing is about 3 units (305 real metres), which resolves procedural
- * features roughly twice the height of a 300 m Kaiju. Deeper costs triangles for detail the
- * amplifier is not yet generating.
+ * The global data stops at level 4 (2.44 km per sample), but two things go deeper: procedural
+ * detail, which produces relief at any scale, and the 225 landmark regions carrying real
+ * Copernicus GLO-30 down to level 10 (38 m). Depth 12 is level 10 plus DATA_LAG, i.e. the depth
+ * at which a level-10 tile renders at its true resolution.
+ *
+ * Outside a landmark region the deeper tiles simply 404, `childrenReady` stays false, and the
+ * node stops subdividing on its own. That is why no region list is needed on the client: the
+ * tree finds its own floor wherever it is, and earthTiles backs off failed requests so a miss
+ * is not retried every frame.
  */
-const MAX_RENDER_DEPTH = 9;
+const MAX_RENDER_DEPTH = 12;
 
 /** Skirt depth as a fraction of patch arc: hides cracks where LOD levels meet. */
 const SKIRT_FRAC = 0.03;

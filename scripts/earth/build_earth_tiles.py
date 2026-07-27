@@ -38,6 +38,7 @@ import numpy as np
 TILE = 257                 # samples per tile side (256 quads + shared edge)
 EARTH_RADIUS_M = 6371000.0 # mean Earth radius, metres
 SCALE = 100.0              # 1 game unit = 100 real metres (informational; tiles stay in metres)
+LANDMARK_MAX_LEVEL = 10    # deepest level build_landmark_tiles.py produces inside its regions
 
 # Face basis vectors: for face f, direction = origin + u * uAxis + v * vAxis, where u and v
 # run over [-1, 1]. Then normalised onto the sphere.
@@ -191,7 +192,12 @@ def main():
     manifest = {
         "version": 1,
         "tileSize": TILE,
-        "maxLevel": args.max_level,
+        # Deepest level that exists ANYWHERE. Global coverage stops at args.max_level; the
+        # landmark regions (build_landmark_tiles.py) carry levels 5-10. The client clamps its
+        # data requests to this, so it must reflect the deepest tiles on R2, not the deepest
+        # GLOBAL ones, or the landmark detail is never fetched.
+        "maxLevel": max(args.max_level, LANDMARK_MAX_LEVEL),
+        "globalMaxLevel": args.max_level,
         "faces": [f[0] for f in FACES],
         "heightUnits": "metres",
         "heightFormat": "int16le",
