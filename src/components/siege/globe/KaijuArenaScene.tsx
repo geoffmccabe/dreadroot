@@ -1,4 +1,4 @@
-// KaijuArenaScene — draws the Everest fight: the two AI Kaiju, and every projectile in flight.
+// KaijuArenaScene — draws the Everest fight: the opposing Kaiju, and every projectile in flight.
 //
 // The player's own Kaiju is still drawn by GlobeKaiju/KaijuLabController, which is untouched.
 // This module only adds the opponents and the ordnance, and drives the simulation clock.
@@ -8,7 +8,7 @@
 // renderer that reads a KaijuBody instead. Rather than thread a mode flag through the working
 // player renderer — which is shared with the other Claude on this branch — this is its own module.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -17,7 +17,8 @@ import { CFG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
 import { walkSpeed, runSpeed, type KaijuBody } from './kaijuBody';
 import {
-  getAgents, stepArena, arenaStarted, playerAttack, ARENA_HEIGHT, type Agent,
+  getAgents, stepArena, arenaStarted, playerAttack, subscribeArena, arenaVersion,
+  ARENA_HEIGHT, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
 
@@ -151,6 +152,14 @@ function Projectiles() {
  * runs a full three-way battle.
  */
 export function KaijuArenaScene({ playerControlled }: { playerControlled: boolean }) {
+  // SUBSCRIBE, do not just read.
+  //
+  // Reading the arena state during render meant this component mounted with no fight running,
+  // returned null, and was never re-rendered when one started — so the opponents could never
+  // appear, however correct the simulation underneath was. That is the whole of the "I only see
+  // my own Kaiju" symptom. The version counter changes on every start, reset and stop, which is
+  // what brings React back to build the models.
+  useSyncExternalStore(subscribeArena, arenaVersion, arenaVersion);
   const agents = getAgents();
   const firing = useRef(false);
 

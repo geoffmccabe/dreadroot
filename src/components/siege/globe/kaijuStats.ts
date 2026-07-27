@@ -341,7 +341,8 @@ export const BREEDS: KaijuBuild[] = [
   },
   {
     // Does exactly what it is told and never runs. Pays for that with everything else.
-    name: 'Martyr', tier: 3, monsterType: 17, weapon: 'gun', obedience: 100,
+    // Red Demon, so the four in the demo fight are four visibly different creatures.
+    name: 'Martyr', tier: 3, monsterType: 8, weapon: 'gun', obedience: 100,
     stats: { might: 75, armour: 60, vigour: 75, speed: 40, instinct: 20 },
     abilities: ['relentless', 'berserker'],
   },

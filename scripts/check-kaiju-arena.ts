@@ -20,7 +20,7 @@
  */
 
 import {
-  initArena, stepArena, getAgents, getEvents, arenaReport, ARENA_HEIGHT,
+  initArena, initArenaWith, stepArena, getAgents, getEvents, arenaReport, ARENA_HEIGHT,
 } from '../src/components/siege/globe/kaijuArena';
 import { getProjectiles } from '../src/components/siege/globe/kaijuWeapons';
 import { scoreActions, chooseAction } from '../src/components/siege/globe/kaijuBrain';
@@ -60,9 +60,12 @@ console.log('\n== Kaiju arena: headless three-way fight ==\n');
 
 initArena(17);
 const agents = getAgents();
-ok(agents.length === 3, 'three agents spawned');
-ok(new Set(agents.map((a) => a.monsterType)).size === 3, 'three DIFFERENT monster models');
-ok(new Set(agents.map((a) => a.weapon)).size === 3, 'three different weapons');
+// Geoff wants THREE opponents, so four Kaiju in total, and each must be a visibly different
+// creature — four identical golems is not a battle worth watching.
+ok(agents.length === 4, 'you plus three opponents', `${agents.length} agents`);
+ok(new Set(agents.map((a) => a.monsterType)).size === 4, 'four DIFFERENT monster models',
+   agents.map((a) => a.monsterType).join(','));
+ok(new Set(agents.map((a) => a.weapon)).size >= 3, 'at least three different weapons');
 ok(agents.filter((a) => a.isPlayer).length === 1, 'exactly one player agent');
 ok(agents.find((a) => a.isPlayer)?.weapon === 'flame', "player's Kaiju has the flamethrower");
 ok(agents.every((a) => a.health === a.maxHealth), 'all start at full health');
@@ -89,7 +92,11 @@ ok(agents.every((a) => a.lastTreeState !== 'ERROR'), 'no behaviour tree threw',
 ok(maxProjectiles > 0, 'projectiles were fired', `peak ${maxProjectiles}`);
 ok(agents.some((a) => a.damageDealt > 0), 'damage was dealt',
    agents.map((a) => `${a.name} dealt ${Math.round(a.damageDealt)}`).join(', '));
-ok(agents.every((a) => a.damageDealt > 0), 'ALL THREE landed hits — nobody is inert',
+// Most of them must connect. NOT all of them: in a four-way brawl the fragile one genuinely can
+// be focused down before it lands anything, and asserting otherwise would be asserting that glass
+// cannons cannot lose quickly, which is wrong. The real worry — "is a weapon simply incapable of
+// hitting?" — is tested directly below instead, per weapon.
+ok(agents.filter((a) => a.damageDealt > 0).length >= 3, 'at least three of the four connected',
    agents.map((a) => `${a.name}=${Math.round(a.damageDealt)}`).join(', '));
 ok(actionsSeen.size >= 2, 'the utility layer changed its mind at least once',
    [...actionsSeen].join(', '));
@@ -99,6 +106,34 @@ ok(agents.some((a) => !a.alive), 'somebody died within 90s',
 // Agents must move: a frozen Kaiju is the exact failure mode we keep hitting.
 ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startDist[i]) > 0.5),
    'agents moved relative to each other');
+
+// EVERY WEAPON MUST BE ABLE TO HIT. A weapon that can never connect looks exactly like a Kaiju
+// that is simply losing, which is how the grenade could have gone unnoticed. So each one gets a
+// duel of its own against an identical opponent, where it has time to land something.
+{
+  const solo: Record<string, number> = {};
+  for (const w of ['flame', 'gun', 'grenade'] as const) {
+    const mk = (name: string, weapon: typeof w) => ({
+      name, tier: 3, monsterType: 16, weapon, obedience: 50, abilities: [],
+      stats: { might: 50, armour: 40, vigour: 60, speed: 45, instinct: 60 },
+    });
+    initArenaWith([mk('A', w), mk('B', w)], 4242, 4);
+    const two = getAgents();
+    for (let i = 0; i < 60 * 20; i++) {
+      stepArena(1 / 20, false);
+      if (two.filter((x) => x.alive).length <= 1) break;
+    }
+    solo[w] = Math.max(...two.map((x) => x.hitsLanded));
+    ok(solo[w] > 0, `the ${w} can actually hit something`, `${solo[w]} hits in 60s`);
+  }
+}
+
+// Put the demo fight back, since the checks below read its report.
+initArena(17);
+for (let i = 0; i < 30 * 30; i++) {
+  stepArena(1 / 30, false);
+  if (getAgents().filter((a) => a.alive).length <= 1) break;
+}
 
 // The headline rule, tested directly on the brain rather than via the fight, so it is
 // deterministic: "under 10% health, turn and run".

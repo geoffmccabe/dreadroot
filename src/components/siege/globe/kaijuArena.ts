@@ -88,6 +88,25 @@ let treeErrorReported = false;
 /** Scratch for the per-tick processing order; module-level so it is not reallocated each frame. */
 const order: number[] = [];
 
+/**
+ * Change notification.
+ *
+ * WITHOUT THIS THE OPPONENTS NEVER APPEAR. KaijuArenaScene reads `arenaStarted()` during render
+ * and returns null when no fight is on. Starting a battle only mutates module state, so React was
+ * never told anything had changed: the component mounted showing nothing and stayed that way
+ * forever, which is exactly the "I only see my own Kaiju" symptom. `version` bumps on every
+ * start/reset/stop and the scene subscribes to it.
+ */
+const arenaListeners = new Set<() => void>();
+let version = 0;
+
+export function subscribeArena(fn: () => void): () => void {
+  arenaListeners.add(fn);
+  return () => { arenaListeners.delete(fn); };
+}
+export function arenaVersion(): number { return version; }
+function emitArena(): void { version++; for (const l of arenaListeners) l(); }
+
 export function getAgents(): Agent[] { return agents; }
 export function getEvents(): ArenaEvent[] { return events; }
 export function arenaClock(): number { return clock; }
@@ -157,13 +176,18 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
   });
 
   started = true;
+  emitArena();
   for (const b of builds) log(describeBuild(b));
   return agents[0].body.dir.clone();
 }
 
-/** The demo fight: three breeds at Mount Everest. */
+/**
+ * The demo fight: you plus THREE opponents at Mount Everest, each a different model.
+ *
+ * Agent 0 is always the player, so the list is one breed for you and three to fight.
+ */
 export function initArena(_playerType?: number): THREE.Vector3 {
-  return initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1]]);
+  return initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]]);
 }
 
 /** Is there ground between two points higher than the line joining them? Cheap cover test. */
@@ -559,4 +583,4 @@ export function arenaReport(): string {
 
 export function resetArena(playerType: number): void { initArena(playerType); }
 
-export function stopArena(): void { started = false; agents.length = 0; clearProjectiles(); }
+export function stopArena(): void { started = false; agents.length = 0; clearProjectiles(); emitArena(); }
