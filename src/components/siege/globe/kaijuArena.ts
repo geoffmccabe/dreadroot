@@ -122,6 +122,10 @@ export interface Agent {
   knock: THREE.Vector3;
   /** Seconds of staggering left, during which it cannot act. */
   stagger: number;
+  /** Seconds left in a melee swing. The renderer plays the attack clip while this runs. */
+  swingTimer: number;
+  /** Whether this swing has already delivered its blow. */
+  swingLanded: boolean;
   /**
    * Seconds left in the "I heard you" flash.
    *
@@ -178,6 +182,21 @@ const _aim = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _kb = new THREE.Vector3();
 const _axis = new THREE.Vector3();
+
+/**
+ * How long a melee swing takes, and when in it the blow lands.
+ *
+ * Scaled by the same dynamic-similarity rule as everything else: a bigger creature swings more
+ * slowly. A 300 m Kaiju takes about 1.8 s to complete a swipe, with contact a little past halfway
+ * — which is where an arm actually is when it connects, and it gives the target a moment to see it
+ * coming. Geoff asked for the attack to be slowed down; this is that, in the simulation rather
+ * than only in the playback rate.
+ */
+export function swingSeconds(a: Agent): number {
+  return (1.8 / Math.max(0.35, a.d.rateMul)) * 0.55;
+}
+/** Fraction of the swing at which contact happens. */
+const SWING_CONTACT = 0.58;
 
 /** Peak knockback speed, units/sec, for a blow worth ~8% of the victim's health. */
 const KNOCK_SPEED = 0.55;
@@ -237,7 +256,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
       order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
       capsule: torsoCapsule(dir, body.radius, ARENA_HEIGHT),
-      knock: new THREE.Vector3(), stagger: 0,
+      knock: new THREE.Vector3(), stagger: 0, swingTimer: 0, swingLanded: false,
     });
   });
 
@@ -451,11 +470,17 @@ function makeBoard(a: Agent) {
       return State.SUCCEEDED;
     },
     MeleeAttack: () => {
-      if (a.cooldown > 0) return State.FAILED;
+      if (a.cooldown > 0 || a.swingTimer > 0) return State.FAILED;
       a.cooldown = WEAPONS.melee.cooldown / a.d.rateMul;
       a.shotsFired++;
-      const hits = resolveMelee(a.id, centreOf(a, new THREE.Vector3()), a.body.forward, ARENA_HEIGHT, hitTargets());
-      applyHits(hits);
+      // START the swing; the blow lands PART-WAY THROUGH it, not now.
+      //
+      // Damage used to be applied on the same frame the decision was made, so the arm animation
+      // (if it played at all) was decoration that happened after the fact. A 300 m arm takes real
+      // time to travel, and the hit has to land when the arm is out — otherwise you are hit by
+      // something that has not moved yet, which is exactly what made melee feel like nothing.
+      a.swingTimer = swingSeconds(a);
+      a.swingLanded = false;
       return State.SUCCEEDED;
     },
     FireWeapon: () => {
@@ -637,6 +662,18 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       reTangentOf(a.body, a.body.forward);
       a.knock.multiplyScalar(Math.max(0, 1 - KNOCK_DECAY * dt));
       if (a.knock.lengthSq() < 1e-8) a.knock.set(0, 0, 0);
+    }
+    // Advance a swing in flight, and deliver the blow when the arm arrives.
+    if (a.swingTimer > 0) {
+      const total = swingSeconds(a);
+      a.swingTimer = Math.max(0, a.swingTimer - dt);
+      const elapsed = total - a.swingTimer;
+      if (!a.swingLanded && elapsed >= total * SWING_CONTACT) {
+        a.swingLanded = true;
+        applyHits(resolveMelee(
+          a.id, centreOf(a, new THREE.Vector3()), a.body.forward, ARENA_HEIGHT, hitTargets(),
+        ));
+      }
     }
     if (a.stagger > 0) { a.stagger = Math.max(0, a.stagger - dt); continue; }
 

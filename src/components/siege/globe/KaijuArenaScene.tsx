@@ -19,7 +19,7 @@ import { walkSpeed, runSpeed, type KaijuBody } from './kaijuBody';
 import { METRES_PER_UNIT } from './cubeSphere';
 import {
   getAgents, stepArena, arenaStarted, playerAttack, subscribeArena, arenaVersion,
-  ARENA_HEIGHT, type Agent,
+  ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps } from './kaijuAudio';
@@ -30,7 +30,9 @@ const CLIPS: Record<string, string[]> = {
   walk: ['walk', 'walking'],
   run: ['run', 'walk', 'walking'],
   idle: ['breathidle', 'idle'],
-  attack: ['attack', 'attack1', 'jumpattack', 'hit'],
+  // 'swipe' first: the golems' attack clip is named that in the catalog, and the Red Demon's is
+  // 'attack'. Listing both here means one gait covers every model without a per-type table.
+  attack: ['swipe', 'attack', 'attack1', 'attack_01', 'jumpattack', 'melee', 'hit'],
   dead: ['death', 'die', 'hit', 'idle'],
 };
 
@@ -94,7 +96,7 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     if (!next || next === current.current) return;
     current.current?.fadeOut(0.25);
     next.reset().fadeIn(0.25).play();
-    if (g === 'dead') { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
+    if (g === 'dead' || g === 'attack') { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
     else next.setLoop(THREE.LoopRepeat, Infinity);
     current.current = next;
   };
@@ -124,6 +126,21 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     g.quaternion.setFromRotationMatrix(basis.current);
 
     if (!agent.alive) { play('dead'); mixer.timeScale = 0.4; stopKaijuFootsteps(agent.id); return; }
+
+    // THE SWIPE. While a swing is in flight the attack clip owns the body, and its playback is
+    // stretched to the swing's real duration so the arm arrives exactly when the blow lands rather
+    // than finishing early and hitting nothing. The clip is played once, not looped.
+    if (agent.swingTimer > 0) {
+      play('attack');
+      const total = Math.max(0.05, swingSeconds(agent));
+      const clipLen = current.current?.getClip().duration ?? total;
+      mixer.timeScale = clipLen / total;
+      camera.getWorldDirection(look.current);
+      updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, false);
+      applyFlash(model, flashIntensity(agent.ackFlash));
+      return;
+    }
+
     const wS = walkSpeed(ARENA_HEIGHT), rS = runSpeed(ARENA_HEIGHT);
     const running = b.speed > (wS + rS) * 0.5;
     play(running ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
