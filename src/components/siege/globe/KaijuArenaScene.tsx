@@ -82,10 +82,16 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     const b = agent.body;
 
     g.position.copy(b.dir).multiplyScalar(b.radius);
-    // Orient: local up is the position direction, and the model faces along `forward`.
-    right.current.crossVectors(b.forward, b.dir).normalize();
-    trueF.current.crossVectors(b.dir, right.current).normalize();
-    basis.current.makeBasis(right.current, b.dir, trueF.current.clone().negate());
+    // FACING. The model's local +Z is its front — the same convention MonsterEnemy uses when it
+    // does `rotation.y = atan2(dx, dz)`. So the basis must map local +Z to `forward`, local +Y to
+    // the local up, and local +X to up x forward.
+    //
+    // This previously built makeBasis(right, up, -forward), which is a valid right-handed frame
+    // but is rotated 180 degrees about up — so the Kaiju faced and animated exactly backwards
+    // while walking forwards. Verified numerically rather than by eye.
+    right.current.crossVectors(b.dir, b.forward).normalize();
+    trueF.current.copy(b.forward).normalize();
+    basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
 
     if (!agent.alive) { play('dead'); mixer.timeScale = 1; return; }

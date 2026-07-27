@@ -32,6 +32,7 @@ import {
   loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
 import { detailMetres } from './globeDetail';
+import { sampleGlobeElevation } from './globeGround';
 
 /** Vertices per patch side. 65 = 64 quads = 8,192 triangles. */
 const PATCH = 65;
@@ -486,7 +487,20 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
 
       const key = idKey(n);
       nodeCentre(n, centre);
-      const cx = centre[0] * PLANET_RADIUS, cy = centre[1] * PLANET_RADIUS, cz = centre[2] * PLANET_RADIUS;
+      // Place the node at its REAL elevation, not at sea level.
+      //
+      // This used to multiply by PLANET_RADIUS flat, which quietly made every tile look further
+      // away than it is by however far the ground is from sea level. On Everest that is 88 units,
+      // and a depth-12 tile spans about 24 units, so the split test could never pass: the finest
+      // two levels were unreachable exactly where the terrain is most dramatic. Standing on the
+      // highest ground on the planet gave the flattest-looking result, which is the opposite of
+      // what it should do.
+      //
+      // The elevation lookup walks up to coarser resident tiles and only costs a sample per node
+      // per re-evaluation, which at 120 ms and a few hundred nodes is nothing.
+      const nodeMetres = sampleGlobeElevation(centre[0], centre[1], centre[2]) ?? 0;
+      const nodeRadius = PLANET_RADIUS + nodeMetres / METRES_PER_UNIT;
+      const cx = centre[0] * nodeRadius, cy = centre[1] * nodeRadius, cz = centre[2] * nodeRadius;
       const dist = Math.max(1, Math.hypot(cam.x - cx, cam.y - cy, cam.z - cz));
       const ratio = tileArcUnits(n.depth) / dist;
 

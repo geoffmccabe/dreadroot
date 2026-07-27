@@ -157,9 +157,15 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       const bUp = up.current.copy(b.dir);
       const bFwd = fwd.current;
       facingVector(bFwd);
-      const bRight = new THREE.Vector3().crossVectors(bFwd, bUp).normalize();
-      const trueF = new THREE.Vector3().crossVectors(bUp, bRight).normalize();
-      basis.current.makeBasis(bRight, bUp, trueF.negate());
+      // FACING. The model's local +Z is its front — the same convention MonsterEnemy uses when it
+      // does `rotation.y = atan2(dx, dz)`. So the basis must map local +Z to `forward`, local +Y to
+      // the local up, and local +X to up x forward.
+      //
+      // This previously built makeBasis(right, up, -forward), which is a valid right-handed frame
+      // but is rotated 180 degrees about up — so the Kaiju faced and animated exactly backwards
+      // while walking forwards. Verified numerically rather than by eye.
+      const bX = new THREE.Vector3().crossVectors(bUp, bFwd).normalize();
+      basis.current.makeBasis(bX, bUp, bFwd.clone().normalize());
       g.quaternion.setFromRotationMatrix(basis.current);
 
       const alt = b.radius - (groundRadiusCached(b) ?? b.radius);
@@ -176,11 +182,26 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
         play(b.speed > (wS + rS) * 0.5 ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
       }
 
-      // Stride rate relative to this body's natural walk speed, so the feet roughly keep up with
-      // the ground instead of always sitting at the clamp.
+      // Stride rate, measured against the speed THE CURRENT CLIP represents.
+      //
+      // This used to divide by the walk speed whichever clip was playing, so a running Kaiju —
+      // moving at a bit over three times walking pace — drove the run cycle at 3x and the legs
+      // blurred. A run clip already depicts running; it only needs correcting for how far from
+      // that reference the body actually is.
+      const ref = gait.current === 'run' ? runSpeed(h) : walkSpeed(h);
       const stride = gait.current === 'walk' || gait.current === 'run'
-        ? Math.min(3, Math.max(0.4, b.speed / Math.max(1e-4, walkSpeed(h)))) : 1;
+        ? Math.min(1.6, Math.max(0.35, b.speed / Math.max(1e-4, ref))) : 1;
       mixer.timeScale = animSpeedMul(state) * stride;
+
+      // The pre-jump crouch. Sink the model and compress it slightly, so the gather is visible even
+      // on models with no crouch clip of their own.
+      if (b.crouchFrac > 0) {
+        const squat = b.crouchFrac * h * 0.18;
+        g.position.addScaledVector(bUp, -squat);
+        g.scale.set(1, 1 - b.crouchFrac * 0.12, 1);
+      } else if (g.scale.y !== 1) {
+        g.scale.set(1, 1, 1);
+      }
       return;
     }
 

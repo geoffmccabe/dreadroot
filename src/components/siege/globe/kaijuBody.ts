@@ -38,6 +38,27 @@ const G_REAL = 9.81;
 const JUMP_BODY_FRAC = 0.45;
 /** How quickly the body turns to face where you are steering, radians/sec. */
 const TURN_RATE = 2.2;
+/**
+ * MOMENTUM. How long a Kaiju takes to reach full speed, and to stop, in seconds.
+ *
+ * Geoff: "he's responsive, but slow to move" — the controls answer immediately, the 300-metre body
+ * does not. Without this the body snapped between standing still and full running speed on the
+ * frame the key went down, which is why the walk cycle never matched: the legs were being asked to
+ * play a run at a speed the body reached instantly and left instantly.
+ *
+ * Braking is quicker than accelerating, because a creature digging its heels in stops faster than
+ * it gets going, and because movement that is slow to stop feels like ice.
+ */
+const ACCEL_SECONDS = 2.2;
+const BRAKE_SECONDS = 1.3;
+/**
+ * JUMP WIND-UP: seconds spent crouching before the leap, for a 1-unit body.
+ *
+ * Scaled by the square root of height for the same dynamic-similarity reason everything else here
+ * is: big things do everything more slowly. A 3-unit (300 m) Kaiju therefore takes about 0.7 s to
+ * gather itself, then leaves the ground under real gravity.
+ */
+const JUMP_CROUCH_SECONDS = 0.4;
 /** Ground stickiness: snap to the surface when within this many body-heights of it. */
 const SNAP_FRAC = 0.06;
 /**
@@ -76,6 +97,17 @@ export interface KaijuBody {
   lastMoveQuat: THREE.Quaternion;
   /** True while the body's centre is below sea level. */
   submerged: boolean;
+  /**
+   * Current horizontal speed, carried between frames so the body has momentum.
+   *
+   * `speed` above is the speed actually achieved last frame and is what the gait reads; this is
+   * the state the acceleration integrates.
+   */
+  moveSpeed: number;
+  /** Seconds left in the pre-jump crouch. Zero when not about to jump. */
+  crouchTimer: number;
+  /** 0..1 how deep into the crouch it is, for the renderer to squat on. */
+  crouchFrac: number;
   /** Metres below sea level (0 on land or at the surface). */
   depthMetres: number;
 }
@@ -98,6 +130,9 @@ export function createKaijuBody(): KaijuBody {
     lastMoveQuat: new THREE.Quaternion(),
     submerged: false,
     depthMetres: 0,
+    moveSpeed: 0,
+    crouchTimer: 0,
+    crouchFrac: 0,
   };
 }
 
@@ -120,6 +155,11 @@ export function runSpeed(heightUnits: number): number {
 
 export function jumpVelocity(heightUnits: number): number {
   return Math.sqrt(2 * gravityUnits() * heightUnits * JUMP_BODY_FRAC);
+}
+
+/** How long this body crouches before a jump. Bigger bodies gather themselves more slowly. */
+export function crouchSeconds(heightUnits: number): number {
+  return JUMP_CROUCH_SECONDS * Math.sqrt(Math.max(0.01, heightUnits));
 }
 
 /** World position of the body's feet. */
@@ -244,7 +284,7 @@ export function stepBodyOf(
   body.submerged = midRadius < PLANET_RADIUS;
   body.depthMetres = body.submerged ? (PLANET_RADIUS - midRadius) * METRES_PER_UNIT : 0;
 
-  const speed = (running ? runSpeed(heightUnits) : walkSpeed(heightUnits))
+  const topSpeed = (running ? runSpeed(heightUnits) : walkSpeed(heightUnits))
     * (body.submerged ? SWIM_SPEED_FRAC : 1);
   rightVectorOf(body, _right);
   _move.set(0, 0, 0)
@@ -252,12 +292,35 @@ export function stepBodyOf(
     .addScaledVector(_right, inputRight);
 
   const moveLen = _move.length();
-  if (moveLen > 1e-6) {
+  const wanted = moveLen > 1e-6 ? topSpeed * Math.min(1, moveLen) : 0;
+
+  // MOMENTUM. Ease toward the speed being asked for instead of snapping to it. A 300 m creature
+  // that reaches a run in one frame reads as weightless, and it is also why the walk cycle never
+  // matched the ground: the gait is chosen from `speed`, so if `speed` is a square wave the legs
+  // are too. Ramping it makes the animation follow the body continuously.
+  const rampSeconds = wanted > body.moveSpeed ? ACCEL_SECONDS : BRAKE_SECONDS;
+  // Crouching for a jump plants the feet: you cannot accelerate while gathering yourself.
+  const gathering = body.crouchTimer > 0;
+  const rate = topSpeed / Math.max(0.05, rampSeconds * (gathering ? 3 : 1));
+  if (wanted > body.moveSpeed) body.moveSpeed = Math.min(wanted, body.moveSpeed + rate * dt);
+  else body.moveSpeed = Math.max(wanted, body.moveSpeed - rate * dt);
+  if (body.moveSpeed < 1e-4) body.moveSpeed = 0;
+
+  if (body.moveSpeed > 0 && moveLen > 1e-6) {
     _move.divideScalar(moveLen);
-    const dist = speed * dt * Math.min(1, moveLen);
+    const dist = body.moveSpeed * dt;
     _axis.crossVectors(body.dir, _move).normalize();
     const angle = dist / Math.max(1, body.radius);
     body.lastMoveQuat.setFromAxisAngle(_axis, angle);
+    body.dir.applyQuaternion(body.lastMoveQuat).normalize();
+    body.forward.applyQuaternion(body.lastMoveQuat);
+    reTangentOf(body, body.forward);
+    body.speed = dist / dt;
+  } else if (body.moveSpeed > 0) {
+    // Still carrying speed with no input: coast along the current heading rather than stopping dead.
+    const dist = body.moveSpeed * dt;
+    _axis.crossVectors(body.dir, body.forward).normalize();
+    body.lastMoveQuat.setFromAxisAngle(_axis, dist / Math.max(1, body.radius));
     body.dir.applyQuaternion(body.lastMoveQuat).normalize();
     body.forward.applyQuaternion(body.lastMoveQuat);
     reTangentOf(body, body.forward);
@@ -290,9 +353,25 @@ export function stepBodyOf(
     const surface = PLANET_RADIUS - heightUnits * 0.5;
     if (body.radius > surface && body.vertVel > 0) { body.radius = surface; body.vertVel = 0; }
   } else {
-    if (wantJump && body.onGround) {
-      body.vertVel = jumpVelocity(heightUnits);
-      body.onGround = false;
+    // JUMPING IS A TWO-STAGE MOVE: gather, then leave the ground.
+    //
+    // Geoff: "if I click jump he needs to slowly squat down and then jump, but it all happens based
+    // on real gravity". So the button starts a crouch, the crouch takes a time proportional to the
+    // square root of the body's height, and only when it completes does the body get its takeoff
+    // velocity — after which real gravity has it, exactly as before.
+    if (body.crouchTimer > 0) {
+      body.crouchTimer = Math.max(0, body.crouchTimer - dt);
+      body.crouchFrac = Math.min(1, body.crouchFrac + dt / Math.max(0.05, crouchSeconds(heightUnits)));
+      if (body.crouchTimer === 0) {
+        body.vertVel = jumpVelocity(heightUnits);
+        body.onGround = false;
+        body.crouchFrac = 0;
+      }
+    } else if (wantJump && body.onGround) {
+      body.crouchTimer = crouchSeconds(heightUnits);
+      body.crouchFrac = 0;
+    } else {
+      body.crouchFrac = Math.max(0, body.crouchFrac - dt * 3);
     }
     body.vertVel -= g * dt;
     body.radius += body.vertVel * dt;
