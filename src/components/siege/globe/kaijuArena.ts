@@ -20,9 +20,12 @@ import {
   type WeaponId, type HitTarget,
 } from './kaijuWeapons';
 import {
-  scoreActions, chooseAction, ACTION_TREES, describeChoice,
+  scoreActions, chooseAction, ACTION_TREES, describeChoice, refusalReason,
   type ActionId, type ActionScore, type Perception,
 } from './kaijuBrain';
+import {
+  parseOrder, orderWeight, orderExpired, ORDER_ACTION, ORDER_ACK, type Order,
+} from './kaijuOrders';
 import {
   BREEDS, derive, describeBuild, STAT_NAMES,
   type KaijuBuild, type DerivedStats,
@@ -89,6 +92,16 @@ export interface Agent {
   intentDir: THREE.Vector3;
   intentRun: boolean;
   intentSpeedMul: number;
+  /** What the player last told this Kaiju to do, if anything. */
+  order: Order | null;
+  /** Its answer: an acknowledgement if it complied, a reason if it refused. Shown as a subtitle. */
+  reply: string;
+  /** Seconds the reply stays on screen. */
+  replyTimer: number;
+  /** True while the Kaiju is disobeying a live order. */
+  refusing: boolean;
+  /** Whether it has answered the current order yet (agreed or refused). */
+  orderAnswered: boolean;
 }
 
 export interface ArenaEvent { t: number; text: string }
@@ -186,6 +199,7 @@ export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies 
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
+      order: null, reply: '', replyTimer: 0, refusing: false, orderAnswered: false,
     });
   });
 
@@ -263,6 +277,8 @@ function perceive(a: Agent): Perception {
     timeSinceHit: Math.round(a.timeSinceHit * 10) / 10,
     instinct: a.d.instinct01,
     obedience: a.d.obedience01,
+    orderedAction: a.order ? (ORDER_ACTION[a.order.type] as ActionId | null) : null,
+    orderWeight: a.order ? orderWeight(a.d.obedience01) : 0,
     neverFlees: a.build.abilities.includes('relentless'),
     // Terrifying enemies within a few body-lengths make this one break off sooner.
     fearPressure: agents.reduce((n, o) => (
@@ -370,6 +386,22 @@ function makeBoard(a: Agent) {
       _aim.copy(centreOf(a, new THREE.Vector3())).sub(centreOf(t, _tmp));
       rightVectorOf(a.body, _tmp);
       _aim.addScaledVector(_tmp, a.strafeSign * 0.8);
+      move(_aim, true);
+      return State.SUCCEEDED;
+    },
+    // --- ordered behaviours ---
+    Idle: () => State.SUCCEEDED,
+    AtDestination: () => {
+      const d = a.order?.destination;
+      if (!d) return true;                       // no destination = already there
+      return a.body.dir.angleTo(d) * PLANET_RADIUS < ARENA_HEIGHT * 1.5;
+    },
+    MoveToDestination: () => {
+      const d = a.order?.destination;
+      if (!d) return State.FAILED;
+      // Walk the great circle toward it: the tangent component of the destination direction.
+      _aim.copy(d);
+      reTangentOf(a.body, _aim);
       move(_aim, true);
       return State.SUCCEEDED;
     },
@@ -496,6 +528,18 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     if (!a.alive) continue;
     a.cooldown = Math.max(0, a.cooldown - dt);
     a.timeSinceHit += dt;
+
+    // Age the order and drop it once stale. An immediate order that fires half a minute later,
+    // when the situation has completely changed, is the classic way an obedient AI looks broken.
+    if (a.order) {
+      a.order.age += dt;
+      if (orderExpired(a.order)) {
+        log(`${a.name}: "${a.order.said}" has expired`);
+        a.order = null;
+        a.refusing = false;
+        a.orderAnswered = false;
+      }
+    }
     // Vigour regrows health, but only once nothing has hit you for a few seconds, so it decides
     // how often a Kaiju can fight rather than how long it survives one fight.
     if (a.timeSinceHit > 5 && a.health < a.maxHealth) {
@@ -514,7 +558,34 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       a.timeInAction = 0;
     }
 
-    if (a.isPlayer && playerControlled) continue;   // AI does not drive the player's body
+    // Did it do what it was told? Refusal is not a branch anywhere — it is simply the ordered
+    // action having lost the contest, which the scores above already explain.
+    if (a.order) {
+      const wanted = ORDER_ACTION[a.order.type] as ActionId | null;
+      const refusing = wanted != null && a.action !== wanted;
+      // Answer on the FIRST evaluation as well as on every change of mind. Without the
+      // first-evaluation case a Kaiju that simply agrees says nothing at all, and an order you
+      // cannot tell was received is worse than no order.
+      if (refusing !== a.refusing || !a.orderAnswered) {
+        a.orderAnswered = true;
+        a.refusing = refusing;
+        const line = refusing
+          ? refusalReason(a.scores, wanted, a.action) ?? 'No.'
+          : ORDER_ACK[a.order.type];
+        a.reply = line;
+        a.replyTimer = 4;
+        log(`${a.name}: "${line}"  (told to ${a.order.type})`);
+      }
+    }
+    if (a.replyTimer > 0) a.replyTimer = Math.max(0, a.replyTimer - dt);
+
+    // WHO DRIVES THE PLAYER'S KAIJU.
+    //
+    // Normally you do, directly, with the movement keys. But the moment you give it an ORDER it
+    // takes over and carries the order out itself — that is the entire point of commanding a
+    // creature rather than puppeting one. Say "free" (or move it yourself once the order expires)
+    // and you have the controls back.
+    if (a.isPlayer && playerControlled && !a.order) continue;
 
     // Fresh intent every tick: a tree that asks for nothing this frame means "stand still", not
     // "keep doing whatever you asked for last frame".
@@ -587,6 +658,61 @@ export function playerAttack(kind: 'weapon' | 'melee'): void {
 
 /** Health of the player's Kaiju, for the HUD. */
 export function playerAgent(): Agent | null { return agents.find((x) => x.isPlayer) ?? null; }
+
+export interface OrderResult { understood: boolean; order: Order | null; text: string }
+
+/**
+ * Tell your Kaiju something, in words. Voice and typing both land here.
+ *
+ * `understood: false` means the local grammar drew a blank and the caller should escalate to the
+ * language model — a null result is a routing decision, not an error.
+ *
+ * Note what this does NOT do: it does not make the Kaiju obey. It records what you asked for, and
+ * the utility contest each tick decides whether the order wins.
+ */
+export function commandKaiju(text: string, agentId?: string): OrderResult {
+  const a = agentId ? agents.find((x) => x.id === agentId) : agents.find((x) => x.isPlayer);
+  if (!a || !a.alive) return { understood: false, order: null, text };
+
+  const order = parseOrder(text);
+  if (!order) return { understood: false, order: null, text };
+  return { understood: true, order: applyOrder(a, order), text };
+}
+
+/** Attach an already-parsed order (from the grammar, the model, or a map click). */
+export function applyOrder(a: Agent, order: Order): Order {
+  if (order.type === 'free') {
+    a.order = null;
+    a.refusing = false;
+    a.reply = ORDER_ACK.free;
+    a.replyTimer = 4;
+    log(`${a.name} released: "${order.said}"`);
+    return order;
+  }
+  a.order = order;
+  a.refusing = false;
+  a.orderAnswered = false;
+  // Deliberately no reply yet: the acknowledgement or the refusal is emitted next tick, once the
+  // Kaiju has actually weighed the order. Saying "going!" before deciding would be a lie.
+  log(`You: "${order.said}" -> ${a.name} (${order.type})`);
+  return order;
+}
+
+/** Point at a place on the planet and tell it to walk there. */
+export function orderGoTo(dir: THREE.Vector3, agentId?: string): void {
+  const a = agentId ? agents.find((x) => x.id === agentId) : agents.find((x) => x.isPlayer);
+  if (!a || !a.alive) return;
+  applyOrder(a, {
+    type: 'goTo', targetId: null, destination: dir.clone().normalize(),
+    said: 'go there', age: 0, standing: false,
+  });
+}
+
+/** The player's Kaiju, its order and its answer — for the command panel. */
+export function playerOrderState(): { order: Order | null; reply: string; refusing: boolean } {
+  const a = agents.find((x) => x.isPlayer);
+  return { order: a?.order ?? null, reply: a && a.replyTimer > 0 ? a.reply : '', refusing: !!a?.refusing };
+}
 
 /** Human-readable dump for the tracker's copy button. */
 export function arenaReport(): string {

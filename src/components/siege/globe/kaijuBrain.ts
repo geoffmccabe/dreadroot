@@ -16,7 +16,11 @@
 import * as THREE from 'three';
 import { WEAPONS, type WeaponId } from './kaijuWeapons';
 
-export type ActionId = 'engage' | 'ranged' | 'flee' | 'takeCover' | 'circle' | 'explore';
+export type ActionId =
+  | 'engage' | 'ranged' | 'flee' | 'takeCover' | 'circle' | 'explore'
+  // Ordered behaviours. They exist as real actions, scoring against everything else, so that an
+  // order can LOSE — which is what refusal is.
+  | 'hold' | 'goTo';
 
 export interface Consideration {
   name: string;
@@ -80,6 +84,16 @@ export interface Perception {
   neverFlees: boolean;
   /** Terrifying enemies nearby make it break off sooner. */
   fearPressure: number;
+  /**
+   * The action the player has ordered, if any, and how hard that pushes.
+   *
+   * The order does NOT select the action. It adds `orderWeight` to that action's score and then
+   * the normal contest runs, so a Kaiju that is badly hurt will still let flee outscore your
+   * "attack" and refuse. Refusal is therefore not a special case anywhere in the code — it is
+   * simply what happens when the order loses, and the scores below say exactly why.
+   */
+  orderedAction: ActionId | null;
+  orderWeight: number;
 }
 
 // --- response curves ---------------------------------------------------------------------------
@@ -225,7 +239,58 @@ export function scoreActions(p: Perception): ActionScore[] {
     considerations: [con('hasTarget', hasTarget ? 1 : 0, hasTarget ? 0 : 1)],
   });
 
+  // HOLD and GO-TO exist only because you asked for them. On their own they are worth almost
+  // nothing, which is deliberate: a Kaiju left alone should never decide to stand still or wander
+  // to a spot. They become live when an order pushes them, and they lose again when it expires.
+  out.push({
+    action: 'hold', score: 0.02,
+    considerations: [con('ordered', 0, 0)],
+  });
+  out.push({
+    action: 'goTo', score: 0.02,
+    considerations: [con('ordered', 0, 0)],
+  });
+
+  // THE ORDER. Added to the matching action AFTER everything else has scored, so it competes on
+  // equal terms with self-preservation rather than overriding it. This single line is the entire
+  // difference between commanding a creature and puppeting one.
+  if (p.orderedAction && p.orderWeight > 0) {
+    const hit = out.find((s) => s.action === p.orderedAction);
+    if (hit) {
+      hit.score += p.orderWeight;
+      hit.considerations.push(con('youOrderedThis', p.orderWeight, p.orderWeight));
+    }
+  }
+
   return out.sort((a, b) => b.score - a.score);
+}
+
+/**
+ * Did the Kaiju refuse, and why?
+ *
+ * Refusal is not a code path — it is the observation that the ordered action lost. The reason is
+ * whatever beat it, expressed through that winner's strongest consideration, so the Kaiju explains
+ * itself in the same terms it actually decided in rather than from a list of canned lines.
+ */
+export function refusalReason(scores: ActionScore[], ordered: ActionId | null, chosen: ActionId | null): string | null {
+  if (!ordered || !chosen || chosen === ordered) return null;
+  const winner = scores.find((s) => s.action === chosen);
+  if (!winner) return null;
+  const top = winner.considerations
+    .filter((c) => c.name !== 'youOrderedThis')
+    .slice().sort((a, b) => b.score - a.score)[0];
+  const why: Record<string, string> = {
+    healthFrac: "I'm too hurt",
+    hurtEnough: "I'm too hurt",
+    powerRatio: "it's stronger than me",
+    powerIfClosed: "I'd lose that fight",
+    distBodies: "it's too far",
+    threatCount: "there are too many",
+    coverNearby: 'I need cover',
+    weaponRange: 'my weapon will not reach',
+    hasTarget: "there's nothing there",
+  };
+  return top ? `No — ${why[top.name] ?? top.name}.` : 'No.';
 }
 
 /** Hysteresis: do not switch action unless the challenger is meaningfully better. */
@@ -296,6 +361,22 @@ export const ACTION_TREES: Record<ActionId, string> = {
   }`,
   explore: `root {
     sequence { action [Wander] }
+  }`,
+  // Stand your ground. It still turns to face whatever is coming, because a Kaiju that has been
+  // told to hold and then stares at the horizon while something walks up to it looks broken.
+  hold: `root {
+    selector {
+      sequence { condition [HasTarget] action [FaceTarget] }
+      action [Idle]
+    }
+  }`,
+  // Walk to where you were pointed. Falls back to standing still once it arrives, rather than
+  // wandering off, so "go there" means "go there and stay".
+  goTo: `root {
+    selector {
+      sequence { condition [AtDestination] action [Idle] }
+      action [MoveToDestination]
+    }
   }`,
 };
 
