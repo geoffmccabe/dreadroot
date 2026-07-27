@@ -477,8 +477,15 @@ export const isEnchantedForest = (id: string | null | undefined): boolean =>
  * pointing at the Houston bearing, i.e. straight out into empty space, and the planet vanished
  * entirely. Never write these coordinates in two places.
  *
+ * ⚠ These numbers are DERIVED FROM cubeSphere.latLonToDirection AND MUST BE REDERIVED IF THAT
+ * CONVENTION CHANGES. They already went stale once: the spawn was computed under the original
+ * longitude convention, then the globe was un-mirrored by negating X in latLonToDirection, which
+ * is exactly a longitude flip. Nobody recomputed the spawn, so 95 W silently became 95 E and
+ * arrival moved from Houston to the Himalayas. scripts/earth/check_cubesphere.mjs now asserts
+ * this spawn still resolves to Houston.
+ *
  * Derived, not hand-tuned:
- *   dir  = (cos(lat)sin(lon), sin(lat), -cos(lat)cos(lon))   lat 29.7604 N, lon 95.3698 W
+ *   dir  = (-cos(lat)sin(lon), sin(lat), -cos(lat)cos(lon))   lat 29.7604 N, lon 95.3698 W
  *   pos  = dir * 160000
  *   fwd  = -dir            (look at the planet centre)
  *   yaw  = atan2(-fwd.x, -fwd.z),  pitch = asin(fwd.y)
@@ -486,8 +493,8 @@ export const isEnchantedForest = (id: string | null | undefined): boolean =>
  * THREE.Euler(pitch, yaw, 0, 'YXZ'), which round-trips these values to zero error.
  */
 export const KAIJU_LAB_SPAWN: WorldDefinition['spawn'] = {
-  position: [-138288, 79420, 12999],
-  yaw: -1.4771,
+  position: [138288, 79420, 12999],
+  yaw: 1.4771,
   pitch: -0.5194,
 };
 

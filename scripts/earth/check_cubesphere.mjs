@@ -119,6 +119,36 @@ const fail = (msg) => { console.error('  FAIL ' + msg); failures++; };
   if (left) fail(`${left}/${total} points are LEFT-handed: the globe renders MIRRORED`);
 }
 
+// --- 3c. the Kaiju Lab spawn must still be above HOUSTON ---------------------------------
+// This is a cross-file consistency check, not a maths check. The spawn coordinates in
+// worldDefinition.ts are DERIVED from latLonToDirection, and when that convention was changed to
+// un-mirror the globe nobody recomputed them: 95 W silently became 95 E and arrival moved to the
+// Himalayas. Anything derived from a convention has to be re-checked against it.
+{
+  const wd = readFileSync('src/config/worldDefinition.ts', 'utf8');
+  const m = wd.match(/KAIJU_LAB_SPAWN[^=]*=\s*\{\s*position:\s*\[([-\d.,\s]+)\][\s\S]*?yaw:\s*([-\d.]+)[\s\S]*?pitch:\s*([-\d.]+)/);
+  if (!m) fail('could not read KAIJU_LAB_SPAWN from worldDefinition.ts');
+  else {
+    const [x, y, z] = m[1].split(',').map(Number);
+    const yaw = Number(m[2]), pitch = Number(m[3]);
+    const len = Math.hypot(x, y, z);
+    const { lat, lon } = directionToLatLon(x / len, y / len, z / len);
+    const HOU = { lat: 29.7604, lon: -95.3698 };
+    const dLat = Math.abs(lat - HOU.lat);
+    let dLon = Math.abs(lon - HOU.lon); if (dLon > 180) dLon = 360 - dLon;
+    console.log(`3c. spawn resolves to lat ${lat.toFixed(2)} lon ${lon.toFixed(2)} `
+      + `(Houston is ${HOU.lat} / ${HOU.lon})`);
+    if (dLat > 0.05 || dLon > 0.05) fail(`spawn is ${dLon.toFixed(1)} deg of longitude from Houston`);
+
+    // ...and it must actually be LOOKING at the planet, not away from it.
+    const cp = Math.cos(pitch);
+    const f = [-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp];
+    const dot = -(f[0] * x + f[1] * y + f[2] * z) / len;
+    console.log(`    forward . toward-centre = ${dot.toFixed(4)}`);
+    if (dot < 0.999) fail('spawn is not aimed at the planet');
+  }
+}
+
 // --- 4. tile indexing self-consistency ---------------------------------------------------
 {
   let bad = 0;
