@@ -19,7 +19,15 @@ const YODEL_MAX_DISTANCE = 500;    // Yodels carry across the entire map
 const YODEL_REFERENCE_DISTANCE = 20; // Full volume within 20 blocks
 const YODEL_ROLLOFF_FACTOR = 0.5;   // Much slower falloff than normal sounds
 
-function getAudioContext(): AudioContext | null {
+/**
+ * Exported so the Kaiju acoustics layer can schedule its own sounds.
+ *
+ * It needs to start a sound at an ABSOLUTE future time (speed-of-sound delay) and insert a
+ * distance low-pass, neither of which the helpers here expose. Sharing the one AudioContext and
+ * buffer cache is the point — two contexts would double the decode work and desynchronise the
+ * clocks the delays are scheduled against.
+ */
+export function getAudioContext(): AudioContext | null {
   if (!audioContext) {
     try {
       audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -36,7 +44,7 @@ function getAudioContext(): AudioContext | null {
   return audioContext;
 }
 
-async function loadAudioBuffer(url: string): Promise<AudioBuffer | null> {
+export async function loadAudioBuffer(url: string): Promise<AudioBuffer | null> {
   // Check cache
   if (bufferCache.has(url)) {
     return bufferCache.get(url)!;

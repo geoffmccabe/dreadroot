@@ -111,8 +111,20 @@ function AgentBlock({ a }: { a: Agent }) {
   );
 }
 
+/**
+ * Starting x for a panel docked to the RIGHT edge.
+ *
+ * The Kaiju panels used to open on the left, where they formed a second column on top of the
+ * game's own HUD and covered the view. They are still draggable; this only changes where they
+ * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
+ */
+function rightEdge(width: number, margin = 16): number {
+  if (typeof window === 'undefined') return margin;
+  return Math.max(margin, window.innerWidth - width - margin);
+}
+
 export function KaijuTrackerPanel() {
-  const { pos, handleProps } = useDraggablePanel({ left: 300, top: 90 });
+  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(340), top: 430 });
   const [, tick] = useState(0);
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(true);

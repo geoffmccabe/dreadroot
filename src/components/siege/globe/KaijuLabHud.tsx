@@ -27,11 +27,23 @@ function fmtReal(units: number): string {
   return metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${Math.round(metres)} m`;
 }
 
+/**
+ * Starting x for a panel docked to the RIGHT edge.
+ *
+ * The Kaiju panels used to open on the left, where they formed a second column on top of the
+ * game's own HUD and covered the view. They are still draggable; this only changes where they
+ * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
+ */
+function rightEdge(width: number, margin = 16): number {
+  if (typeof window === 'undefined') return margin;
+  return Math.max(margin, window.innerWidth - width - margin);
+}
+
 export function KaijuLabHud() {
   const s = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
   const walking = useSyncExternalStore(subscribeKaijuWalk, isKaijuWalkActive, isKaijuWalkActive);
   const lm = useSyncExternalStore(subscribeLandmark, currentLandmark, currentLandmark);
-  const { pos, handleProps } = useDraggablePanel({ left: 16, top: 90 });
+  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(268), top: 90 });
   const tiles = earthTileStats();
 
   const row = (label: string, value: string) => (

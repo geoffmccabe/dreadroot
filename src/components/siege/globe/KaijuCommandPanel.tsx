@@ -57,8 +57,20 @@ const LANGS: [string, string][] = [
 /** Things worth trying, shown when the box is empty. */
 const SUGGESTIONS = ['attack it', 'back off', 'take cover', 'hold', 'follow me', 'do what you want'];
 
+/**
+ * Starting x for a panel docked to the RIGHT edge.
+ *
+ * The Kaiju panels used to open on the left, where they formed a second column on top of the
+ * game's own HUD and covered the view. They are still draggable; this only changes where they
+ * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
+ */
+function rightEdge(width: number, margin = 16): number {
+  if (typeof window === 'undefined') return margin;
+  return Math.max(margin, window.innerWidth - width - margin);
+}
+
 export function KaijuCommandPanel() {
-  const { pos, handleProps } = useDraggablePanel({ left: 16, top: 420 });
+  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(320), top: 90 });
   useSyncExternalStore(subscribeArena, arenaVersion, arenaVersion);
   const [text, setText] = useState('');
   const [lang, setLang] = useState('en-US');

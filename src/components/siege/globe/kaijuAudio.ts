@@ -1,63 +1,154 @@
-// kaijuAudio — footsteps for something 300 metres tall.
+// kaijuAudio — footsteps, roars, and sound that takes time to arrive.
 //
-// Geoff supplied the clip and the note that matters: "needs to be slowed down about 50% to sound
-// right and match his gait". That is the whole tuning brief, and it happens to agree with the
-// physics the rest of this map already runs on — under dynamic similarity a body scaled up by a
-// factor S moves its limbs at 1/sqrt(S), so a creature ~160x a human's height steps roughly an
-// order of magnitude slower. Halving the clip is a good ear-led approximation of that, and slowing
-// a sample also drops its pitch, which is exactly what makes it read as heavy.
+// Two things Geoff asked for, and they interact:
 //
-// Two things it must do beyond "play a sound":
+//   ONE SHOT PER STEP. "You should always play one of these for each step the animation takes.
+//   But there should be a random amount of volume, speed, and pitch applied... +-10% on each."
+//   The old version looped a whole footstep track and rate-shifted it, which never lands with the
+//   feet and repeats audibly. Now a single stomp fires per stride, each one slightly different.
 //
-//   MATCH THE GAIT. A fixed rate would drift out of sync the moment the Kaiju changed pace, and
-//   footsteps that do not land with the feet are worse than none. So the rate tracks the body's
-//   actual speed against its own natural walk speed, which is where the 50% sits.
+//   SOUND THAT TRAVELS. At 100 m per unit a Kaiju 1 km away is 2.9 seconds of delay. See
+//   docs/KAIJU_ACOUSTICS.md — this is layer 1, the cheap one, and it is the piece that makes the
+//   scale audible rather than merely visible.
 //
-//   SCALE THE DISTANCE MODEL. The shared audio helper defaults to a reference distance of 5 and a
-//   maximum of 50, tuned for a world where 1 unit is 1 metre. Here 1 unit is 100 metres, so those
-//   defaults would make a Kaiju inaudible 500 m away and silent past 5 km. Both are widened so a
-//   fight you can see is a fight you can hear.
+// A NOTE ON "SPEED AND PITCH" AS SEPARATE KNOBS. For a sampled sound they are the same knob:
+// `playbackRate` and `detune` both fold into one rate, so slowing a sample also lowers it, exactly
+// like a record. Truly independent pitch needs a phase vocoder, which is not worth it here — and
+// for a footstep, varying them together is what you actually want, since a heavier-sounding step
+// really is both slower and lower. So volume varies independently, and rate carries speed+pitch.
 
 import * as THREE from 'three';
-import { startLoopSound, updateLoopSound, stopLoopSound, type LoopSound } from '@/lib/spatialAudio';
+import { getAudioContext, loadAudioBuffer } from '@/lib/spatialAudio';
 import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
-import { walkSpeed, type KaijuBody } from './kaijuBody';
+import { type KaijuBody } from './kaijuBody';
+import { METRES_PER_UNIT } from './cubeSphere';
+import { rand } from './kaijuRandom';
 
-export const FOOTSTEP_URL = '/kaiju_footsteps.mp3';
+export const FOOTSTEP_URL = '/kaiju_footstep_one.mp3';
+export const ROAR_URL = '/kaiju_roar.mp3';
+
+/** ±10% on volume and on rate, per Geoff. */
+const VARY = 0.10;
 
 /**
- * Playback rate at a normal walking pace. Geoff's ear, and it is the number to change if it still
- * sounds wrong — everything else here is relative to it.
- */
-const BASE_RATE = 0.5;
-/**
- * How far the rate may drift from BASE_RATE as the Kaiju speeds up or slows down.
+ * Stride length as a fraction of body height.
  *
- * Deliberately narrow. Letting it track speed proportionally would push a sprinting Kaiju back to
- * full playback rate, which sounds like a person jogging and throws away the weight the slowdown
- * bought. Running should sound like a faster colossus, not like a lighter one.
+ * A 300 m biped has 150 m legs, so its steps are enormous and infrequent, and that is a big part
+ * of why the thing reads as huge — a creature taking human-frequency steps reads as human-sized
+ * however tall you draw it.
+ *
+ * 0.25 rather than a strict 0.5 of body height, tuned to the WALK CYCLE rather than to leg length:
+ * the clips play at about 0.2x for a creature this size, so a cycle lasts roughly six seconds and
+ * lands two footfalls in it. That gives a step every ~2.8 s walking and ~0.9 s running, which is
+ * what the animation is actually doing. A strict leg-length stride gave 5.5 s and drifted out of
+ * step with the feet, which is the one thing footstep audio must never do.
  */
-const RATE_MIN = 0.72;
-const RATE_MAX = 1.55;
+const STRIDE_FRAC = 0.25;
 
-/** Loudest the footsteps get, at a full run. */
-const MAX_VOLUME = 0.85;
-/** Below this fraction of walking speed there is no footfall at all. */
-const SILENT_BELOW = 0.12;
+/** Metres per second. Real. Scaled by the setting below so it can be tuned by feel. */
+const SPEED_OF_SOUND_MS = 343;
+/**
+ * Multiplier on the speed of sound. 1 = real physics.
+ *
+ * Exposed because the honest warning in the acoustics doc applies: at real speed a footstep from
+ * 2 km away arrives six seconds late, which is dramatic and can also be disorienting, since audio
+ * stops meaning "something is there" and starts meaning "something WAS there". Film compresses
+ * this constantly; so can we.
+ */
+let soundSpeedScale = 1;
+export function setSoundSpeedScale(v: number): void { soundSpeedScale = Math.max(0.2, v); }
+export function getSoundSpeedScale(): number { return soundSpeedScale; }
 
-/** Reference and maximum distance in UNITS (1 unit = 100 m). ~1 km and ~12 km. */
-const REF_DISTANCE = 10;
-const MAX_DISTANCE = 120;
-
-interface Entry { loop: LoopSound; }
-const loops = new Map<string, Entry>();
+/** Distance in units -> delay in seconds. */
+export function propagationDelay(distanceUnits: number): number {
+  const metres = distanceUnits * METRES_PER_UNIT;
+  return metres / (SPEED_OF_SOUND_MS * soundSpeedScale);
+}
 
 const _pos = new THREE.Vector3();
+const _d = new THREE.Vector3();
 
 /**
- * Start, update or stop the footsteps for one Kaiju. Safe to call every frame.
+ * Play a one-shot at a world position, arriving when the sound would actually get there.
  *
- * `id` is anything stable per creature — the arena agent id, or 'player'.
+ * The position is SNAPSHOT at emission. That matters more than it looks: a sound that takes three
+ * seconds to arrive must be placed where the creature was when it made the noise, not where it has
+ * since walked to. Reading the emitter's live position at playback time is the classic bug here.
+ */
+export async function playKaijuSound(
+  url: string,
+  worldPos: THREE.Vector3,
+  listenerPos: THREE.Vector3,
+  listenerDir: THREE.Vector3,
+  opts: { volume?: number; rate?: number; refUnits?: number; maxUnits?: number } = {},
+): Promise<void> {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const sx = worldPos.x, sy = worldPos.y, sz = worldPos.z;
+  const distUnits = _d.set(sx, sy, sz).distanceTo(listenerPos);
+  const delay = propagationDelay(distUnits);
+  // Beyond about 25 km the delay is over a minute and the level is inaudible; do not schedule it.
+  if (delay > 60) return;
+
+  const buffer = await loadAudioBuffer(url);
+  if (!buffer) return;
+
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.playbackRate.value = opts.rate ?? 1;
+
+  const gain = ctx.createGain();
+  gain.gain.value = opts.volume ?? 0.8;
+
+  // AIR ABSORPTION. High frequencies die first over distance, which is why far-off thunder is a
+  // rumble and close thunder is a crack. This does more for the sense of distance than volume
+  // alone, and it is one filter node.
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  const km = (distUnits * METRES_PER_UNIT) / 1000;
+  lp.frequency.value = Math.max(320, 20000 / (1 + km * 1.4));
+
+  const panner = ctx.createPanner();
+  panner.panningModel = 'HRTF';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = opts.refUnits ?? 12;
+  panner.maxDistance = opts.maxUnits ?? 260;
+  panner.rolloffFactor = 1.0;
+  if (panner.positionX) {
+    panner.positionX.value = toRenderX(sx);
+    panner.positionY.value = toRenderY(sy);
+    panner.positionZ.value = toRenderZ(sz);
+  } else panner.setPosition(toRenderX(sx), toRenderY(sy), toRenderZ(sz));
+
+  const l = ctx.listener;
+  if (l.positionX) {
+    l.positionX.value = listenerPos.x; l.positionY.value = listenerPos.y; l.positionZ.value = listenerPos.z;
+    l.forwardX.value = listenerDir.x; l.forwardY.value = listenerDir.y; l.forwardZ.value = listenerDir.z;
+    l.upX.value = 0; l.upY.value = 1; l.upZ.value = 0;
+  } else {
+    l.setPosition(listenerPos.x, listenerPos.y, listenerPos.z);
+    l.setOrientation(listenerDir.x, listenerDir.y, listenerDir.z, 0, 1, 0);
+  }
+
+  src.connect(lp); lp.connect(gain); gain.connect(panner); panner.connect(ctx.destination);
+  // The whole point: start it LATER, by however long the sound takes to cross the distance.
+  src.start(ctx.currentTime + delay);
+  src.stop(ctx.currentTime + delay + buffer.duration / Math.max(0.05, src.playbackRate.value) + 0.1);
+}
+
+// --- footsteps -----------------------------------------------------------------------------------
+
+/** Distance each Kaiju has walked since its last footfall. */
+const strideAccum = new Map<string, number>();
+const _prev = new Map<string, THREE.Vector3>();
+
+/**
+ * Fire a footstep every time this Kaiju has covered one stride.
+ *
+ * Triggering on DISTANCE TRAVELLED rather than on a timer means the steps always match the feet,
+ * whatever the creature's speed and whatever rate its walk clip happens to be playing at — the two
+ * cannot drift apart, because both derive from the same movement.
  */
 export function updateKaijuFootsteps(
   id: string,
@@ -67,53 +158,48 @@ export function updateKaijuFootsteps(
   listenerDir: THREE.Vector3,
   active: boolean,
 ): void {
-  const entry = loops.get(id);
-
-  // Not on the ground, not moving, or dead: no footsteps. Airborne is important — a Kaiju mid-jump
-  // or mid-glide should be silent, and it is the cheapest possible cue that it has left the ground.
-  const natural = walkSpeed(heightUnits);
-  const paceFrac = body.speed / Math.max(1e-4, natural);
-  const shouldPlay = active && body.onGround && !body.submerged && paceFrac > SILENT_BELOW;
-
-  if (!shouldPlay) {
-    if (entry) {
-      // Silence it rather than tearing it down: starting a loop is asynchronous (the buffer has to
-      // load) so stop/start on every pause would stutter or drop steps entirely.
-      updateLoopSound(entry.loop, 0, 0, 0, listenerPos, listenerDir, BASE_RATE, 0);
-    }
-    return;
-  }
-
-  // Feet, not centre of mass — that is where the sound is actually made.
+  const prev = _prev.get(id);
   _pos.copy(body.dir).multiplyScalar(body.radius);
-  const x = toRenderX(_pos.x), y = toRenderY(_pos.y), z = toRenderZ(_pos.z);
+  if (!prev) { _prev.set(id, _pos.clone()); strideAccum.set(id, 0); return; }
 
-  const rate = Math.min(RATE_MAX, Math.max(RATE_MIN, paceFrac)) * BASE_RATE;
-  // Volume rises with pace but is not proportional to it: a walking Kaiju is still enormous.
-  const volume = MAX_VOLUME * Math.min(1, 0.45 + paceFrac * 0.4);
+  const moved = _pos.distanceTo(prev);
+  prev.copy(_pos);
 
-  if (!entry) {
-    loops.set(id, {
-      loop: startLoopSound(FOOTSTEP_URL, {
-        x, y, z, baseVolume: volume, playbackRate: rate,
-        refDistance: REF_DISTANCE, maxDistance: MAX_DISTANCE, rolloffFactor: 1.1,
-      }),
+  // Airborne, submerged, standing still, or switched off: no footfall, and no accumulation either
+  // — a Kaiju should not bank up steps mid-jump and fire them all on landing.
+  if (!active || !body.onGround || body.submerged || moved < 1e-5) return;
+
+  const stride = heightUnits * STRIDE_FRAC;
+  let acc = (strideAccum.get(id) ?? 0) + moved;
+  if (acc >= stride) {
+    acc -= stride;
+    // ±10% on each, independently rolled, so no two steps are identical.
+    const vary = () => 1 + (rand() * 2 - 1) * VARY;
+    void playKaijuSound(FOOTSTEP_URL, _pos, listenerPos, listenerDir, {
+      volume: 0.85 * vary(),
+      rate: vary(),
+      refUnits: 10,
+      maxUnits: 300,
     });
-    return;
   }
-  updateLoopSound(entry.loop, x, y, z, listenerPos, listenerDir, rate, volume);
+  strideAccum.set(id, acc);
 }
 
-/** Tear down one Kaiju's footsteps (it died, or the map unmounted). */
+/** A roar from this Kaiju — the loudest thing it does, so it carries much further. */
+export function roar(worldPos: THREE.Vector3, listenerPos: THREE.Vector3, listenerDir: THREE.Vector3): void {
+  void playKaijuSound(ROAR_URL, worldPos, listenerPos, listenerDir, {
+    volume: 1.0 * (1 + (rand() * 2 - 1) * VARY),
+    rate: 1 + (rand() * 2 - 1) * VARY,
+    refUnits: 40,
+    maxUnits: 900,
+  });
+}
+
 export function stopKaijuFootsteps(id: string): void {
-  const e = loops.get(id);
-  if (!e) return;
-  stopLoopSound(e.loop);
-  loops.delete(id);
+  strideAccum.delete(id);
+  _prev.delete(id);
 }
-
-/** Tear down everything. Call when leaving the globe map. */
 export function stopAllKaijuFootsteps(): void {
-  for (const [, e] of loops) stopLoopSound(e.loop);
-  loops.clear();
+  strideAccum.clear();
+  _prev.clear();
 }

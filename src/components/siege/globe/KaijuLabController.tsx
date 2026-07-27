@@ -6,8 +6,9 @@
 //   -  =   scale the current one down/up in 5% steps
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
-//   ;      battle: drop in at Mount Everest, where three other Kaiju are waiting
+//   B or ; battle: drop in at Mount Everest, where three other Kaiju are waiting
 //   '      200 people, 1.8 m tall, around the Kaiju — for a sense of its scale
+//   R      roar — for testing speed-of-sound delay (1 km = 2.9 s late)
 //          (also starts on its own when you arrive at Everest with , or .)
 //   , .    previous / next of the 226 real landmarks, flying you straight there
 //
@@ -30,6 +31,8 @@ import {
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuCrowd, toggleCrowd } from './KaijuCrowd';
+import { roar } from './kaijuAudio';
+import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
@@ -121,14 +124,14 @@ export function KaijuLabController() {
           if (lm.n === 'Mount Everest' && !arenaStarted()) startArenaHere(camera);
           break;
         }
-        // SEMICOLON, not B.
+        // B *AND* SEMICOLON, and it also starts on arrival at Everest.
         //
-        // B was already bound three times over — most damagingly in siegeAreas as the teleport to
-        // the "SciFi Space" map, so pressing it on the globe started the battle and then flung the
-        // camera to another world. That is why the opponents were never there: they existed, and
-        // Geoff had been moved away from them. Every letter key in this codebase is spoken for, so
-        // this uses a punctuation key next to the landmark keys, and the arena also starts on its
-        // own when you arrive at Everest (see the landmark jump below).
+        // I moved this off B after finding B bound in siegeAreas as the SciFi Space teleport, and
+        // assumed that was why the opponents never appeared. That was WRONG: B demonstrably worked
+        // on this map — the real cause was a missing re-render, fixed separately — and moving it
+        // broke a key Geoff was already using. Restored, with the alias and the automatic start
+        // kept as well, since three ways in is strictly better than one.
+        case 'KeyB':
         case 'Semicolon': {
           startArenaHere(camera);
           break;
@@ -138,6 +141,15 @@ export function KaijuLabController() {
         case 'Quote':
           toggleCrowd();
           break;
+        // R — ROAR. For testing the acoustics: fire it, then walk away and fire it again. At 1 km
+        // the sound arrives 2.9 s after the keypress, at 2 km nearly 6 s. That gap IS the feature.
+        case 'KeyR': {
+          const at = playerBody.dir.clone().multiplyScalar(playerBody.radius + 2);
+          const look = new THREE.Vector3();
+          camera.getWorldDirection(look);
+          roar(at, camera.position, look);
+          break;
+        }
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height
