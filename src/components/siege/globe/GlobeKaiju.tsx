@@ -27,6 +27,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
+import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { CFG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
@@ -82,15 +83,21 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(`${url}?v=${APP_VERSION}`);
 
-  // Clone per instance: the cached glTF scene is shared and mutating it would corrupt every other
-  // user of the same model.
+  // MUST be SkeletonUtils.clone, not scene.clone().
+  //
+  // These are SKINNED models. A plain clone copies the meshes but leaves each SkinnedMesh bound to
+  // the ORIGINAL skeleton, which is not in the copy's own hierarchy, so the result renders
+  // collapsed or not at all. That is why the Kaiju was never visible: it was being created every
+  // frame and drawing nothing. MonsterEnemy already does this correctly and says so in a comment;
+  // I should have followed the working renderer instead of writing a fresh one.
   const model = useMemo(() => {
-    const c = scene.clone(true);
+    const c = SkeletonUtils.clone(scene) as THREE.Group;
     c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
     return c;
   }, [scene]);
 
-  const { actions, names, mixer } = useAnimations(animations, group);
+  // Bind the mixer to the CLONE, so the clips drive the clone's own bones.
+  const { actions, names, mixer } = useAnimations(animations, model);
   useEffect(() => { kaijuDiag.loaded = true; return () => { kaijuDiag.loaded = false; }; }, []);
   const gait = useRef<Gait>('glide');
   const current = useRef<THREE.AnimationAction | null>(null);
