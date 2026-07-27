@@ -21,7 +21,8 @@
     "smoke:do": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-do-client.ts",
     "check:kaiju-arena": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-arena.ts",
     "check:kaiju-balance": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-balance.ts",
-    "check:kaiju-orders": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-orders.ts"
+    "check:kaiju-orders": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-orders.ts",
+    "check:globe-lod": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-lod.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

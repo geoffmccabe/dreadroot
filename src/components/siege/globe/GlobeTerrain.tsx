@@ -479,12 +479,12 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     const next: NodeId[] = [];
     const nowSplit = new Set<string>();
 
-    // Traverse the six roots, splitting toward the camera.
-    const visit = (n: NodeId) => {
-      // Backstop against a runaway subdivision: at these scales the ratio test should keep
-      // the count in the low hundreds, so blowing past this means a maths bug, not a view.
-      if (next.length > MAX_LEAVES) { next.push(n); return; }
-
+    /**
+     * How badly does this node want to be split? Bigger means "more visibly too coarse".
+     * Returns -1 for a node that must not split at all.
+     */
+    const splitUrgency = (n: NodeId): number => {
+      if (n.depth >= maxDepth) return -1;
       const key = idKey(n);
       nodeCentre(n, centre);
       // Place the node at its REAL elevation, not at sea level.
@@ -507,17 +507,41 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       // Hysteresis: a node already split holds on down to MERGE_RATIO; a leaf must clear
       // the higher SPLIT_RATIO to divide. Equal thresholds would thrash at the boundary.
       const threshold = splitNodes.current.has(key) ? MERGE_RATIO : SPLIT_RATIO;
-
-      if (n.depth < maxDepth && ratio > threshold && childrenReady(n, mf.maxLevel)) {
-        nowSplit.add(key);
-        for (let c = 0; c < 4; c++) {
-          visit({ face: n.face, depth: n.depth + 1, x: n.x * 2 + (c & 1), y: n.y * 2 + (c >> 1) });
-        }
-        return;
-      }
-      next.push(n);
+      if (ratio <= threshold) return -1;
+      if (!childrenReady(n, mf.maxLevel)) return -1;
+      return ratio;
     };
-    for (let f = 0; f < 6; f++) visit({ face: f, depth: 0, x: 0, y: 0 });
+
+    // SPLIT THE MOST URGENT NODE FIRST, UNTIL THE BUDGET RUNS OUT.
+    //
+    // This used to be a plain recursive descent over the six faces in index order, which meant the
+    // leaf budget was spent in whatever order the faces happened to be numbered rather than on
+    // what you are looking at. Measuring it (scripts/check-globe-lod.ts) showed the budget being
+    // exhausted at every location tested — so the ground under your feet got its detail, and the
+    // landscape around it, which is the part you actually see, was starved and rendered as a
+    // smooth ramp. That is the "flat brown plain" on Everest.
+    //
+    // Splitting by urgency spends the same budget nearest-first, so detail lands in front of you.
+    const frontier: NodeId[] = [];
+    for (let f = 0; f < 6; f++) frontier.push({ face: f, depth: 0, x: 0, y: 0 });
+
+    // Each split turns one leaf into four, so it costs three of the budget.
+    while (frontier.length + 3 <= MAX_LEAVES) {
+      let bestIdx = -1;
+      let bestUrgency = 0;
+      for (let i = 0; i < frontier.length; i++) {
+        const u = splitUrgency(frontier[i]);
+        if (u > bestUrgency) { bestUrgency = u; bestIdx = i; }
+      }
+      if (bestIdx < 0) break;                    // nothing left that wants dividing
+      const n = frontier[bestIdx];
+      nowSplit.add(idKey(n));
+      frontier.splice(bestIdx, 1);
+      for (let c = 0; c < 4; c++) {
+        frontier.push({ face: n.face, depth: n.depth + 1, x: n.x * 2 + (c & 1), y: n.y * 2 + (c >> 1) });
+      }
+    }
+    for (const n of frontier) next.push(n);
 
     splitNodes.current = nowSplit;
     const wanted = new Set(next.map(idKey));

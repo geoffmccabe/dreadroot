@@ -21,6 +21,7 @@ import {
   body, stepBody, placeOnSurface, groundRadius, walkSpeed, runSpeed, reTangent, turnTangent,
 } from './kaijuBody';
 import { getKaijuLab, subscribeKaijuLab } from './kaijuLabState';
+import { getWalkZoom, nudgeWalkZoom, resetWalkZoom, flyZoomDelta } from './globeZoom';
 
 /** Camera distance behind the Kaiju, in body heights. */
 const CAM_BACK = 4.2;
@@ -135,19 +136,40 @@ export function KaijuWalkController() {
       pendingYaw.current -= e.movementX * LOOK_SENS;
       orbitPitch.current = Math.max(-0.9, Math.min(1.2, orbitPitch.current + e.movementY * LOOK_SENS));
     };
+    // SCROLL-WHEEL ZOOM. Missing on this map until now — the globe has its own camera and the
+    // wheel was never wired to it, so it read as removed functionality. Plain wheel and Alt+wheel
+    // both work: plain because that is what anyone expects on a map, Alt because that is the SWW
+    // binding and the muscle memory should carry over.
+    const wheel = (e: WheelEvent) => {
+      if (isTypingTarget(e.target)) return;
+      if (walkActive) {
+        nudgeWalkZoom(e.deltaY);
+      } else {
+        // Flying: move the camera toward or away from the surface, by a step proportional to how
+        // high you are, so orbit-to-ground is a handful of notches rather than hundreds.
+        const r = camera.position.length();
+        if (r < 1e-6) return;
+        const altitude = r - PLANET_RADIUS;
+        camera.position.setLength(Math.max(PLANET_RADIUS + 0.5, r + flyZoomDelta(e.deltaY, altitude)));
+      }
+      e.preventDefault();
+    };
     window.addEventListener('keydown', down, true);
     window.addEventListener('keyup', up, true);
     window.addEventListener('mousemove', move);
+    // Not passive: this needs preventDefault so the page does not scroll behind the canvas.
+    window.addEventListener('wheel', wheel, { passive: false });
     return () => {
       window.removeEventListener('keydown', down, true);
       window.removeEventListener('keyup', up, true);
       window.removeEventListener('mousemove', move);
+      window.removeEventListener('wheel', wheel);
     };
   }, [camera]);
 
   useFrame((_, rawDt) => {
     if (!walkActive) return;
-    if (pendingEnter) { pendingEnter = false; haveCam.current = false; haveFwd.current = false; }
+    if (pendingEnter) { pendingEnter = false; haveCam.current = false; haveFwd.current = false; resetWalkZoom(); }
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
     const h = getKaijuLab().height;
@@ -194,9 +216,12 @@ export function KaijuWalkController() {
       // Sit at the Kaiju's own eye height rather than behind it.
       target.current.copy(feet.current).addScaledVector(body.dir, h * EYE_FRAC);
     } else {
+      // Scroll-wheel zoom scales the whole chase offset, so pulling back also rises, which keeps
+      // the Kaiju framed instead of sliding it up the screen as the camera retreats.
+      const z = getWalkZoom();
       target.current.copy(feet.current)
-        .addScaledVector(want.current, h * CAM_BACK)
-        .addScaledVector(body.dir, h * CAM_UP);
+        .addScaledVector(want.current, h * CAM_BACK * z)
+        .addScaledVector(body.dir, h * CAM_UP * z);
     }
 
     // Do not let the camera end up underground on a slope.
