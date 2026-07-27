@@ -6,11 +6,13 @@
 //   -  =   scale the current one down/up in 5% steps
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
-//   B      battle: drop in at Mount Everest, where two other Kaiju are waiting
+//   ;      battle: drop in at Mount Everest, where three other Kaiju are waiting
+//          (also starts on its own when you arrive at Everest with , or .)
 //   , .    previous / next of the 226 real landmarks, flying you straight there
 //
-// Keys are chosen because they are unused elsewhere, and this component only mounts on the
-// globe map, so it cannot interfere with play keys on any other map.
+// Keys must be checked against the WHOLE codebase, not assumed free. Every letter key is
+// already bound somewhere — B in particular is the SciFi Space teleport in siegeAreas, which
+// silently stole the battle key and made the whole feature look broken.
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -32,6 +34,30 @@ import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
 // what you actually want while flying around.
 
+
+/**
+ * Drop in at Mount Everest with three other Kaiju already there and let the fight begin.
+ *
+ * Shared by the Semicolon key and by simply ARRIVING at Everest on the landmark tour, so the
+ * feature does not hinge on one keypress surviving a codebase where every letter is already bound.
+ */
+function startArenaHere(camera: THREE.Camera): void {
+  setKaijuHeight(ARENA_HEIGHT);
+  const dir = initArena(17);
+  const face = new THREE.Vector3(0, 1, 0).cross(dir);
+  if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
+  face.normalize();
+  // Drop from one body height: unmistakably a fall, without a long wait before you can move.
+  dropKaijuAt(dir, face, 1);
+  const surface = dir.clone().multiplyScalar(
+    PLANET_RADIUS + (sampleGlobeSurface(dir.x, dir.y, dir.z) ?? 0) / METRES_PER_UNIT,
+  );
+  camera.position.copy(surface)
+    .addScaledVector(dir, ARENA_HEIGHT * 2.2)
+    .addScaledVector(face, -ARENA_HEIGHT * 4.2);
+  camera.lookAt(surface.clone().addScaledVector(dir, ARENA_HEIGHT * 0.55));
+  console.log('[kaiju] battle started at Mount Everest — 4 Kaiju');
+}
 
 export function KaijuLabController() {
   const state = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
@@ -84,27 +110,25 @@ export function KaijuLabController() {
             .addScaledVector(face, -h * 4.2);
           camera.lookAt(surface.clone().addScaledVector(up, h * 0.55));
           console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon}) — dropping in`);
+          // ARRIVING AT EVEREST STARTS THE FIGHT.
+          //
+          // This is what was asked for in the first place: drop in at Everest and the other Kaiju
+          // are waiting. Making it depend on a separate keypress meant that when that key turned
+          // out to be taken, the whole feature was invisible. Arriving at the place is the natural
+          // trigger and cannot be swallowed by another binding.
+          if (lm.n === 'Mount Everest' && !arenaStarted()) startArenaHere(camera);
           break;
         }
-        case 'KeyB': {
-          // BATTLE. Drop in at Mount Everest with two other Kaiju already there, all three the
-          // same size and health, and let the AI fight. See docs/KAIJU_AI_RESEARCH.md.
-          setKaijuHeight(ARENA_HEIGHT);
-          const dir = initArena(17);
-          const face = new THREE.Vector3(0, 1, 0).cross(dir);
-          if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
-          face.normalize();
-          // Drop from one body height, the same as arriving at a landmark: unmistakably a fall,
-          // without a long wait before you can move.
-          dropKaijuAt(dir, face, 1);
-          const surface = dir.clone().multiplyScalar(
-            PLANET_RADIUS + (sampleGlobeSurface(dir.x, dir.y, dir.z) ?? 0) / METRES_PER_UNIT,
-          );
-          camera.position.copy(surface)
-            .addScaledVector(dir, ARENA_HEIGHT * 2.2)
-            .addScaledVector(face, -ARENA_HEIGHT * 4.2);
-          camera.lookAt(surface.clone().addScaledVector(dir, ARENA_HEIGHT * 0.55));
-          console.log('[kaiju] battle started at Mount Everest');
+        // SEMICOLON, not B.
+        //
+        // B was already bound three times over — most damagingly in siegeAreas as the teleport to
+        // the "SciFi Space" map, so pressing it on the globe started the battle and then flung the
+        // camera to another world. That is why the opponents were never there: they existed, and
+        // Geoff had been moved away from them. Every letter key in this codebase is spoken for, so
+        // this uses a punctuation key next to the landmark keys, and the arena also starts on its
+        // own when you arrive at Everest (see the landmark jump below).
+        case 'Semicolon': {
+          startArenaHere(camera);
           break;
         }
         case 'KeyK': {

@@ -13,9 +13,10 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { CFG } from '../siegeMonsterCatalog';
+import { CFG, MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
 import { walkSpeed, runSpeed, type KaijuBody } from './kaijuBody';
+import { METRES_PER_UNIT } from './cubeSphere';
 import {
   getAgents, stepArena, arenaStarted, playerAttack, subscribeArena, arenaVersion,
   ARENA_HEIGHT, type Agent,
@@ -33,10 +34,27 @@ const CLIPS: Record<string, string[]> = {
   dead: ['death', 'die', 'hit', 'idle'],
 };
 
-/** Playback rate for a body this tall. Bigger creatures move their limbs slower (Froude). */
-function animRate(b: KaijuBody, h: number): number {
-  const w = walkSpeed(h);
-  return Math.max(0.35, Math.min(1.8, b.speed / Math.max(1e-4, w)));
+/**
+ * Playback rate for a Kaiju's clips. TWO factors, and this had NEITHER of them right.
+ *
+ * 1. SIZE. Under dynamic similarity a creature scaled up by S moves its limbs at 1/sqrt(S). A
+ *    300 m Kaiju built from a 4 m Red Demon is 75x its natural size, so its clips must play at
+ *    about 0.12x. This applied no size factor at all — which is why Geoff's opponent was
+ *    "running super fast": the AI Kaiju were animating roughly fifteen times too quickly while
+ *    the player's own Kaiju (which does apply it) looked correct.
+ *
+ * 2. GAIT. The stride correction has to be measured against the speed the CURRENT CLIP depicts.
+ *    Dividing by walk speed while the run clip is playing pushed it to the 1.8x clamp on top of
+ *    everything else. Same bug already fixed in GlobeKaiju; it lived on here.
+ *
+ * `naturalMetres` is the creature's real-world height from the catalog, not the model's units.
+ */
+function animRate(b: KaijuBody, h: number, naturalMetres: number, running: boolean): number {
+  const sizeRatio = (h * METRES_PER_UNIT) / Math.max(0.01, naturalMetres);
+  const sizeMul = 1 / Math.sqrt(sizeRatio);
+  const reference = running ? runSpeed(h) : walkSpeed(h);
+  const stride = Math.min(1.6, Math.max(0.35, b.speed / Math.max(1e-4, reference)));
+  return sizeMul * stride;
 }
 
 function AgentAvatar({ agent }: { agent: Agent }) {
@@ -45,6 +63,10 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const cfg = CFG[agent.monsterType as keyof typeof CFG];
   const url = cfg?.url;
   const modelHeight = cfg?.modelHeight ?? 2;
+  // The creature's REAL-WORLD height, which is what the size slowdown is measured against — a Red
+  // Demon is naturally 4 m, a Fort Golem 12 m, so blowing both up to 300 m slows them by very
+  // different amounts.
+  const naturalMetres = MONSTER_CATALOG.find((c) => c.id === agent.monsterType)?.baseHeight ?? 2;
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(`${url}?v=${APP_VERSION}`);
 
@@ -101,10 +123,11 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
 
-    if (!agent.alive) { play('dead'); mixer.timeScale = 1; stopKaijuFootsteps(agent.id); return; }
+    if (!agent.alive) { play('dead'); mixer.timeScale = 0.4; stopKaijuFootsteps(agent.id); return; }
     const wS = walkSpeed(ARENA_HEIGHT), rS = runSpeed(ARENA_HEIGHT);
-    play(b.speed > (wS + rS) * 0.5 ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
-    mixer.timeScale = animRate(b, ARENA_HEIGHT);
+    const running = b.speed > (wS + rS) * 0.5;
+    play(running ? 'run' : b.speed > wS * 0.25 ? 'walk' : 'idle');
+    mixer.timeScale = animRate(b, ARENA_HEIGHT, naturalMetres, running);
 
     // Footsteps, positioned in the world — so an enemy Kaiju crossing behind you is something you
     // hear before you see, which at this scale is most of the drama.
@@ -139,10 +162,25 @@ function Projectiles() {
     for (let i = 0; i < n; i++) {
       const p = list[i];
       dummy.position.copy(p.pos);
-      dummy.scale.setScalar(p.size);
+
+      // FIRE GROWS AND COOLS. A flame ball that is one constant size and colour reads as a
+      // travelling pebble; real fire expands as it burns out and shifts white -> orange -> smoke.
+      // `age` runs 0 (just fired) to 1 (about to die).
+      const age = 1 - Math.max(0, Math.min(1, p.life / Math.max(0.01, p.maxLife)));
+      if (p.weapon === 'flame') {
+        dummy.scale.setScalar(p.size * (0.45 + age * 1.9));
+        // White-hot at the muzzle, deep orange in the middle, dim red as it dies.
+        colour.setRGB(
+          1.0,
+          0.92 - age * 0.62,
+          0.75 - age * 0.72,
+        ).multiplyScalar(1 - age * 0.65);
+      } else {
+        dummy.scale.setScalar(p.size);
+        colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);
+      }
       dummy.updateMatrix();
       m.setMatrixAt(i, dummy.matrix);
-      colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);
       m.setColorAt(i, colour);
     }
     m.count = n;
@@ -151,9 +189,17 @@ function Projectiles() {
   });
 
   return (
+    // Additive and depth-write off: overlapping flame particles accumulate into a bright core the
+    // way fire does, instead of showing every sphere's silhouette as a hard edge.
     <instancedMesh ref={mesh} args={[undefined, undefined, MAX]} frustumCulled={false}>
-      <sphereGeometry args={[1, 8, 6]} />
-      <meshBasicMaterial toneMapped={false} />
+      <sphereGeometry args={[1, 10, 8]} />
+      <meshBasicMaterial
+        toneMapped={false}
+        transparent
+        opacity={0.85}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
     </instancedMesh>
   );
 }

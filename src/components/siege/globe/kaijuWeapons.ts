@@ -57,10 +57,19 @@ export interface WeaponSpec {
 
 export const WEAPONS: Record<WeaponId, WeaponSpec> = {
   // Continuous, close, and the highest damage per second if you can stay in range.
+  // SCALED FOR A 300 M CREATURE, AND DELIBERATELY SLOW.
+  //
+  // The first pass used human-flamethrower numbers scaled by nothing: 900 m/s muzzle speed across
+  // a 660 m reach, so a burst crossed the whole range in a quarter of a second and was gone before
+  // the eye caught it. At this size fire should behave like fire in a slow-motion shot — a huge
+  // billowing mass that takes a beat to arrive and then hangs in the air.
+  //
+  // 320 m/s over 660 m is about two seconds of travel, which is long enough to watch, to aim, and
+  // to walk out of. Low gravity on it so the plume drifts and rises rather than falling like grit.
   flame: {
     id: 'flame', name: 'Flamethrower', rangeBodies: 2.2, cooldown: 0.15, damage: 2,
-    speed: 9, spread: 0.30, count: 5, life: 1.1, blastBodies: 0, gravityScale: 0.35,
-    colour: [1.0, 0.55, 0.12], size: 0.16,
+    speed: 3.2, spread: 0.34, count: 6, life: 2.6, blastBodies: 0, gravityScale: 0.12,
+    colour: [1.0, 0.55, 0.12], size: 0.55,
   },
   // Long reach, flat trajectory, modest damage. The ranged-attacker's weapon.
   gun: {
@@ -84,6 +93,8 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
 export interface Projectile {
   pos: THREE.Vector3;
   vel: THREE.Vector3;
+  /** Lifetime it started with, so the renderer can grow and fade it over its life. */
+  maxLife: number;
   /** Local up at launch, so gravity pulls toward the planet centre rather than world -Y. */
   ownerId: string;
   weapon: WeaponId;
@@ -133,7 +144,9 @@ export function fireWeapon(
       vel: _dir.clone().multiplyScalar(speed),
       ownerId,
       weapon,
-      life: w.life,
+      // Vary the lifetime a little so a burst does not wink out as one solid block.
+      life: w.life * (0.8 + rand() * 0.4),
+      maxLife: w.life,
       damage: w.damage,
       blast: w.blastBodies * heightUnits,
       colour: w.colour,
