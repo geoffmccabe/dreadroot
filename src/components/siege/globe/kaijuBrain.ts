@@ -60,6 +60,26 @@ export interface Perception {
   /** Is there terrain higher than us between us and the target? */
   coverNearby: boolean;
   timeSinceHit: number;
+  /**
+   * Tactical quality, 0..1, from the Instinct stat.
+   *
+   * This is the knob that makes a clever Kaiju and a stupid one behave differently WITHOUT
+   * changing a single line of the decision code — which is the whole payoff of having built the
+   * brain as a utility system. Low instinct blunts the considerations that require judgement:
+   * it barely notices cover, it has no sense of its weapon's ideal range, and it is slow to
+   * realise it is losing. High instinct reads all of them properly.
+   */
+  instinct: number;
+  /**
+   * How readily it obeys, 0..1. High obedience makes it hold its ground past the point its own
+   * judgement would break off — which is exactly why it refunds points. It is the "more obedient
+   * means more suicidal" trade, expressed as a weight on self-preservation.
+   */
+  obedience: number;
+  /** Relentless: it never breaks off, whatever the odds. */
+  neverFlees: boolean;
+  /** Terrifying enemies nearby make it break off sooner. */
+  fearPressure: number;
 }
 
 // --- response curves ---------------------------------------------------------------------------
@@ -86,6 +106,16 @@ export function scoreActions(p: Perception): ActionScore[] {
   const hasTarget = p.targetId != null;
   const r = p.weaponRangeBodies;
 
+  // Instinct blends a judgement call toward "no opinion". At instinct 0 a tactical consideration
+  // returns a flat 0.5 no matter what the situation is, so the Kaiju simply does not weigh it; at
+  // instinct 1 it reads the situation fully. Interpolating rather than gating keeps every score
+  // continuous, which matters because the hysteresis works on score differences.
+  const judge = (v: number) => 0.5 + (v - 0.5) * p.instinct;
+
+  // Obedience suppresses self-preservation. At obedience 1 the survival routes score barely a
+  // third of what they otherwise would, so it stays in fights it should leave — and dies in them.
+  const selfPreservation = 1 - 0.65 * p.obedience;
+
   // FLEE: two separate routes, whichever is stronger.
   //
   // The first version summed the routes, so a FULL-HEALTH Kaiju facing a stronger enemy scored
@@ -101,8 +131,11 @@ export function scoreActions(p: Perception): ActionScore[] {
     const outmatched = ramp(p.powerRatio, 1.1, 2.2);
     const hurt = fall(p.healthFrac, 0.40, 0.85);
     const swarmed = 1 + 0.5 * ramp(p.threatCount, 1, 3);
-    const losing = Math.min(1, outmatched * hurt * swarmed);
-    const score = Math.max(desperate, losing * 0.8) * (hasTarget ? 1 : 0);
+    const losing = Math.min(1, judge(outmatched) * hurt * swarmed);
+    // A frightened Kaiju breaks off sooner; Relentless never does at all.
+    const scared = 1 + p.fearPressure;
+    const raw = Math.max(desperate, losing * 0.8) * scared * selfPreservation;
+    const score = p.neverFlees ? 0 : Math.min(1, raw) * (hasTarget ? 1 : 0);
     out.push({
       action: 'flee', score,
       considerations: [
@@ -120,7 +153,10 @@ export function scoreActions(p: Perception): ActionScore[] {
     const hurtish = fall(p.healthFrac, 0.25, 0.75);
     const cover = p.coverNearby ? 1 : 0;                   // hard veto: no cover, no cover-seeking
     const notPointBlank = ramp(p.targetDistBodies, 1.5, 4);
-    const score = outmatched * hurtish * cover * notPointBlank * (hasTarget ? 1 : 0);
+    // Using cover is the most judgement-dependent thing here, so it is the most blunted by low
+    // Instinct: a stupid Kaiju stands in the open.
+    const score = judge(outmatched) * hurtish * cover * notPointBlank * p.instinct
+      * selfPreservation * (hasTarget ? 1 : 0);
     out.push({
       action: 'takeCover', score,
       considerations: [
@@ -135,7 +171,8 @@ export function scoreActions(p: Perception): ActionScore[] {
   // RANGED: hold at my weapon's sweet spot. Meaningless for a melee-range weapon.
   {
     const ideal = r * 0.7;
-    const inBand = r > 3 ? band(p.targetDistBodies, ideal, r * 0.6) : 0;
+    // Range discipline — holding at your weapon's sweet spot — is skill. Low instinct has none.
+    const inBand = r > 3 ? judge(band(p.targetDistBodies, ideal, r * 0.6)) : 0;
     const healthy = ramp(p.healthFrac, 0.15, 0.5);
     const score = inBand * healthy * (hasTarget ? 1 : 0);
     out.push({
@@ -159,7 +196,8 @@ export function scoreActions(p: Perception): ActionScore[] {
   {
     const near = 0.35 + 0.65 * fall(p.targetDistBodies, r * 0.9, r * 3.5);
     const healthy = ramp(p.healthFrac, 0.2, 0.55);
-    const notOutmatched = fall(p.powerRatioClosed, 1.2, 2.0);
+    // Knowing you would win up close is judgement too; a dim Kaiju charges regardless.
+    const notOutmatched = judge(fall(p.powerRatioClosed, 1.2, 2.0));
     const score = near * healthy * notOutmatched * (hasTarget ? 1 : 0);
     out.push({
       action: 'engage', score,

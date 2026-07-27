@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { gravityUnits } from './kaijuBody';
+import { rand } from './kaijuRandom';
 
 export type WeaponId = 'flame' | 'gun' | 'grenade' | 'melee';
 
@@ -122,11 +123,11 @@ export function fireWeapon(
       if (Math.abs(_dir.y) > 0.9) _up.set(1, 0, 0);
       _side.crossVectors(_dir, _up).normalize();
       _up.crossVectors(_dir, _side).normalize();
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * w.spread;
+      const a = rand() * Math.PI * 2;
+      const r = rand() * w.spread;
       _dir.addScaledVector(_side, Math.cos(a) * r).addScaledVector(_up, Math.sin(a) * r).normalize();
     }
-    const speed = w.speed * (0.9 + Math.random() * 0.2);
+    const speed = w.speed * (0.9 + rand() * 0.2);
     projectiles.push({
       pos: origin.clone(),
       vel: _dir.clone().multiplyScalar(speed),

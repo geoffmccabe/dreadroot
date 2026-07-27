@@ -23,6 +23,11 @@ import {
   scoreActions, chooseAction, ACTION_TREES, describeChoice,
   type ActionId, type ActionScore, type Perception,
 } from './kaijuBrain';
+import {
+  BREEDS, derive, describeBuild,
+  type KaijuBuild, type DerivedStats,
+} from './kaijuStats';
+import { seedKaiju, rand } from './kaijuRandom';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
 export const ARENA_LAT = 27.9881;
@@ -39,8 +44,15 @@ export interface Agent {
   monsterType: number;
   weapon: WeaponId;
   isPlayer: boolean;
+  /** The design this Kaiju was built from. */
+  build: KaijuBuild;
+  /** Cached numbers the simulation reads every frame. */
+  d: DerivedStats;
   body: KaijuBody;
   health: number;
+  maxHealth: number;
+  /** Set once the first blow of a fight has landed, for Ambusher. */
+  hasStruck: boolean;
   alive: boolean;
   action: ActionId | null;
   scores: ActionScore[];
@@ -73,6 +85,8 @@ const events: ArenaEvent[] = [];
 let clock = 0;
 let started = false;
 let treeErrorReported = false;
+/** Scratch for the per-tick processing order; module-level so it is not reallocated each frame. */
+const order: number[] = [];
 
 export function getAgents(): Agent[] { return agents; }
 export function getEvents(): ArenaEvent[] { return events; }
@@ -96,13 +110,20 @@ export function feetOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(a.body.dir).multiplyScalar(a.body.radius);
 }
 
-/** Set up the fight. Player at the centre, the two AI Kaiju waiting a few body-heights away. */
-export function initArena(playerType: number): THREE.Vector3 {
+/**
+ * Set up a fight from a list of BUILDS.
+ *
+ * Everything that makes two Kaiju different now comes from `kaijuStats.ts` — health, damage,
+ * armour, rate, speed, how well it plays and how readily it obeys. `initArena` keeps the old
+ * three-Kaiju demo working by handing in three breeds.
+ */
+export function initArenaWith(builds: KaijuBuild[], seed = 0x5EED, spreadBodies = 6): THREE.Vector3 {
   agents.length = 0;
   events.length = 0;
   clearProjectiles();
   clock = 0;
   treeErrorReported = false;
+  seedKaiju(seed);
 
   const d = new Float64Array(3);
   latLonToDirection(ARENA_LAT, ARENA_LON, d);
@@ -110,31 +131,25 @@ export function initArena(playerType: number): THREE.Vector3 {
   const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), centre).normalize();
   const north = new THREE.Vector3().crossVectors(centre, east).normalize();
 
-  // Three corners of a triangle about 6 body-heights across, so they start in sight but not
-  // already touching.
-  const R = ARENA_HEIGHT * 6;
-  const spec: { name: string; type: number; weapon: WeaponId; player: boolean }[] = [
-    { name: 'Fort Golem',       type: 17, weapon: 'flame',   player: true  },
-    { name: 'Mechanical Golem', type: 16, weapon: 'gun',     player: false },
-    { name: 'Elemental Golem',  type: 15, weapon: 'grenade', player: false },
-  ];
-
-  spec.forEach((s, i) => {
-    const ang = (i / spec.length) * Math.PI * 2;
+  const R = ARENA_HEIGHT * spreadBodies;
+  builds.forEach((build, i) => {
+    const ang = (i / builds.length) * Math.PI * 2;
     const off = east.clone().multiplyScalar(Math.cos(ang) * R).addScaledVector(north, Math.sin(ang) * R);
     const dir = centre.clone().add(off.multiplyScalar(1 / PLANET_RADIUS)).normalize();
     // The player's agent REUSES the shared player body rather than getting its own. That is what
     // makes the walk controller, the third-person camera and the existing HUD drive agent 0 with
     // no extra plumbing, and it means the arena reads exactly the body the player is moving.
-    const body = s.player ? playerBody : createKaijuBody();
-    // Face the middle, so they are looking at each other when it starts.
+    const body = i === 0 ? playerBody : createKaijuBody();
     const facing = centre.clone().sub(dir).normalize();
     placeBodyOnSurface(body, dir, facing);
+    const der = derive(build);
     agents.push({
-      id: `k${i}`, name: s.name, monsterType: s.type, weapon: s.weapon, isPlayer: s.player,
-      body, health: MAX_HEALTH, alive: true,
+      id: `k${i}`, name: build.name, monsterType: build.monsterType, weapon: build.weapon,
+      isPlayer: i === 0, build, d: der,
+      body, health: der.maxHealth, maxHealth: der.maxHealth, alive: true, hasStruck: false,
       action: null, scores: [], perception: null,
-      cooldown: 0, timeSinceHit: 99, timeInAction: 0, damageDealt: 0, damageTaken: 0,
+      // A small random opening delay, so two identical Kaiju do not fire in lockstep forever.
+      cooldown: rand() * 0.3, timeSinceHit: 99, timeInAction: 0, damageDealt: 0, damageTaken: 0,
       shotsFired: 0, hitsLanded: 0, killedBy: null,
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
@@ -142,8 +157,13 @@ export function initArena(playerType: number): THREE.Vector3 {
   });
 
   started = true;
-  log(`Arena set at Mount Everest. ${agents.map((a) => `${a.name} [${WEAPONS[a.weapon].name}]`).join(' vs ')}`);
+  for (const b of builds) log(describeBuild(b));
   return agents[0].body.dir.clone();
+}
+
+/** The demo fight: three breeds at Mount Everest. */
+export function initArena(_playerType?: number): THREE.Vector3 {
+  return initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1]]);
 }
 
 /** Is there ground between two points higher than the line joining them? Cheap cover test. */
@@ -180,19 +200,20 @@ function perceive(a: Agent): Perception {
   // both other Kaiju judged it terrifying and fled. A weapon that cannot reach you right now is
   // not currently a threat, so reach is folded in.
   const rawDps = (x: Agent) =>
-    WEAPONS[x.weapon].damage * WEAPONS[x.weapon].count / Math.max(0.05, WEAPONS[x.weapon].cooldown);
+    (WEAPONS[x.weapon].damage * WEAPONS[x.weapon].count * x.d.damageMul * x.d.rateMul)
+    / Math.max(0.05, WEAPONS[x.weapon].cooldown);
   const reach = (x: Agent, distBodies: number) =>
     Math.min(1, WEAPONS[x.weapon].rangeBodies / Math.max(0.5, distBodies));
   const dist = best ? bestD : 999;
-  const mine = rawDps(a) * reach(a, dist) * (a.health / MAX_HEALTH);
-  const theirs = best ? rawDps(best) * reach(best, dist) * (best.health / MAX_HEALTH) : 0;
+  const mine = rawDps(a) * reach(a, dist) * (a.health / a.maxHealth);
+  const theirs = best ? rawDps(best) * reach(best, dist) * (best.health / best.maxHealth) : 0;
   // The same comparison again, but imagining we have already closed to our own effective range.
   const myRange = WEAPONS[a.weapon].rangeBodies;
-  const mineClosed = rawDps(a) * (a.health / MAX_HEALTH);
-  const theirsClosed = best ? rawDps(best) * reach(best, myRange) * (best.health / MAX_HEALTH) : 0;
+  const mineClosed = rawDps(a) * (a.health / a.maxHealth);
+  const theirsClosed = best ? rawDps(best) * reach(best, myRange) * (best.health / best.maxHealth) : 0;
   return {
     selfId: a.id,
-    healthFrac: a.health / MAX_HEALTH,
+    healthFrac: a.health / a.maxHealth,
     targetId: best?.id ?? null,
     targetDistBodies: best ? bestD : 999,
     powerRatio: mine > 0 ? theirs / mine : 1,
@@ -202,6 +223,14 @@ function perceive(a: Agent): Perception {
     weapon: a.weapon,
     coverNearby: best ? coverBetween(me, centreOf(best, _tmp)) : false,
     timeSinceHit: Math.round(a.timeSinceHit * 10) / 10,
+    instinct: a.d.instinct01,
+    obedience: a.d.obedience01,
+    neverFlees: a.build.abilities.includes('relentless'),
+    // Terrifying enemies within a few body-lengths make this one break off sooner.
+    fearPressure: agents.reduce((n, o) => (
+      o !== a && o.alive && o.build.abilities.includes('terrifying')
+        && me.distanceTo(centreOf(o, new THREE.Vector3())) / ARENA_HEIGHT < 6 ? n + 0.6 : n
+    ), 0),
   };
 }
 
@@ -215,9 +244,13 @@ function makeBoard(a: Agent) {
   // `dt` is refreshed by the caller each step. Mistreevous binds this object at construction, so
   // it must be stable for the life of the tree rather than rebuilt per frame.
   const ctx = { dt: 1 / 60 };
-  const move = (dirWorld: THREE.Vector3, run: boolean) => {
+  const move = (dirWorld: THREE.Vector3, run: boolean, closing = false) => {
     reTangentOf(a.body, dirWorld);
-    stepBodyOf(a.body, ctx.dt, 1, 0, false, run, ARENA_HEIGHT, dirWorld);
+    // Speed scales movement by stretching the timestep, which keeps the sphere-rotation maths in
+    // stepBodyOf untouched. Sprinter adds a burst, but only while closing on an enemy — that is
+    // what makes it a short-range fighter's ability rather than just more Speed.
+    const mul = a.d.moveMul * (closing && a.build.abilities.includes('sprinter') ? 1.35 : 1);
+    stepBodyOf(a.body, ctx.dt * mul, 1, 0, false, run, ARENA_HEIGHT, dirWorld);
   };
   const faceTarget = () => {
     const t = targetOf(a);
@@ -253,7 +286,7 @@ function makeBoard(a: Agent) {
       const t = targetOf(a);
       if (!t) return State.FAILED;
       _aim.copy(centreOf(t, _tmp)).sub(centreOf(a, new THREE.Vector3()));
-      move(_aim, true);
+      move(_aim, true, true);
       return State.SUCCEEDED;
     },
     BackAway: () => {
@@ -274,7 +307,7 @@ function makeBoard(a: Agent) {
       rightVectorOf(a.body, _aim);
       _aim.multiplyScalar(a.strafeSign);
       move(_aim, false);
-      if (Math.random() < ctx.dt * 0.25) a.strafeSign *= -1;
+      if (rand() < ctx.dt * 0.25) a.strafeSign *= -1;
       return State.SUCCEEDED;
     },
     MoveToCover: () => {
@@ -290,7 +323,7 @@ function makeBoard(a: Agent) {
       return State.SUCCEEDED;
     },
     Wander: () => {
-      a.wanderTurn += (Math.random() - 0.5) * ctx.dt;
+      a.wanderTurn += (rand() - 0.5) * ctx.dt;
       _aim.copy(a.body.forward);
       _aim.applyAxisAngle(a.body.dir, a.wanderTurn * ctx.dt);
       move(_aim, false);
@@ -298,7 +331,7 @@ function makeBoard(a: Agent) {
     },
     MeleeAttack: () => {
       if (a.cooldown > 0) return State.FAILED;
-      a.cooldown = WEAPONS.melee.cooldown;
+      a.cooldown = WEAPONS.melee.cooldown / a.d.rateMul;
       a.shotsFired++;
       const hits = resolveMelee(a.id, centreOf(a, new THREE.Vector3()), a.body.forward, ARENA_HEIGHT, hitTargets());
       applyHits(hits);
@@ -308,7 +341,7 @@ function makeBoard(a: Agent) {
       if (a.cooldown > 0) return State.FAILED;
       const t = targetOf(a);
       if (!t) return State.FAILED;
-      a.cooldown = WEAPONS[a.weapon].cooldown;
+      a.cooldown = WEAPONS[a.weapon].cooldown / a.d.rateMul;
       a.shotsFired++;
       const from = centreOf(a, new THREE.Vector3());
       _aim.copy(centreOf(t, _tmp)).sub(from).normalize();
@@ -334,15 +367,50 @@ function hitTargets(): HitTarget[] {
   }));
 }
 
+/**
+ * Turn a raw weapon hit into damage actually taken.
+ *
+ * Order matters and is the conventional one: scale by the attacker's output first, then apply the
+ * defender's reduction. Abilities hook in on both sides.
+ */
+function resolveDamage(raw: number, weapon: WeaponId, src: Agent | undefined, t: Agent): number {
+  let dmg = raw;
+
+  if (src) {
+    dmg *= src.d.damageMul;
+    // Berserker: up to double damage as health runs out. The comeback ability.
+    if (src.build.abilities.includes('berserker')) {
+      dmg *= 1 + (1 - src.health / src.maxHealth);
+    }
+    // Ambusher: the opening blow of the fight lands twice as hard.
+    if (!src.hasStruck && src.build.abilities.includes('ambusher')) dmg *= 2;
+    src.hasStruck = true;
+  }
+
+  // Defender's armour, on the MOBA curve so it never reaches immunity.
+  let reduction = t.d.damageReduction;
+  // Thick Hide is ranged-only, which is what makes it a shape rather than just more armour.
+  if (t.build.abilities.includes('thickHide') && weapon !== 'melee') reduction += (1 - reduction) * 0.3;
+  // Bulwark: much tougher standing your ground, much softer once you run.
+  if (t.build.abilities.includes('bulwark')) {
+    if (t.action === 'flee') reduction *= 0.4;
+    else reduction += (1 - reduction) * 0.25;
+  }
+  if (weapon === 'flame' && t.build.abilities.includes('flameWard')) reduction += (1 - reduction) * 0.7;
+
+  return dmg * (1 - Math.min(0.95, reduction));
+}
+
 function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; damage: number }[]): void {
   for (const h of hits) {
     const t = agents.find((a) => a.id === h.targetId);
     const src = agents.find((a) => a.id === h.ownerId);
     if (!t || !t.alive) continue;
-    t.health = Math.max(0, t.health - h.damage);
-    t.damageTaken += h.damage;
+    const dmg = resolveDamage(h.damage, h.weapon, src, t);
+    t.health = Math.max(0, t.health - dmg);
+    t.damageTaken += dmg;
     t.timeSinceHit = 0;
-    if (src) { src.damageDealt += h.damage; src.hitsLanded++; }
+    if (src) { src.damageDealt += dmg; src.hitsLanded++; }
     if (t.health <= 0) {
       t.alive = false;
       t.killedBy = src?.name ?? null;
@@ -356,10 +424,32 @@ export function stepArena(dt: number, playerControlled: boolean): void {
   if (!started) return;
   clock += dt;
 
-  for (const a of agents) {
+  // PROCESS AGENTS IN A SHUFFLED ORDER.
+  //
+  // Iterating the list in order gives agent 0 a systematic advantage: with equal cooldowns
+  // everyone fires on the same tick, and whoever is handled first lands their damage first. Over a
+  // long duel that decides the fight on its own. The balance simulator found it immediately —
+  // every matchup came out 100%/0% purely on seating position, so swapping sides produced a
+  // meaningless flat 50% and made Instinct and Obedience look worthless when both in fact work.
+  //
+  // The shuffle uses the seeded stream, so runs stay reproducible.
+  order.length = 0;
+  for (let i = 0; i < agents.length; i++) order.push(i);
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  for (const idx of order) {
+    const a = agents[idx];
     if (!a.alive) continue;
     a.cooldown = Math.max(0, a.cooldown - dt);
     a.timeSinceHit += dt;
+    // Vigour regrows health, but only once nothing has hit you for a few seconds, so it decides
+    // how often a Kaiju can fight rather than how long it survives one fight.
+    if (a.timeSinceHit > 5 && a.health < a.maxHealth) {
+      a.health = Math.min(a.maxHealth, a.health + a.d.regenPerSec * dt);
+    }
 
     // The player's Kaiju is driven by the walk controller; it still perceives so the tracker can
     // show what the AI WOULD have decided, which is a useful way to sanity-check the curves.
@@ -421,12 +511,12 @@ export function playerAttack(kind: 'weapon' | 'melee'): void {
   if (!a || !a.alive || a.cooldown > 0) return;
   const from = centreOf(a, new THREE.Vector3());
   if (kind === 'melee') {
-    a.cooldown = WEAPONS.melee.cooldown;
+    a.cooldown = WEAPONS.melee.cooldown / a.d.rateMul;
     a.shotsFired++;
     applyHits(resolveMelee(a.id, from, a.body.forward, ARENA_HEIGHT, hitTargets()));
     return;
   }
-  a.cooldown = WEAPONS[a.weapon].cooldown;
+  a.cooldown = WEAPONS[a.weapon].cooldown / a.d.rateMul;
   a.shotsFired++;
   _aim.copy(a.body.forward).normalize();
   fireWeapon(a.id, a.weapon, from.addScaledVector(a.body.forward, ARENA_HEIGHT * 0.35), _aim, ARENA_HEIGHT);

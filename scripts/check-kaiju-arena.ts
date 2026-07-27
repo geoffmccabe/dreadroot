@@ -20,7 +20,7 @@
  */
 
 import {
-  initArena, stepArena, getAgents, getEvents, arenaReport, MAX_HEALTH, ARENA_HEIGHT,
+  initArena, stepArena, getAgents, getEvents, arenaReport, ARENA_HEIGHT,
 } from '../src/components/siege/globe/kaijuArena';
 import { getProjectiles } from '../src/components/siege/globe/kaijuWeapons';
 import { scoreActions, chooseAction } from '../src/components/siege/globe/kaijuBrain';
@@ -65,7 +65,7 @@ ok(new Set(agents.map((a) => a.monsterType)).size === 3, 'three DIFFERENT monste
 ok(new Set(agents.map((a) => a.weapon)).size === 3, 'three different weapons');
 ok(agents.filter((a) => a.isPlayer).length === 1, 'exactly one player agent');
 ok(agents.find((a) => a.isPlayer)?.weapon === 'flame', "player's Kaiju has the flamethrower");
-ok(agents.every((a) => a.health === MAX_HEALTH), 'all start on equal health');
+ok(agents.every((a) => a.health === a.maxHealth), 'all start at full health');
 
 // Everyone starts within sight of everyone else.
 const startDist = agents.map((a) => a.perception?.targetDistBodies ?? 999);
@@ -106,6 +106,8 @@ const dying = {
   selfId: 'x', healthFrac: 0.05, targetId: 'y', targetDistBodies: 3, powerRatio: 1.2,
   powerRatioClosed: 1.2, threatCount: 1, weaponRangeBodies: 2.2, weapon: 'flame' as const,
   coverNearby: false, timeSinceHit: 0.2,
+  // A competent, averagely-obedient Kaiju, so these tests read the brain and not a stat quirk.
+  instinct: 1, obedience: 0.5, neverFlees: false, fearPressure: 0,
 };
 const fleeChoice = chooseAction(scoreActions(dying), 'engage');
 ok(fleeChoice.action === 'flee', 'at 5% health the brain chooses flee', `chose ${fleeChoice.action}`);
