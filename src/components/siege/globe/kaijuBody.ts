@@ -387,7 +387,13 @@ export function stepBodyOf(
   }
 
   const snap = heightUnits * SNAP_FRAC;
-  if (body.radius <= gr + snap) {
+  // ONLY SNAP WHEN FALLING OR LEVEL — never while moving up.
+  //
+  // This is why jumping did nothing. The snap band is 0.18 units, and the first frame of a jump
+  // rises 0.0086 — twenty-one times less — so the body was re-grounded and its velocity zeroed on
+  // the very frame it launched, every time. It never left the ground at all; what looked like
+  // "bounces back up instantly" was the crouch offset returning.
+  if (body.radius <= gr + snap && body.vertVel <= 0) {
     body.radius = gr;
     if (body.vertVel < 0) body.vertVel = 0;
     body.onGround = true;

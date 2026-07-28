@@ -29,6 +29,9 @@ interface Tinted {
 
 const registry = new WeakMap<THREE.Object3D, Tinted[]>();
 
+/** The colour a burning Kaiju is tinted toward. */
+const EMBER = new THREE.Color(1.0, 0.34, 0.06);
+
 /**
  * Give this model its own materials and remember their resting colours.
  *
@@ -80,10 +83,27 @@ export function flashIntensity(remaining: number): number {
  * readable against snow, sea and sky alike. A little extra lightness and emissive glow ride along
  * so it is still unmistakable at a kilometre, which at this scale is normal viewing distance.
  */
-export function applyFlash(model: THREE.Object3D, intensity: number): void {
+export function applyFlash(model: THREE.Object3D, intensity: number, burning = 0): void {
   const list = registry.get(model);
   if (!list) return;
   const t = Math.max(0, Math.min(1, intensity));
+
+  // BURNING. A Kaiju on fire glows hot and flickers, so you can see at a glance which of them is
+  // still alight — the damage was landing all along, but with nothing on screen saying so it
+  // looked as though flame did nothing. Flicker is deliberately irregular: a steady glow reads as
+  // a material change, an unsteady one reads as fire.
+  if (burning > 0 && t <= 0.001) {
+    const flicker = 0.62 + 0.38 * Math.abs(Math.sin(burning * 11.3) * Math.cos(burning * 7.1));
+    // Fades out over the last second, so it stops smouldering rather than switching off.
+    const strength = Math.min(1, burning) * flicker;
+    for (const e of list) {
+      e.mat.color.copy(e.baseColour).lerp(EMBER, 0.55 * strength);
+      if (e.baseEmissive && 'emissive' in e.mat) {
+        e.mat.emissive.setRGB(0.55 * strength, 0.17 * strength, 0.02 * strength);
+      }
+    }
+    return;
+  }
 
   for (const e of list) {
     if (t <= 0.001) {

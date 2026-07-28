@@ -39,7 +39,7 @@ import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kai
 import { isKaijuWalkActive } from './KaijuWalkController';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
-import { ackFlashRemaining } from './kaijuArena';
+import { ackFlashRemaining, playerBurning } from './kaijuArena';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -170,7 +170,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       camera.getWorldDirection(view.current);
       updateKaijuFootsteps('player', b, h, camera.position, view.current, true);
       // "I heard you": three vivid pulses in one second whenever a command is understood.
-      applyFlash(model, flashIntensity(ackFlashRemaining('player')));
+      applyFlash(model, flashIntensity(ackFlashRemaining('player')), playerBurning());
       const bUp = up.current.copy(b.dir);
       const bFwd = fwd.current;
       facingVector(bFwd);
@@ -217,10 +217,15 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       // already carries `state.height / modelHeight` from the JSX prop, so writing a raw 1 here
       // shrank a 300 m Kaiju down to its model's natural size the moment it crouched — and left
       // it there, because a frame-loop write is not undone by re-rendering.
+      // THE CROUCH IS A COMPRESSION, NOT A DESCENT.
+      //
+      // It used to also translate the whole model 54 m DOWN, which is why it read as the Kaiju
+      // sinking into the ground rather than gathering itself. The group's origin is at the feet,
+      // so scaling y alone keeps the feet planted and brings the head down — which is what a
+      // squat actually is. Deepened from 12% to 30% so it is visible at all.
       const baseScale = h / Math.max(0.01, modelHeight);
-      const squash = b.crouchFrac > 0 ? 1 - b.crouchFrac * 0.12 : 1;
+      const squash = b.crouchFrac > 0 ? 1 - b.crouchFrac * 0.30 : 1;
       g.scale.set(baseScale, baseScale * squash, baseScale);
-      if (b.crouchFrac > 0) g.position.addScaledVector(bUp, -b.crouchFrac * h * 0.18);
       return;
     }
 

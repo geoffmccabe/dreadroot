@@ -47,7 +47,7 @@ export const CROWD_SIZE = 200;
  */
 const SPREAD_M = 350;
 /** Running speed, metres per second. A frightened human, not an athlete. */
-const RUN_MS = 5.5;
+const RUN_MS = 5.5;   // a running human, not an athlete
 
 const MODEL_URL = '/siege/characters/player.glb';
 
@@ -70,6 +70,13 @@ export function isCrowdOn(): boolean { return crowdOn; }
 export function subscribeCrowd(fn: () => void): () => void {
   listeners.add(fn); return () => { listeners.delete(fn); };
 }
+/** Turn the crowd on explicitly — used when a battle starts, so they are simply there. */
+export function setCrowd(on: boolean): void {
+  if (crowdOn === on) return;
+  crowdOn = on;
+  for (const l of listeners) l();
+}
+
 export function toggleCrowd(): void {
   crowdOn = !crowdOn;
   for (const l of listeners) l();
@@ -161,7 +168,9 @@ function Crowd() {
       p.timer -= dt;
       if (p.timer <= 0) {
         p.running = !p.running;
-        p.timer = p.running ? 1.5 + rand() * 4 : 0.6 + rand() * 2.5;
+        // Running more than standing: Geoff wants them following him around, so the stops are
+        // brief glances rather than long pauses.
+        p.timer = p.running ? 2.5 + rand() * 5 : 0.4 + rand() * 1.4;
         if (p.running) {
           // Mostly drift toward the monster — people gather to look at the impossible thing — with
           // a wide random spread so it never becomes a tidy convergence.
@@ -170,7 +179,8 @@ function Crowd() {
           if (_toKaiju.lengthSq() < 1e-12) _toKaiju.copy(p.fwd);
           _toKaiju.normalize();
           _axis.copy(p.dir);
-          p.fwd.copy(_toKaiju).applyAxisAngle(_axis, (rand() - 0.5) * 2.6).normalize();
+          // Narrower scatter than before, so the crowd genuinely FOLLOWS rather than dispersing.
+          p.fwd.copy(_toKaiju).applyAxisAngle(_axis, (rand() - 0.5) * 1.5).normalize();
         }
       }
 

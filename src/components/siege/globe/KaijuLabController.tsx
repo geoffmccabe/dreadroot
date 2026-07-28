@@ -32,7 +32,7 @@ import {
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
-import { KaijuCrowd, toggleCrowd } from './KaijuCrowd';
+import { KaijuCrowd, toggleCrowd, setCrowd } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
@@ -95,7 +95,10 @@ function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteNa
     }
   }
   camera.lookAt(surface.clone().addScaledVector(dir, ARENA_HEIGHT * 0.55));
-  console.log(`[kaiju] battle started at ${siteName} — 4 Kaiju`);
+  // The crowd comes with the battle. They are the ruler that makes the Kaiju's size read, so
+  // hiding them behind a key meant the scale was only visible if you knew to ask for it.
+  setCrowd(true);
+  console.log(`[kaiju] battle started at ${siteName} — 4 Kaiju + 200 people`);
 }
 
 export function KaijuLabController() {

@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import { BehaviourTree, State } from 'mistreevous';
 import {
-  createKaijuBody, stepBodyOf, placeBodyOnSurface, reTangentOf, rightVectorOf,
+  createKaijuBody, stepBodyOf, placeBodyOnSurface, reTangentOf, rightVectorOf, turnTangentOf,
   body as playerBody, type KaijuBody,
 } from './kaijuBody';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
@@ -208,6 +208,10 @@ const SWING_CONTACT = 0.58;
 const KNOCK_SPEED = 0.55;
 /** How fast knockback bleeds off (per second). */
 const KNOCK_DECAY = 3.2;
+/** Ceiling on accumulated knockback, units/sec. See the note where it is applied. */
+const KNOCK_MAX = 0.35;
+/** How fast the player's Kaiju swings round to face the crosshair, radians/sec. */
+const TURN_RATE_PLAYER = 1.6;
 
 function centreOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
@@ -579,6 +583,11 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
       reTangentOf(t.body, _kb);
       const share = Math.min(1, dmg / Math.max(1, t.maxHealth * 0.08));
       t.knock.addScaledVector(_kb, share * KNOCK_SPEED);
+      // HARD CAP. Flame lands well over a thousand tiny hits a second, and each one adding its
+      // own nudge accumulated into a constant shove — a Kaiju pushed around by an invisible
+      // force, which is exactly what Geoff was feeling. Knockback is a reaction to a blow, not a
+      // thrust that builds while you stand in a jet.
+      if (t.knock.lengthSq() > KNOCK_MAX * KNOCK_MAX) t.knock.setLength(KNOCK_MAX);
       // Heavy blows also interrupt: a staggered Kaiju cannot act for a moment, which is what
       // makes a melee exchange read as a real trade rather than two loops running side by side.
       if (share > 0.5 && h.weapon === 'melee') t.stagger = Math.max(t.stagger, 0.7);
@@ -831,9 +840,32 @@ export function stepArena(dt: number, playerControlled: boolean): void {
  * bookkeeping are the same code the AI uses. The player gets no special case beyond who decides
  * when to pull the trigger.
  */
-export function playerAttack(kind: 'weapon' | 'melee'): void {
+export function playerAttack(kind: 'weapon' | 'melee', aimWorld?: THREE.Vector3, dt = 1 / 60): void {
   const a = agents.find((x) => x.isPlayer);
-  if (!a || !a.alive || a.cooldown > 0) return;
+  if (!a || !a.alive) return;
+
+  // AIM WITH THE CROSSHAIR, BUT TURN FIRST.
+  //
+  // Geoff: "have it shoot the fire in the direction I'm pointing with the crosshairs. But he has
+  // to rotate in that direction first, then the fire can shoot out."
+  //
+  // So the aim direction steers the BODY at its normal turn rate, and the weapon only fires once
+  // the body has actually come round to face it. A 300 m creature does not snap its torso to a
+  // mouse position, and firing before it has turned would put the jet out of its shoulder.
+  if (aimWorld) {
+    _aim.copy(aimWorld);
+    reTangentOf(a.body, _aim);
+    const cos = Math.max(-1, Math.min(1, a.body.forward.dot(_aim)));
+    if (cos < 0.999) {
+      rightVectorOf(a.body, _tmp);
+      const sign = _aim.dot(_tmp) >= 0 ? -1 : 1;
+      turnTangentOf(a.body, a.body.forward, sign * Math.min(Math.acos(cos), TURN_RATE_PLAYER * dt));
+    }
+    // Not lined up yet: keep turning, hold fire.
+    if (a.body.forward.dot(_aim) < 0.985) return;
+  }
+
+  if (a.cooldown > 0) return;
   const from = centreOf(a, new THREE.Vector3());
   if (kind === 'melee') {
     a.cooldown = WEAPONS.melee.cooldown / a.d.rateMul;
@@ -898,6 +930,11 @@ export function orderGoTo(dir: THREE.Vector3, agentId?: string): void {
     type: 'goTo', targetId: null, destination: dir.clone().normalize(),
     said: 'go there', age: 0, standing: false,
   });
+}
+
+/** Seconds the player's Kaiju has left burning, so its own model can glow too. */
+export function playerBurning(): number {
+  return agents.find((x) => x.isPlayer)?.burning ?? 0;
 }
 
 /** Seconds left in a Kaiju's acknowledgement flash, for the renderers. */

@@ -137,7 +137,7 @@ function AgentAvatar({ agent }: { agent: Agent }) {
       mixer.timeScale = clipLen / total;
       camera.getWorldDirection(look.current);
       updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, false);
-      applyFlash(model, flashIntensity(agent.ackFlash));
+      applyFlash(model, flashIntensity(agent.ackFlash), agent.burning);
       return;
     }
 
@@ -157,7 +157,7 @@ function AgentAvatar({ agent }: { agent: Agent }) {
       scream(g.position, camera.position, look.current);
     }
     updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true);
-    applyFlash(model, flashIntensity(agent.ackFlash));
+    applyFlash(model, flashIntensity(agent.ackFlash), agent.burning);
   });
 
   useEffect(() => () => stopKaijuFootsteps(agent.id), [agent.id]);
@@ -278,6 +278,8 @@ export function KaijuArenaScene({ playerControlled }: { playerControlled: boolea
   useSyncExternalStore(subscribeArena, arenaVersion, arenaVersion);
   const agents = getAgents();
   const firing = useRef(false);
+  const aimDir = useRef(new THREE.Vector3());
+  const camera = useThree((s) => s.camera);
 
   // Left mouse held = fire your weapon (the flamethrower, which is continuous, so holding is the
   // natural way to use it). R = swing. Both go through the same cooldowns and hit tests the AI
@@ -303,7 +305,11 @@ export function KaijuArenaScene({ playerControlled }: { playerControlled: boolea
   useFrame((_, rawDt) => {
     if (!arenaStarted()) return;
     // Clamp: a long frame (tab restored, a stall) must not teleport everybody through each other.
-    if (firing.current) playerAttack('weapon');
+    if (firing.current) {
+      // The crosshair direction, flattened onto the ground plane the Kaiju stands on.
+      camera.getWorldDirection(aimDir.current);
+      playerAttack('weapon', aimDir.current, Math.min(rawDt, 0.05));
+    }
     stepArena(Math.min(rawDt, 0.05), playerControlled);
   });
 
