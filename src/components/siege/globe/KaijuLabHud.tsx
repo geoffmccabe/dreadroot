@@ -6,10 +6,11 @@
 //
 // Uses the shared debug-panel CSS variables so it matches the engine's other readouts.
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
+import { terrainDiag } from './GlobeTerrain';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import { kaijuDiag } from './kaijuDiag';
@@ -44,6 +45,14 @@ export function KaijuLabHud() {
   const walking = useSyncExternalStore(subscribeKaijuWalk, isKaijuWalkActive, isKaijuWalkActive);
   const lm = useSyncExternalStore(subscribeLandmark, currentLandmark, currentLandmark);
   const { pos, handleProps } = useDraggablePanel({ left: rightEdge(268), top: 90 });
+  // Repaint a few times a second: the terrain diagnostics below are live values, and this panel
+  // otherwise only redraws when the lab state changes — which would show them permanently stale,
+  // i.e. exactly as useless as not having them.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 300);
+    return () => clearInterval(id);
+  }, []);
   const tiles = earthTileStats();
 
   const row = (label: string, value: string) => (
@@ -102,6 +111,12 @@ export function KaijuLabHud() {
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
       {row('Tiles', `${tiles.cached} cached, ${tiles.inFlight} loading`)}
+      {/* Terrain diagnostics — these three lines identify WHY the planet is missing, if it is:
+          patches 0 + wanted 0 = the LOD tree chose nothing; patches 0 + wanted > 0 = it wants them
+          but they will not build; patches > 0 = the geometry is there and it is a camera problem. */}
+      {row('Patches', `${terrainDiag.patches} drawn / ${terrainDiag.wanted} wanted`)}
+      {row('Deepest', `level ${terrainDiag.deepest}`)}
+      {row('Altitude', `${Math.round(terrainDiag.altitudeUnits)} u (near ${Math.round(terrainDiag.near)}, far ${Math.round(terrainDiag.far)})`)}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}

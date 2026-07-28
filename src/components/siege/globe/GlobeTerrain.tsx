@@ -91,6 +91,18 @@ const MAX_RENDER_DEPTH = 12;
 /** Skirt depth as a fraction of patch arc: hides cracks where LOD levels meet. */
 const SKIRT_FRAC = 0.03;
 
+/**
+ * Live terrain diagnostics, so "the planet has disappeared" can be answered by LOOKING rather than
+ * by guessing. Three failed guesses at this bug is three too many, and each of the plausible
+ * causes leaves a different fingerprint here:
+ *   patches 0, wanted 0   -> the tree evaluated to nothing (LOD/traversal)
+ *   patches 0, wanted > 0 -> it wants them but they will not BUILD (tile data)
+ *   patches > 0           -> geometry exists and the problem is the CAMERA (near/far, clipping)
+ */
+export const terrainDiag = {
+  patches: 0, wanted: 0, deepest: 0, altitudeUnits: 0, near: 0, far: 0, evals: 0,
+};
+
 interface NodeId { face: number; depth: number; x: number; y: number }
 const idKey = (n: NodeId) => `${n.face}:${n.depth}:${n.x}:${n.y}`;
 
@@ -424,6 +436,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   /** When each superseded patch first became stale, so it can be retired on a deadline. */
   const staleSince = useRef(new Map<string, number>());
   const readyFired = useRef(false);
+  const warnedEmpty = useRef(false);
 
   const material = useMemo(
     // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
@@ -556,6 +569,26 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     splitNodes.current = nowSplit;
     const wanted = new Set(next.map(idKey));
     leafKeys.current = wanted;
+
+    // Say so LOUDLY when the tree wants patches and none exist. This has been reported twice and
+    // guessed at three times; a line in the console beats another round of speculation.
+    if (terrainDiag.evals > 8 && meshes.current.size === 0 && next.length > 0 && !warnedEmpty.current) {
+      warnedEmpty.current = true;
+      console.warn(
+        `[earth] NO PATCHES BUILT after ${terrainDiag.evals} evaluations: ${next.length} wanted, `
+        + `altitude ${Math.round(cam.length() - PLANET_RADIUS)} u, `
+        + `deepest level ${next.reduce((m, n) => Math.max(m, n.depth), 0)}. `
+        + 'The tree is choosing nodes but their geometry is not being produced.',
+      );
+    }
+    terrainDiag.evals++;
+    terrainDiag.wanted = wanted.size;
+    terrainDiag.patches = meshes.current.size;
+    terrainDiag.deepest = next.reduce((m, n) => Math.max(m, n.depth), 0);
+    terrainDiag.altitudeUnits = cam.length() - PLANET_RADIUS;
+    const pc = camera as THREE.PerspectiveCamera;
+    terrainDiag.near = pc.near ?? 0;
+    terrainDiag.far = pc.far ?? 0;
 
     // Retire meshes that are no longer leaves, BUT ONLY once whatever replaces them exists.
     //
