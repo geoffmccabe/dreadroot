@@ -22,6 +22,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
+import { footOffset } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
@@ -59,18 +60,6 @@ function animRate(b: KaijuBody, h: number, naturalMetres: number, running: boole
   return sizeMul * stride;
 }
 
-/**
- * How far the model's origin sits ABOVE its feet, in the model's own units.
- *
- * A body radius is the position of the FEET, and the renderer puts the model's origin there. That
- * is only correct if the artist placed the origin at the feet — and plenty of models have it at the
- * hips or the centre of the bounding box instead, which buries the lower half of the creature in
- * the ground. Measuring it removes the assumption.
- */
-function footOffset(model: THREE.Object3D): number {
-  const box = new THREE.Box3().setFromObject(model);
-  return Number.isFinite(box.min.y) ? -box.min.y : 0;
-}
 
 function AgentAvatar({ agent }: { agent: Agent }) {
   const camera = useThree((s) => s.camera);

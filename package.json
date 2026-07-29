@@ -23,7 +23,8 @@
     "check:kaiju-balance": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-balance.ts",
     "check:kaiju-orders": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-orders.ts",
     "check:globe-lod": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-lod.ts",
-    "check:globe-transect": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-transect.ts"
+    "check:globe-transect": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-transect.ts",
+    "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

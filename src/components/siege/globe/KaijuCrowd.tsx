@@ -202,12 +202,31 @@ function Crowd() {
     const b = bakeCrowd(scene, clip, `${cfg?.url ?? MODEL_URL}|${clip?.name ?? ''}`);
     if (b) {
       console.log(`[crowd] baked ${b.frames} frames x ${b.vertexCount} verts `
-        + `(${((b.vertexCount * b.frames * 3 * 4) / 1048576).toFixed(1)} MB) from "${clip?.name}"`);
+        + `(${((b.vertexCount * b.frames * 4 * 4) / 1048576).toFixed(1)} MB) from "${clip?.name}"`);
     } else {
       console.warn('[crowd] could not bake — no skinned mesh or no clip; crowd will not render');
     }
     return b;
   }, [scene, animations, cfg]);
+
+  /**
+   * How far the baked model's origin sits above its own feet, in baked units.
+   *
+   * The crowd has the same problem the Kaiju had: an instance is placed at a GROUND position, so if
+   * the model's origin is at its hips the whole crowd is knee-deep in rock. Read straight off the
+   * baked frame-0 positions — no scene graph is involved, so the world-space trap that made the
+   * Kaiju's version worse than the bug cannot happen here.
+   */
+  const bakedFoot = useMemo(() => {
+    if (!baked) return 0;
+    let minY = Infinity;
+    const d = baked.texture.image.data as Float32Array;
+    for (let i = 0; i < baked.vertexCount; i++) {
+      const y = d[i * 4 + 1];
+      if (y < minY) minY = y;
+    }
+    return Number.isFinite(minY) ? -minY : 0;
+  }, [baked]);
 
   /** Reuse the source model's texture so the figures keep their own colours. */
   const material = useMemo(() => {
@@ -300,7 +319,8 @@ function Crowd() {
       const radius = metres != null
         ? PLANET_RADIUS + metres / METRES_PER_UNIT
         : playerBody.radius;
-      dummy.position.copy(p.dir).multiplyScalar(radius);
+      // Stand ON the ground: lift by the model's own foot offset, at the scale it is drawn.
+      dummy.position.copy(p.dir).multiplyScalar(radius + bakedFoot * scale);
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);

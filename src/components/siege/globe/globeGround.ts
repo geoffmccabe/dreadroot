@@ -51,7 +51,22 @@ export function sampleGlobeElevation(x: number, y: number, z: number): number | 
  * would leave a Kaiju hovering or buried. `spacingUnits` matches the finest render depth so the
  * ground agrees with the most detailed mesh the player can be standing on.
  */
-export function sampleGlobeSurface(x: number, y: number, z: number, spacingUnits = 3): number | null {
+/**
+ * Elevation INCLUDING procedural detail — the surface you can actually see and stand on.
+ *
+ * The default spacing must match the FINEST spacing the renderer uses, or the collision surface and
+ * the drawn surface are different heights at the same point. It was 3 units against the renderer's
+ * 0.382 at full detail: detailMetres is band-limited by the spacing it is given, so the sampler was
+ * blind to about 37 m of relief that was being drawn. A creature standing at the collision height
+ * then appears sunk into the visible mesh, which is exactly the reported symptom.
+ *
+ * 0.382 = quarter-circumference / 2^12 / 64, i.e. one render patch's vertex spacing at depth 12.
+ */
+export const FINEST_RENDER_SPACING = 0.382;
+
+export function sampleGlobeSurface(
+  x: number, y: number, z: number, spacingUnits = FINEST_RENDER_SPACING,
+): number | null {
   const base = sampleGlobeElevation(x, y, z);
   if (base == null) return null;
   return base + detailMetres(x, y, z, PLANET_RADIUS, base, spacingUnits);
