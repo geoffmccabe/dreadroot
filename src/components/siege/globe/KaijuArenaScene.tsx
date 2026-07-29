@@ -59,6 +59,19 @@ function animRate(b: KaijuBody, h: number, naturalMetres: number, running: boole
   return sizeMul * stride;
 }
 
+/**
+ * How far the model's origin sits ABOVE its feet, in the model's own units.
+ *
+ * A body radius is the position of the FEET, and the renderer puts the model's origin there. That
+ * is only correct if the artist placed the origin at the feet — and plenty of models have it at the
+ * hips or the centre of the bounding box instead, which buries the lower half of the creature in
+ * the ground. Measuring it removes the assumption.
+ */
+function footOffset(model: THREE.Object3D): number {
+  const box = new THREE.Box3().setFromObject(model);
+  return Number.isFinite(box.min.y) ? -box.min.y : 0;
+}
+
 function AgentAvatar({ agent }: { agent: Agent }) {
   const camera = useThree((s) => s.camera);
   const look = useRef(new THREE.Vector3());
@@ -106,13 +119,21 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const right = useRef(new THREE.Vector3());
   const trueF = useRef(new THREE.Vector3());
   const basis = useRef(new THREE.Matrix4());
+  const footLift = useRef(0);
+  useEffect(() => {
+    const scale = ARENA_HEIGHT / Math.max(0.01, modelHeight);
+    footLift.current = footOffset(model) * scale;
+  }, [model, modelHeight]);
 
-  useFrame(() => {
+  useFrame((_, rawDt) => {
+    const dt = Math.min(rawDt, 0.05);
     const g = group.current;
     if (!g) return;
     const b = agent.body;
 
-    g.position.copy(b.dir).multiplyScalar(b.radius);
+    // Lift by however far the model's origin sits above its own feet, so it stands ON the ground
+    // rather than half inside it.
+    g.position.copy(b.dir).multiplyScalar(b.radius + footLift.current);
     // FACING. The model's local +Z is its front — the same convention MonsterEnemy uses when it
     // does `rotation.y = atan2(dx, dz)`. So the basis must map local +Z to `forward`, local +Y to
     // the local up, and local +X to up x forward.
@@ -156,7 +177,7 @@ function AgentAvatar({ agent }: { agent: Agent }) {
       agent.screamed = false;
       scream(g.position, camera.position, look.current);
     }
-    updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true);
+    updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true, dt);
     applyFlash(model, flashIntensity(agent.ackFlash), agent.burning);
   });
 

@@ -104,9 +104,15 @@ function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName
   // If the tiles under the viewpoint have not streamed in, sampleGlobeSurface returns null and
   // falling back to 0 would bury the camera a kilometre inside the Grand Canyon's rim. Use the
   // Kaiju's own ground height in that case — it is the same plateau.
+  // GROUND, NOT SEA LEVEL. Falling back to 0 here buried the camera 2.1 km inside the canyon rim.
+  // The Kaiju's own radius was set moments ago by dropKaijuAt and is always valid, so it is the
+  // right fallback: same plateau, same height.
   const kGroundEarly = sampleGlobeSurface(kaijuDir.x, kaijuDir.y, kaijuDir.z);
-  const groundM = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? kGroundEarly ?? 0;
-  const eye = PLANET_RADIUS + groundM / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT;
+  const camGround = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? kGroundEarly;
+  const eye = camGround != null
+    ? PLANET_RADIUS + camGround / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT
+    : playerBody.radius + 1.8 / METRES_PER_UNIT;
+  const groundM = camGround ?? 0;
   camera.position.copy(camDir).multiplyScalar(eye);
 
   // Look at the Kaiju's middle, not its feet, so it fills the frame properly.

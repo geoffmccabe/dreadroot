@@ -290,8 +290,17 @@ function Crowd() {
       phase[i] = p.phase;
       moving[i] = p.running ? 1 : 0;
 
+      // NEVER FALL BACK TO SEA LEVEL.
+      //
+      // A tile that has not streamed yet makes sampleGlobeSurface return null, and `?? 0` then
+      // means sea level — which on the Grand Canyon rim is 2.1 km UNDERGROUND. That is why the
+      // crowd was invisible: they were all buried. The Kaiju's own radius is always valid, because
+      // it was just placed, and it is the same ground these people are standing on.
       const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
-      dummy.position.copy(p.dir).multiplyScalar(PLANET_RADIUS + (metres ?? 0) / METRES_PER_UNIT);
+      const radius = metres != null
+        ? PLANET_RADIUS + metres / METRES_PER_UNIT
+        : playerBody.radius;
+      dummy.position.copy(p.dir).multiplyScalar(radius);
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);

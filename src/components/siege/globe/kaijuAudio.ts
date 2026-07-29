@@ -75,6 +75,30 @@ const _d = new THREE.Vector3();
  * seconds to arrive must be placed where the creature was when it made the noise, not where it has
  * since walked to. Reading the emitter's live position at playback time is the classic bug here.
  */
+/**
+ * One shared output stage with a compressor, so overlapping sounds cannot clip.
+ *
+ * Everything used to connect straight to the destination, and Web Audio simply sums — so a handful
+ * of overlapping 0.85-gain stomps exceeded full scale and clipped, which is a harsh crackle that
+ * reads as something being badly wrong rather than as loudness.
+ */
+let busGain: GainNode | null = null;
+function bus(ctx: AudioContext): GainNode {
+  if (busGain) return busGain;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -10;
+  comp.knee.value = 6;
+  comp.ratio.value = 8;
+  comp.attack.value = 0.004;
+  comp.release.value = 0.18;
+  const g = ctx.createGain();
+  g.gain.value = 0.9;
+  g.connect(comp);
+  comp.connect(ctx.destination);
+  busGain = g;
+  return g;
+}
+
 export async function playKaijuSound(
   url: string,
   worldPos: THREE.Vector3,
@@ -131,7 +155,7 @@ export async function playKaijuSound(
     l.setOrientation(listenerDir.x, listenerDir.y, listenerDir.z, 0, 1, 0);
   }
 
-  src.connect(lp); lp.connect(gain); gain.connect(panner); panner.connect(ctx.destination);
+  src.connect(lp); lp.connect(gain); gain.connect(panner); panner.connect(bus(ctx));
   // The whole point: start it LATER, by however long the sound takes to cross the distance.
   src.start(ctx.currentTime + delay);
   src.stop(ctx.currentTime + delay + buffer.duration / Math.max(0.05, src.playbackRate.value) + 0.1);
@@ -157,17 +181,23 @@ export function updateKaijuFootsteps(
   listenerPos: THREE.Vector3,
   listenerDir: THREE.Vector3,
   active: boolean,
+  dt = 1 / 60,
 ): void {
-  const prev = _prev.get(id);
   _pos.copy(body.dir).multiplyScalar(body.radius);
-  if (!prev) { _prev.set(id, _pos.clone()); strideAccum.set(id, 0); return; }
 
-  const moved = _pos.distanceTo(prev);
-  prev.copy(_pos);
+  // MEASURE THE WALK, NOT THE POSITION CHANGE.
+  //
+  // This used to accumulate the distance between frames, which counts EVERY reason a body moved —
+  // including the separation pass shoving four Kaiju apart three times a tick, and knockback. In a
+  // brawl that inflated the stride distance enormously and machine-gunned the footstep sample into
+  // itself, which is what was clipping the speakers and reading as a roar.
+  //
+  // body.speed is the walking speed the locomotion actually produced, and nothing else feeds it.
+  const moved = body.speed * dt;
 
   // Airborne, submerged, standing still, or switched off: no footfall, and no accumulation either
   // — a Kaiju should not bank up steps mid-jump and fire them all on landing.
-  if (!active || !body.onGround || body.submerged || moved < 1e-5) return;
+  if (!active || !body.onGround || body.submerged || moved < 1e-6) return;
 
   const stride = heightUnits * STRIDE_FRAC;
   let acc = (strideAccum.get(id) ?? 0) + moved;
@@ -176,7 +206,7 @@ export function updateKaijuFootsteps(
     // ±10% on each, independently rolled, so no two steps are identical.
     const vary = () => 1 + (rand() * 2 - 1) * VARY;
     void playKaijuSound(FOOTSTEP_URL, _pos, listenerPos, listenerDir, {
-      volume: 0.85 * vary(),
+      volume: 0.55 * vary(),
       rate: vary(),
       refUnits: 10,
       maxUnits: 300,

@@ -81,6 +81,19 @@ export function GlobeKaiju({ state }: { state: KaijuLabState }) {
   return <KaijuAvatar url={cfg.url} state={state} modelHeight={cfg.modelHeight ?? 2} />;
 }
 
+/**
+ * How far the model's origin sits ABOVE its feet, in the model's own units.
+ *
+ * A body radius is the position of the FEET, and the renderer puts the model's origin there. That
+ * is only correct if the artist placed the origin at the feet — and plenty of models have it at the
+ * hips or the centre of the bounding box instead, which buries the lower half of the creature in
+ * the ground. Measuring it removes the assumption.
+ */
+function footOffset(model: THREE.Object3D): number {
+  const box = new THREE.Box3().setFromObject(model);
+  return Number.isFinite(box.min.y) ? -box.min.y : 0;
+}
+
 function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLabState; modelHeight: number }) {
   const camera = useThree((s) => s.camera);
   const group = useRef<THREE.Group>(null);
@@ -123,6 +136,10 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const target = useRef(new THREE.Vector3());
   const quat = useRef(new THREE.Quaternion());
   const basis = useRef(new THREE.Matrix4());
+  const footLift = useRef(0);
+  useEffect(() => {
+    footLift.current = footOffset(model) * (state.height / Math.max(0.01, modelHeight));
+  }, [model, modelHeight, state.height]);
 
   /** Resolve a gait to an actual clip on THIS model, case-insensitively. */
   const clipFor = (g: Gait): string | null => {
@@ -163,12 +180,13 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     // camera. Everything below (gait, animation rate, scale) is shared between the two modes.
     if (isKaijuWalkActive()) {
       const b = kaijuBodyState;
-      g.position.copy(b.dir).multiplyScalar(b.radius);
+      // Stand ON the ground: lift by however far this model's origin is above its own feet.
+      g.position.copy(b.dir).multiplyScalar(b.radius + footLift.current);
 
       // Footsteps. Only while walking: in fly mode the Kaiju is carried by the camera rather than
       // simulated, so it has no real gait to match and stomping would be a lie.
       camera.getWorldDirection(view.current);
-      updateKaijuFootsteps('player', b, h, camera.position, view.current, true);
+      updateKaijuFootsteps('player', b, h, camera.position, view.current, true, dt);
       // "I heard you": three vivid pulses in one second whenever a command is understood.
       applyFlash(model, flashIntensity(ackFlashRemaining('player')), playerBurning());
       const bUp = up.current.copy(b.dir);
