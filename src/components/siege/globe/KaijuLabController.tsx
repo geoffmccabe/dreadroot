@@ -96,12 +96,16 @@ function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName
 
   // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding this up to "a few units" would
   // put the camera where a ten-storey building's roof is and quietly destroy the comparison.
-  const groundM = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? 0;
+  // If the tiles under the viewpoint have not streamed in, sampleGlobeSurface returns null and
+  // falling back to 0 would bury the camera a kilometre inside the Grand Canyon's rim. Use the
+  // Kaiju's own ground height in that case — it is the same plateau.
+  const kGroundEarly = sampleGlobeSurface(kaijuDir.x, kaijuDir.y, kaijuDir.z);
+  const groundM = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? kGroundEarly ?? 0;
   const eye = PLANET_RADIUS + groundM / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT;
   camera.position.copy(camDir).multiplyScalar(eye);
 
   // Look at the Kaiju's middle, not its feet, so it fills the frame properly.
-  const kGround = sampleGlobeSurface(kaijuDir.x, kaijuDir.y, kaijuDir.z) ?? 0;
+  const kGround = kGroundEarly ?? groundM;
   camera.lookAt(kaijuDir.clone().multiplyScalar(
     PLANET_RADIUS + kGround / METRES_PER_UNIT + ARENA_HEIGHT * 0.5,
   ));

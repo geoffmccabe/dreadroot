@@ -253,9 +253,11 @@ export function KaijuWalkController() {
       const look = new THREE.Vector3();
       seedLookFrom.getWorldDirection(look);
       const up = seedLookFrom.position.clone().normalize();
-      orbitPitch.current = -Math.asin(Math.max(-1, Math.min(1, look.dot(up))));
-      look.addScaledVector(up, -look.dot(up));
-      if (look.lengthSq() > 1e-12) { camFwd.current.copy(look).normalize(); haveFwd.current = true; }
+      if (up.lengthSq() > 1e-12 && Number.isFinite(look.x)) {
+        orbitPitch.current = -Math.asin(Math.max(-1, Math.min(1, look.dot(up))));
+        look.addScaledVector(up, -look.dot(up));
+        if (look.lengthSq() > 1e-12) { camFwd.current.copy(look).normalize(); haveFwd.current = true; }
+      }
       seedLookFrom = null;
     }
     if (cameraFree) {
@@ -264,12 +266,21 @@ export function KaijuWalkController() {
       // scale view is being able to look from the people up to the Kaiju and back.
       const up = camera.position.clone().normalize();
       const fwd = camFwd.current.clone();
-      fwd.addScaledVector(up, -fwd.dot(up)).normalize();
-      // Pitch about the camera's own right axis, so up is always the local surface up.
+      fwd.addScaledVector(up, -fwd.dot(up));
+      // GUARD. A zero-length forward normalises to (0,0,0), lookAt then targets the camera's own
+      // position, and the resulting quaternion is NaN — which does not merely look wrong, it
+      // blanks the entire scene. That is very likely why the scale view showed nothing at all.
+      if (fwd.lengthSq() < 1e-12) {
+        fwd.crossVectors(up, new THREE.Vector3(0, 1, 0));
+        if (fwd.lengthSq() < 1e-12) fwd.crossVectors(up, new THREE.Vector3(1, 0, 0));
+      }
+      fwd.normalize();
       const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
-      fwd.applyAxisAngle(right, -orbitPitch.current);
-      camera.up.copy(up);
-      camera.lookAt(camera.position.clone().add(fwd));
+      if (Number.isFinite(right.x)) fwd.applyAxisAngle(right, -orbitPitch.current);
+      if (Number.isFinite(fwd.x) && fwd.lengthSq() > 1e-12) {
+        camera.up.copy(up);
+        camera.lookAt(camera.position.clone().add(fwd));
+      }
     } else {
       camera.position.copy(camPos.current);
     }
