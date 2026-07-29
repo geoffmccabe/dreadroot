@@ -65,6 +65,14 @@ interface Person {
 }
 
 let crowdOn = false;
+/**
+ * Bumped whenever the crowd should re-form somewhere new.
+ *
+ * Without this, `setCrowd(true)` on an already-visible crowd did nothing, so jumping from Everest
+ * to the Grand Canyon left 200 people standing on the wrong mountain — they spawn around the Kaiju
+ * ONCE, when the component mounts. The epoch is a React key, so a new site rebuilds them.
+ */
+let crowdEpoch = 0;
 const listeners = new Set<() => void>();
 export function isCrowdOn(): boolean { return crowdOn; }
 export function subscribeCrowd(fn: () => void): () => void {
@@ -72,13 +80,16 @@ export function subscribeCrowd(fn: () => void): () => void {
 }
 /** Turn the crowd on explicitly — used when a battle starts, so they are simply there. */
 export function setCrowd(on: boolean): void {
-  if (crowdOn === on) return;
+  // Always re-form on a fresh request, even if already visible — that is the point.
+  if (on) crowdEpoch++;
+  if (crowdOn === on) { for (const l of listeners) l(); return; }
   crowdOn = on;
   for (const l of listeners) l();
 }
 
 export function toggleCrowd(): void {
   crowdOn = !crowdOn;
+  if (crowdOn) crowdEpoch++;
   for (const l of listeners) l();
   console.log(`[kaiju] crowd ${crowdOn ? 'ON' : 'OFF'} — ${CROWD_SIZE} people at 1.8 m`);
 }
@@ -87,7 +98,8 @@ export function KaijuCrowd() {
   const [, force] = useState(0);
   useEffect(() => subscribeCrowd(() => force((n) => n + 1)), []);
   if (!crowdOn) return null;
-  return <Crowd />;
+  // Keyed by epoch: a new battle site rebuilds the crowd around the Kaiju's new position.
+  return <Crowd key={crowdEpoch} />;
 }
 
 function Crowd() {

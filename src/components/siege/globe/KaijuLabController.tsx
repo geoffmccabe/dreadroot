@@ -152,6 +152,8 @@ export function KaijuLabController() {
             .addScaledVector(face, -h * 4.2);
           camera.lookAt(surface.clone().addScaledVector(up, h * 0.55));
           console.log(`[earth] -> ${lm.n} (${lm.lat}, ${lm.lon}) — dropping in`);
+          // The crowd comes with you. Landing somewhere is exactly when the scale needs reading.
+          setCrowd(true);
           // ARRIVING AT EVEREST STARTS THE FIGHT.
           //
           // This is what was asked for in the first place: drop in at Everest and the other Kaiju
@@ -212,6 +214,7 @@ export function KaijuLabController() {
           // ground contact by design, so moving the mouse slid it through the air. "Land" should
           // mean you are now standing on the planet, which is walk mode.
           enterWalkMode(camera);
+          setCrowd(true);
           break;
         }
         default: return;
