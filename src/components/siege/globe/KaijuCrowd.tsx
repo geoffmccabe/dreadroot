@@ -128,10 +128,20 @@ function Crowd() {
    * swapping the model later cannot silently change how tall everyone is.
    */
   const geometry = useMemo(() => {
+    // TAKE THE BIGGEST MESH, not the first one.
+    //
+    // A character model contains several meshes — body, hair, eyes, kit — and traverse order is
+    // whatever the exporter wrote. Grabbing the first one and stretching it to a person's height
+    // could produce 200 copies of somebody's eyelashes, which at this size reads as unexplained
+    // specks rather than as people. That is almost certainly Geoff's "sparkles". The body is
+    // reliably the mesh with the most vertices.
     let found: THREE.BufferGeometry | null = null;
+    let bestVerts = 0;
     scene.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!found && m.isMesh && m.geometry) found = m.geometry.clone() as THREE.BufferGeometry;
+      if (!m.isMesh || !m.geometry) return;
+      const n = m.geometry.attributes.position?.count ?? 0;
+      if (n > bestVerts) { bestVerts = n; found = m.geometry.clone() as THREE.BufferGeometry; }
     });
     const geo = found ?? new THREE.CapsuleGeometry(0.25, 1.2, 4, 8);
     geo.computeBoundingBox();
@@ -200,9 +210,10 @@ function Crowd() {
     crowdDiag.on = true;
     crowdDiag.spawned = people.length;
     crowdDiag.layout = spawnHint ? 'corridor' : 'ring';
-    crowdDiag.modelOk = geometry.attributes.position?.count > 0;
-    console.log(`[crowd] ${people.length} people, ${crowdDiag.layout}, `
-      + `${geometry.attributes.position?.count ?? 0} verts per person`);
+    const verts = geometry.attributes.position?.count ?? 0;
+    crowdDiag.modelOk = verts > 200;   // a body, not an eyelash
+    console.log(`[crowd] ${people.length} people, ${crowdDiag.layout} layout, ${verts} verts each`
+      + `${verts <= 200 ? '  <-- SUSPICIOUSLY FEW: probably not the body mesh' : ''}`);
     return () => { crowdDiag.on = false; crowdDiag.spawned = 0; };
   }, [people, geometry]);
 
@@ -263,7 +274,10 @@ function Crowd() {
 
       // Procedural motion, which at this apparent size IS the animation: a running bob and a
       // forward lean, still and upright when stopped.
-      const bob = p.running ? Math.abs(Math.sin(clock.current * 9 + p.phase)) * PERSON_UNITS * 0.10 : 0;
+      // 2.4 rad/s, not 9. A running human's stride is about two steps a second; 9 rad/s is nearly
+      // three times that and at three pixels tall reads as a flicker rather than as running —
+      // which is the other half of why they looked like sparkles.
+      const bob = p.running ? Math.abs(Math.sin(clock.current * 2.4 + p.phase)) * PERSON_UNITS * 0.10 : 0;
       const lean = p.running ? 0.22 : 0;
 
       _up.copy(p.dir);

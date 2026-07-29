@@ -16,7 +16,11 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { isTypingTarget } from '@/lib/isTypingTarget';
-import { PLANET_RADIUS } from './cubeSphere';
+import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
+import { sampleGlobeSurface } from './globeGround';
+
+/** Eye height for the parked camera, in metres. A person, not a Kaiju. */
+const EYE_METRES = 1.8;
 import {
   body, stepBody, placeOnSurface, groundRadius, walkSpeed, runSpeed, reTangent, turnTangent,
 } from './kaijuBody';
@@ -160,14 +164,16 @@ export function KaijuWalkController() {
     const wheel = (e: WheelEvent) => {
       if (isTypingTarget(e.target)) return;
       if (walkActive && cameraFree) {
-        // Parked camera (the scale view): dolly along the look direction. Previously the wheel
-        // adjusted a chase-camera distance that nothing was reading, so zoom silently did nothing
-        // here while working elsewhere — which is exactly the inconsistency Geoff hit.
+        // Parked camera: dolly toward or away from the SUBJECT, by a fraction of how far away it
+        // already is. My first attempt scaled the step by altitude above SEA LEVEL, which on the
+        // canyon rim is 2,100 m — giving an 8.4 km step against a subject 500 m away, a 17x
+        // overshoot on every notch. That is why zoom felt broken and why the camera kept ending up
+        // somewhere distant and underground.
         const look = new THREE.Vector3();
         camera.getWorldDirection(look);
-        const r = camera.position.length();
-        const alt = Math.max(0.02, r - PLANET_RADIUS);
-        camera.position.addScaledVector(look, -Math.sign(e.deltaY) * Math.max(0.3, alt * 4));
+        const subject = playerBody.dir.clone().multiplyScalar(playerBody.radius);
+        const toSubject = Math.max(0.5, camera.position.distanceTo(subject));
+        camera.position.addScaledVector(look, -Math.sign(e.deltaY) * toSubject * 0.12);
       } else if (walkActive) {
         nudgeWalkZoom(e.deltaY);
       } else {
@@ -289,6 +295,17 @@ export function KaijuWalkController() {
       seedLookFrom = null;
     }
     if (cameraFree) {
+      // NEVER BELOW THE GROUND. The parked camera can be dollied, and the terrain under it is not
+      // flat, so without this it burrows into the mountain — which is both disorienting and makes
+      // the whole scene disappear behind rock. Clamped every frame, not just when it is placed.
+      {
+        const cd = camera.position.clone().normalize();
+        const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
+        if (gm != null) {
+          const floor = PLANET_RADIUS + gm / METRES_PER_UNIT + EYE_METRES / METRES_PER_UNIT;
+          if (camera.position.length() < floor) camera.position.setLength(floor);
+        }
+      }
       // FREE CAMERA: hold the position, but still let the mouse look around from it. A fixed shot
       // you cannot turn your head in is a screenshot, not a viewpoint — and the whole value of the
       // scale view is being able to look from the people up to the Kaiju and back.
