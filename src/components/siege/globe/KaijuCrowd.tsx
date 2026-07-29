@@ -50,8 +50,14 @@ export const CROWD_SIZE = 200;
 const SPREAD_M = 350;
 /** Running speed, metres per second. A frightened human, not an athlete. */
 const RUN_MS = 5.5;   // a running human, not an athlete
-/** Stride length as a fraction of height — one full cycle covers this much ground. */
-const STRIDE_FRAC = 0.8;
+/**
+ * Ground covered by ONE full walk cycle, as a fraction of height.
+ *
+ * 1.4, not 0.8. At 0.8 a cycle covers 1.44 m, which at a 5.5 m/s run is 3.8 cycles a second —
+ * nearly twice a real runner's 2.2, and the same "why are they moving so fast" that the previous
+ * procedural version had. A running human covers about 2.5 m per cycle, which is 1.4 x 1.8 m.
+ */
+const STRIDE_FRAC = 1.4;
 
 const MODEL_URL = '/siege/characters/player.glb';
 
@@ -193,7 +199,7 @@ function Crowd() {
     const names = animations.map((a) => a.name.toLowerCase());
     const pick = ['walk', 'walking', 'run', 'idle'].find((n) => names.includes(n));
     const clip = pick ? animations[names.indexOf(pick)] : animations[0] ?? null;
-    const b = bakeCrowd(scene, clip);
+    const b = bakeCrowd(scene, clip, `${cfg?.url ?? MODEL_URL}|${clip?.name ?? ''}`);
     if (b) {
       console.log(`[crowd] baked ${b.frames} frames x ${b.vertexCount} verts `
         + `(${((b.vertexCount * b.frames * 3 * 4) / 1048576).toFixed(1)} MB) from "${clip?.name}"`);
@@ -201,7 +207,7 @@ function Crowd() {
       console.warn('[crowd] could not bake — no skinned mesh or no clip; crowd will not render');
     }
     return b;
-  }, [scene, animations]);
+  }, [scene, animations, cfg]);
 
   /** Reuse the source model's texture so the figures keep their own colours. */
   const material = useMemo(() => {
@@ -232,8 +238,9 @@ function Crowd() {
     return () => {
       crowdDiag.on = false;
       crowdDiag.spawned = 0;
-      baked.texture.dispose();
-      baked.geometry.dispose();
+      // Deliberately NOT disposing the texture or geometry: the bake is cached and shared across
+      // every crowd that ever forms. Freeing it here would leave the next one reading a dead
+      // texture, which is the sort of bug that shows up as an invisible crowd much later.
     };
   }, [baked, people, phase, moving]);
 

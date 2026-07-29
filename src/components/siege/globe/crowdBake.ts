@@ -21,13 +21,14 @@
 // for a crowd: pay once, in memory, instead of every frame, in CPU and draw calls.
 
 import * as THREE from 'three';
+import { SkeletonUtils } from 'three-stdlib';
 
 /** Samples through the cycle. 24 is smooth for a walk; the texture cost scales with this. */
 export const BAKE_FRAMES = 24;
 
 export interface BakedCrowd {
   geometry: THREE.BufferGeometry;
-  /** RGB float texture: x = vertex, y = frame, value = position in the model's own space. */
+  /** RGBA float texture: x = vertex, y = frame, rgb = position in the model's own space. */
   texture: THREE.DataTexture;
   vertexCount: number;
   frames: number;
@@ -42,7 +43,9 @@ export interface BakedCrowd {
  * hand — the same four-bone weighted blend the GPU does — after the mixer and skeleton have been
  * brought to the requested time.
  */
-function readSkinnedPositions(mesh: THREE.SkinnedMesh, out: Float32Array, offset: number): void {
+function readSkinnedPositions(
+  mesh: THREE.SkinnedMesh, out: Float32Array, offset: number, toRoot: THREE.Matrix4,
+): void {
   const geo = mesh.geometry;
   const pos = geo.attributes.position;
   const skinIndex = geo.attributes.skinIndex;
@@ -69,9 +72,9 @@ function readSkinnedPositions(mesh: THREE.SkinnedMesh, out: Float32Array, offset
       acc.add(temp);
     }
 
-    acc.applyMatrix4(bindMatrixInverse);
-    const o = offset + i * 3;
-    out[o] = acc.x; out[o + 1] = acc.y; out[o + 2] = acc.z;
+    acc.applyMatrix4(bindMatrixInverse).applyMatrix4(toRoot);
+    const o = offset + i * 4;
+    out[o] = acc.x; out[o + 1] = acc.y; out[o + 2] = acc.z; out[o + 3] = 1;
   }
 }
 
@@ -81,9 +84,32 @@ function readSkinnedPositions(mesh: THREE.SkinnedMesh, out: Float32Array, offset
  * Returns null if the model has no skinned mesh, in which case the caller should fall back rather
  * than render nothing — a crowd that silently vanishes is worse than a crude one.
  */
+/** One bake per model, kept forever. See the note in bakeCrowd. */
+const cache = new Map<string, BakedCrowd | null>();
+
 export function bakeCrowd(
-  source: THREE.Object3D, clip: THREE.AnimationClip | null,
+  loaded: THREE.Object3D, clip: THREE.AnimationClip | null, cacheKey = '',
 ): BakedCrowd | null {
+  // CACHED, because the crowd re-forms every time you land somewhere and baking is not free:
+  // 24 frames x a few thousand vertices x four bones each. The result depends only on the model
+  // and the clip, so doing it twice is pure waste.
+  if (cacheKey && cache.has(cacheKey)) return cache.get(cacheKey) ?? null;
+  const result = bakeCrowdUncached(loaded, clip);
+  if (cacheKey) cache.set(cacheKey, result);
+  return result;
+}
+
+function bakeCrowdUncached(
+  loaded: THREE.Object3D, clip: THREE.AnimationClip | null,
+): BakedCrowd | null {
+  // BAKE A PRIVATE COPY, never the loaded model.
+  //
+  // useGLTF caches by URL, so `loaded` is the SAME object every other component using that model
+  // is rendering. Driving a mixer on it and calling skeleton.update() would move those bones out
+  // from under them mid-frame. This model in particular — reddemon.glb — is also monster type 8,
+  // which is one of the four Kaiju in the arena, so baking would visibly corrupt its pose.
+  const source = SkeletonUtils.clone(loaded) as THREE.Object3D;
+
   // Take the mesh with the most vertices: on a character that is reliably the body rather than
   // hair, eyes or kit.
   let mesh: THREE.SkinnedMesh | null = null;
@@ -98,7 +124,27 @@ export function bakeCrowd(
 
   const skinned = mesh as THREE.SkinnedMesh;
   const vertexCount = skinned.geometry.attributes.position.count;
-  const data = new Float32Array(vertexCount * BAKE_FRAMES * 3);
+
+  // A texture is limited in width, and the width here is the vertex count. Bail loudly rather than
+  // hand the renderer something it will refuse.
+  if (vertexCount > 16384) {
+    console.warn(`[crowd] body mesh has ${vertexCount} vertices, too many to bake into a texture row`);
+    return null;
+  }
+
+  // THE MESH'S OWN PLACE IN THE MODEL. Skinned positions come out in the mesh's local space, but a
+  // GLTF commonly parents the body under nodes carrying rotation or scale — a character exported
+  // from a Z-up tool has a -90 degree X rotation sitting right there. Ignoring it would lay the
+  // whole crowd on its back. This composes the mesh's transform relative to the model root and
+  // applies it to every baked vertex.
+  source.updateMatrixWorld(true);
+  const rootInverse = new THREE.Matrix4().copy(source.matrixWorld).invert();
+  const meshToRoot = new THREE.Matrix4().multiplyMatrices(rootInverse, skinned.matrixWorld);
+  // FOUR components, not three. THREE.RGBFormat still exists as a constant but the renderer
+  // dropped support for it in r137 — an RGB float texture silently fails to upload, and the shader
+  // then reads zeroes, which would have drawn 200 people collapsed into a single point at the
+  // planet's core. This is on three 180.
+  const data = new Float32Array(vertexCount * BAKE_FRAMES * 4);
 
   const mixer = new THREE.AnimationMixer(source);
   const action = mixer.clipAction(clip);
@@ -110,14 +156,14 @@ export function bakeCrowd(
     mixer.update(0);
     source.updateMatrixWorld(true);
     skinned.skeleton.update();
-    readSkinnedPositions(skinned, data, f * vertexCount * 3);
+    readSkinnedPositions(skinned, data, f * vertexCount * 4, meshToRoot);
   }
   action.stop();
   mixer.uncacheClip(clip);
 
   // One texel per vertex per frame. Float RGB so positions survive without quantising.
   const texture = new THREE.DataTexture(
-    data, vertexCount, BAKE_FRAMES, THREE.RGBFormat, THREE.FloatType,
+    data, vertexCount, BAKE_FRAMES, THREE.RGBAFormat, THREE.FloatType,
   );
   texture.needsUpdate = true;
   texture.minFilter = THREE.NearestFilter;
@@ -128,7 +174,7 @@ export function bakeCrowd(
   // units the artist worked in.
   let minY = Infinity, maxY = -Infinity;
   for (let i = 0; i < vertexCount; i++) {
-    const y = data[i * 3 + 1];
+    const y = data[i * 4 + 1];
     if (y < minY) minY = y;
     if (y > maxY) maxY = y;
   }
@@ -198,6 +244,11 @@ export function makeCrowdMaterial(baked: BakedCrowd, base?: THREE.Texture | null
       vec3 walked = mix(poseA, poseB, fract(framePos));
       // Standing still holds the first frame rather than freezing mid-stride.
       vec3 transformed = mix(poseAt(0.0), walked, aMoving);
+      // Preserved from the chunk being replaced: dropping it would break alpha hashing if the
+      // engine ever enables it on this material.
+      #ifdef USE_ALPHAHASH
+        vPosition = transformed;
+      #endif
       `,
     );
   };

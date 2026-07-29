@@ -90,8 +90,18 @@ export const WEAPONS: Record<WeaponId, WeaponSpec> = {
     streams: 6, streamSpread: 0.030,
   },
   // Long reach, flat trajectory, modest damage. The ranged-attacker's weapon.
+  //
+  // EXTENDED to 30 bodies (9 km) because the flame was extended to 18 (5.4 km) on request, which
+  // made the flamethrower the longest-reaching weapon in the game. That inverts the entire design:
+  // the cannon exists to be the only thing that works at distance, and the flame to be the reward
+  // for closing. With flame outranging it there was no reason to close at all, and the balance
+  // simulator reported the flame-vs-cannon matchup as degenerate — one side winning regardless of
+  // how it was played, which is the signature of a broken triangle rather than a tuning problem.
+  //
+  // The fix is to raise the cannon rather than shorten the flame, since the longer flame is what
+  // was actually asked for.
   gun: {
-    id: 'gun', name: 'Cannon', rangeBodies: 14, cooldown: 0.75, damage: 26,
+    id: 'gun', name: 'Cannon', rangeBodies: 30, cooldown: 0.75, damage: 26,
     speed: 60, spread: 0.02, count: 1, life: 3.0, blastBodies: 0, gravityScale: 1,
     colour: [1.0, 0.95, 0.5], size: 0.10,
   },

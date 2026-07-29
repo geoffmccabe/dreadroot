@@ -705,7 +705,17 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     // Carry knockback: slide along the surface and bleed off. Applied before the tree runs so a
     // staggered Kaiju is still visibly pushed around while it cannot act.
     if (a.knock.lengthSq() > 1e-8) {
-      reTangentOf(a.body, a.knock);
+      // PROJECT, DO NOT RE-TANGENT.
+      //
+      // reTangentOf NORMALISES the vector it is handed — it exists to produce unit headings. Using
+      // it on a velocity reset the knockback to length 1.0 every single tick, so it never decayed
+      // and pushed at roughly three times its own cap FOREVER. One hit from anything and that Kaiju
+      // slid at 100 m/s for the rest of the fight. This is the second, and worse, of the two causes
+      // of "my Kaiju is sliding for no reason"; the stuck movement key was the first.
+      //
+      // Projecting onto the tangent plane by hand keeps the magnitude, which is the whole point of
+      // a velocity.
+      a.knock.addScaledVector(a.body.dir, -a.knock.dot(a.body.dir));
       const speed = a.knock.length();
       _tmp.crossVectors(a.body.dir, a.knock).normalize();
       a.body.dir.applyAxisAngle(_tmp, -(speed * dt) / Math.max(1, a.body.radius)).normalize();

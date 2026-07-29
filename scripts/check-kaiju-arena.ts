@@ -107,6 +107,37 @@ ok(agents.some((a) => !a.alive), 'somebody died within 90s',
 ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startDist[i]) > 0.5),
    'agents moved relative to each other');
 
+// NOTHING MAY MOVE A KAIJU FOREVER.
+//
+// Knockback was being passed through reTangentOf, which NORMALISES — resetting it to length 1.0
+// every tick, so it never decayed and shoved the victim at three times its cap for the rest of the
+// fight. That was one of the two causes of "my Kaiju is sliding for no reason". Both halves are
+// asserted: the cap holds, and it bleeds away to nothing when nothing is hitting you.
+{
+  initArena(17);
+  const four = getAgents();
+  let peakKnock = 0;
+  for (let i = 0; i < 90 * 30; i++) {
+    stepArena(1 / 30, false);
+    for (const a of four) peakKnock = Math.max(peakKnock, a.knock.length());
+    if (four.filter((a) => a.alive).length <= 1) break;
+  }
+  ok(peakKnock <= 0.36, 'knockback never exceeds its cap', `peak ${peakKnock.toFixed(3)} vs 0.35`);
+
+  // Decay has to be measured with NOTHING shooting. Leaving the other three alive meant the
+  // victim was being hit throughout the window, which measures the cap again rather than decay.
+  initArena(17);
+  const all = getAgents();
+  for (const a of all) if (!a.isPlayer) a.alive = false;
+  const victim = all[0];
+  victim.knock.set(0.3, 0, 0);
+  victim.knock.addScaledVector(victim.body.dir, -victim.knock.dot(victim.body.dir));
+  const before = victim.knock.length();
+  for (let i = 0; i < 90; i++) stepArena(1 / 30, true);
+  ok(victim.knock.length() < 0.001, 'knockback decays to nothing when nothing is hitting it',
+     `${before.toFixed(3)} -> ${victim.knock.length().toFixed(5)} over 3s`);
+}
+
 // THEY MUST NOT STAND INSIDE EACH OTHER.
 //
 // Geoff: "The Red demon is just standing inside me walking in circles." Before body separation

@@ -19,11 +19,12 @@ import { isTypingTarget } from '@/lib/isTypingTarget';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 
-/** Eye height for the parked camera, in metres. A person, not a Kaiju. */
-const EYE_METRES = 1.8;
 import {
   body, stepBody, placeOnSurface, groundRadius, walkSpeed, runSpeed, reTangent, turnTangent,
 } from './kaijuBody';
+
+/** Eye height for the parked camera, in metres. A person, not a Kaiju. */
+const EYE_METRES = 1.8;
 import { getKaijuLab, subscribeKaijuLab } from './kaijuLabState';
 import { getWalkZoom, nudgeWalkZoom, resetWalkZoom, flyZoomDelta } from './globeZoom';
 
@@ -171,7 +172,9 @@ export function KaijuWalkController() {
         // somewhere distant and underground.
         const look = new THREE.Vector3();
         camera.getWorldDirection(look);
-        const subject = playerBody.dir.clone().multiplyScalar(playerBody.radius);
+        // `body` is this file's import name for the player's Kaiju; there is no `playerBody`
+        // here, and referring to one threw a ReferenceError on every single scroll event.
+        const subject = body.dir.clone().multiplyScalar(body.radius);
         const toSubject = Math.max(0.5, camera.position.distanceTo(subject));
         camera.position.addScaledVector(look, -Math.sign(e.deltaY) * toSubject * 0.12);
       } else if (walkActive) {
