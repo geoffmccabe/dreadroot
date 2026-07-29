@@ -122,7 +122,8 @@ export function KaijuWalkController() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target)) return;
+      // Typing in a panel: drop anything still held, or the last movement key sticks down.
+      if (isTypingTarget(e.target)) { keys.current.clear(); return; }
       if (e.code === 'KeyG' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (!walkActive) {
           // Entering walk mode: drop the Kaiju onto the ground beneath the camera so you do not
@@ -158,7 +159,16 @@ export function KaijuWalkController() {
     // binding and the muscle memory should carry over.
     const wheel = (e: WheelEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (walkActive) {
+      if (walkActive && cameraFree) {
+        // Parked camera (the scale view): dolly along the look direction. Previously the wheel
+        // adjusted a chase-camera distance that nothing was reading, so zoom silently did nothing
+        // here while working elsewhere — which is exactly the inconsistency Geoff hit.
+        const look = new THREE.Vector3();
+        camera.getWorldDirection(look);
+        const r = camera.position.length();
+        const alt = Math.max(0.02, r - PLANET_RADIUS);
+        camera.position.addScaledVector(look, -Math.sign(e.deltaY) * Math.max(0.3, alt * 4));
+      } else if (walkActive) {
         nudgeWalkZoom(e.deltaY);
       } else {
         // Flying: move the camera toward or away from the surface, by a step proportional to how
@@ -170,9 +180,24 @@ export function KaijuWalkController() {
       }
       e.preventDefault();
     };
+    /**
+     * FORGET EVERY HELD KEY when focus goes anywhere else.
+     *
+     * THIS IS THE SLIDING. A keydown is recorded and the matching keyup is only ever delivered to
+     * the focused element — so holding W and then clicking a panel, alt-tabbing, or losing pointer
+     * lock leaves 'KeyW' in the set permanently, and the Kaiju walks forever with nothing on the
+     * keyboard pressed. It looks exactly like being shoved by an invisible force, which is what it
+     * was mistaken for through three separate attempted fixes.
+     *
+     * Clearing on every way focus can be lost is the standard remedy and it is cheap.
+     */
+    const forgetKeys = () => keys.current.clear();
     window.addEventListener('keydown', down, true);
     window.addEventListener('keyup', up, true);
     window.addEventListener('mousemove', move);
+    window.addEventListener('blur', forgetKeys);
+    document.addEventListener('visibilitychange', forgetKeys);
+    document.addEventListener('pointerlockchange', forgetKeys);
     // Not passive: this needs preventDefault so the page does not scroll behind the canvas.
     window.addEventListener('wheel', wheel, { passive: false });
     return () => {
@@ -180,6 +205,9 @@ export function KaijuWalkController() {
       window.removeEventListener('keyup', up, true);
       window.removeEventListener('mousemove', move);
       window.removeEventListener('wheel', wheel);
+      window.removeEventListener('blur', forgetKeys);
+      document.removeEventListener('visibilitychange', forgetKeys);
+      document.removeEventListener('pointerlockchange', forgetKeys);
     };
   }, [camera]);
 

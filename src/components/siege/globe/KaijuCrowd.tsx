@@ -88,6 +88,9 @@ export function setCrowdCorridor(from: THREE.Vector3 | null, to?: THREE.Vector3)
 }
 const listeners = new Set<() => void>();
 export function isCrowdOn(): boolean { return crowdOn; }
+
+/** Live state, so 'I don't see the humans' can be answered by looking rather than guessing. */
+export const crowdDiag = { on: false, spawned: 0, layout: 'none' as 'none' | 'ring' | 'corridor', modelOk: false };
 export function subscribeCrowd(fn: () => void): () => void {
   listeners.add(fn); return () => { listeners.delete(fn); };
 }
@@ -139,7 +142,10 @@ function Crowd() {
     return geo;
   }, [scene]);
 
-  const material = useMemo(() => new THREE.MeshLambertMaterial({ color: '#c8b49a' }), []);
+  // Unlit, not Lambert. These are three pixels tall against snow and sky; a lit material makes
+  // them read as dark specks or vanish entirely depending on where the sun is, which is a poor
+  // trade for shading nobody can resolve at this size.
+  const material = useMemo(() => new THREE.MeshBasicMaterial({ color: '#e8dcc8' }), []);
   useEffect(() => () => { geometry.dispose(); material.dispose(); }, [geometry, material]);
 
   /** Spawn everyone in a ring around wherever the Kaiju is standing right now. */
@@ -189,6 +195,16 @@ function Crowd() {
     }
     return out;
   }, []);
+
+  useEffect(() => {
+    crowdDiag.on = true;
+    crowdDiag.spawned = people.length;
+    crowdDiag.layout = spawnHint ? 'corridor' : 'ring';
+    crowdDiag.modelOk = geometry.attributes.position?.count > 0;
+    console.log(`[crowd] ${people.length} people, ${crowdDiag.layout}, `
+      + `${geometry.attributes.position?.count ?? 0} verts per person`);
+    return () => { crowdDiag.on = false; crowdDiag.spawned = 0; };
+  }, [people, geometry]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const _up = useMemo(() => new THREE.Vector3(), []);

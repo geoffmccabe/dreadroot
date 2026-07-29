@@ -90,8 +90,13 @@ function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName
     .addScaledVector(east, -(VIEW_M / METRES_PER_UNIT) / PLANET_RADIUS)
     .normalize();
 
-  // Face the Kaiju, and drop it in so it lands rather than appearing.
-  dropKaijuAt(kaijuDir, east.clone().negate(), 1);
+  // STAND it there. Do NOT drop it.
+  //
+  // Dropping from a body height means seven seconds of falling under real gravity before it is
+  // where the shot needs it, and from a fixed camera 500 m away that reads as the Kaiju falling
+  // through the sky and vanishing behind the terrain — which is precisely what happened. A scale
+  // shot should be composed the instant it opens.
+  dropKaijuAt(kaijuDir, east.clone().negate(), 0);
   setWalkCameraFree(true);
 
   // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding this up to "a few units" would

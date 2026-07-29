@@ -11,6 +11,7 @@ import { useDraggablePanel } from '../useDraggablePanel';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
+import { crowdDiag } from './KaijuCrowd';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import { kaijuDiag } from './kaijuDiag';
@@ -116,6 +117,9 @@ export function KaijuLabHud() {
           but they will not build; patches > 0 = the geometry is there and it is a camera problem. */}
       {row('Patches', `${terrainDiag.patches} drawn / ${terrainDiag.wanted} wanted`)}
       {row('Deepest', `level ${terrainDiag.deepest}`)}
+      {row('Crowd', crowdDiag.on
+        ? `${crowdDiag.spawned} ${crowdDiag.layout}${crowdDiag.modelOk ? '' : ' (NO MODEL)'}`
+        : 'off')}
       {row('Altitude', `${Math.round(terrainDiag.altitudeUnits)} u (near ${Math.round(terrainDiag.near)}, far ${Math.round(terrainDiag.far)})`)}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
