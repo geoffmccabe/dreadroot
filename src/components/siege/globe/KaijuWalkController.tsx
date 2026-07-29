@@ -75,6 +75,22 @@ export function dropKaijuAt(dir: THREE.Vector3, forward: THREE.Vector3, dropHeig
 /** Set when walk mode is entered externally, so the controller resets its camera on the next frame. */
 let pendingEnter = false;
 
+/**
+ * Walk mode with the camera left alone.
+ *
+ * The scale view needs the Kaiju's BODY simulated and standing at a fixed spot on the ground
+ * (which is what walk mode gives) while the camera sits somewhere else entirely, at human eye
+ * height half a kilometre away. Without this the chase camera would immediately snap back behind
+ * the Kaiju and the whole point of the shot would be lost.
+ */
+let cameraFree = false;
+export function setWalkCameraFree(v: boolean): void { cameraFree = v; }
+
+/** Adopt the camera's CURRENT facing as the look heading, so a parked shot opens where it is aimed. */
+let seedLookFrom: THREE.Camera | null = null;
+export function seedWalkLook(camera: THREE.Camera): void { seedLookFrom = camera; }
+export function isWalkCameraFree(): boolean { return cameraFree; }
+
 function setWalkActive(v: boolean) {
   if (walkActive === v) return;
   walkActive = v;
@@ -233,7 +249,30 @@ export function KaijuWalkController() {
 
     if (!haveCam.current) { camPos.current.copy(target.current); haveCam.current = true; }
     camPos.current.lerp(target.current, Math.min(1, CAM_LERP * dt));
-    camera.position.copy(camPos.current);
+    if (seedLookFrom) {
+      const look = new THREE.Vector3();
+      seedLookFrom.getWorldDirection(look);
+      const up = seedLookFrom.position.clone().normalize();
+      orbitPitch.current = -Math.asin(Math.max(-1, Math.min(1, look.dot(up))));
+      look.addScaledVector(up, -look.dot(up));
+      if (look.lengthSq() > 1e-12) { camFwd.current.copy(look).normalize(); haveFwd.current = true; }
+      seedLookFrom = null;
+    }
+    if (cameraFree) {
+      // FREE CAMERA: hold the position, but still let the mouse look around from it. A fixed shot
+      // you cannot turn your head in is a screenshot, not a viewpoint — and the whole value of the
+      // scale view is being able to look from the people up to the Kaiju and back.
+      const up = camera.position.clone().normalize();
+      const fwd = camFwd.current.clone();
+      fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+      // Pitch about the camera's own right axis, so up is always the local surface up.
+      const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+      fwd.applyAxisAngle(right, -orbitPitch.current);
+      camera.up.copy(up);
+      camera.lookAt(camera.position.clone().add(fwd));
+    } else {
+      camera.position.copy(camPos.current);
+    }
 
     // Look along the heading (first person) or at the body (third person). camera.up is local up
     // either way, which is what keeps the horizon level on a sphere.

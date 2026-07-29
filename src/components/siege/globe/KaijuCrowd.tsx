@@ -73,6 +73,19 @@ let crowdOn = false;
  * ONCE, when the component mounts. The epoch is a React key, so a new site rebuilds them.
  */
 let crowdEpoch = 0;
+
+/**
+ * Where to put the crowd. Null = a ring around the Kaiju, the default.
+ *
+ * The scale view needs them strung out in the CORRIDOR between the viewer and the Kaiju instead,
+ * because that is what makes the comparison work: people at your feet, people in the middle
+ * distance, and the creature beyond them all — three reference points in one line of sight, which
+ * is far more legible than a ring you are standing outside of.
+ */
+let spawnHint: { from: THREE.Vector3; to: THREE.Vector3 } | null = null;
+export function setCrowdCorridor(from: THREE.Vector3 | null, to?: THREE.Vector3): void {
+  spawnHint = from && to ? { from: from.clone().normalize(), to: to.clone().normalize() } : null;
+}
 const listeners = new Set<() => void>();
 export function isCrowdOn(): boolean { return crowdOn; }
 export function subscribeCrowd(fn: () => void): () => void {
@@ -131,6 +144,27 @@ function Crowd() {
 
   /** Spawn everyone in a ring around wherever the Kaiju is standing right now. */
   const people = useMemo<Person[]>(() => {
+    // CORRIDOR LAYOUT: scattered along the line from the viewer to the Kaiju.
+    if (spawnHint) {
+      const { from, to } = spawnHint;
+      const side = new THREE.Vector3().crossVectors(from, to).normalize();
+      const out: Person[] = [];
+      for (let i = 0; i < CROWD_SIZE; i++) {
+        // Biased toward the near end, so the closest figures are the ones you can actually read.
+        const t = 0.06 + Math.pow(rand(), 1.5) * 0.82;
+        const dir = from.clone().lerp(to, t).normalize();
+        // Lateral scatter widens down the corridor, which reads as depth rather than as a queue.
+        const spread = (60 + t * 420) / METRES_PER_UNIT;
+        dir.addScaledVector(side, ((rand() * 2 - 1) * spread) / PLANET_RADIUS).normalize();
+        const fwd = new THREE.Vector3().crossVectors(dir, side).normalize();
+        out.push({
+          dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand() * Math.PI * 2,
+          speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        });
+      }
+      return out;
+    }
+
     const centre = playerBody.dir.clone().normalize();
     const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), centre).normalize();
     const north = new THREE.Vector3().crossVectors(centre, east).normalize();

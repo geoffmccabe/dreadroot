@@ -7,7 +7,8 @@
 //   0      reset to the default size
 //   K      land: drop to just above the ground where you are
 //   B or ; battle: drop in at Mount Everest, where three other Kaiju are waiting
-//   1-9    stage the battle somewhere else (2 = Grand Canyon, 3 = Matterhorn, ...)
+//   1-9    stage the battle somewhere else
+//          2 = Grand Canyon SCALE SHOT: eye at 1.8 m, Kaiju 500 m off, 200 people between
 //   '      200 people, 1.8 m tall, around the Kaiju — for a sense of its scale
 //   R      roar — for testing speed-of-sound delay (1 km = 2.9 s late)
 //          (also starts on its own when you arrive at Everest with , or .)
@@ -25,14 +26,14 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { latLonToDirection } from './cubeSphere';
 import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
-import { enterWalkMode, dropKaijuAt } from './KaijuWalkController';
+import { enterWalkMode, dropKaijuAt, setWalkCameraFree, seedWalkLook } from './KaijuWalkController';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab, setKaijuHeight,
 } from './kaijuLabState';
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
-import { KaijuCrowd, toggleCrowd, setCrowd } from './KaijuCrowd';
+import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
@@ -66,7 +67,59 @@ export const ARENA_SITES: { key: string; name: string; lat: number; lon: number 
   { key: 'Digit9', name: 'Aoraki / Mt Cook', lat: -43.5950, lon: 170.1418 },
 ];
 
+/**
+ * THE SCALE SHOT. Grand Canyon rim, camera at HUMAN eye height, Kaiju half a kilometre out, and
+ * 200 people scattered in the corridor between the two.
+ *
+ * Geoff's design, and it is the right one: a number in a HUD does not convey 300 metres, and even
+ * a crowd around the Kaiju does not, because you are looking at it from the Kaiju's own height. Put
+ * the eye at 1.8 m — where a person actually stands — with people near, people in the middle
+ * distance, and the creature beyond them all, and the size reads without anyone explaining it.
+ *
+ * Walk mode stays ON so the Kaiju's body is simulated and standing on real ground, but the chase
+ * camera is switched off, or it would snap straight back behind the creature and lose the shot.
+ */
+function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName: string): void {
+  setKaijuHeight(ARENA_HEIGHT);
+  const kaijuDir = initArena(17, lat, lon);
+
+  // Look direction along the surface: put the viewer 500 m back from the Kaiju.
+  const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), kaijuDir).normalize();
+  const VIEW_M = 500;
+  const camDir = kaijuDir.clone()
+    .addScaledVector(east, -(VIEW_M / METRES_PER_UNIT) / PLANET_RADIUS)
+    .normalize();
+
+  // Face the Kaiju, and drop it in so it lands rather than appearing.
+  dropKaijuAt(kaijuDir, east.clone().negate(), 1);
+  setWalkCameraFree(true);
+
+  // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding this up to "a few units" would
+  // put the camera where a ten-storey building's roof is and quietly destroy the comparison.
+  const groundM = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? 0;
+  const eye = PLANET_RADIUS + groundM / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT;
+  camera.position.copy(camDir).multiplyScalar(eye);
+
+  // Look at the Kaiju's middle, not its feet, so it fills the frame properly.
+  const kGround = sampleGlobeSurface(kaijuDir.x, kaijuDir.y, kaijuDir.z) ?? 0;
+  camera.lookAt(kaijuDir.clone().multiplyScalar(
+    PLANET_RADIUS + kGround / METRES_PER_UNIT + ARENA_HEIGHT * 0.5,
+  ));
+
+  // Seed the look direction at the Kaiju so the shot opens on it, then the mouse takes over.
+  seedWalkLook(camera);
+  setCrowdCorridor(camDir, kaijuDir);
+  setCrowd(true);
+  console.log(
+    `[kaiju] SCALE VIEW at ${siteName}: eye 1.8 m, Kaiju ${VIEW_M} m away and ` +
+    `${ARENA_HEIGHT * METRES_PER_UNIT} m tall, 200 people between.`,
+  );
+}
+
 function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest'): void {
+  // Leaving the scale shot: hand the camera back and put the crowd back in a ring.
+  setWalkCameraFree(false);
+  setCrowdCorridor(null);
   setKaijuHeight(ARENA_HEIGHT);
   const dir = initArena(17, lat, lon);
   const face = new THREE.Vector3(0, 1, 0).cross(dir);
@@ -193,7 +246,10 @@ export function KaijuLabController() {
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
         case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': {
           const site = ARENA_SITES.find((x) => x.key === e.code);
-          if (site) startArenaHere(camera, site.lat, site.lon, site.name);
+          if (!site) break;
+          // 2 is the Grand Canyon SCALE SHOT, per Geoff. The others are ordinary battles.
+          if (e.code === 'Digit2') startScaleView(camera, site.lat, site.lon, site.name);
+          else startArenaHere(camera, site.lat, site.lon, site.name);
           break;
         }
         case 'KeyK': {
