@@ -4,19 +4,19 @@
 // this is for, and it is the cheapest way to make the size READ. A number in a HUD does not do it;
 // a creature whose foot is longer than the crowd running away from it does.
 //
-// THE ONE ENGINEERING DECISION WORTH EXPLAINING.
+// HOW IT IS LIGHT, since that was the requirement.
 //
-// These are drawn as ONE instanced mesh in a single draw call, in a fixed pose, with their motion
-// done procedurally — not as 200 animated characters. That is not a shortcut taken to save effort;
-// it is the correct call at this scale, and the maths says so:
+// They are REAL animated characters — the game's own 1.8 m NPC, with its own walk clip — but they
+// cost one draw call between them and no per-frame skinning at all.
 //
-//   a person is 1.8 m; the Kaiju is 300 m; so a person is 0.6% of its height.
-//   Framed so the Kaiju fills half the screen, a person is about THREE PIXELS tall.
+// The trick is in crowdBake.ts: the walk cycle is evaluated ONCE at load and written into a
+// texture, so the vertex shader can look up where any vertex is at any point in the cycle. Every
+// figure is then just an instance with its own position and its own place in that cycle.
 //
-// Skinned animation at three pixels is invisible. What is visible at three pixels is whether the
-// dot is moving, bobbing, and leaning — so that is what gets simulated. 200 skinned meshes would
-// cost 200 draw calls and 200 skeleton updates per frame to render detail nobody can resolve, on a
-// map that already streams a planet.
+//   200 skinned clones : 200 draw calls, 200 skeleton updates every frame
+//   this               : 1 draw call, 0 skeleton updates, a few MB of texture
+//
+// It also scales: a thousand of them would cost the same draw call and the same texture.
 //
 // Their behaviour is deliberately simple and deliberately human: run for a while, stop and look,
 // run again, and generally stay near the monster the way crowds actually do — which is to say some
@@ -25,7 +25,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
-import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { APP_VERSION } from '@/version';
 import { CFG } from '../siegeMonsterCatalog';
@@ -33,6 +32,7 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { body as playerBody } from './kaijuBody';
 import { rand } from './kaijuRandom';
+import { bakeCrowd, makeCrowdMaterial } from './crowdBake';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -50,6 +50,8 @@ export const CROWD_SIZE = 200;
 const SPREAD_M = 350;
 /** Running speed, metres per second. A frightened human, not an athlete. */
 const RUN_MS = 5.5;   // a running human, not an athlete
+/** Stride length as a fraction of height — one full cycle covers this much ground. */
+const STRIDE_FRAC = 0.8;
 
 const MODEL_URL = '/siege/characters/player.glb';
 
@@ -61,7 +63,7 @@ interface Person {
   running: boolean;
   /** Seconds until the next stop/start decision. */
   timer: number;
-  /** Phase offset so the crowd does not bob in unison, which reads as machinery. */
+  /** Where this person is in the walk cycle, 0..1. Advanced by distance covered, not by time. */
   phase: number;
   speed: number;
 }
@@ -144,7 +146,7 @@ function makePeople(): Person[] {
       dir.addScaledVector(side, ((rand() * 2 - 1) * spread) / PLANET_RADIUS).normalize();
       const fwd = new THREE.Vector3().crossVectors(dir, side).normalize();
       out.push({
-        dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand() * Math.PI * 2,
+        dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
       });
     }
@@ -167,7 +169,7 @@ function makePeople(): Person[] {
       fwd: new THREE.Vector3().crossVectors(dir, east).normalize(),
       running: rand() < 0.7,
       timer: rand() * 3,
-      phase: rand() * Math.PI * 2,
+      phase: rand(),
       speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
     });
   }
@@ -175,63 +177,67 @@ function makePeople(): Person[] {
 }
 
 function Crowd() {
-  // USE THE NPC THE GAME ALREADY ANIMATES.
+  // ONE DRAW CALL for the whole crowd.
   //
-  // I had been pulling a mesh out of a character file and driving it procedurally, which meant
-  // guessing which mesh was the body and hand-rolling a run cycle — and produced the "sparkles".
-  // Type 1 in the monster catalog is 1.8 m, human-scaled, already rigged, already has clips, and
-  // is already cloned correctly elsewhere in this codebase. Reusing it removes every guess.
-  //
-  // THE COST, stated plainly: 200 skinned clones is 200 draw calls and 200 skeleton updates a
-  // frame, against one draw call for the instanced version. That is a real price, worth paying
-  // here because in the scale view the nearest figures are ~50 px tall, where a frozen pose is
-  // obvious and a walk cycle is the whole point. If it costs too much the lever is the head
-  // count, not the technique.
+  // The animation is baked into a texture once at load (see crowdBake.ts), so every figure is a
+  // single instance whose vertex shader looks up where it should be at its own point in the walk
+  // cycle. No per-person skeleton, no per-person draw call, and the CPU does nothing each frame
+  // but move two hundred matrices.
   const cfg = CFG[1 as keyof typeof CFG];
   const { scene, animations } = useGLTF(`${cfg?.url ?? MODEL_URL}?v=${APP_VERSION}`);
-  const group = useRef<THREE.Group>(null);
+  const mesh = useRef<THREE.InstancedMesh>(null);
 
   const people = useMemo<Person[]>(() => makePeople(), []);
 
-  /** One clone and one mixer each, so everybody is at a different point in their stride. */
-  const rigs = useMemo(() => {
+  const baked = useMemo(() => {
     const names = animations.map((a) => a.name.toLowerCase());
     const pick = ['walk', 'walking', 'run', 'idle'].find((n) => names.includes(n));
-    const clip = pick ? animations[names.indexOf(pick)] : animations[0];
-    const scale = PERSON_UNITS / Math.max(0.01, cfg?.modelHeight ?? 1.886);
+    const clip = pick ? animations[names.indexOf(pick)] : animations[0] ?? null;
+    const b = bakeCrowd(scene, clip);
+    if (b) {
+      console.log(`[crowd] baked ${b.frames} frames x ${b.vertexCount} verts `
+        + `(${((b.vertexCount * b.frames * 3 * 4) / 1048576).toFixed(1)} MB) from "${clip?.name}"`);
+    } else {
+      console.warn('[crowd] could not bake — no skinned mesh or no clip; crowd will not render');
+    }
+    return b;
+  }, [scene, animations]);
 
-    return people.map(() => {
-      const obj = SkeletonUtils.clone(scene) as THREE.Group;
-      obj.scale.setScalar(scale);
-      obj.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
-      const mixer = new THREE.AnimationMixer(obj);
-      if (clip) {
-        const act = mixer.clipAction(clip);
-        act.play();
-        // Random start and a little rate spread, or 200 figures move as one rigid block.
-        act.time = rand() * clip.duration;
-        act.timeScale = 0.85 + rand() * 0.3;
-      }
-      return { obj, mixer };
+  /** Reuse the source model's texture so the figures keep their own colours. */
+  const material = useMemo(() => {
+    if (!baked) return null;
+    let map: THREE.Texture | null = null;
+    scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (map || !m.isMesh) return;
+      const mm = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
+      if (mm?.map) map = mm.map;
     });
-  }, [scene, animations, people, cfg]);
+    return makeCrowdMaterial(baked, map);
+  }, [baked, scene]);
+
+  // Per-instance animation state: where in the cycle, and whether moving at all.
+  const phase = useMemo(() => new Float32Array(CROWD_SIZE), []);
+  const moving = useMemo(() => new Float32Array(CROWD_SIZE), []);
 
   useEffect(() => {
-    const g = group.current;
-    if (!g) return;
-    for (const r of rigs) g.add(r.obj);
+    if (!baked || !mesh.current) return;
+    const g = mesh.current.geometry;
+    g.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phase, 1));
+    g.setAttribute('aMoving', new THREE.InstancedBufferAttribute(moving, 1));
     crowdDiag.on = true;
-    crowdDiag.spawned = rigs.length;
+    crowdDiag.spawned = people.length;
     crowdDiag.layout = spawnHint ? 'corridor' : 'ring';
-    crowdDiag.modelOk = animations.length > 0;
-    console.log(`[crowd] ${rigs.length} animated NPCs, ${crowdDiag.layout} layout, `
-      + `${animations.length} clips`);
+    crowdDiag.modelOk = true;
     return () => {
-      for (const r of rigs) { r.mixer.stopAllAction(); g.remove(r.obj); }
-      crowdDiag.on = false; crowdDiag.spawned = 0;
+      crowdDiag.on = false;
+      crowdDiag.spawned = 0;
+      baked.texture.dispose();
+      baked.geometry.dispose();
     };
-  }, [rigs, animations]);
+  }, [baked, people, phase, moving]);
 
+  const dummy = useMemo(() => new THREE.Object3D(), []);
   const _up = useMemo(() => new THREE.Vector3(), []);
   const _side = useMemo(() => new THREE.Vector3(), []);
   const _axis = useMemo(() => new THREE.Vector3(), []);
@@ -239,13 +245,15 @@ function Crowd() {
   const _basis = useMemo(() => new THREE.Matrix4(), []);
 
   useFrame((_, rawDt) => {
+    const m = mesh.current;
+    if (!m || !baked) return;
     const dt = Math.min(rawDt, 0.05);
     const kaiju = playerBody.dir;
+    // Scale the source model to a real 1.8 m person, whatever units it was made in.
+    const scale = PERSON_UNITS / baked.modelHeight;
 
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
-      const rig = rigs[i];
-      if (!rig) continue;
 
       p.timer -= dt;
       if (p.timer <= 0) {
@@ -268,24 +276,37 @@ function Crowd() {
         p.dir.applyAxisAngle(_axis, ang).normalize();
         p.fwd.applyAxisAngle(_axis, ang);
         p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir)).normalize();
+        // Advance the cycle in step with the DISTANCE covered, so the feet match the ground
+        // instead of sliding — the same rule the Kaiju's own gait follows.
+        p.phase = (p.phase + (dist / (PERSON_UNITS * STRIDE_FRAC))) % 1;
       }
-
-      // The clip only advances while they are moving, so a stopped figure stands rather than
-      // running on the spot.
-      rig.mixer.update(p.running ? dt : dt * 0.12);
+      phase[i] = p.phase;
+      moving[i] = p.running ? 1 : 0;
 
       const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
-      rig.obj.position.copy(p.dir)
-        .multiplyScalar(PLANET_RADIUS + (metres ?? 0) / METRES_PER_UNIT);
-
-      // Upright on the sphere, facing the way they are heading. Model front is local +Z, matching
-      // the convention MonsterEnemy already relies on.
+      dummy.position.copy(p.dir).multiplyScalar(PLANET_RADIUS + (metres ?? 0) / METRES_PER_UNIT);
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);
-      rig.obj.quaternion.setFromRotationMatrix(_basis);
+      dummy.quaternion.setFromRotationMatrix(_basis);
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      m.setMatrixAt(i, dummy.matrix);
     }
+
+    m.instanceMatrix.needsUpdate = true;
+    const ph = m.geometry.getAttribute('aPhase');
+    const mv = m.geometry.getAttribute('aMoving');
+    if (ph) ph.needsUpdate = true;
+    if (mv) mv.needsUpdate = true;
   });
 
-  return <group ref={group} />;
+  if (!baked || !material) return null;
+  return (
+    <instancedMesh
+      ref={mesh}
+      args={[baked.geometry, material, CROWD_SIZE]}
+      frustumCulled={false}
+    />
+  );
 }
