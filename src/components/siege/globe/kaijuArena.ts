@@ -702,8 +702,13 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       }
     }
 
-    // Carry knockback: slide along the surface and bleed off. Applied before the tree runs so a
-    // staggered Kaiju is still visibly pushed around while it cannot act.
+    // Carry knockback: slide along the surface and bleed off.
+    //
+    // NOT ON THE BODY THE PLAYER IS DRIVING. An enemy standing to one side pushes you consistently
+    // to that side, which while holding "forward" reads as the Kaiju veering off on its own — the
+    // controls feeling broken rather than the world feeling physical. Same reasoning as the
+    // separation pass, which was exempted for exactly this. Damage still lands; the shove does not.
+    if (a.isPlayer && playerControlled) a.knock.set(0, 0, 0);
     if (a.knock.lengthSq() > 1e-8) {
       // PROJECT, DO NOT RE-TANGENT.
       //

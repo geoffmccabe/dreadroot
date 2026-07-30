@@ -22,7 +22,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
-import { footOffset } from './modelFeet';
+import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
@@ -112,7 +112,11 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   useEffect(() => {
     const scale = ARENA_HEIGHT / Math.max(0.01, modelHeight);
     footLift.current = footOffset(model) * scale;
-  }, [model, modelHeight]);
+    // Print the raw measurement. Two attempts at this have now gone wrong in opposite directions
+    // because the model's actual layout was assumed rather than known.
+    console.log(`[kaiju] ${agent.name} model foot offset: raw ${footOffsetRaw(model).toFixed(3)}, `
+      + `applied ${footLift.current.toFixed(3)} units (${(footLift.current * 100).toFixed(0)} m)`);
+  }, [model, modelHeight, agent.name]);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);

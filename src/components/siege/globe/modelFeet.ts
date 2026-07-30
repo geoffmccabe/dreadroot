@@ -46,5 +46,21 @@ export function footOffset(model: THREE.Object3D): number {
     _box.union(_local);
   });
 
+  if (!Number.isFinite(_box.min.y)) return 0;
+  const offset = -_box.min.y;
+
+  // NEVER RETURN A NEGATIVE LIFT.
+  //
+  // A negative value would push the creature DOWN into the terrain, which is the opposite of this
+  // function's entire purpose. It can happen legitimately — a model whose geometry sits above its
+  // own origin — and it is what turned "sunk to the waist" into "sunk to the shoulders". Clamping
+  // at zero means a model this cannot measure correctly is left exactly where it was rather than
+  // being made worse, which is the right failure mode for a correction.
+  return Math.max(0, offset);
+}
+
+/** The raw measurement, unclamped, for logging so the real number is known rather than guessed. */
+export function footOffsetRaw(model: THREE.Object3D): number {
+  footOffset(model);
   return Number.isFinite(_box.min.y) ? -_box.min.y : 0;
 }

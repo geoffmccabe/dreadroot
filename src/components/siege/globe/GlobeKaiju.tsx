@@ -37,7 +37,7 @@ import { animSpeedMul, type KaijuLabState } from './kaijuLabState';
 import { kaijuDiag } from './kaijuDiag';
 import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
 import { isKaijuWalkActive } from './KaijuWalkController';
-import { footOffset } from './modelFeet';
+import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning } from './kaijuArena';
@@ -128,6 +128,8 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const footLift = useRef(0);
   useEffect(() => {
     footLift.current = footOffset(model) * (state.height / Math.max(0.01, modelHeight));
+    console.log(`[kaiju] player model foot offset: raw ${footOffsetRaw(model).toFixed(3)}, `
+      + `applied ${footLift.current.toFixed(3)} units (${(footLift.current * 100).toFixed(0)} m)`);
   }, [model, modelHeight, state.height]);
 
   /** Resolve a gait to an actual clip on THIS model, case-insensitively. */
