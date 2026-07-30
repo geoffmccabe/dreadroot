@@ -44,12 +44,6 @@ import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 
 
 /**
- * Drop in at Mount Everest with three other Kaiju already there and let the fight begin.
- *
- * Shared by the Semicolon key and by simply ARRIVING at Everest on the landmark tour, so the
- * feature does not hinge on one keypress surviving a codebase where every letter is already bound.
- */
-/**
  * Where a battle can be staged. Number keys pick one; each drops you in with the other Kaiju.
  *
  * Geoff: "make it so if I hit 2 after B then it goes to the grand canyon. Same thing with other
@@ -68,71 +62,67 @@ export const ARENA_SITES: { key: string; name: string; lat: number; lon: number 
 ];
 
 /**
- * THE SCALE SHOT. Grand Canyon rim, camera at HUMAN eye height, Kaiju half a kilometre out, and
- * 200 people scattered in the corridor between the two.
+ * THE SCALE SHOT — camera at human eye height with the crowd between you and the Kaiju.
  *
- * Geoff's design, and it is the right one: a number in a HUD does not convey 300 metres, and even
- * a crowd around the Kaiju does not, because you are looking at it from the Kaiju's own height. Put
- * the eye at 1.8 m — where a person actually stands — with people near, people in the middle
- * distance, and the creature beyond them all, and the size reads without anyone explaining it.
+ * ONE PLACEMENT PATH, and this is why. Geoff: "why does it not sink into the ground in the
+ * himalayas but it does in the grand canyon? why is each location on the globe getting different
+ * rules and controls? that's stupid and not supposed to be like that."
  *
- * Walk mode stays ON so the Kaiju's body is simulated and standing on real ground, but the chase
- * camera is switched off, or it would snap straight back behind the creature and lose the shot.
+ * He is exactly right, and the cause was not the location at all — it was that I had written TWO
+ * setup functions. Everest went through startArenaHere and dropped the Kaiju from one body height,
+ * so gravity and the ground snap settled it correctly. The Grand Canyon went through a separate
+ * function of mine that placed it with a drop of ZERO, taking a different route through the physics
+ * and inheriting a different bug. Two locations, two code paths, two behaviours — from the same
+ * planet and the same creature.
+ *
+ * So this no longer places anything. It calls the ONE placement path every site uses and then only
+ * changes where the CAMERA is and how the crowd is arranged. If the Kaiju stands correctly at
+ * Everest it now stands correctly here, necessarily, because it is the same code.
  */
 function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName: string): void {
-  setKaijuHeight(ARENA_HEIGHT);
-  const kaijuDir = initArena(17, lat, lon);
+  // Identical placement to every other site. No special cases.
+  startArenaHere(camera, lat, lon, siteName);
+  const kaijuDir = playerBody.dir.clone().normalize();
 
-  // Look direction along the surface: put the viewer 500 m back from the Kaiju.
+  // Now, and ONLY now, differ: stand the viewer 500 m back at a person's eye height.
   const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), kaijuDir).normalize();
   const VIEW_M = 500;
   const camDir = kaijuDir.clone()
     .addScaledVector(east, -(VIEW_M / METRES_PER_UNIT) / PLANET_RADIUS)
     .normalize();
 
-  // STAND it there. Do NOT drop it.
-  //
-  // Dropping from a body height means seven seconds of falling under real gravity before it is
-  // where the shot needs it, and from a fixed camera 500 m away that reads as the Kaiju falling
-  // through the sky and vanishing behind the terrain — which is precisely what happened. A scale
-  // shot should be composed the instant it opens.
-  dropKaijuAt(kaijuDir, east.clone().negate(), 0);
   setWalkCameraFree(true);
 
-  // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding this up to "a few units" would
-  // put the camera where a ten-storey building's roof is and quietly destroy the comparison.
-  // If the tiles under the viewpoint have not streamed in, sampleGlobeSurface returns null and
-  // falling back to 0 would bury the camera a kilometre inside the Grand Canyon's rim. Use the
-  // Kaiju's own ground height in that case — it is the same plateau.
-  // GROUND, NOT SEA LEVEL. Falling back to 0 here buried the camera 2.1 km inside the canyon rim.
-  // The Kaiju's own radius was set moments ago by dropKaijuAt and is always valid, so it is the
-  // right fallback: same plateau, same height.
-  const kGroundEarly = sampleGlobeSurface(kaijuDir.x, kaijuDir.y, kaijuDir.z);
-  const camGround = sampleGlobeSurface(camDir.x, camDir.y, camDir.z) ?? kGroundEarly;
+  // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding it up to "a few units" would put the
+  // camera on a ten-storey roof and destroy the comparison. The Kaiju's own radius is the fallback
+  // when the viewpoint's tiles have not streamed, since it is the same ground and always valid.
+  const camGround = sampleGlobeSurface(camDir.x, camDir.y, camDir.z);
   const eye = camGround != null
     ? PLANET_RADIUS + camGround / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT
     : playerBody.radius + 1.8 / METRES_PER_UNIT;
-  const groundM = camGround ?? 0;
   camera.position.copy(camDir).multiplyScalar(eye);
 
-  // Look at the Kaiju's middle, not its feet, so it fills the frame properly.
-  const kGround = kGroundEarly ?? groundM;
-  camera.lookAt(kaijuDir.clone().multiplyScalar(
-    PLANET_RADIUS + kGround / METRES_PER_UNIT + ARENA_HEIGHT * 0.5,
-  ));
-
-  // Seed the look direction at the Kaiju so the shot opens on it, then the mouse takes over.
+  // Look at the Kaiju's middle, not its feet, so it fills the frame.
+  camera.lookAt(kaijuDir.clone().multiplyScalar(playerBody.radius + ARENA_HEIGHT * 0.5));
   seedWalkLook(camera);
+
   setCrowdCorridor(camDir, kaijuDir);
   setCrowd(true);
   console.log(
-    `[kaiju] SCALE VIEW at ${siteName}: eye 1.8 m, Kaiju ${VIEW_M} m away and ` +
-    `${ARENA_HEIGHT * METRES_PER_UNIT} m tall, 200 people between.`,
+    `[kaiju] SCALE VIEW at ${siteName}: eye 1.8 m, Kaiju ${VIEW_M} m away and `
+    + `${ARENA_HEIGHT * METRES_PER_UNIT} m tall, 200 people between.`,
   );
 }
 
+/**
+ * THE ONE PLACEMENT PATH. Every site, every key, every landing goes through this.
+ *
+ * It used to be one of two, and the other one placed the Kaiju differently — which is how the same
+ * creature on the same planet ended up standing correctly on Everest and sunk at the Grand Canyon.
+ * Anything that wants a different VIEW calls this first and then moves the camera.
+ */
 function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest'): void {
-  // Leaving the scale shot: hand the camera back and put the crowd back in a ring.
+  // Reset anything a previous scale shot changed, so no site inherits another site's state.
   setWalkCameraFree(false);
   setCrowdCorridor(null);
   setKaijuHeight(ARENA_HEIGHT);
