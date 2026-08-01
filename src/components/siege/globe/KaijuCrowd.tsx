@@ -32,7 +32,8 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { body as playerBody } from './kaijuBody';
 import { rand } from './kaijuRandom';
-import { bakeCrowd, makeCrowdMaterial } from './crowdBake';
+import { SkeletonUtils } from 'three-stdlib';
+import { resolveGait } from './kaijuClips';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -183,103 +184,97 @@ function makePeople(): Person[] {
 }
 
 function Crowd() {
-  // ONE DRAW CALL for the whole crowd.
+  // REAL NPCs, RENDERED THE WAY EVERY OTHER NPC IN THIS GAME IS RENDERED.
   //
-  // The animation is baked into a texture once at load (see crowdBake.ts), so every figure is a
-  // single instance whose vertex shader looks up where it should be at its own point in the walk
-  // cycle. No per-person skeleton, no per-person draw call, and the CPU does nothing each frame
-  // but move two hundred matrices.
+  // Geoff: "the 1.8m humans look like sparkling random geometric shapes, they don't seem to have a
+  // mesh or be based on our NPCs. Why don't they? The game has so many NPCs all working perfectly,
+  // so how can it be a challenge to add them here?"
+  //
+  // He is right, and the answer is that I did not use them. I wrote a Vertex Animation Texture
+  // instead — bake the walk cycle into a float texture, draw all 200 as one instanced call with a
+  // custom vertex shader. On paper that is far cheaper: 1 draw call and no skinning. In practice my
+  // shader was wrong, and a wrong VAT does not look slightly off, it looks like confetti — which is
+  // exactly "sparkling random geometric shapes".
+  //
+  // The model was never the problem: it is already the game's own 1.8 m Demon Horde NPC. So this
+  // now uses the SAME recipe as GlobeKaiju and AgentAvatar, which demonstrably work:
+  // SkeletonUtils.clone plus an AnimationMixer per figure. Boring, proven, and visible.
+  //
+  // COST, honestly: 200 skinned characters is 200 draw calls and 200 skeleton updates, where the
+  // VAT would have been one and none. Mitigated by updating each figure's mixer on a stagger (a
+  // third of them per frame, with three times the delta), which is the standard trick and cuts the
+  // skinning cost to a third without anyone being able to see the difference at 1.8 m. If it turns
+  // out too heavy, the answer is fewer people or a fixed VAT — not a broken one.
   const cfg = CFG[1 as keyof typeof CFG];
-  const { scene, animations } = useGLTF(`${cfg?.url ?? MODEL_URL}?v=${APP_VERSION}`);
-  const mesh = useRef<THREE.InstancedMesh>(null);
-
+  const url = cfg?.url ?? MODEL_URL;
+  const { scene, animations } = useGLTF(`${url}?v=${APP_VERSION}`);
+  const group = useRef<THREE.Group>(null);
   const people = useMemo<Person[]>(() => makePeople(), []);
 
-  const baked = useMemo(() => {
-    const names = animations.map((a) => a.name.toLowerCase());
-    const pick = ['walk', 'walking', 'run', 'idle'].find((n) => names.includes(n));
-    const clip = pick ? animations[names.indexOf(pick)] : animations[0] ?? null;
-    const b = bakeCrowd(scene, clip, `${cfg?.url ?? MODEL_URL}|${clip?.name ?? ''}`);
-    if (b) {
-      console.log(`[crowd] baked ${b.frames} frames x ${b.vertexCount} verts `
-        + `(${((b.vertexCount * b.frames * 4 * 4) / 1048576).toFixed(1)} MB) from "${clip?.name}"`);
-    } else {
-      console.warn('[crowd] could not bake — no skinned mesh or no clip; crowd will not render');
+  /** Natural height of the source model, so it can be scaled to a real 1.8 m person. */
+  const modelHeight = cfg?.modelHeight ?? 2;
+
+  /** One clone + mixer per figure. Built once; the frame loop only moves them. */
+  const figures = useMemo(() => {
+    const clipName = resolveGait(
+      animations.map((a) => ({ name: a.name, duration: a.duration })), 'walk',
+    );
+    const clip = animations.find((a) => a.name === clipName) ?? animations[0] ?? null;
+    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null }[] = [];
+    for (let i = 0; i < CROWD_SIZE; i++) {
+      const obj = SkeletonUtils.clone(scene) as THREE.Group;
+      obj.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; }
+      });
+      const mixer = new THREE.AnimationMixer(obj);
+      let action: THREE.AnimationAction | null = null;
+      if (clip) {
+        action = mixer.clipAction(clip);
+        // Start each figure at a different point in the cycle, or two hundred people march in step.
+        action.time = rand() * clip.duration;
+        action.play();
+      }
+      out.push({ obj, mixer, action });
     }
-    return b;
-  }, [scene, animations, cfg]);
+    crowdDiag.modelOk = out.length > 0 && clip != null;
+    console.log(`[crowd] ${out.length} figures from ${url} using clip "${clip?.name ?? 'none'}"`);
+    return out;
+  }, [scene, animations, url]);
 
-  /**
-   * How far the baked model's origin sits above its own feet, in baked units.
-   *
-   * The crowd has the same problem the Kaiju had: an instance is placed at a GROUND position, so if
-   * the model's origin is at its hips the whole crowd is knee-deep in rock. Read straight off the
-   * baked frame-0 positions — no scene graph is involved, so the world-space trap that made the
-   * Kaiju's version worse than the bug cannot happen here.
-   */
-  const bakedFoot = useMemo(() => {
-    if (!baked) return 0;
-    let minY = Infinity;
-    const d = baked.texture.image.data as Float32Array;
-    for (let i = 0; i < baked.vertexCount; i++) {
-      const y = d[i * 4 + 1];
-      if (y < minY) minY = y;
-    }
-    return Number.isFinite(minY) ? -minY : 0;
-  }, [baked]);
-
-  /** Reuse the source model's texture so the figures keep their own colours. */
-  const material = useMemo(() => {
-    if (!baked) return null;
-    let map: THREE.Texture | null = null;
-    scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (map || !m.isMesh) return;
-      const mm = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.MeshStandardMaterial;
-      if (mm?.map) map = mm.map;
-    });
-    return makeCrowdMaterial(baked, map);
-  }, [baked, scene]);
-
-  // Per-instance animation state: where in the cycle, and whether moving at all.
-  const phase = useMemo(() => new Float32Array(CROWD_SIZE), []);
-  const moving = useMemo(() => new Float32Array(CROWD_SIZE), []);
-
+  // Attach the clones once, and take them down cleanly.
   useEffect(() => {
-    if (!baked || !mesh.current) return;
-    const g = mesh.current.geometry;
-    g.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phase, 1));
-    g.setAttribute('aMoving', new THREE.InstancedBufferAttribute(moving, 1));
+    const g = group.current;
+    if (!g) return;
+    for (const f of figures) g.add(f.obj);
     crowdDiag.on = true;
     crowdDiag.spawned = people.length;
     crowdDiag.layout = spawnHint ? 'corridor' : 'ring';
-    crowdDiag.modelOk = true;
     return () => {
+      for (const f of figures) { f.mixer.stopAllAction(); g.remove(f.obj); }
       crowdDiag.on = false;
       crowdDiag.spawned = 0;
-      // Deliberately NOT disposing the texture or geometry: the bake is cached and shared across
-      // every crowd that ever forms. Freeing it here would leave the next one reading a dead
-      // texture, which is the sort of bug that shows up as an invisible crowd much later.
     };
-  }, [baked, people, phase, moving]);
+  }, [figures, people]);
 
-  const dummy = useMemo(() => new THREE.Object3D(), []);
   const _up = useMemo(() => new THREE.Vector3(), []);
   const _side = useMemo(() => new THREE.Vector3(), []);
   const _axis = useMemo(() => new THREE.Vector3(), []);
   const _toKaiju = useMemo(() => new THREE.Vector3(), []);
   const _basis = useMemo(() => new THREE.Matrix4(), []);
+  const frame = useRef(0);
 
   useFrame((_, rawDt) => {
-    const m = mesh.current;
-    if (!m || !baked) return;
+    if (!group.current) return;
     const dt = Math.min(rawDt, 0.05);
     const kaiju = playerBody.dir;
-    // Scale the source model to a real 1.8 m person, whatever units it was made in.
-    const scale = PERSON_UNITS / baked.modelHeight;
+    const scale = PERSON_UNITS / Math.max(0.01, modelHeight);
+    frame.current++;
+    const STAGGER = 3;
 
-    for (let i = 0; i < people.length; i++) {
+    for (let i = 0; i < people.length && i < figures.length; i++) {
       const p = people[i];
+      const f = figures[i];
 
       p.timer -= dt;
       if (p.timer <= 0) {
@@ -302,47 +297,29 @@ function Crowd() {
         p.dir.applyAxisAngle(_axis, ang).normalize();
         p.fwd.applyAxisAngle(_axis, ang);
         p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir)).normalize();
-        // Advance the cycle in step with the DISTANCE covered, so the feet match the ground
-        // instead of sliding — the same rule the Kaiju's own gait follows.
-        p.phase = (p.phase + (dist / (PERSON_UNITS * STRIDE_FRAC))) % 1;
       }
-      phase[i] = p.phase;
-      moving[i] = p.running ? 1 : 0;
 
-      // NEVER FALL BACK TO SEA LEVEL.
-      //
-      // A tile that has not streamed yet makes sampleGlobeSurface return null, and `?? 0` then
-      // means sea level — which on the Grand Canyon rim is 2.1 km UNDERGROUND. That is why the
-      // crowd was invisible: they were all buried. The Kaiju's own radius is always valid, because
-      // it was just placed, and it is the same ground these people are standing on.
+      // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
+      // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m
+      // against a 300 m Kaiju nobody can see the difference.
+      if (f.action && (i % STAGGER) === (frame.current % STAGGER)) {
+        f.mixer.update(p.running ? dt * STAGGER : 0);
+      }
+
+      // NEVER FALL BACK TO SEA LEVEL: on the canyon rim that is 2.1 km underground, which is why
+      // the crowd was once invisible. The Kaiju's own radius is always valid and is the same ground.
       const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
       const radius = metres != null
         ? PLANET_RADIUS + metres / METRES_PER_UNIT
         : playerBody.radius;
-      // Stand ON the ground: lift by the model's own foot offset, at the scale it is drawn.
-      dummy.position.copy(p.dir).multiplyScalar(radius + bakedFoot * scale);
+      f.obj.position.copy(p.dir).multiplyScalar(radius);
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);
-      dummy.quaternion.setFromRotationMatrix(_basis);
-      dummy.scale.setScalar(scale);
-      dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
+      f.obj.quaternion.setFromRotationMatrix(_basis);
+      f.obj.scale.setScalar(scale);
     }
-
-    m.instanceMatrix.needsUpdate = true;
-    const ph = m.geometry.getAttribute('aPhase');
-    const mv = m.geometry.getAttribute('aMoving');
-    if (ph) ph.needsUpdate = true;
-    if (mv) mv.needsUpdate = true;
   });
 
-  if (!baked || !material) return null;
-  return (
-    <instancedMesh
-      ref={mesh}
-      args={[baked.geometry, material, CROWD_SIZE]}
-      frustumCulled={false}
-    />
-  );
+  return <group ref={group} />;
 }

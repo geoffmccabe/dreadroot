@@ -963,6 +963,33 @@ export function playerAttack(kind: 'weapon' | 'melee', aimWorld?: THREE.Vector3,
   fireWeapon(a.id, a.weapon, from.addScaledVector(a.body.forward, ARENA_HEIGHT * 0.35), _aim, ARENA_HEIGHT);
 }
 
+/**
+ * Distance from the player to the nearest living Kaiju, centre to centre, in METRES — plus the
+ * distance at which their colliders touch.
+ *
+ * Put on screen because I have run out of things I can measure from here. Headlessly the torso
+ * capsules never overlap: probe-arena-overlap runs the real four-Kaiju fight for 90 seconds and
+ * reports zero interpenetration, and the live site is confirmed to be serving the build that has
+ * it. Geoff still sees them pass through each other. One of us is measuring the wrong thing, and a
+ * number from HIS screen settles it: if the readout says 400 m while two Kaiju visibly overlap,
+ * the simulation is right and the models are drawn somewhere their bodies are not.
+ */
+export function nearestKaijuMetres(): { gap: number; contact: number } | null {
+  const me = agents.find((x) => x.isPlayer);
+  if (!me) return null;
+  let best = Infinity;
+  for (const other of agents) {
+    if (other === me || !other.alive) continue;
+    const d = me.body.dir.angleTo(other.body.dir) * me.body.radius;
+    if (d < best) best = d;
+  }
+  if (!isFinite(best)) return null;
+  return {
+    gap: best * METRES_PER_UNIT,
+    contact: torsoRadiusFrac * 2 * ARENA_HEIGHT * METRES_PER_UNIT,
+  };
+}
+
 /** Health of the player's Kaiju, for the HUD. */
 export function playerAgent(): Agent | null { return agents.find((x) => x.isPlayer) ?? null; }
 

@@ -12,6 +12,7 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
+import { nearestKaijuMetres } from './kaijuArena';
 import { failedLayers } from './GlobeErrorBoundary';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
@@ -125,6 +126,14 @@ export function KaijuLabHud() {
       {/* A dropped layer stops being simulated, not just drawn. If the arena layer goes, the fight
           silently freezes and it reads as several unrelated bugs at once. Say it out loud. */}
       {failedLayers.size > 0 && row('LAYER FAILED', [...failedLayers].join(', '))}
+      {/* THE COLLIDER, MEASURED LIVE. If this reads well above "contact" while two Kaiju look like
+          they are inside each other, the physics is fine and the models are being drawn somewhere
+          their bodies are not — which is a completely different bug from the one I have been
+          chasing, and this line is the only way to tell the two apart. */}
+      {(() => {
+        const n = nearestKaijuMetres();
+        return n ? row('Nearest Kaiju', `${Math.round(n.gap)} m (touch at ${Math.round(n.contact)} m)`) : null;
+      })()}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}
