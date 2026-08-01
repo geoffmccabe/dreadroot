@@ -27,6 +27,9 @@
     "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts",
     "check:player-collision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-player-collision.ts",
     "bench:ground-sample": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-ground-sample.ts",
+    "check:lod-seam": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-lod-seam.ts",
+    "probe:canyon-sites": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/probe-canyon-sites.ts",
+    "probe:canyon-rim": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/probe-canyon-rim.ts",
     "check:kaiju-clips": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-clips.ts",
     "check:ground-matches-mesh": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ground-matches-mesh.ts",
     "measure:glb-feet": "node scripts/measure-glb-feet.mjs"

@@ -49,9 +49,29 @@ import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
  * Geoff: "make it so if I hit 2 after B then it goes to the grand canyon. Same thing with other
  * Kaijus that attack." So these are full battles, not sightseeing jumps.
  */
-export const ARENA_SITES: { key: string; name: string; lat: number; lon: number }[] = [
+export const ARENA_SITES: {
+  key: string; name: string; lat: number; lon: number;
+  /** Compass bearing to face on arrival, degrees, 0 = north. Omit for "any tangent will do". */
+  facingDeg?: number;
+}[] = [
   { key: 'Digit1', name: 'Mount Everest',   lat: 27.9881, lon: 86.9250 },
-  { key: 'Digit2', name: 'Grand Canyon',    lat: 36.1069, lon: -112.1129 },
+  // MATHER POINT, the South Rim visitor centre — not a coordinate picked off a map.
+  //
+  // Geoff: "I land on a relatively flat and featureless area... there appears to be a canyon, but
+  // it's only around 300-500 m deep."
+  //
+  // scripts/probe-canyon-sites measured the real elevation data at nine named viewpoints and found
+  // the old drop (36.1069, -112.1129) stands at 1020 m — that is the canyon FLOOR, about 1,100 m
+  // BELOW the rim. Standing on the floor of a canyon is the one place a canyon cannot read as one.
+  // Every rim viewpoint measures 2100-2600 m.
+  //
+  // scripts/probe-canyon-rim then searched a 4 km grid for the actual lip, scoring high ground with
+  // a big drop close by and a steep face. The winner is 36.0616, -112.1076: 2151 m, with 975 m
+  // falling away within a single kilometre at a 51 degree face — which is exactly Mather Point, the
+  // published visitor-centre overlook. Pleasing, and measured rather than assumed.
+  //
+  // The deepest ground lies NORTHEAST, so that is the way to look.
+  { key: 'Digit2', name: 'Grand Canyon (Mather Point)', lat: 36.0616, lon: -112.1076, facingDeg: 45 },
   { key: 'Digit3', name: 'Matterhorn',      lat: 45.9766, lon: 7.6585 },
   { key: 'Digit4', name: 'Yosemite',        lat: 37.7459, lon: -119.5332 },
   { key: 'Digit5', name: 'Torres del Paine', lat: -50.9423, lon: -73.4068 },
@@ -83,9 +103,11 @@ export const ARENA_SITES: { key: string; name: string; lat: number; lon: number 
 const VIEW_M = 500;
 const EYE_M = 1.8;
 
-function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName: string): void {
+function startScaleView(
+  camera: THREE.Camera, lat: number, lon: number, siteName: string, facingDeg?: number,
+): void {
   // Identical placement to every other site. No special cases.
-  startArenaHere(camera, lat, lon, siteName);
+  startArenaHere(camera, lat, lon, siteName, facingDeg);
 
   // ...and identical CAMERA to every other site too, now. This is the whole of the difference: the
   // same orbit camera, dialled out to 500 m and down to a person's eye height. It used to be a
@@ -116,15 +138,38 @@ function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName
  * creature on the same planet ended up standing correctly on Everest and sunk at the Grand Canyon.
  * Anything that wants a different VIEW calls this first and then moves the camera.
  */
-function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest'): void {
+/**
+ * A tangent vector pointing along a compass bearing at `dir`. 0 = north, 90 = east.
+ *
+ * Needed because arriving somewhere spectacular facing an arbitrary direction wastes it: at the
+ * canyon rim the drop is to the northeast, and a Kaiju placed with "any tangent will do" has a
+ * three-in-four chance of standing with its back to the view.
+ */
+function bearingTangent(dir: THREE.Vector3, degrees: number, out: THREE.Vector3): THREE.Vector3 {
+  const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), dir);
+  if (east.lengthSq() < 1e-9) east.set(1, 0, 0);
+  east.normalize();
+  const north = new THREE.Vector3().crossVectors(dir, east).normalize();
+  const r = (degrees * Math.PI) / 180;
+  return out.copy(north).multiplyScalar(Math.cos(r)).addScaledVector(east, Math.sin(r)).normalize();
+}
+
+function startArenaHere(
+  camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest', facingDeg?: number,
+): void {
   // Reset anything a previous scale shot changed, so no site inherits another site's state.
   resetChaseShot();
   setCrowdCorridor(null);
   setKaijuHeight(ARENA_HEIGHT);
   const dir = initArena(17, lat, lon);
-  const face = new THREE.Vector3(0, 1, 0).cross(dir);
-  if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
-  face.normalize();
+  const face = new THREE.Vector3();
+  if (facingDeg != null) {
+    bearingTangent(dir, facingDeg, face);
+  } else {
+    face.copy(new THREE.Vector3(0, 1, 0).cross(dir));
+    if (face.lengthSq() < 1e-6) face.set(1, 0, 0);
+    face.normalize();
+  }
   // Drop from one body height: unmistakably a fall, without a long wait before you can move.
   dropKaijuAt(dir, face, 1);
   const surface = dir.clone().multiplyScalar(
@@ -248,8 +293,8 @@ export function KaijuLabController() {
           const site = ARENA_SITES.find((x) => x.key === e.code);
           if (!site) break;
           // 2 is the Grand Canyon SCALE SHOT, per Geoff. The others are ordinary battles.
-          if (e.code === 'Digit2') startScaleView(camera, site.lat, site.lon, site.name);
-          else startArenaHere(camera, site.lat, site.lon, site.name);
+          if (e.code === 'Digit2') startScaleView(camera, site.lat, site.lon, site.name, site.facingDeg);
+          else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
           break;
         }
         case 'KeyK': {
