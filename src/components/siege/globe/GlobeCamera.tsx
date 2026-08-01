@@ -22,6 +22,7 @@ import { useEffect, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
+import { sampleGlobeSurface } from './globeGround';
 
 /** Extra margin past the horizon so the planet's limb and the far side of terrain stay in view. */
 const FAR_MARGIN = 1.6;
@@ -38,7 +39,15 @@ const FAR_MIN = 2000;
  * against coastline at extreme range, is handled by draw order rather than by depth.
  */
 const NEAR_FRAC = 0.02;
-const NEAR_MIN = 0.1;
+/**
+ * 0.03 units = 3 m, not 0.1 = 10 m.
+ *
+ * The near plane is the radius of a hole cut around the camera, and anything inside it is not
+ * drawn. Standing at a person's eye height of 1.8 m, a 10 m near plane removes the ground under
+ * your own feet, so you see straight through the hillside you are standing on. 3 m is below eye
+ * height, which is the condition that has to hold.
+ */
+const NEAR_MIN = 0.03;
 const NEAR_MAX = 5;
 
 export function GlobeCamera() {
@@ -94,7 +103,25 @@ export function GlobeCamera() {
     const tangent = Math.sqrt(Math.max(0, d * d - PLANET_RADIUS * PLANET_RADIUS));
 
     const far = Math.max(FAR_MIN, tangent * FAR_MARGIN + FAR_MIN);
-    const near = Math.min(NEAR_MAX, Math.max(NEAR_MIN, altitude * NEAR_FRAC));
+
+    // NEAR PLANE FROM HEIGHT ABOVE THE GROUND, NOT ABOVE SEA LEVEL.
+    //
+    // Geoff: "the camera is set so that I can see below the terrain. I can see both below the
+    // terrain and above it."
+    //
+    // `altitude` is measured from sea level, and the Grand Canyon rim is 2,100 m above sea level.
+    // Standing there put the near plane at 42 m while the camera sat 1.8 m off the ground, so a
+    // 42 m sphere of terrain around the viewer was clipped away and you looked straight through
+    // the rim into the gorge below it. Measured from the GROUND the same spot gives essentially
+    // zero, which floors at 3 m and leaves the ground you are standing on visible.
+    //
+    // This is the second time this exact mistake has cost a day: the scroll-wheel zoom step was
+    // also scaled by altitude above sea level, which made one notch 8.4 km against a 500 m
+    // subject. Anything that should scale with "how far am I from what I am looking at" must not
+    // be measured from the centre of the planet.
+    const groundM = d > 1e-6 ? sampleGlobeSurface(p.x / d, p.y / d, p.z / d) : null;
+    const overGround = d - (PLANET_RADIUS + (groundM ?? 0) / METRES_PER_UNIT);
+    const near = Math.min(NEAR_MAX, Math.max(NEAR_MIN, overGround * NEAR_FRAC));
 
     // Only touch the projection matrix when it actually changes materially, since
     // updateProjectionMatrix() is not free and this runs every frame.

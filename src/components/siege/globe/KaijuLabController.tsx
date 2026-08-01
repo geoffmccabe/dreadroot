@@ -26,7 +26,7 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { latLonToDirection } from './cubeSphere';
 import { loadLandmarks, stepLandmark, currentLandmark } from './landmarkJump';
-import { enterWalkMode, dropKaijuAt, setWalkCameraFree, seedWalkLook } from './KaijuWalkController';
+import { enterWalkMode, dropKaijuAt, setChaseShot, resetChaseShot } from './KaijuWalkController';
 import {
   cycleKaiju, scaleKaiju, resetKaijuSize, getKaijuLab, subscribeKaijuLab, setKaijuHeight,
 } from './kaijuLabState';
@@ -79,37 +79,32 @@ export const ARENA_SITES: { key: string; name: string; lat: number; lon: number 
  * changes where the CAMERA is and how the crowd is arranged. If the Kaiju stands correctly at
  * Everest it now stands correctly here, necessarily, because it is the same code.
  */
+/** How far back the viewer stands, and how tall they are. */
+const VIEW_M = 500;
+const EYE_M = 1.8;
+
 function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName: string): void {
   // Identical placement to every other site. No special cases.
   startArenaHere(camera, lat, lon, siteName);
+
+  // ...and identical CAMERA to every other site too, now. This is the whole of the difference: the
+  // same orbit camera, dialled out to 500 m and down to a person's eye height. It used to be a
+  // second camera with its own rules, which is how the scale view ended up unable to rotate, with
+  // a ground clamp that measured the wrong ground, and with a zoom that overshot 17x.
+  setChaseShot(VIEW_M, EYE_M);
+
+  // Where the camera will therefore be: directly behind the Kaiju, 500 m back along its facing.
+  // Computed rather than read, because the camera itself does not move until the next frame and
+  // the crowd needs to be laid out along that line now.
   const kaijuDir = playerBody.dir.clone().normalize();
-
-  // Now, and ONLY now, differ: stand the viewer 500 m back at a person's eye height.
-  const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), kaijuDir).normalize();
-  const VIEW_M = 500;
-  const camDir = kaijuDir.clone()
-    .addScaledVector(east, -(VIEW_M / METRES_PER_UNIT) / PLANET_RADIUS)
+  const camDir = kaijuDir.clone().multiplyScalar(PLANET_RADIUS)
+    .addScaledVector(playerBody.forward, -(VIEW_M / METRES_PER_UNIT))
     .normalize();
-
-  setWalkCameraFree(true);
-
-  // EYE HEIGHT, 1.8 m — the entire point of the shot. Rounding it up to "a few units" would put the
-  // camera on a ten-storey roof and destroy the comparison. The Kaiju's own radius is the fallback
-  // when the viewpoint's tiles have not streamed, since it is the same ground and always valid.
-  const camGround = sampleGlobeSurface(camDir.x, camDir.y, camDir.z);
-  const eye = camGround != null
-    ? PLANET_RADIUS + camGround / METRES_PER_UNIT + 1.8 / METRES_PER_UNIT
-    : playerBody.radius + 1.8 / METRES_PER_UNIT;
-  camera.position.copy(camDir).multiplyScalar(eye);
-
-  // Look at the Kaiju's middle, not its feet, so it fills the frame.
-  camera.lookAt(kaijuDir.clone().multiplyScalar(playerBody.radius + ARENA_HEIGHT * 0.5));
-  seedWalkLook(camera);
 
   setCrowdCorridor(camDir, kaijuDir);
   setCrowd(true);
   console.log(
-    `[kaiju] SCALE VIEW at ${siteName}: eye 1.8 m, Kaiju ${VIEW_M} m away and `
+    `[kaiju] SCALE VIEW at ${siteName}: eye ${EYE_M} m, Kaiju ${VIEW_M} m away and `
     + `${ARENA_HEIGHT * METRES_PER_UNIT} m tall, 200 people between.`,
   );
 }
@@ -123,7 +118,7 @@ function startScaleView(camera: THREE.Camera, lat: number, lon: number, siteName
  */
 function startArenaHere(camera: THREE.Camera, lat?: number, lon?: number, siteName = 'Mount Everest'): void {
   // Reset anything a previous scale shot changed, so no site inherits another site's state.
-  setWalkCameraFree(false);
+  resetChaseShot();
   setCrowdCorridor(null);
   setKaijuHeight(ARENA_HEIGHT);
   const dir = initArena(17, lat, lon);

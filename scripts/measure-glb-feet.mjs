@@ -125,6 +125,12 @@ for (const f of files) {
     console.log(`${f}`);
     console.log(`   bounds y   ${box.min[1].toFixed(4)} .. ${box.max[1].toFixed(4)}   height ${height.toFixed(4)}`);
     console.log(`   foot lift  ${lift.toFixed(4)}  =  ${(sunk * 100).toFixed(1)}% of the body below its own origin`);
+    // Half-width of the BIND POSE, which for a rigged humanoid is a T-pose — so this is the arm
+    // span, not the body. Reported for scale only. It is NOT the right number to compare against
+    // the arena's torso capsule radius (0.25 x height): comparing them says every model is "too
+    // wide for its collider" when what is actually sticking out is a pair of outstretched arms.
+    const halfW = Math.max(box.max[0] - box.min[0], box.max[2] - box.min[2]) / 2;
+    console.log(`   bind span  ${(halfW / height).toFixed(3)} x height each side (T-pose arms, not body width)`);
     console.log(`   meshes     ${skinned} skinned, ${rigid} rigid`);
     console.log(`   verdict    ${
       Math.abs(lift) < height * 0.02 ? 'ORIGIN AT THE FEET — no lift needed'

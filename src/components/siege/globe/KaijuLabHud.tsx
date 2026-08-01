@@ -12,6 +12,7 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
+import { failedLayers } from './GlobeErrorBoundary';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import { kaijuDiag } from './kaijuDiag';
@@ -120,7 +121,10 @@ export function KaijuLabHud() {
       {row('Crowd', crowdDiag.on
         ? `${crowdDiag.spawned} ${crowdDiag.layout}${crowdDiag.modelOk ? '' : ' (NO MODEL)'}`
         : 'off')}
-      {row('Altitude', `${Math.round(terrainDiag.altitudeUnits)} u (near ${Math.round(terrainDiag.near)}, far ${Math.round(terrainDiag.far)})`)}
+      {row('Altitude', `${Math.round(terrainDiag.altitudeUnits)} u (near ${terrainDiag.near.toFixed(2)}, far ${Math.round(terrainDiag.far)})`)}
+      {/* A dropped layer stops being simulated, not just drawn. If the arena layer goes, the fight
+          silently freezes and it reads as several unrelated bugs at once. Say it out loud. */}
+      {failedLayers.size > 0 && row('LAYER FAILED', [...failedLayers].join(', '))}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}

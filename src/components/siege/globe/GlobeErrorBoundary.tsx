@@ -12,6 +12,16 @@ import { Component, type ErrorInfo, type ReactNode } from 'react';
 interface Props { children: ReactNode; label: string }
 interface State { failed: boolean }
 
+/**
+ * Layers that have been dropped, so the HUD can SAY SO.
+ *
+ * A console.error is invisible to anyone playing the game. When the arena layer is dropped the
+ * fight stops being simulated entirely — no separation, no weapons, no AI — and every one of those
+ * reads as a separate bug ("colliders do not work", "I cannot fire"). One line on screen turns
+ * that from three mysteries into one fact.
+ */
+export const failedLayers = new Set<string>();
+
 export class GlobeErrorBoundary extends Component<Props, State> {
   state: State = { failed: false };
 
@@ -22,6 +32,7 @@ export class GlobeErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo): void {
     // Log loudly but keep going. Silent failure here would be worse than the crash: the layer
     // would simply be missing with no explanation.
+    failedLayers.add(this.props.label);
     console.error(`[earth] "${this.props.label}" layer failed and was dropped:`, error, info.componentStack);
   }
 

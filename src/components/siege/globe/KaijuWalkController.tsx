@@ -20,22 +20,40 @@ import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 
 import {
-  body, stepBody, placeOnSurface, groundRadius, walkSpeed, runSpeed, reTangent, turnTangent,
+  body, stepBody, placeOnSurface, walkSpeed, runSpeed, reTangent, turnTangent,
 } from './kaijuBody';
-
-/** Eye height for the parked camera, in metres. A person, not a Kaiju. */
-const EYE_METRES = 1.8;
 import { getKaijuLab, subscribeKaijuLab } from './kaijuLabState';
-import { getWalkZoom, nudgeWalkZoom, resetWalkZoom, flyZoomDelta } from './globeZoom';
+import { getWalkZoom, nudgeWalkZoom, resetWalkZoom, setWalkZoom, flyZoomDelta } from './globeZoom';
 
-/** Camera distance behind the Kaiju, in body heights. */
-const CAM_BACK = 4.2;
-/** Camera height above it, in body heights. */
-const CAM_UP = 1.7;
+/**
+ * ONE CAMERA. It orbits the Kaiju at a DISTANCE and a PITCH, and that is all it does.
+ *
+ * There used to be a second, "free" camera for the Grand Canyon scale shot, parked in space with
+ * its own rules. Geoff, twice: "why is each location on the globe getting different rules and
+ * controls? that's stupid and not supposed to be like that." He is right, and the second camera
+ * also silently lost three separate features — you could not orbit it, its ground clamp used the
+ * Kaiju's ground rather than its own, and the chase code below overwrote its aim every frame.
+ *
+ * So the scale shot is no longer a different camera. It is this camera with the distance dialled
+ * out to 500 m and the pitch dialled down to a person's eye height. Everything else — orbiting,
+ * the wheel, staying above the terrain, aiming the weapon — is the same code it always was.
+ */
+/** Orbit distance at zoom 1, in body heights. */
+const CAM_ORBIT = 4.9;
+/**
+ * Resting pitch, radians above the horizon.
+ *
+ * 0.59 with CAM_ORBIT 4.9 reproduces the previous framing exactly: the old camera was 12.2 body
+ * heights back and 8.2 up, which is the same point in polar form. Expressing it as one distance
+ * and one angle is what lets a shot be composed by setting two numbers.
+ */
+const DEFAULT_PITCH = 0.59;
 /** How fast the chase camera catches up (per second). Lower = laggier, heavier feeling. */
 const CAM_LERP = 6;
 /** Mouse sensitivity for the orbit. */
 const LOOK_SENS = 0.0022;
+/** Metres the camera must stay above whatever ground is under IT. */
+const CAM_CLEAR_METRES = 2;
 /** Eye height as a fraction of body height. A 300 m Kaiju sees from about 270 m. */
 const EYE_FRAC = 0.9;
 
@@ -81,20 +99,30 @@ export function dropKaijuAt(dir: THREE.Vector3, forward: THREE.Vector3, dropHeig
 let pendingEnter = false;
 
 /**
- * Walk mode with the camera left alone.
+ * A composed shot: stand this far back, at this eye height. Applied on the next frame.
  *
- * The scale view needs the Kaiju's BODY simulated and standing at a fixed spot on the ground
- * (which is what walk mode gives) while the camera sits somewhere else entirely, at human eye
- * height half a kilometre away. Without this the chase camera would immediately snap back behind
- * the Kaiju and the whole point of the shot would be lost.
+ * Deferred rather than written straight into the zoom, because entering walk mode resets the zoom
+ * on the frame it takes effect — so setting it beforehand would be wiped out immediately.
  */
-let cameraFree = false;
-export function setWalkCameraFree(v: boolean): void { cameraFree = v; }
+let pendingShot: { distanceMetres: number; eyeMetres: number } | null = null;
 
-/** Adopt the camera's CURRENT facing as the look heading, so a parked shot opens where it is aimed. */
-let seedLookFrom: THREE.Camera | null = null;
-export function seedWalkLook(camera: THREE.Camera): void { seedLookFrom = camera; }
-export function isWalkCameraFree(): boolean { return cameraFree; }
+/**
+ * Compose a shot: the camera `distanceMetres` from the Kaiju, its eye `eyeMetres` above the
+ * ground. This is the Grand Canyon scale view, and it is ordinary camera settings rather than a
+ * second camera.
+ */
+export function setChaseShot(distanceMetres: number, eyeMetres: number): void {
+  pendingShot = { distanceMetres, eyeMetres };
+}
+
+/** Back to the resting over-the-shoulder view. Every site calls this so none inherits another's. */
+export function resetChaseShot(): void {
+  pendingShot = null;
+  resetWalkZoom();
+  restPitch = true;
+}
+/** Set when the pitch should return to its resting value on the next frame. */
+let restPitch = false;
 
 function setWalkActive(v: boolean) {
   if (walkActive === v) return;
@@ -110,7 +138,7 @@ export function KaijuWalkController() {
   // flips at the poles. Mouse-x rotates it about local up; mouse-y is a simple pitch.
   const camFwd = useRef(new THREE.Vector3());
   const haveFwd = useRef(false);
-  const orbitPitch = useRef(0.25);
+  const orbitPitch = useRef(DEFAULT_PITCH);
   const pendingYaw = useRef(0);
   /** First person puts the camera at the Kaiju's own eye height, which is what "eye level" means
    *  for a body this size: about 270 m up for a 300 m Kaiju. Third person stays the default. */
@@ -153,8 +181,26 @@ export function KaijuWalkController() {
       keys.current.add(e.code);
     };
     const up = (e: KeyboardEvent) => keys.current.delete(e.code);
+
+    // RIGHT-DRAG ORBITS, AND IT DOES NOT NEED POINTER LOCK.
+    //
+    // Geoff: "if I hold the right mouse button and slide the mouse left or right, the camera
+    // location would rotate around the Kaiju so it can change positions, but nothing at all
+    // happens."
+    //
+    // Looking around was gated on pointer lock alone, so without a lock the mouse did nothing —
+    // and left-click is already taken by the flamethrower, so clicking to acquire a lock fires
+    // instead. Right-drag is the convention everywhere else and costs nothing to support: the
+    // same yaw and pitch, just a different way of delivering them.
+    const dragging = { on: false };
+    const mouseDown = (e: MouseEvent) => { if (walkActive && e.button === 2) dragging.on = true; };
+    const mouseUp = (e: MouseEvent) => { if (e.button === 2) dragging.on = false; };
+    // Without this the browser's context menu opens on top of the drag and eats the mouse-up.
+    const noMenu = (e: MouseEvent) => { if (walkActive) e.preventDefault(); };
+
     const move = (e: MouseEvent) => {
-      if (!walkActive || document.pointerLockElement == null) return;
+      if (!walkActive) return;
+      if (document.pointerLockElement == null && !dragging.on) return;
       pendingYaw.current -= e.movementX * LOOK_SENS;
       orbitPitch.current = Math.max(-0.9, Math.min(1.2, orbitPitch.current + e.movementY * LOOK_SENS));
     };
@@ -164,20 +210,9 @@ export function KaijuWalkController() {
     // binding and the muscle memory should carry over.
     const wheel = (e: WheelEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (walkActive && cameraFree) {
-        // Parked camera: dolly toward or away from the SUBJECT, by a fraction of how far away it
-        // already is. My first attempt scaled the step by altitude above SEA LEVEL, which on the
-        // canyon rim is 2,100 m — giving an 8.4 km step against a subject 500 m away, a 17x
-        // overshoot on every notch. That is why zoom felt broken and why the camera kept ending up
-        // somewhere distant and underground.
-        const look = new THREE.Vector3();
-        camera.getWorldDirection(look);
-        // `body` is this file's import name for the player's Kaiju; there is no `playerBody`
-        // here, and referring to one threw a ReferenceError on every single scroll event.
-        const subject = body.dir.clone().multiplyScalar(body.radius);
-        const toSubject = Math.max(0.5, camera.position.distanceTo(subject));
-        camera.position.addScaledVector(look, -Math.sign(e.deltaY) * toSubject * 0.12);
-      } else if (walkActive) {
+      if (walkActive) {
+        // ONE ZOOM. The scale view used to dolly the camera by hand instead, which is where the
+        // 17x-overshoot bug lived; there is nothing left for a second path to get wrong.
         nudgeWalkZoom(e.deltaY);
       } else {
         // Flying: move the camera toward or away from the surface, by a step proportional to how
@@ -204,6 +239,9 @@ export function KaijuWalkController() {
     window.addEventListener('keydown', down, true);
     window.addEventListener('keyup', up, true);
     window.addEventListener('mousemove', move);
+    window.addEventListener('mousedown', mouseDown);
+    window.addEventListener('mouseup', mouseUp);
+    window.addEventListener('contextmenu', noMenu);
     window.addEventListener('blur', forgetKeys);
     document.addEventListener('visibilitychange', forgetKeys);
     document.addEventListener('pointerlockchange', forgetKeys);
@@ -213,6 +251,9 @@ export function KaijuWalkController() {
       window.removeEventListener('keydown', down, true);
       window.removeEventListener('keyup', up, true);
       window.removeEventListener('mousemove', move);
+      window.removeEventListener('mousedown', mouseDown);
+      window.removeEventListener('mouseup', mouseUp);
+      window.removeEventListener('contextmenu', noMenu);
       window.removeEventListener('wheel', wheel);
       window.removeEventListener('blur', forgetKeys);
       document.removeEventListener('visibilitychange', forgetKeys);
@@ -226,6 +267,19 @@ export function KaijuWalkController() {
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
     const h = getKaijuLab().height;
+
+    if (restPitch) { restPitch = false; orbitPitch.current = DEFAULT_PITCH; }
+    // A COMPOSED SHOT IS JUST THE ORDINARY DIALS. Applied here, AFTER the walk-mode entry above
+    // has had its chance to reset the zoom, or arriving somewhere would immediately undo it.
+    if (pendingShot) {
+      const { distanceMetres, eyeMetres } = pendingShot;
+      pendingShot = null;
+      const distUnits = distanceMetres / METRES_PER_UNIT;
+      const eyeUnits = eyeMetres / METRES_PER_UNIT;
+      orbitPitch.current = Math.atan2(eyeUnits, distUnits);
+      setWalkZoom(Math.hypot(distUnits, eyeUnits) / Math.max(1e-4, h * CAM_ORBIT));
+      haveCam.current = false;                       // snap, do not sail in from the old position
+    }
 
     const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
     const right = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
@@ -269,73 +323,31 @@ export function KaijuWalkController() {
       // Sit at the Kaiju's own eye height rather than behind it.
       target.current.copy(feet.current).addScaledVector(body.dir, h * EYE_FRAC);
     } else {
-      // Scroll-wheel zoom scales the whole chase offset, so pulling back also rises, which keeps
-      // the Kaiju framed instead of sliding it up the screen as the camera retreats.
-      const z = getWalkZoom();
+      // A PLAIN ORBIT: one distance, one angle. `want` already carries the pitch, so the camera
+      // rises as it is pitched up and drops toward eye level as it is pitched down — which is what
+      // makes a 500 m, 1.8 m scale shot reachable with the same two dials as every other view.
       target.current.copy(feet.current)
-        .addScaledVector(want.current, h * CAM_BACK * z)
-        .addScaledVector(body.dir, h * CAM_UP * z);
+        .addScaledVector(want.current, h * CAM_ORBIT * getWalkZoom());
     }
 
-    // Do not let the camera end up underground on a slope.
-    const gr = groundRadius();
-    if (gr != null) {
-      const minR = gr + h * 0.35;
-      if (target.current.length() < minR) target.current.setLength(minR);
+    // NEVER UNDERGROUND — MEASURED WHERE THE CAMERA ACTUALLY IS.
+    //
+    // This used to clamp against the ground under the KAIJU, which is a different place: on the
+    // canyon rim the camera can be out over the gorge, or back up the slope, hundreds of metres
+    // from the Kaiju's own ground height. Clamping to the wrong ground both buried the camera on a
+    // rise and shoved it into the air over a drop. Sampling under the camera is the only version
+    // of this that means what it says.
+    {
+      const cd = target.current.clone().normalize();
+      const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
+      if (gm != null) {
+        const floor = PLANET_RADIUS + gm / METRES_PER_UNIT + CAM_CLEAR_METRES / METRES_PER_UNIT;
+        if (target.current.length() < floor) target.current.setLength(floor);
+      }
     }
 
     if (!haveCam.current) { camPos.current.copy(target.current); haveCam.current = true; }
     camPos.current.lerp(target.current, Math.min(1, CAM_LERP * dt));
-    if (seedLookFrom) {
-      const look = new THREE.Vector3();
-      seedLookFrom.getWorldDirection(look);
-      const up = seedLookFrom.position.clone().normalize();
-      if (up.lengthSq() > 1e-12 && Number.isFinite(look.x)) {
-        orbitPitch.current = -Math.asin(Math.max(-1, Math.min(1, look.dot(up))));
-        look.addScaledVector(up, -look.dot(up));
-        if (look.lengthSq() > 1e-12) { camFwd.current.copy(look).normalize(); haveFwd.current = true; }
-      }
-      seedLookFrom = null;
-    }
-    if (cameraFree) {
-      // NEVER BELOW THE GROUND. The parked camera can be dollied, and the terrain under it is not
-      // flat, so without this it burrows into the mountain — which is both disorienting and makes
-      // the whole scene disappear behind rock. Clamped every frame, not just when it is placed.
-      {
-        const cd = camera.position.clone().normalize();
-        const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
-        if (gm != null) {
-          const floor = PLANET_RADIUS + gm / METRES_PER_UNIT + EYE_METRES / METRES_PER_UNIT;
-          if (camera.position.length() < floor) camera.position.setLength(floor);
-        }
-      }
-      // FREE CAMERA: hold the position, but still let the mouse look around from it. A fixed shot
-      // you cannot turn your head in is a screenshot, not a viewpoint — and the whole value of the
-      // scale view is being able to look from the people up to the Kaiju and back.
-      const up = camera.position.clone().normalize();
-      const fwd = camFwd.current.clone();
-      fwd.addScaledVector(up, -fwd.dot(up));
-      // GUARD. A zero-length forward normalises to (0,0,0), lookAt then targets the camera's own
-      // position, and the resulting quaternion is NaN — which does not merely look wrong, it
-      // blanks the entire scene. That is very likely why the scale view showed nothing at all.
-      if (fwd.lengthSq() < 1e-12) {
-        fwd.crossVectors(up, new THREE.Vector3(0, 1, 0));
-        if (fwd.lengthSq() < 1e-12) fwd.crossVectors(up, new THREE.Vector3(1, 0, 0));
-      }
-      fwd.normalize();
-      const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
-      if (Number.isFinite(right.x)) fwd.applyAxisAngle(right, -orbitPitch.current);
-      if (Number.isFinite(fwd.x) && fwd.lengthSq() > 1e-12) {
-        camera.up.copy(up);
-        camera.lookAt(camera.position.clone().add(fwd));
-      }
-      // AND STOP HERE. The chase-camera block below ends with lookAt(the Kaiju), which ran
-      // unconditionally and threw away everything just computed — so the parked camera was welded
-      // to face the Kaiju and the mouse turned nothing at all. That is "I cannot rotate the camera
-      // to see what is behind me": the yaw and pitch were being tracked correctly and then
-      // overwritten one line later.
-      return;
-    }
     camera.position.copy(camPos.current);
 
     // Look along the heading (first person) or at the body (third person). camera.up is local up

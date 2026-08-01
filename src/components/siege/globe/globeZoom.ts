@@ -17,8 +17,14 @@
 
 /** Chase-camera distance multiplier while walking. 1 = the tuned default. */
 let walkZoom = 1;
-/** Range: shoulder-height right up close, out to a wide establishing shot of the Kaiju. */
-const WALK_MIN = 0.35;
+/**
+ * Range: shoulder-height right up close, out to a wide establishing shot of the Kaiju.
+ *
+ * The floor is 0.25, not 0.35, because the Grand Canyon scale shot stands the viewer 500 m from a
+ * 300 m Kaiju and that works out to 0.34 — right on the old limit, where a single wheel notch
+ * would have jammed against it.
+ */
+const WALK_MIN = 0.25;
 const WALK_MAX = 6;
 
 /** Metres of altitude the wheel moves per notch while flying, as a fraction of current altitude. */
@@ -51,6 +57,20 @@ export function nudgeWalkZoom(delta: number): void {
 export function resetWalkZoom(): void {
   if (walkZoom === 1) return;
   walkZoom = 1;
+  emit();
+}
+
+/**
+ * Set the chase distance directly, clamped to the same range the wheel uses.
+ *
+ * This is how a composed shot is set up — the Grand Canyon scale view is just "stand a long way
+ * back and very low", not a second kind of camera. Going through the same knob is what keeps it
+ * one camera with one set of controls.
+ */
+export function setWalkZoom(v: number): void {
+  const next = Math.min(WALK_MAX, Math.max(WALK_MIN, v));
+  if (next === walkZoom) return;
+  walkZoom = next;
   emit();
 }
 
