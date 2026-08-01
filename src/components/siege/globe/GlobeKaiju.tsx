@@ -38,6 +38,7 @@ import { kaijuDiag } from './kaijuDiag';
 import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
 import { isKaijuWalkActive } from './KaijuWalkController';
 import { footOffset, footOffsetRaw } from './modelFeet';
+import { resolveGait } from './kaijuClips';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning } from './kaijuArena';
@@ -57,18 +58,9 @@ const STILL_SPEED = 0.6;
 
 type Gait = 'glide' | 'land' | 'walk' | 'run' | 'idle' | 'swim';
 
-/** Preferred clip per gait, in priority order. Models differ (Red Demon uses Mixamo names). */
-const CLIPS: Record<Gait, string[]> = {
-  glide: ['flex', 'jumpattack', 'idle'],
-  land:  ['stand_to_crouch', 'hit', 'idle'],
-  walk:  ['walk', 'walking'],
-  run:   ['run', 'walk', 'walking'],
-  idle:  ['breathidle', 'idle'],
-  // No model has a swim clip yet, so reuse the limbs-out 'flex' that also serves as the glide
-  // pose. It reads as moving through a medium rather than standing, which is the point. A real
-  // swim cycle is part of the animation work in P13.
-  swim:  ['flex', 'crawl', 'idle'],
-};
+// Clip choice is shared with the arena renderer (kaijuClips.ts). This file used to carry its own
+// exact-match table and its own names[0] fallback — two copies of the same brittle logic, which is
+// how one of them could be wrong about the Red Demon for as long as it was.
 
 /** Ground radius under the body, tolerant of tiles that have not streamed in yet. */
 function groundRadiusCached(b: typeof kaijuBodyState): number | null {
@@ -132,14 +124,12 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       + `applied ${footLift.current.toFixed(3)} units (${(footLift.current * 100).toFixed(0)} m)`);
   }, [model, modelHeight, state.height]);
 
-  /** Resolve a gait to an actual clip on THIS model, case-insensitively. */
-  const clipFor = (g: Gait): string | null => {
-    for (const want of CLIPS[g]) {
-      const hit = names.find((n) => n.toLowerCase() === want);
-      if (hit) return hit;
-    }
-    return names[0] ?? null;
-  };
+  // Clip list for THIS model with real durations, so zero-length and container tracks are rejected.
+  const clipInfo = useMemo(
+    () => animations.map((a) => ({ name: a.name, duration: a.duration })),
+    [animations],
+  );
+  const clipFor = (g: Gait): string | null => resolveGait(clipInfo, g);
 
   const play = (g: Gait) => {
     if (gait.current === g && current.current) return;
@@ -177,7 +167,13 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       // Footsteps. Only while walking: in fly mode the Kaiju is carried by the camera rather than
       // simulated, so it has no real gait to match and stomping would be a lie.
       camera.getWorldDirection(view.current);
-      updateKaijuFootsteps('player', b, h, camera.position, view.current, true, dt);
+      // Same rule as the arena avatars: the clip drives the sound.
+      const act = current.current;
+      const clipLen = act?.getClip().duration ?? 0;
+      const phase = act && clipLen > 0 && (gait.current === 'walk' || gait.current === 'run')
+        ? (act.time % clipLen) / clipLen
+        : undefined;
+      updateKaijuFootsteps('player', b, h, camera.position, view.current, true, dt, phase);
       // "I heard you": three vivid pulses in one second whenever a command is understood.
       applyFlash(model, flashIntensity(ackFlashRemaining('player')), playerBurning());
       const bUp = up.current.copy(b.dir);

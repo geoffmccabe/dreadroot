@@ -199,8 +199,34 @@ const _axis = new THREE.Vector3();
  * than only in the playback rate.
  */
 export function swingSeconds(a: Agent): number {
-  return (1.8 / Math.max(0.35, a.d.rateMul)) * 0.55;
+  // A SWING IS SCALED BY SIZE, like every other rate in this system. It was the one that was not.
+  //
+  // Geoff: "instead of doing its slow motion swipe attack like it does in SWW, it's just twitching
+  // really fast" — and separately, approvingly, of the walk: "it's in slow motion and looks good".
+  // The walk was already Froude-scaled in the renderer; the swing was a flat ~1 s regardless of
+  // whether the creature was 4 m or 300 m tall.
+  //
+  // Limb period goes as sqrt(L), the same rule behind the walk cycle and the turn rate. Measured
+  // against the creature's NATURAL height, not a constant, because a Red Demon blown up from 4 m
+  // and a Fort Golem blown up from 12 m are slowed by very different amounts.
+  //
+  // The exponent is deliberately the full 0.5 rather than something softened for playability: a
+  // 300 m arm that arrives in a second is exactly the thing that reads as twitching.
+  const naturalMetres = Math.max(0.5, NATURAL_METRES[a.monsterType] ?? 4);
+  const sizeMul = Math.sqrt((ARENA_HEIGHT * METRES_PER_UNIT) / naturalMetres);
+  return (1.8 / Math.max(0.35, a.d.rateMul)) * 0.55 * sizeMul;
 }
+
+/**
+ * Real-world height of each creature, in metres, for the size scaling above.
+ *
+ * Duplicated from MONSTER_CATALOG rather than imported: that module pulls in the whole SWW monster
+ * catalog including React components, and the headless checks that exercise this file must stay
+ * importable in node. Only the numbers are needed here.
+ */
+const NATURAL_METRES: Record<number, number> = {
+  1: 1.8, 8: 4, 15: 8, 16: 10, 17: 12,
+};
 /** Fraction of the swing at which contact happens. */
 const SWING_CONTACT = 0.58;
 
@@ -217,7 +243,29 @@ const KNOCK_MAX = 0.35;
  * size-scaled curve the body itself uses, so a Kaiju cannot pivot faster to aim than it can to
  * walk — two hand-tuned constants for one physical quantity is how they drift apart.
  */
-const turnRatePlayer = () => turnRate(ARENA_HEIGHT);
+/**
+ * AIMING IS A TORSO TWIST, NOT A TURN. It is allowed to be faster than walking the body round.
+ *
+ * Geoff: "I still have trouble firing my kaiju's flames... it seems to work a little and then stops
+ * working." That is a regression I introduced. Locomotion turning was correctly slowed from a flat
+ * 2.2 rad/s to a size-scaled 0.54 rad/s, and the aim-turn was pointed at the same curve — but the
+ * weapon only fires once the body is lined up with the crosshair, and at 31 degrees a second the
+ * body simply cannot keep up with a mouse. Move the camera and it never converges, so it fires
+ * briefly and then never again.
+ *
+ * A creature can bring its shoulders and arms round faster than it can walk its whole mass round,
+ * so the aim gets 3x the locomotion rate. It is still visibly a turn, not a turret.
+ */
+const AIM_TURN_MUL = 3;
+const turnRatePlayer = () => turnRate(ARENA_HEIGHT) * AIM_TURN_MUL;
+/**
+ * How closely the body must face the crosshair before the weapon fires, as a dot product.
+ *
+ * 0.94 is a 20-degree cone. It was 0.985 — under 10 degrees — which is tighter than a 300 m
+ * creature can hold against a moving mouse, and tighter than it needs to be: a flame jet 20 degrees
+ * off the crosshair still plainly goes where you are pointing.
+ */
+const AIM_CONE_DOT = 0.94;
 
 function centreOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
@@ -886,7 +934,7 @@ export function playerAttack(kind: 'weapon' | 'melee', aimWorld?: THREE.Vector3,
       turnTangentOf(a.body, a.body.forward, sign * Math.min(Math.acos(cos), turnRatePlayer() * dt));
     }
     // Not lined up yet: keep turning, hold fire.
-    if (a.body.forward.dot(_aim) < 0.985) return;
+    if (a.body.forward.dot(_aim) < AIM_CONE_DOT) return;
   }
 
   if (a.cooldown > 0) return;

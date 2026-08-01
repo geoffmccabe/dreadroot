@@ -163,9 +163,22 @@ export async function playKaijuSound(
 
 // --- footsteps -----------------------------------------------------------------------------------
 
-/** Distance each Kaiju has walked since its last footfall. */
+/** Distance each Kaiju has walked since its last footfall. Only used without a clip to read. */
 const strideAccum = new Map<string, number>();
 const _prev = new Map<string, THREE.Vector3>();
+
+/** Where each Kaiju's walk clip was last frame, 0..1, for detecting a footfall crossing. */
+const phasePrev = new Map<string, number>();
+
+/**
+ * Points in a walk cycle where a foot lands, as a fraction of the clip.
+ *
+ * Two per cycle — left and right — half a cycle apart. 0.0 and 0.5 is the standard convention for a
+ * biped walk clip, which every model here uses. If a clip is ever authored with its contacts
+ * elsewhere the two sounds simply lead or lag together, which is far less wrong than the previous
+ * arrangement of running on a completely independent clock.
+ */
+const FOOTFALL_PHASES = [0.0, 0.5];
 
 /**
  * Fire a footstep every time this Kaiju has covered one stride.
@@ -182,6 +195,22 @@ export function updateKaijuFootsteps(
   listenerDir: THREE.Vector3,
   active: boolean,
   dt = 1 / 60,
+  /**
+   * Where the WALK CLIP is in its cycle, 0..1, if the renderer knows.
+   *
+   * Geoff: "His footsteps seem to happen around every 3.7 seconds... that's a guess but would be
+   * good timing for when they hit the ground."
+   *
+   * He should not have to guess, and the number should not be a constant anyone has to keep in
+   * step. Footsteps were paced by DISTANCE (speed x dt against an assumed stride) while the legs
+   * were paced by TIME (clip duration / playback rate). Two independent clocks for one physical
+   * event, so they drift apart the moment either is retuned — the same duplicated-source-of-truth
+   * pattern behind today's other bugs.
+   *
+   * Given the clip's own phase, a footfall fires at fixed points in the cycle and therefore lands
+   * with the visible foot by construction, at whatever cadence the animation actually runs.
+   */
+  phase01?: number,
 ): void {
   _pos.copy(body.dir).multiplyScalar(body.radius);
 
@@ -199,18 +228,42 @@ export function updateKaijuFootsteps(
   // — a Kaiju should not bank up steps mid-jump and fire them all on landing.
   if (!active || !body.onGround || body.submerged || moved < 1e-6) return;
 
-  const stride = heightUnits * STRIDE_FRAC;
-  let acc = (strideAccum.get(id) ?? 0) + moved;
-  if (acc >= stride) {
-    acc -= stride;
-    // ±10% on each, independently rolled, so no two steps are identical.
-    const vary = () => 1 + (rand() * 2 - 1) * VARY;
+  // ±10% on each, independently rolled, so no two steps are identical.
+  const vary = () => 1 + (rand() * 2 - 1) * VARY;
+  const step = () => {
     void playKaijuSound(FOOTSTEP_URL, _pos, listenerPos, listenerDir, {
       volume: 0.55 * vary(),
       rate: vary(),
       refUnits: 10,
       maxUnits: 300,
     });
+  };
+
+  // PREFERRED: the clip's own cycle. Two footfalls per cycle, at the points where a walk cycle
+  // plants each foot. Whatever rate the animation is playing at — and at Kaiju scale that is about
+  // nine seconds a cycle — the sound follows it.
+  if (phase01 != null && Number.isFinite(phase01)) {
+    const prev = phasePrev.get(id);
+    phasePrev.set(id, phase01);
+    if (prev != null) {
+      // Forward progress since last frame, wrapping at 1. Guards against a paused or reversed clip.
+      const delta = (phase01 - prev + 1) % 1;
+      if (delta > 0 && delta < 0.5) {
+        for (const f of FOOTFALL_PHASES) {
+          const d = (f - prev + 1) % 1;
+          if (d > 0 && d <= delta) step();
+        }
+      }
+    }
+    return;
+  }
+
+  // FALLBACK, for anything with no clip to read: pace by distance walked, as before.
+  const stride = heightUnits * STRIDE_FRAC;
+  let acc = (strideAccum.get(id) ?? 0) + moved;
+  if (acc >= stride) {
+    acc -= stride;
+    step();
   }
   strideAccum.set(id, acc);
 }
@@ -241,8 +294,12 @@ export function scream(worldPos: THREE.Vector3, listenerPos: THREE.Vector3, list
 export function stopKaijuFootsteps(id: string): void {
   strideAccum.delete(id);
   _prev.delete(id);
+  // Drop the remembered clip phase too, or a Kaiju that stops and restarts fires a spurious step
+  // on its first frame back from wherever the cycle happened to be left.
+  phasePrev.delete(id);
 }
 export function stopAllKaijuFootsteps(): void {
   strideAccum.clear();
+  phasePrev.clear();
   _prev.clear();
 }

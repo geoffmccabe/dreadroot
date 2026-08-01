@@ -9,6 +9,7 @@
 // player renderer — which is shared with the other Claude on this branch — this is its own module.
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { resolveGait } from './kaijuClips';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -27,15 +28,10 @@ import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
 /** Clip preferences per gait, matching GlobeKaiju so both look the same. */
-const CLIPS: Record<string, string[]> = {
-  walk: ['walk', 'walking'],
-  run: ['run', 'walk', 'walking'],
-  idle: ['breathidle', 'idle'],
-  // 'swipe' first: the golems' attack clip is named that in the catalog, and the Red Demon's is
-  // 'attack'. Listing both here means one gait covers every model without a per-type table.
-  attack: ['swipe', 'attack', 'attack1', 'attack_01', 'jumpattack', 'melee', 'hit'],
-  dead: ['death', 'die', 'hit', 'idle'],
-};
+// Clip choice lives in kaijuClips.ts now, shared with GlobeKaiju. The list that used to be here
+// demanded an EXACT name match and fell back to names[0] — which on the Red Demon is the Mixamo
+// container track, and is why its attack read as fast twitching rather than a swipe. See the note
+// in that file; it is measured against the real clip lists in check-kaiju-clips.
 
 /**
  * Playback rate for a Kaiju's clips. TWO factors, and this had NEITHER of them right.
@@ -88,11 +84,19 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const gait = useRef<string>('idle');
   const current = useRef<THREE.AnimationAction | null>(null);
 
+  // Clip list for THIS model, with real durations, so the resolver can reject the zero-length and
+  // container tracks rather than trusting a name.
+  const clipInfo = useMemo(
+    () => animations.map((a) => ({ name: a.name, duration: a.duration })),
+    [animations],
+  );
+
   const play = (g: string) => {
     if (gait.current === g && current.current) return;
     gait.current = g;
-    const want = CLIPS[g] ?? CLIPS.idle;
-    const name = want.map((w) => names.find((n) => n.toLowerCase() === w)).find(Boolean) ?? names[0];
+    const name = resolveGait(clipInfo, g);
+    // No sensible clip: keep whatever is playing. Switching to an arbitrary track is what produced
+    // the twitching, so doing nothing is strictly better.
     if (!name) return;
     const next = actions[name];
     if (!next || next === current.current) return;
@@ -170,7 +174,14 @@ function AgentAvatar({ agent }: { agent: Agent }) {
       agent.screamed = false;
       scream(g.position, camera.position, look.current);
     }
-    updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true, dt);
+    // Hand the walk clip's own phase over, so the stomp lands with the foot instead of being
+    // paced by a separate distance counter that drifts against the animation.
+    const act = current.current;
+    const clipLen = act?.getClip().duration ?? 0;
+    const phase = act && clipLen > 0 && (gait.current === 'walk' || gait.current === 'run')
+      ? (act.time % clipLen) / clipLen
+      : undefined;
+    updateKaijuFootsteps(agent.id, b, ARENA_HEIGHT, camera.position, look.current, true, dt, phase);
     applyFlash(model, flashIntensity(agent.ackFlash), agent.burning);
   });
 
