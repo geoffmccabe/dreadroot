@@ -148,6 +148,10 @@ function measure(path) {
     let torso = 0;
     let lowest = Infinity;
     let highest = -Infinity;
+    // ROOT MOTION: how far the whole skeleton wanders horizontally over the clip, in ROOT space.
+    // Mixamo's non-in-place clips bake locomotion into the hips, so the drawn creature slides away
+    // from the position its collider is at. Tracked as the range of the hips/pelvis over the cycle.
+    let rootMinX = Infinity, rootMaxX = -Infinity, rootMinZ = Infinity, rootMaxZ = -Infinity;
     const SAMPLES = 12;
     for (let s = 0; s < SAMPLES; s++) {
       const t = duration * (s / SAMPLES);
@@ -179,6 +183,13 @@ function measure(path) {
         lowest = Math.min(lowest, p[1]);
         highest = Math.max(highest, p[1]);
       }
+      // The deepest-but-one node is the hips in every rig here; use the node that moves most
+      // instead of guessing a name, by taking the mean position of all bones.
+      let mx = 0, mz = 0;
+      for (const p of pts) { mx += p[0]; mz += p[2]; }
+      mx /= Math.max(1, pts.length); mz /= Math.max(1, pts.length);
+      rootMinX = Math.min(rootMinX, mx); rootMaxX = Math.max(rootMaxX, mx);
+      rootMinZ = Math.min(rootMinZ, mz); rootMaxZ = Math.max(rootMaxZ, mz);
       const h = highest - lowest;
       for (const p of pts) {
         const reach = Math.hypot(p[0], p[2]);
@@ -191,7 +202,10 @@ function measure(path) {
         if (f > 0.40 && f < 0.75) torso = Math.max(torso, reach);
       }
     }
-    results.push({ name: anim.name ?? `#${ai}`, widest, torso, height: highest - lowest });
+    results.push({
+      name: anim.name ?? `#${ai}`, widest, torso, height: highest - lowest,
+      rootTravel: Math.hypot(rootMaxX - rootMinX, rootMaxZ - rootMinZ),
+    });
   }
   return { clips, results };
 }
@@ -215,8 +229,10 @@ for (const f of files) {
     for (const r of m.results) {
       const frac = r.height > 1e-6 ? r.widest / r.height : 0;
       const tf = r.height > 1e-6 ? r.torso / r.height : 0;
-      console.log(`   "${r.name}": torso ${tf.toFixed(3)}, full reach ${frac.toFixed(3)} (x height)`
-        + `   ${tf > CAPSULE_FRAC ? `<-- TORSO reaches past the ${CAPSULE_FRAC} capsule` : 'torso inside the capsule'}`);
+      const rt = r.height > 1e-6 ? r.rootTravel / r.height : 0;
+      console.log(`   "${r.name}": torso ${tf.toFixed(3)}, full reach ${frac.toFixed(3)}, `
+        + `root drift ${rt.toFixed(3)} (all x height)`
+        + `${rt > 0.05 ? '   <-- SLIDES AWAY FROM ITS COLLIDER' : ''}`);
     }
     console.log('');
   } catch (e) {

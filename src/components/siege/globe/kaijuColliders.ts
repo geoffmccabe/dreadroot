@@ -120,14 +120,31 @@ export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsu
  * all. That is Geoff's "the red demon still walks right through me", and no amount of correct
  * separation maths could have fixed it, because the maths was correctly separating the wrong shape.
  *
- * 0.46 covers every walk and run pose. It does not cover the arms-out breathing idle at 0.53, and
- * deliberately not: that would hold two Kaiju 318 m apart, and a hand overlapping while both stand
- * still is a far smaller lie than a pair of creatures that visibly cannot approach each other.
+ * 0.46 was not enough, because the torso is not what you SEE overlapping. Full bone reach — arms
+ * included — measures 0.548 x height on the Red Demon and 0.686 on the golems. Two of them held
+ * 0.92 apart with a combined reach of 1.23 means about 94 m of arm passing through the other one's
+ * body, which at this scale reads exactly as Geoff's "the Kaiju just walk through each other".
  *
- * Melee still reaches: the hit test allows the attacker's 0.9-body reach PLUS the target's own
- * radius, so two Kaiju touching at 0.92 apart are comfortably inside 1.36.
+ * THE CEILING IS NOT THE MELEE HIT TEST. I claimed it was, and that was wrong: the hit test allows
+ * the attacker's 0.9-body reach PLUS the target's radius, so it permits r up to 0.9. The real
+ * ceiling is the behaviour tree's InMeleeRange gate, which only lets an agent swing when the target
+ * is within melee range + 0.4 = 1.3 bodies. Two colliders touching sit 2r apart, so r > 0.65 means
+ * an AI can never get close enough to decide to attack at all — the fight would silently stop.
+ *
+ * 0.60 sits below that with room to spare: 1.20 apart, inside the 1.3 gate. It roughly halves the
+ * limb overlap rather than eliminating it. Eliminating it needs per-limb capsules — kaijuColliders
+ * already builds them, but separation still resolves torso-to-torso — and that is the real answer
+ * to "ideally they match to the arms, legs, head, etc". This is the honest partial fix.
  */
-const TORSO_FRAC = 0.46;
+const TORSO_FRAC = 0.60;
+
+/**
+ * The widest this may go before the AI stops being able to reach anything.
+ *
+ * Kept next to the value it constrains, and asserted in check-player-collision, because the two
+ * numbers live in different files and the failure mode is silent: combat simply stops happening.
+ */
+export const TORSO_FRAC_CEILING = 0.65;
 
 /**
  * The always-available torso capsule: feet to shoulders, up the body's own local up.
