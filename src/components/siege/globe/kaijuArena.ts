@@ -130,6 +130,8 @@ export interface Agent {
   screamed: boolean;
   /** Seconds left in a melee swing. The renderer plays the attack clip while this runs. */
   swingTimer: number;
+  /** Seconds since it died, for the fall-and-topple. Undefined while alive. */
+  deadFor?: number;
   /** Whether this swing has already delivered its blow. */
   swingLanded: boolean;
   /**
@@ -692,7 +694,17 @@ export function stepArena(dt: number, playerControlled: boolean): void {
 
   for (const idx of order) {
     const a = agents[idx];
-    if (!a.alive) continue;
+    if (!a.alive) {
+      // A CORPSE STILL FALLS. Geoff: "when the kaijus die, their bodies float up in the air instead
+      // of falling onto the terrain like physics would dictate."
+      //
+      // Dead agents were skipped outright, so nothing ever applied gravity to them again: whatever
+      // radius the body held at the moment of death is where it stayed. Stepping it with no input
+      // keeps gravity and the ground snap running, so it drops and lands.
+      a.deadFor = (a.deadFor ?? 0) + dt;
+      stepBodyOf(a.body, dt, 0, 0, false, false, ARENA_HEIGHT, null);
+      continue;
+    }
     a.cooldown = Math.max(0, a.cooldown - dt);
     a.timeSinceHit += dt;
 

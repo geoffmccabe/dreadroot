@@ -26,6 +26,7 @@
     "check:globe-transect": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-transect.ts",
     "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts",
     "check:player-collision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-player-collision.ts",
+    "bench:ground-sample": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-ground-sample.ts",
     "check:kaiju-clips": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-clips.ts",
     "check:ground-matches-mesh": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ground-matches-mesh.ts",
     "measure:glb-feet": "node scripts/measure-glb-feet.mjs"

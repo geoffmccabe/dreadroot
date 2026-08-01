@@ -22,7 +22,9 @@
 import {
   initArena, initArenaWith, stepArena, getAgents, getEvents, arenaReport, ARENA_HEIGHT,
 } from '../src/components/siege/globe/kaijuArena';
-import { getProjectiles } from '../src/components/siege/globe/kaijuWeapons';
+import {
+  getProjectiles, spawnExplosion, clearProjectiles,
+} from '../src/components/siege/globe/kaijuWeapons';
 import { scoreActions, chooseAction } from '../src/components/siege/globe/kaijuBrain';
 import * as THREE from 'three';
 import {
@@ -230,7 +232,17 @@ ok(agents.some((a, i) => Math.abs((a.perception?.targetDistBodies ?? 0) - startD
   console.log(`  peak explosion debris in flight: ${peakDebris} particles`);
   ok(sawGrenade, 'a grenade was actually thrown');
   ok(apex > 300, 'it arcs ABOVE the thrower rather than flying flat', `${apex.toFixed(0)} m`);
-  ok(peakDebris > 200, 'the explosion is hundreds of particles, not a puff', `${peakDebris}`);
+  // MEASURE THE EXPLOSION DIRECTLY, not by hoping a 40-second brawl happens to detonate one on a
+  // frame we sampled. The property under test is "spawnExplosion produces a dense blast", which is
+  // a fact about that function; how many grenades a given fight throws is combat pacing, and it
+  // shifts whenever the AI is retuned. Tying the two together made an unrelated change to swing
+  // speed look like the explosion had been broken.
+  clearProjectiles();
+  spawnExplosion(new THREE.Vector3(0, 0, 63710), 1.6);
+  const burst = getProjectiles().filter((p) => p.visual === 'blast').length;
+  ok(burst > 200, 'one explosion is hundreds of particles, not a puff', `${burst} particles`);
+  console.log(`  (peak debris seen in the live fight: ${peakDebris}, which is pacing, not density)`);
+  clearProjectiles();
 }
 
 // FLAME MUST SET THINGS ALIGHT, AND THE BURN MUST STOP.

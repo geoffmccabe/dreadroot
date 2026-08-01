@@ -111,3 +111,33 @@ export function resolveGait(
   const usable = clips.filter(c => c.duration > 0.02 && !isContainerClip(c.name));
   return usable.sort((a, b) => b.duration - a.duration)[0]?.name ?? null;
 }
+
+/**
+ * Remove baked-in root translation from a clip, so the game's physics owns where the body IS.
+ *
+ * Mixamo exports carry locomotion in the hips. Measured on the models here:
+ *
+ *   reddemon "Two Handed Sword Death"    75.0 units of hip travel
+ *   reddemon "Standing Melee Attack..."  20.3
+ *   fortgolem "jumpattack"              198.1
+ *
+ * At the scale these are drawn, that is hundreds of metres of the model sliding away from its own
+ * collider — and on a death clip, which clamps on its last frame, it simply stops there. That is
+ * Geoff's "their bodies float up in the air instead of falling onto the terrain".
+ *
+ * Only the ROOT-most animated position track is dropped. Everything else — the actual animation —
+ * is untouched, so the pose still plays; it just plays in place, where the body says it is.
+ *
+ * Deliberately NOT applied to walk and run: their hip travel measures 0.04-0.06 of body height,
+ * which is ordinary cycle sway rather than locomotion, and Geoff has said the walk looks right.
+ * Changing what is already good to fix something else is how regressions happen.
+ */
+export function stripRootMotion(clip: { tracks: Array<{ name: string }> }): void {
+  const posTracks = clip.tracks.filter(t => t.name.endsWith('.position'));
+  if (posTracks.length === 0) return;
+  // The root is the shortest bone path — hips/pelvis sit above every other animated node.
+  let root = posTracks[0];
+  for (const t of posTracks) if (t.name.length < root.name.length) root = t;
+  const i = clip.tracks.indexOf(root);
+  if (i >= 0) clip.tracks.splice(i, 1);
+}

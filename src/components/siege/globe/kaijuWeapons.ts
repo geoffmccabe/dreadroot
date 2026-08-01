@@ -143,7 +143,116 @@ export interface Projectile {
   dead: boolean;
   /** How the renderer should draw it. 'blast' is explosion debris, not a weapon. */
   visual: WeaponId | 'blast';
+  /** Flame only: has this particle touched the ground and started flowing along it? */
+  grounded?: boolean;
 }
+
+// --- burning terrain -----------------------------------------------------------------------------
+
+/**
+ * A patch of ground left alight where the jet washed over it.
+ *
+ * Geoff: "leave some flames burning on the terrain for 10-15 seconds". Rather than a second
+ * renderer, each patch is an EMITTER that keeps spawning short-lived flame particles straight up,
+ * so it draws through the same instanced mesh as everything else and inherits its colour ramp,
+ * fade and cost model for free.
+ */
+interface GroundFire {
+  pos: THREE.Vector3;
+  /** Local up at the patch, cached — it never moves, so this is computed once. */
+  up: THREE.Vector3;
+  /** Seconds of burning left. */
+  life: number;
+  /** Seconds until the next puff. */
+  nextEmit: number;
+  /** Particle size, captured from whatever lit it, so the emitter needs no world scale passed in. */
+  size: number;
+}
+
+const groundFires: GroundFire[] = [];
+export function getGroundFires(): GroundFire[] { return groundFires; }
+
+/**
+ * How many patches may burn at once.
+ *
+ * A jet lays down contacts continuously, so without a cap a few seconds of sustained fire would
+ * carpet the mountain and every one of them would be emitting. 48 is enough to read as a burning
+ * hillside; past that the oldest patch is replaced rather than the list growing.
+ */
+const MAX_GROUND_FIRES = 48;
+/** Seconds a patch burns. Geoff asked for 10-15. */
+const FIRE_LIFE_MIN = 10;
+const FIRE_LIFE_MAX = 15;
+/** Chance that one contacting flame particle starts a new patch. Low: contacts are constant. */
+const IGNITE_CHANCE = 0.06;
+/** Seconds between puffs from one patch. */
+const FIRE_EMIT_INTERVAL = 0.10;
+
+/** Light a patch of ground, or refresh one that is already burning nearby. */
+function igniteGround(pos: THREE.Vector3, up: THREE.Vector3, size: number): void {
+  // Merge with a nearby patch instead of stacking dozens in one footprint — that both looks like
+  // one bigger fire and keeps the emitter count honest.
+  const mergeDist = 1.2;
+  for (const f of groundFires) {
+    if (f.pos.distanceTo(pos) < mergeDist) {
+      f.life = Math.max(f.life, FIRE_LIFE_MIN + rand() * (FIRE_LIFE_MAX - FIRE_LIFE_MIN));
+      return;
+    }
+  }
+  const fire: GroundFire = {
+    pos: pos.clone(),
+    up: up.clone(),
+    life: FIRE_LIFE_MIN + rand() * (FIRE_LIFE_MAX - FIRE_LIFE_MIN),
+    nextEmit: 0,
+    size,
+  };
+  if (groundFires.length >= MAX_GROUND_FIRES) groundFires.shift();
+  groundFires.push(fire);
+}
+
+/** Advance the burning patches and emit their flames. Called from stepProjectiles. */
+function stepGroundFires(dt: number): void {
+  const spec = WEAPONS.flame;
+  for (let i = groundFires.length - 1; i >= 0; i--) {
+    const f = groundFires[i];
+    f.life -= dt;
+    if (f.life <= 0) { groundFires.splice(i, 1); continue; }
+
+    f.nextEmit -= dt;
+    if (f.nextEmit > 0) continue;
+    f.nextEmit = FIRE_EMIT_INTERVAL;
+
+    // Fade the patch out over its last couple of seconds rather than stopping dead.
+    const fading = Math.min(1, f.life / 2);
+    const puffs = 1 + Math.floor(rand() * 2 * fading);
+    for (let k = 0; k < puffs; k++) {
+      // Straight up, wandering: a resting fire is buoyancy with almost no forward momentum.
+      _dir.copy(f.up).multiplyScalar(0.9 + rand() * 0.6);
+      _sideA.set(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize();
+      _dir.addScaledVector(_sideA, 0.25).normalize();
+      projectiles.push({
+        pos: f.pos.clone().addScaledVector(_sideA, (rand() - 0.5) * 0.8),
+        vel: _dir.clone().multiplyScalar(spec.speed * (0.06 + rand() * 0.06)),
+        ownerId: 'ground-fire',
+        weapon: 'flame',
+        life: 0.9 + rand() * 0.7,
+        maxLife: 1.6,
+        // NO DAMAGE. Burning terrain is scenery for now; making it hurt would change the balance
+        // of every fight without anyone asking for that. The direct jet still ignites Kaiju.
+        damage: 0,
+        blast: 0,
+        colour: spec.colour,
+        size: f.size * (0.8 + rand() * 0.8),
+        dead: false,
+        visual: 'flame',
+        grounded: true,
+      });
+    }
+  }
+}
+
+/** Put every fire out — used when an arena is reset, so a new fight starts on cold ground. */
+export function clearGroundFires(): void { groundFires.length = 0; }
 
 const projectiles: Projectile[] = [];
 export function getProjectiles(): Projectile[] { return projectiles; }
@@ -233,6 +342,68 @@ export interface HitEvent { targetId: string; ownerId: string; weapon: WeaponId;
  * Gravity is applied along the projectile's OWN local up (toward the planet centre), which is what
  * makes ballistics behave correctly on a sphere over the distances a Kaiju cannon covers.
  */
+/**
+ * Buoyancy of burning gas, as a multiple of gravity.
+ *
+ * Fire rises because it is hot and therefore less dense than the air around it. That single fact is
+ * what makes a jet climb a slope and roll over a ridge instead of pooling at the bottom, so it is
+ * the one piece of fluid behaviour worth simulating explicitly. 1.6 means a flame particle
+ * accelerates upward at 0.6 g once it is no longer being driven by the nozzle.
+ */
+const FLAME_BUOYANCY = 1.6;
+/** How much speed a flame particle keeps when it washes along the ground, per second. */
+const FLAME_GROUND_DRAG = 2.2;
+/** Air drag on flame, per second — a jet slows as it entrains cold air, and then buoyancy wins. */
+const FLAME_AIR_DRAG = 0.55;
+/**
+ * Arc distance used to measure the terrain slope, in units.
+ *
+ * Matches the finest render spacing (0.382 u), so the normal is the slope of the surface actually
+ * drawn rather than of some smoother idea of it.
+ */
+const SLOPE_EPS = 0.4;
+
+const _n = new THREE.Vector3();
+const _t1 = new THREE.Vector3();
+const _t2 = new THREE.Vector3();
+const _probe = new THREE.Vector3();
+const WORLD_Y = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The outward normal of the terrain under `pos`, written into `out`.
+ *
+ * Built from central differences of the ground height across two tangent directions. Costs four
+ * extra height lookups, so it is only ever taken for a particle that has ACTUALLY hit something —
+ * which is a small fraction of them.
+ *
+ * Without this, everything would slide along the sphere's tangent plane, which on the face of a
+ * mountain is simply the wrong direction: fire would run horizontally into the rock rather than up
+ * it. The normal is what turns contact into flow.
+ */
+function terrainNormal(
+  pos: THREE.Vector3, up: THREE.Vector3, groundRadiusAt: (p: THREE.Vector3) => number | null,
+  out: THREE.Vector3,
+): THREE.Vector3 {
+  _t1.crossVectors(up, WORLD_Y);
+  if (_t1.lengthSq() < 1e-9) _t1.crossVectors(up, new THREE.Vector3(1, 0, 0));
+  _t1.normalize();
+  _t2.crossVectors(up, _t1).normalize();
+
+  const sample = (t: THREE.Vector3, s: number): number | null =>
+    groundRadiusAt(_probe.copy(pos).addScaledVector(t, s));
+
+  const a1 = sample(_t1, SLOPE_EPS), b1 = sample(_t1, -SLOPE_EPS);
+  const a2 = sample(_t2, SLOPE_EPS), b2 = sample(_t2, -SLOPE_EPS);
+  // Any missing sample (unstreamed tile) means no usable slope: fall back to straight up, which is
+  // correct on flat ground and harmless elsewhere.
+  if (a1 == null || b1 == null || a2 == null || b2 == null) return out.copy(up);
+
+  const d1 = (a1 - b1) / (2 * SLOPE_EPS);
+  const d2 = (a2 - b2) / (2 * SLOPE_EPS);
+  out.copy(up).addScaledVector(_t1, -d1).addScaledVector(_t2, -d2);
+  return out.lengthSq() > 1e-12 ? out.normalize() : out.copy(up);
+}
+
 export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt: (p: THREE.Vector3) => number | null): HitEvent[] {
   const hits: HitEvent[] = [];
   const g = gravityUnits();
@@ -246,21 +417,51 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
     if (len > 1e-6) {
       _up.copy(p.pos).multiplyScalar(1 / len);
       p.vel.addScaledVector(_up, -g * spec.gravityScale * dt);
+      // BUOYANCY. Flame is hot gas, so it accelerates UPWARD, and that is what carries it up a
+      // slope and over a ridge rather than letting it pile against the foot of the hill.
+      if (p.weapon === 'flame' || p.visual === 'blast') {
+        p.vel.addScaledVector(_up, g * FLAME_BUOYANCY * dt);
+        const drag = p.grounded ? FLAME_GROUND_DRAG : FLAME_AIR_DRAG;
+        p.vel.multiplyScalar(Math.max(0, 1 - drag * dt));
+      }
     }
     p.pos.addScaledVector(p.vel, dt);
     p.life -= dt;
 
     let detonate = false;
 
-    // Ground contact.
+    // GROUND CONTACT.
     //
-    // SKIPPED FOR FLAME. It is life-limited, barely affected by gravity, and there are about a
-    // thousand of them: sampling the terrain per particle per frame would be 60,000 height
-    // lookups a second to decide something invisible. The ballistic weapons, which genuinely arc
-    // into the ground, still test it.
-    if (p.weapon !== 'flame') {
-      const gr = groundRadiusAt(p.pos);
-      if (gr != null && p.pos.length() <= gr) detonate = true;
+    // Flame used to be exempt, on the grounds that a height lookup per particle per frame was too
+    // expensive. That was an estimate; scripts/bench-ground-sample measured it at 0.69 microseconds,
+    // which is about 1 ms a frame at full flame — 6% of a 60 fps budget, only while firing. Geoff
+    // wants the jet to treat terrain as solid, and it costs what it costs.
+    // Explosion DEBRIS flows like flame rather than detonating: it is burning wreckage thrown by a
+    // blast that has already gone off, so re-detonating it on the first thing it touches is both
+    // wrong and, since a grenade lands ON the ground, instantly fatal to the whole effect. It cut
+    // the visible explosion from 420 particles to 149, which check-kaiju-arena caught.
+    const flows = p.weapon === 'flame' || p.visual === 'blast';
+    const gr = groundRadiusAt(p.pos);
+    if (gr != null && p.pos.length() <= gr + (flows ? p.size * 0.4 : 0)) {
+      if (!flows) {
+        detonate = true;
+      } else {
+        // FLOW, DO NOT STOP. Take away only the velocity going INTO the surface and keep what runs
+        // along it, which is what makes the jet wash up the slope and spill around obstacles
+        // instead of stopping dead at the point of contact.
+        if (len > 1e-6) {
+          terrainNormal(p.pos, _up, groundRadiusAt, _n);
+          const into = p.vel.dot(_n);
+          if (into < 0) p.vel.addScaledVector(_n, -into * 1.05);   // slight lift out of the surface
+          // Sit it exactly on the surface rather than inside it.
+          p.pos.setLength(gr + p.size * 0.4);
+          if (!p.grounded) {
+            p.grounded = true;
+            // Some of what washes over the ground stays alight behind the jet.
+            if (rand() < IGNITE_CHANCE) igniteGround(p.pos, _n, p.size);
+          }
+        }
+      }
     }
 
     // Direct hit. Skip the firer so nobody shoots themselves point blank.
@@ -292,6 +493,10 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
       p.dead = true;
     }
   }
+
+  // Burning ground keeps emitting after the jet has moved on. Stepped AFTER the particle loop so
+  // this frame's new puffs are not immediately aged by it.
+  stepGroundFires(dt);
 
   // Compact the list rather than splicing inside the loop.
   for (let i = projectiles.length - 1; i >= 0; i--) if (projectiles[i].dead) projectiles.splice(i, 1);
@@ -363,4 +568,4 @@ export function spawnExplosion(at: THREE.Vector3, radiusUnits: number, count = 4
   }
 }
 
-export function clearProjectiles(): void { projectiles.length = 0; }
+export function clearProjectiles(): void { projectiles.length = 0; clearGroundFires(); }

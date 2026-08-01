@@ -9,7 +9,11 @@
 // player renderer — which is shared with the other Claude on this branch — this is its own module.
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
-import { resolveGait } from './kaijuClips';
+import { resolveGait, stripRootMotion } from './kaijuClips';
+import { sampleGlobeNormal } from './globeGround';
+
+/** Model-local X, the axis a body topples about when it falls forward. */
+const _xAxis = new THREE.Vector3(1, 0, 0);
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
@@ -80,7 +84,15 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   }, [scene]);
   useEffect(() => () => releaseFlash(model), [model]);
 
-  const { actions, names, mixer } = useAnimations(animations, model);
+  // STRIP ROOT MOTION FROM THE DEATH CLIP before the mixer ever sees it. Left in, it drags the
+  // corpse hundreds of metres and then clamps there — the "floating in the air" Geoff reported.
+  const deathReady = useMemo(() => {
+    const clips = animations.map((a) => ({ name: a.name, duration: a.duration }));
+    const deadName = resolveGait(clips, 'dead');
+    for (const a of animations) if (a.name === deadName) stripRootMotion(a);
+    return animations;
+  }, [animations]);
+  const { actions, names, mixer } = useAnimations(deathReady, model);
   const gait = useRef<string>('idle');
   const current = useRef<THREE.AnimationAction | null>(null);
 
@@ -113,6 +125,8 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const trueF = useRef(new THREE.Vector3());
   const basis = useRef(new THREE.Matrix4());
   const footLift = useRef(0);
+  const _normal = useRef(new THREE.Vector3());
+  const _tip = useRef(new THREE.Quaternion());
   useEffect(() => {
     const scale = ARENA_HEIGHT / Math.max(0.01, modelHeight);
     footLift.current = footOffset(model) * scale;
@@ -143,7 +157,50 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
 
-    if (!agent.alive) { play('dead'); mixer.timeScale = 0.4; stopKaijuFootsteps(agent.id); return; }
+    if (!agent.alive) {
+      play('dead');
+      mixer.timeScale = 0.4;
+      stopKaijuFootsteps(agent.id);
+
+      // RAGDOLL-ISH: fall, then lie along the slope.
+      //
+      // Geoff: "when the kaijus die, their bodies float up in the air... can you have them ragdoll
+      // when they die and fall on the terrain, such that if the terrain is at an angle, they lay at
+      // an angle like a ragdoll should?"
+      //
+      // Two things were lifting them. The body stopped being simulated the moment it died, so
+      // gravity never acted again (fixed in kaijuArena — a corpse still falls). And the death CLIP
+      // carries baked root motion: the Red Demon's "Two Handed Sword Death" translates its hips 75
+      // units, which at this scale is hundreds of metres of drift, upward included. That track is
+      // stripped when the clip is prepared, below.
+      //
+      // A true joint-by-joint ragdoll needs a physics solver this project does not have. What
+      // actually reads on screen at 300 m is the BODY going down and lying at the angle of the
+      // ground, so that is what is simulated: the model topples about its own right axis onto the
+      // terrain NORMAL, easing over a couple of seconds, and settles flat against the hillside.
+      const t = agent.deadFor ?? 0;
+      const TOPPLE_SECONDS = 2.4;
+      const fall = Math.min(1, t / TOPPLE_SECONDS);
+      // Ease out, so it goes over slowly, accelerates, and settles rather than snapping flat.
+      const ease = 1 - (1 - fall) * (1 - fall);
+      const nrm = sampleGlobeNormal(b.dir, _normal.current);
+      // Build the upright frame against the SLOPE rather than the radial direction, then tip it.
+      const fwdFlat = trueF.current.copy(b.forward)
+        .addScaledVector(nrm, -b.forward.dot(nrm));
+      if (fwdFlat.lengthSq() < 1e-9) fwdFlat.copy(b.dir);
+      fwdFlat.normalize();
+      right.current.crossVectors(nrm, fwdFlat).normalize();
+      basis.current.makeBasis(right.current, nrm, fwdFlat);
+      g.quaternion.setFromRotationMatrix(basis.current);
+      // Face-plant forward, 90 degrees about its own right axis.
+      g.quaternion.multiply(
+        _tip.current.setFromAxisAngle(_xAxis, -Math.PI * 0.5 * ease),
+      );
+      // Once down, the body's own centre is roughly half a width off the ground, so drop the model
+      // by that much: a creature lying on its side does not float at standing height.
+      g.position.copy(b.dir).multiplyScalar(b.radius + footLift.current);
+      return;
+    }
 
     // THE SWIPE. While a swing is in flight the attack clip owns the body, and its playback is
     // stretched to the swing's real duration so the arm arrives exactly when the blow lands rather

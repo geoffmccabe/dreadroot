@@ -14,9 +14,18 @@ import {
   TILE, directionToFaceUv, uvToTileIndex, tileUvRange,
 } from './cubeSphere';
 import { getManifest, getTile, sampleTileBilinear } from './earthTiles';
+import * as THREE from 'three';
 import { detailMetres } from './globeDetail';
 import { renderedElevation, patchIndexDiag } from './globePatchIndex';
-import { PLANET_RADIUS } from './cubeSphere';
+import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
+
+// Scratch for sampleGlobeNormal, allocated once — it runs per dead body per frame.
+const _up = new THREE.Vector3();
+const _t1 = new THREE.Vector3();
+const _t2 = new THREE.Vector3();
+const _probe = new THREE.Vector3();
+const _WORLD_Y = new THREE.Vector3(0, 1, 0);
+const _WORLD_X = new THREE.Vector3(1, 0, 0);
 
 /**
  * Elevation in METRES for a unit direction from the planet centre.
@@ -75,6 +84,44 @@ export const FINEST_RENDER_SPACING = 0.382;
  * The fallback cannot be right by construction, so it is counted in patchIndexDiag.estimated
  * rather than being silently trusted.
  */
+/**
+ * The outward NORMAL of the terrain at a direction — which way is "up the slope".
+ *
+ * Anything that has to lie flat against the ground needs this, not the radial direction: on a
+ * mountainside those differ by the angle of the slope, which is the whole point. A dead Kaiju
+ * aligned to the radial direction stands to attention on a 40-degree face; aligned to the normal it
+ * lies along the hill, which is what Geoff means by "if the terrain is at an angle, they lay at an
+ * angle like a ragdoll should".
+ *
+ * Central differences across two tangent directions. `epsUnits` defaults to the finest render
+ * spacing, so the slope is the slope of the surface actually drawn.
+ */
+export function sampleGlobeNormal(
+  dir: THREE.Vector3, out: THREE.Vector3, epsUnits = FINEST_RENDER_SPACING,
+): THREE.Vector3 {
+  _up.copy(dir).normalize();
+  _t1.crossVectors(_up, _WORLD_Y);
+  if (_t1.lengthSq() < 1e-9) _t1.crossVectors(_up, _WORLD_X);
+  _t1.normalize();
+  _t2.crossVectors(_up, _t1).normalize();
+
+  const at = (t: THREE.Vector3, s: number): number | null => {
+    _probe.copy(_up).addScaledVector(t, s / PLANET_RADIUS).normalize();
+    return sampleGlobeSurface(_probe.x, _probe.y, _probe.z);
+  };
+  const a1 = at(_t1, epsUnits), b1 = at(_t1, -epsUnits);
+  const a2 = at(_t2, epsUnits), b2 = at(_t2, -epsUnits);
+  // No usable slope (unstreamed tiles): straight up is right on the flat and harmless elsewhere.
+  if (a1 == null || b1 == null || a2 == null || b2 == null) return out.copy(_up);
+
+  // Heights are in METRES and the offsets in units, so convert before taking the gradient or the
+  // slope comes out a hundred times too steep and every corpse stands on its head.
+  const d1 = ((a1 - b1) / METRES_PER_UNIT) / (2 * epsUnits);
+  const d2 = ((a2 - b2) / METRES_PER_UNIT) / (2 * epsUnits);
+  out.copy(_up).addScaledVector(_t1, -d1).addScaledVector(_t2, -d2);
+  return out.lengthSq() > 1e-12 ? out.normalize() : out.copy(_up);
+}
+
 export function sampleGlobeSurface(
   x: number, y: number, z: number, spacingUnits?: number,
 ): number | null {
