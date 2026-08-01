@@ -26,7 +26,7 @@ import { getProjectiles } from '../src/components/siege/globe/kaijuWeapons';
 import { scoreActions, chooseAction } from '../src/components/siege/globe/kaijuBrain';
 import * as THREE from 'three';
 import {
-  createKaijuBody, placeBodyOnSurface, reTangentOf, stepBodyOf,
+  createKaijuBody, placeBodyOnSurface, reTangentOf, stepBodyOf, turnRate,
 } from '../src/components/siege/globe/kaijuBody';
 
 let failures = 0;
@@ -48,7 +48,11 @@ console.log('\n== Kaiju arena: headless three-way fight ==\n');
     const b = createKaijuBody();
     placeBodyOnSurface(b, new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));
     const want = new THREE.Vector3(dx, dy, 0).normalize();
-    for (let i = 0; i < 40; i++) {
+    // TEN SECONDS, not 1.3. A 300 m Kaiju now turns at about 31 degrees a second — the Froude
+    // rule, the same one that already governed its walking speed and its animation rate — so a
+    // half turn takes just under six seconds. The old flat 2.2 rad/s was a HUMAN's turning rate
+    // applied to a 300 m body, and this test passed in 1.3 s only because of that.
+    for (let i = 0; i < 300; i++) {
       const w = want.clone();
       reTangentOf(b, w);
       stepBodyOf(b, 1 / 30, 1, 0, false, false, 3, w);
@@ -56,6 +60,29 @@ console.log('\n== Kaiju arena: headless three-way fight ==\n');
     if (b.forward.dot(want) <= 0.9) bad++;
   }
   ok(bad === 0, 'a steered body turns TOWARD its heading from every direction', `${bad} failed`);
+}
+
+// ...and it turns SLOWLY, in proportion to its size. This is the property Geoff reported missing:
+// "rotating a kaiju makes it just slide at full speed around the y-axis instead of slowly moving
+// like it should according to physics."
+{
+  const big = turnRate(3);          // 300 m
+  const small = turnRate(0.02);     // 2 m, a person
+  ok(big < 0.7, 'a 300 m Kaiju turns no faster than about 40 degrees a second',
+     `${(big * 180 / Math.PI).toFixed(0)} deg/s`);
+  // Angular velocity goes as sqrt(1/L), so a 150x taller body turns sqrt(150) ~ 12x slower.
+  const ratio = small / big;
+  ok(Math.abs(ratio - Math.sqrt(150)) < 0.5, 'turning is scaled by size the same way speed is',
+     `a person turns ${ratio.toFixed(1)}x faster, expected ${Math.sqrt(150).toFixed(1)}x`);
+
+  // And it winds UP rather than starting at full rate.
+  const b = createKaijuBody();
+  placeBodyOnSurface(b, new THREE.Vector3(0, 0, 1), new THREE.Vector3(1, 0, 0));
+  const want = new THREE.Vector3(0, 1, 0);
+  reTangentOf(b, want);
+  stepBodyOf(b, 1 / 60, 1, 0, false, false, 3, want);
+  ok(b.turnSpeed < big * 0.25, 'the first frame of a turn is not already at full rate',
+     `${(b.turnSpeed / big * 100).toFixed(0)}% of top rate after one frame`);
 }
 
 initArena(17);

@@ -36,8 +36,31 @@ const FROUDE_RUN = 2.5;
 const G_REAL = 9.81;
 /** Jump height as a fraction of body height. */
 const JUMP_BODY_FRAC = 0.45;
-/** How quickly the body turns to face where you are steering, radians/sec. */
-const TURN_RATE = 2.2;
+/**
+ * TURNING IS SCALED BY SIZE, like everything else here. It was the one thing that was not.
+ *
+ * Geoff: "rotating a kaiju makes it just slide at full speed around the y-axis instead of slowly
+ * moving like it should according to physics."
+ *
+ * This was a flat 2.2 rad/s — 126 degrees a second, a full about-face in 1.4 s. For a 300 m
+ * creature that is not a turn, it is a turret. And 2.2 is not an arbitrary number: sqrt(g/L) for a
+ * 2 m body is 2.21 rad/s, so the constant was exactly right for a HUMAN and had simply never been
+ * scaled, while walking speed, running speed and the animation rate all were.
+ *
+ * Angular velocity under dynamic similarity goes as sqrt(g/L), the same Froude rule as the rest of
+ * this file. TURN_FROUDE is the multiplier on it: 3.0 gives a 300 m Kaiju 0.54 rad/s, about 31
+ * degrees a second, so a half turn takes just under six seconds. Slow enough to have mass, fast
+ * enough to steer.
+ */
+const TURN_FROUDE = 3.0;
+/**
+ * Seconds for a 1-unit body to wind UP to its full turning rate.
+ *
+ * Without this the turn still began at full rate on the frame the key went down, which is the
+ * "at full speed instead of slowly" half of the complaint. Scaled by sqrt(height) for the same
+ * reason as the jump crouch: big things start everything more slowly.
+ */
+const TURN_ACCEL_SECONDS = 0.6;
 /**
  * MOMENTUM. How long a Kaiju takes to reach full speed, and to stop, in seconds.
  *
@@ -110,6 +133,8 @@ export interface KaijuBody {
   crouchTimer: number;
   /** 0..1 how deep into the crouch it is, for the renderer to squat on. */
   crouchFrac: number;
+  /** Current turning rate, rad/s. Carried between frames so a turn winds up rather than snapping. */
+  turnSpeed: number;
   /** Metres below sea level (0 on land or at the surface). */
   depthMetres: number;
 }
@@ -135,6 +160,7 @@ export function createKaijuBody(): KaijuBody {
     moveSpeed: 0,
     crouchTimer: 0,
     crouchFrac: 0,
+    turnSpeed: 0,
   };
 }
 
@@ -162,6 +188,22 @@ export function jumpVelocity(heightUnits: number): number {
 /** How long this body crouches before a jump. Bigger bodies gather themselves more slowly. */
 export function crouchSeconds(heightUnits: number): number {
   return JUMP_CROUCH_SECONDS * Math.sqrt(Math.max(0.01, heightUnits));
+}
+
+/**
+ * Top turning rate in radians/sec for a body this tall, from the same Froude rule as the speeds.
+ *
+ * A 300 m Kaiju gets about 31 degrees a second; a 2 m one about 4.7 rad/s. Exported so the arena's
+ * aim-turn uses the identical curve rather than a second hand-tuned constant that can drift.
+ */
+export function turnRate(heightUnits: number): number {
+  const lengthM = Math.max(0.01, heightUnits) * METRES_PER_UNIT;
+  return TURN_FROUDE * Math.sqrt(G_REAL / lengthM);
+}
+
+/** How long this body takes to wind up to that rate. Bigger bodies take longer. */
+export function turnAccelSeconds(heightUnits: number): number {
+  return TURN_ACCEL_SECONDS * Math.sqrt(Math.max(0.01, heightUnits));
 }
 
 /** World position of the body's feet. */
@@ -257,6 +299,15 @@ export function stepBodyOf(
 
   // Turn toward the steering direction at a finite rate, so a 300 m body has visible inertia
   // instead of pivoting like a turret.
+  // WIND THE TURN UP AND DOWN. Held outside the branch so it bleeds off when you stop steering,
+  // rather than staying spun up and snapping the body round the instant you press a key again.
+  const maxTurn = turnRate(heightUnits);
+  const turnAccel = maxTurn / Math.max(0.05, turnAccelSeconds(heightUnits));
+  const steering = desiredForward != null && (inputFwd !== 0 || inputRight !== 0);
+  body.turnSpeed = steering
+    ? Math.min(maxTurn, body.turnSpeed + turnAccel * dt)
+    : Math.max(0, body.turnSpeed - turnAccel * 2 * dt);
+
   if (desiredForward && (inputFwd !== 0 || inputRight !== 0)) {
     _move.copy(desiredForward);
     reTangentOf(body, _move);
@@ -272,7 +323,7 @@ export function stepBodyOf(
       // survived until the Kaiju arena made three agents chase each other and separate.
       rightVectorOf(body, _right);
       const sign = _move.dot(_right) >= 0 ? -1 : 1;
-      angle = Math.min(angle, TURN_RATE * dt);
+      angle = Math.min(angle, body.turnSpeed * dt);
       turnTangentOf(body, body.forward, sign * angle);
     }
   }

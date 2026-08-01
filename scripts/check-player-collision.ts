@@ -18,8 +18,21 @@ import {
 } from '../src/components/siege/globe/kaijuArena';
 import { BREEDS } from '../src/components/siege/globe/kaijuStats';
 import { body as playerBody, stepBodyOf, reTangentOf } from '../src/components/siege/globe/kaijuBody';
-import { torsoCapsule, capsuleOverlap } from '../src/components/siege/globe/kaijuColliders';
+import { torsoCapsule, capsuleOverlap, torsoRadiusFrac } from '../src/components/siege/globe/kaijuColliders';
+import { WEAPONS } from '../src/components/siege/globe/kaijuWeapons';
 import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
+
+/**
+ * Torso half-widths measured off the model files by scripts/measure-glb-width.mjs, in the walk
+ * clip each one is actually drawn in. The collider has to cover these or two Kaiju are held apart
+ * at a distance where their chests still intersect — which is exactly what "the red demon walks
+ * right through me" was, with the separation maths working perfectly the whole time.
+ */
+const MEASURED_TORSO: [string, number][] = [
+  ['red demon', 0.313],
+  ['fort golem', 0.444],
+  ['elemental golem', 0.453],
+];
 
 let failures = 0;
 function ok(cond: boolean, label: string, detail = ''): void {
@@ -49,6 +62,21 @@ function worstOverlapMetres(): number {
 
 console.log('\n== You cannot walk through another Kaiju ==\n');
 
+// FIRST: is the collider even the right SHAPE? No amount of correct separation maths helps if it
+// is separating a body narrower than the one on screen.
+for (const [name, halfWidth] of MEASURED_TORSO) {
+  ok(torsoRadiusFrac >= halfWidth,
+     `the collider covers the ${name}'s torso`,
+     `collider ${torsoRadiusFrac.toFixed(3)} vs measured ${halfWidth.toFixed(3)} x height`);
+}
+// ...and it must not be so wide that nothing can ever reach anything. The melee hit test allows
+// the attacker's reach PLUS the target's own radius, so that is what contact has to fit inside.
+ok(torsoRadiusFrac * 2 < WEAPONS.melee.rangeBodies + torsoRadiusFrac,
+   'two Kaiju at contact are still within melee reach',
+   `${(torsoRadiusFrac * 2).toFixed(2)} apart vs `
+   + `${(WEAPONS.melee.rangeBodies + torsoRadiusFrac).toFixed(2)} reach`);
+
+
 // Two Kaiju, close together, and the player walks straight at the other one for thirty seconds.
 {
   initArenaWith([BREEDS[0], BREEDS[2]], 0x5EED, 1);
@@ -75,7 +103,7 @@ console.log('\n== You cannot walk through another Kaiju ==\n');
     stepBodyOf(playerBody, DT, 1, 0, false, false, ARENA_HEIGHT, steer);
 
     const gapM = playerBody.dir.angleTo(them.body.dir) * playerBody.radius * METRES_PER_UNIT;
-    if (gapM < ARENA_HEIGHT * 0.5 * METRES_PER_UNIT) closedIn = true;
+    if (gapM < ARENA_HEIGHT * (torsoRadiusFrac * 2 + 0.15) * METRES_PER_UNIT) closedIn = true;
     const o = worstOverlapMetres();
     if (o > worst) { worst = o; worstAt = step; }
   }

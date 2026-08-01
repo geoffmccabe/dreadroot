@@ -104,20 +104,49 @@ export function updateRigCapsules(id: string, heightUnits: number): void {
 export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsules ?? []; }
 
 /**
+ * Torso radius as a fraction of body height. MEASURED, not estimated.
+ *
+ * This was 0.25, described in a comment as "about right for these broad-shouldered golems". It was
+ * not: scripts/measure-glb-width.mjs evaluates each model's own walk and idle clips and reports how
+ * far the bones actually get from the body's centre line, in the TORSO band (hips to shoulders,
+ * ignoring hands swinging forward, which are silhouette rather than bulk):
+ *
+ *     red demon        walk 0.313    idle 0.244
+ *     fort golem       walk 0.444    idle 0.287    breathidle 0.532
+ *     elemental golem  walk 0.453    idle 0.274    breathidle 0.541
+ *
+ * At 0.25 each, two Kaiju were held 0.5 x height apart while their chests reached 0.31 and 0.44 —
+ * so roughly 78 m of a 300 m creature was inside the other one, before the arms are counted at
+ * all. That is Geoff's "the red demon still walks right through me", and no amount of correct
+ * separation maths could have fixed it, because the maths was correctly separating the wrong shape.
+ *
+ * 0.46 covers every walk and run pose. It does not cover the arms-out breathing idle at 0.53, and
+ * deliberately not: that would hold two Kaiju 318 m apart, and a hand overlapping while both stand
+ * still is a far smaller lie than a pair of creatures that visibly cannot approach each other.
+ *
+ * Melee still reaches: the hit test allows the attacker's 0.9-body reach PLUS the target's own
+ * radius, so two Kaiju touching at 0.92 apart are comfortably inside 1.36.
+ */
+const TORSO_FRAC = 0.46;
+
+/**
  * The always-available torso capsule: feet to shoulders, up the body's own local up.
  *
  * This is what separation and projectile hits use, so the simulation never depends on art having
- * loaded. Radius is a quarter of the height, which for these broad-shouldered golems is about
- * right and errs toward "cannot overlap" rather than "clips through".
+ * loaded.
  */
 export function torsoCapsule(
   dir: THREE.Vector3, radiusUnits: number, heightUnits: number, out?: Capsule,
 ): Capsule {
   const feet = (out?.a ?? new THREE.Vector3()).copy(dir).multiplyScalar(radiusUnits);
   const top = (out?.b ?? new THREE.Vector3()).copy(dir).multiplyScalar(radiusUnits + heightUnits * 0.82);
-  if (out) { out.radius = heightUnits * 0.25; out.part = 'torso'; return out; }
-  return { a: feet, b: top, radius: heightUnits * 0.25, part: 'torso' };
+  const r = heightUnits * TORSO_FRAC;
+  if (out) { out.radius = r; out.part = 'torso'; return out; }
+  return { a: feet, b: top, radius: r, part: 'torso' };
 }
+
+/** Exported so the collision check can assert the capsule still covers the measured bodies. */
+export const torsoRadiusFrac = TORSO_FRAC;
 
 const _seg = new THREE.Vector3();
 const _toP = new THREE.Vector3();

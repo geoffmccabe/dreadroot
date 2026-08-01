@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { BehaviourTree, State } from 'mistreevous';
 import {
   createKaijuBody, stepBodyOf, placeBodyOnSurface, reTangentOf, rightVectorOf, turnTangentOf,
-  body as playerBody, type KaijuBody,
+  turnRate, body as playerBody, type KaijuBody,
 } from './kaijuBody';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -33,7 +33,7 @@ import {
 import { seedKaiju, rand } from './kaijuRandom';
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
-  torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, type Capsule,
+  torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac, type Capsule,
 } from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
@@ -210,8 +210,14 @@ const KNOCK_SPEED = 0.55;
 const KNOCK_DECAY = 3.2;
 /** Ceiling on accumulated knockback, units/sec. See the note where it is applied. */
 const KNOCK_MAX = 0.35;
-/** How fast the player's Kaiju swings round to face the crosshair, radians/sec. */
-const TURN_RATE_PLAYER = 1.6;
+/**
+ * How fast the player's Kaiju swings round to face the crosshair.
+ *
+ * Was a flat 1.6 rad/s, which for a 300 m body is a turret rather than a turn. Now the SAME
+ * size-scaled curve the body itself uses, so a Kaiju cannot pivot faster to aim than it can to
+ * walk — two hand-tuned constants for one physical quantity is how they drift apart.
+ */
+const turnRatePlayer = () => turnRate(ARENA_HEIGHT);
 
 function centreOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
   return out.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
@@ -526,7 +532,10 @@ function hitTargets(): HitTarget[] {
   return agents.map((a) => ({
     id: a.id,
     centre: centreOf(a, new THREE.Vector3()),
-    radius: ARENA_HEIGHT * 0.42,
+    // THE SAME radius the collider uses. This was a hardcoded 0.42 — a third independent copy of
+    // "how wide is a Kaiju", alongside the torso capsule and the melee reach. Two of the three
+    // were wrong, and nothing would have told us, because each was individually plausible.
+    radius: ARENA_HEIGHT * torsoRadiusFrac,
     alive: a.alive,
   }));
 }
@@ -874,7 +883,7 @@ export function playerAttack(kind: 'weapon' | 'melee', aimWorld?: THREE.Vector3,
     if (cos < 0.999) {
       rightVectorOf(a.body, _tmp);
       const sign = _aim.dot(_tmp) >= 0 ? -1 : 1;
-      turnTangentOf(a.body, a.body.forward, sign * Math.min(Math.acos(cos), TURN_RATE_PLAYER * dt));
+      turnTangentOf(a.body, a.body.forward, sign * Math.min(Math.acos(cos), turnRatePlayer() * dt));
     }
     // Not lined up yet: keep turning, hold fire.
     if (a.body.forward.dot(_aim) < 0.985) return;
