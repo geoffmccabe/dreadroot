@@ -15,6 +15,7 @@ import {
 } from './cubeSphere';
 import { getManifest, getTile, sampleTileBilinear } from './earthTiles';
 import { detailMetres } from './globeDetail';
+import { renderedElevation, patchIndexDiag } from './globePatchIndex';
 import { PLANET_RADIUS } from './cubeSphere';
 
 /**
@@ -44,30 +45,45 @@ export function sampleGlobeElevation(x: number, y: number, z: number): number | 
 }
 
 /**
- * Elevation in METRES including procedural amplification: the surface as RENDERED.
+ * Fallback spacing for ground with no patch on screen yet.
  *
- * Anything that stands on the ground must use this, not sampleGlobeElevation. The measured data
- * alone is up to a few hundred metres away from the visible surface once detail is added, which
- * would leave a Kaiju hovering or buried. `spacingUnits` matches the finest render depth so the
- * ground agrees with the most detailed mesh the player can be standing on.
- */
-/**
- * Elevation INCLUDING procedural detail — the surface you can actually see and stand on.
- *
- * The default spacing must match the FINEST spacing the renderer uses, or the collision surface and
- * the drawn surface are different heights at the same point. It was 3 units against the renderer's
- * 0.382 at full detail: detailMetres is band-limited by the spacing it is given, so the sampler was
- * blind to about 37 m of relief that was being drawn. A creature standing at the collision height
- * then appears sunk into the visible mesh, which is exactly the reported symptom.
- *
- * 0.382 = quarter-circumference / 2^12 / 64, i.e. one render patch's vertex spacing at depth 12.
+ * 0.382 = quarter-circumference / 2^12 / 64, i.e. one render patch's vertex spacing at the deepest
+ * render depth. Only an estimate: see the note on sampleGlobeSurface below.
  */
 export const FINEST_RENDER_SPACING = 0.382;
 
+/**
+ * Elevation in METRES of the surface you can SEE and STAND ON.
+ *
+ * ONE SOURCE OF TRUTH, and this is why. Everything that stands on the planet — the Kaiju, the AI
+ * Kaiju, the crowd, the camera floor — is placed at this height, while the terrain you look at is
+ * built by GlobeTerrain. Those were computed separately and disagreed:
+ *
+ *   the mesh was built from the deepest tile resident AT BUILD TIME, capped two levels above the
+ *   patch depth, with detail band-limited to that patch's own vertex spacing;
+ *
+ *   this function walked to the deepest tile resident NOW at ANY level, with detail band-limited
+ *   to a fixed constant.
+ *
+ * Inside a landmark region like the Grand Canyon, where real data goes down to 38 m samples, that
+ * put the sampler several data levels ahead of the visible mesh. On a canyon rim the gap is well
+ * over a hundred metres — which is a 300 m Kaiju standing in the ground up to its waist, and a
+ * 1.8 m person buried out of sight entirely. Both were reported, and they are the same bug.
+ *
+ * So it now asks the patch index what was actually DRAWN here, and only falls back to an
+ * independent estimate for ground that has no patch yet (high flight over unstreamed terrain).
+ * The fallback cannot be right by construction, so it is counted in patchIndexDiag.estimated
+ * rather than being silently trusted.
+ */
 export function sampleGlobeSurface(
-  x: number, y: number, z: number, spacingUnits = FINEST_RENDER_SPACING,
+  x: number, y: number, z: number, spacingUnits?: number,
 ): number | null {
+  if (spacingUnits === undefined) {
+    const drawn = renderedElevation(x, y, z);
+    if (drawn != null) return drawn;
+  }
   const base = sampleGlobeElevation(x, y, z);
   if (base == null) return null;
-  return base + detailMetres(x, y, z, PLANET_RADIUS, base, spacingUnits);
+  if (spacingUnits === undefined) patchIndexDiag.estimated++;
+  return base + detailMetres(x, y, z, PLANET_RADIUS, base, spacingUnits ?? FINEST_RENDER_SPACING);
 }

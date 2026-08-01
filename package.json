@@ -24,7 +24,9 @@
     "check:kaiju-orders": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-orders.ts",
     "check:globe-lod": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-lod.ts",
     "check:globe-transect": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-transect.ts",
-    "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts"
+    "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts",
+    "check:ground-matches-mesh": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ground-matches-mesh.ts",
+    "measure:glb-feet": "node scripts/measure-glb-feet.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

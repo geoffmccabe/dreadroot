@@ -351,7 +351,10 @@ export function stepBodyOf(
     // SWIMMING: full 3D. Vertical is driven directly rather than by gravity, with drag so it
     // settles instead of oscillating, and a slight upward bias so an idle body drifts to the
     // surface rather than sinking forever.
-    const vSpeed = speed * SWIM_VERT_FRAC;
+    // `topSpeed`, not a bare `speed` — there is no such variable in this scope, so every frame the
+    // body was submerged threw a ReferenceError and the whole physics step died mid-way. Swimming
+    // simply did not work, and neither did anything scheduled after it.
+    const vSpeed = topSpeed * SWIM_VERT_FRAC;
     if (inputUp !== 0) {
       body.vertVel += (inputUp * vSpeed - body.vertVel) * Math.min(1, WATER_DRAG * dt);
     } else {

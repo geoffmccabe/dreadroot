@@ -25,19 +25,21 @@ import * as THREE from 'three';
 import { enqueueJob } from '@/lib/budgetedWork';
 import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import {
-  TILE, PLANET_RADIUS, METRES_PER_UNIT, faceUvToDirection, tileArcUnits, tileUvRange,
-  sampleSpacingUnits,
+  PLANET_RADIUS, METRES_PER_UNIT, faceUvToDirection, tileArcUnits, tileUvRange,
 } from './cubeSphere';
 import {
   loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
 import { detailMetres } from './globeDetail';
 import { sampleGlobeElevation } from './globeGround';
-
-/** Vertices per patch side. 65 = 64 quads = 8,192 triangles. */
-const PATCH = 65;
-/** Data level is this many quadtree levels shallower than the render depth (see header). */
-const DATA_LAG = 2;
+// PATCH, DATA_LAG, dataFor and the node-key helpers live in globePatchIndex so that the ground
+// sampler and this mesh builder cannot drift apart. They used to be defined here and re-derived
+// there, which is precisely how the surface you stand on ended up being a different height from
+// the surface you see.
+import {
+  PATCH, DATA_LAG, MAX_RENDER_DEPTH, patchSpacingUnits, dataFor, idKey, parseKey,
+  notePatchBuilt, notePatchRemoved, clearPatchIndex, type NodeId,
+} from './globePatchIndex';
 
 /**
  * Split when the patch's arc subtends more than this fraction of its distance.
@@ -85,8 +87,10 @@ const MAX_LEAVES = 300;
  * node stops subdividing on its own. That is why no region list is needed on the client: the
  * tree finds its own floor wherever it is, and earthTiles backs off failed requests so a miss
  * is not retried every frame.
+ *
+ * (MAX_RENDER_DEPTH itself is defined in globePatchIndex, alongside PATCH and DATA_LAG, so the
+ * ground sampler searches exactly the range this tree can produce.)
  */
-const MAX_RENDER_DEPTH = 12;
 
 /** Skirt depth as a fraction of patch arc: hides cracks where LOD levels meet. */
 const SKIRT_FRAC = 0.03;
@@ -102,14 +106,6 @@ const SKIRT_FRAC = 0.03;
 export const terrainDiag = {
   patches: 0, wanted: 0, deepest: 0, altitudeUnits: 0, near: 0, far: 0, evals: 0,
 };
-
-interface NodeId { face: number; depth: number; x: number; y: number }
-const idKey = (n: NodeId) => `${n.face}:${n.depth}:${n.x}:${n.y}`;
-
-function parseKey(k: string): NodeId {
-  const [face, depth, x, y] = k.split(':').map(Number);
-  return { face, depth, x, y };
-}
 
 /** Do these two nodes cover any of the same ground? True when one contains the other. */
 function overlaps(a: NodeId, b: NodeId): boolean {
@@ -172,14 +168,6 @@ function disposePatch(geo: THREE.BufferGeometry): void {
 }
 
 /**
- * Data level, tile index and sub-rectangle for a render node.
- *
- * `span` and `stride` are FLOATS. Once the render tree goes deeper than the data pyramid plus
- * DATA_LAG (which it now does, so procedural detail has somewhere to live), a patch covers less
- * than one texel per vertex and must sample the tile bilinearly at fractional coordinates.
- * Integer indexing there silently reads undefined and produces NaN geometry.
- */
-/**
  * The deepest RESIDENT tile covering this node, walking up until one is found.
  *
  * Levels 5-10 exist only inside the 225 landmark regions, so outside them level 5 simply 404s.
@@ -213,17 +201,6 @@ function resolveLevel(n: NodeId, maxLevel: number): number {
   return -1;
 }
 
-function dataFor(n: NodeId, maxLevel: number, level = -1) {
-  if (level < 0) level = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
-  const shift = n.depth - level;              // how many quadtree steps the tile is above us
-  const tx = n.x >> shift, ty = n.y >> shift;
-  const span = (TILE - 1) / Math.pow(2, shift);   // samples of the tile this patch covers
-  const stride = span / (PATCH - 1);
-  const ox = (n.x - (tx * Math.pow(2, shift))) * span;
-  const oy = (n.y - (ty * Math.pow(2, shift))) * span;
-  return { level, tx, ty, ox, oy, stride };
-}
-
 /** Centre direction of a node, written into `out`. */
 function nodeCentre(n: NodeId, out: Float64Array): void {
   const [u0, u1] = tileUvRange(n.x, n.depth);
@@ -235,7 +212,9 @@ function nodeCentre(n: NodeId, out: Float64Array): void {
  * Build one patch's geometry. Elevation comes from the data tile; colour is a simple
  * height/latitude ramp so the planet reads as Earth before the biome work of P3.
  */
-function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeometry; water: THREE.BufferGeometry | null } | null {
+function buildPatchGeometry(
+  n: NodeId, maxLevel: number,
+): { geo: THREE.BufferGeometry; water: THREE.BufferGeometry | null; level: number } | null {
   const lvl = resolveLevel(n, maxLevel);
   if (lvl < 0) return null;                       // nothing resident yet; try again next pass
   const d = dataFor(n, maxLevel, lvl);
@@ -260,7 +239,7 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
   const dir = new Float64Array(3);
   const skirtDrop = tileArcUnits(n.depth) * SKIRT_FRAC;
   // Vertex spacing of THIS patch, which band-limits the procedural octaves.
-  const patchSpacing = tileArcUnits(n.depth) / (PATCH - 1);
+  const patchSpacing = patchSpacingUnits(n.depth);
   // Same spacing in real metres, used to turn a height difference into a slope for shading.
   const spacingM = patchSpacing * METRES_PER_UNIT;
   let prevM = 0;
@@ -392,7 +371,11 @@ function buildPatchGeometry(n: NodeId, maxLevel: number): { geo: THREE.BufferGeo
     dropSkirt(wpos, side, skirtDrop);
     water.computeBoundingSphere();
   }
-  return { geo, water };
+  // Report the data level this geometry was ACTUALLY made from. The caller used to re-run
+  // resolveLevel afterwards, which can return a finer level if a tile arrived while the patch was
+  // queued — recording a level the geometry does not match, and so a ground height that does not
+  // match either.
+  return { geo, water, level: lvl };
 }
 
 /**
@@ -483,6 +466,9 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     }
     meshes.current.clear();
     waters.current.clear();
+    // No patches on screen means no drawn ground to report; leaving stale entries would have the
+    // sampler answering for a planet that is no longer mounted.
+    clearPatchIndex();
     material.dispose();
     waterMat.dispose();
   }, [material, waterMat]);
@@ -612,6 +598,9 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
       disposePatch(mesh.geometry);
       meshes.current.delete(key);
       builtLevel.current.delete(key);
+      // Tell the ground sampler this patch is gone, or it would keep answering with a height for
+      // terrain that is no longer drawn.
+      notePatchRemoved(key);
       const w = waters.current.get(key);
       if (w) { groupRef.current.remove(w); disposePatch(w.geometry); waters.current.delete(key); }
     }
@@ -650,7 +639,9 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
           waters.current.set(rk, wm);
           groupRef.current?.add(wm);
         }
-        builtLevel.current.set(rk, now);
+        builtLevel.current.set(rk, rebuilt.level);
+        // Rebuilt from finer data: the ground moved, so the sampler must move with it.
+        notePatchBuilt(n, rebuilt.level);
         return true;
       });
     }
@@ -684,7 +675,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const mesh = new THREE.Mesh(built.geo, material);
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
-        builtLevel.current.set(key, resolveLevel(n, mf.maxLevel));
+        builtLevel.current.set(key, built.level);
+        notePatchBuilt(n, built.level);
         groupRef.current?.add(mesh);
         if (built.water) {
           const wm = new THREE.Mesh(built.water, waterMat);

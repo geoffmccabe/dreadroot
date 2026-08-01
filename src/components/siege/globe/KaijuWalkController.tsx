@@ -329,9 +329,14 @@ export function KaijuWalkController() {
         camera.up.copy(up);
         camera.lookAt(camera.position.clone().add(fwd));
       }
-    } else {
-      camera.position.copy(camPos.current);
+      // AND STOP HERE. The chase-camera block below ends with lookAt(the Kaiju), which ran
+      // unconditionally and threw away everything just computed — so the parked camera was welded
+      // to face the Kaiju and the mouse turned nothing at all. That is "I cannot rotate the camera
+      // to see what is behind me": the yaw and pitch were being tracked correctly and then
+      // overwritten one line later.
+      return;
     }
+    camera.position.copy(camPos.current);
 
     // Look along the heading (first person) or at the body (third person). camera.up is local up
     // either way, which is what keeps the horizon level on a sphere.
