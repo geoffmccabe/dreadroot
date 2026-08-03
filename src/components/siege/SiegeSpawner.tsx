@@ -10,7 +10,7 @@
 //   11 Pig Butcher · 12 Mutant · 13 Forest Guardian · 14 Barbarian Giant · 15 Elemental Golem
 //   16 Mechanical Golem · 17 Fort Golem · 18 Crawlies · 19 DF Demon.
 //   (01 Demon Horde & 08 Red Demon are the SAME monster at different size/colour.)
-// "!" sub-commands (not spawns): !c/!b Challenge Browser · !e Editor gallery · !hb hitboxes · !a bullseye.
+// "!" sub-commands (not spawns): !c/!b Challenge Browser · !e Editor gallery · !hb hitboxes · !sk skeletons · !a bullseye.
 // Keys are consumed (capture + stopPropagation) so they don't also trigger game keybinds.
 import { useEffect, useRef, useState } from 'react';
 import { useThree } from '@react-three/fiber';
@@ -19,7 +19,7 @@ import { CatalogMonster, makeHordeMember, isKnownMonsterType, type MType, type O
 import { toggleEditor } from './challenge/challengeCreatorStore';
 import { toggleBrowser } from './challenge/challengeBrowserStore';
 import { getChallengeState, subscribeChallenge } from './challenge/challengeStore';
-import { toggleSiegeHitboxes, getMonstersPaused, setMonstersPaused, toggleBullseyeAnyHead } from './siegeDebugToggles';
+import { toggleSiegeHitboxes, toggleSiegeSkeletons, getMonstersPaused, setMonstersPaused, toggleBullseyeAnyHead } from './siegeDebugToggles';
 import { applyEdit, toggleSelectedBox, resetNearest, markEditTarget } from './hitboxEditor';
 import { exportHitboxes } from './hitboxConfig';
 import { suppressQA } from '@/config/qaGuard';
@@ -36,7 +36,7 @@ export function SiegeSpawner() {
   // camera regardless of world, so clear all test-spawns whenever the active map changes.
   const mapId = useActiveMapId();
   useEffect(() => { setDemons([]); }, [mapId]);
-  const stage = useRef<'idle' | 'type' | 'type2' | 'qty' | 'hbwait'>('idle');
+  const stage = useRef<'idle' | 'type' | 'type2' | 'qty' | 'hbwait' | 'skwait'>('idle');
   const firstDigit = useRef('');
   const stageTimer = useRef<number | null>(null);
   const spamUntil = useRef(0);
@@ -128,6 +128,7 @@ export function SiegeSpawner() {
         if (k === 'c' || k === 'C') { toggleBrowser(); clearStage(); }         // !c → open the Challenge Browser (pick one)
         else if (k === 'e' || k === 'E') { toggleEditor(); clearStage(); }    // !e → open the Challenge Editor gallery
         else if (k === 'h' || k === 'H') { stage.current = 'hbwait'; arm(); }  // !h… → expect 'b' for hitboxes
+        else if (k === 's' || k === 'S') { stage.current = 'skwait'; arm(); }  // !s… → expect 'k' for skeleton overlay
         else if (k === 'a' || k === 'A') { const on = toggleBullseyeAnyHead(); console.log('[bullseye] any-headshot =', on); clearStage(); }  // !a → toggle "any headshot = bullseye" (TEMP testing)
         else if (k === 'b' || k === 'B') { toggleBrowser(); clearStage(); }    // !b → open the Challenge Browser
         else if (k >= '0' && k <= '9') { firstDigit.current = k; stage.current = 'type2'; arm(); }   // first digit of the two-digit id
@@ -149,6 +150,12 @@ export function SiegeSpawner() {
       if (stage.current === 'hbwait') {
         e.preventDefault(); e.stopPropagation();
         if (k === 'b' || k === 'B') toggleSiegeHitboxes();   // !hb → toggle body + head hitbox wireframes
+        clearStage();
+        return;
+      }
+      if (stage.current === 'skwait') {
+        e.preventDefault(); e.stopPropagation();
+        if (k === 'k' || k === 'K') toggleSiegeSkeletons();  // !sk → toggle live monster bone overlay
         clearStage();
         return;
       }

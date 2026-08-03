@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from 'react';
 
 let hitboxes = false;
+let skeletons = false;   // `!sk` → draw each monster's live bones as a SkeletonHelper overlay (diagnose in-game rig twist)
 let paused = false;
 // TESTING aid: when true, ANY headshot counts as a bullseye, so the bullseye
 // effects are easy to trigger without hitting the tiny gold box. Default OFF so
@@ -18,6 +19,9 @@ const emit = () => subs.forEach((f) => f());
 export const getSiegeHitboxes = (): boolean => hitboxes;
 export const toggleSiegeHitboxes = (): void => { hitboxes = !hitboxes; emit(); };
 
+export const getSiegeSkeletons = (): boolean => skeletons;
+export const toggleSiegeSkeletons = (): void => { skeletons = !skeletons; emit(); };
+
 export const getBullseyeAnyHead = (): boolean => bullseyeAnyHead;
 export const toggleBullseyeAnyHead = (): boolean => { bullseyeAnyHead = !bullseyeAnyHead; emit(); return bullseyeAnyHead; };
 
@@ -28,4 +32,8 @@ function subscribe(cb: () => void): () => void { subs.add(cb); return () => { su
 
 export function useSiegeHitboxes(): boolean {
   return useSyncExternalStore(subscribe, getSiegeHitboxes, getSiegeHitboxes);
+}
+
+export function useSiegeSkeletons(): boolean {
+  return useSyncExternalStore(subscribe, getSiegeSkeletons, getSiegeSkeletons);
 }

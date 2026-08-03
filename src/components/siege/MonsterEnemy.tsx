@@ -29,7 +29,7 @@ import { getChallengeState } from './challenge/challengeStore';
 import { tickDarkLordLightning, tryStartLightning, clearLightningCaster } from './darkLord/darkLordLightningCore';
 import { sdbg } from './siegeDebug';
 import { addDemon, removeDemon, hurtDemon, type DemonInstance } from './siegeHorde';
-import { getMonstersPaused, useSiegeHitboxes } from './siegeDebugToggles';
+import { getMonstersPaused, useSiegeHitboxes, useSiegeSkeletons } from './siegeDebugToggles';
 import { isSiegePlayerDead } from './siegePlayerState';
 import { getHitboxFor, subscribeHitboxes, type MonsterHitbox } from './hitboxConfig';
 import { bullseyePct, useBullseyeFactor, effectiveBullseyePct } from '@/features/bullseye/bullseyeZone';
@@ -357,6 +357,16 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const bullsWireRef = useRef<THREE.Mesh>(null);  // the !hb bullseye wireframe (nested in the head box)
   const group = useRef<THREE.Group>(null);
   const showHitboxes = useSiegeHitboxes();   // !hb toggle → draw body + head collision boxes
+  const showSkeleton = useSiegeSkeletons();  // !sk toggle → draw the live bones so in-game rig twist is visible
+  // SkeletonHelper reads each bone's matrixWorld (so it renders at the monster's world scale/pose
+  // regardless of where this node sits). depthTest off + high renderOrder → bones show THROUGH the mesh.
+  const skelHelper = useMemo(() => {
+    const h = new THREE.SkeletonHelper(cloned);
+    const m = h.material as THREE.LineBasicMaterial;
+    m.depthTest = false; m.depthWrite = false; m.transparent = true;
+    h.renderOrder = 997;
+    return h;
+  }, [cloned]);
   useBullseyeFactor();                       // re-render the gold box when the size factor changes (role/items)
   const { actions, names, mixer } = useAnimations(animations, group);
   const camera = useThree((s) => s.camera);
@@ -1809,6 +1819,9 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
   const bpct = effectiveBullseyePct(bullseyePct(Math.max(H, hitbox.body.hx * 2, hitbox.body.hz * 2)));
   return (
    <>
+    {/* !sk debug: live bone overlay. Outside the scaled group — SkeletonHelper bakes bone
+        world matrices itself, so nesting it under the scale would double-apply it. */}
+    {showSkeleton && <primitive object={skelHelper} />}
     <group ref={group} scale={scale}>
       <primitive object={cloned} />
       {c.weapon && <HandWeapon root={cloned} w={c.weapon} />}
