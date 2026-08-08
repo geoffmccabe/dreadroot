@@ -23,8 +23,15 @@ import { mergeBufferGeometries, SkeletonUtils } from 'three-stdlib';
 
 /** Length of a rifle as a fraction of the man holding it. An AK is 0.88 m; a soldier is 1.8 m. */
 const RIFLE_FRAC = 0.49;
-/** How far along the rifle, from the butt, the trigger hand grips it. */
-const GRIP_FRAC = 0.30;
+/**
+ * How far along the rifle, from the butt, the trigger hand grips it.
+ *
+ * A real AK's pistol grip is about 0.30 of the way along. 0.42 here on purpose: these poses extend
+ * the arm well forward of the body, so at the true fraction the whole weapon floats out at arm's
+ * length with nothing behind the hand. Sliding the grip back puts the stock in toward the shoulder,
+ * which is what a rifle held by a person looks like. Checked against a render, not guessed.
+ */
+const GRIP_FRAC = 0.42;
 
 export interface SoldierTemplate {
   /** A root holding the armature and one merged SkinnedMesh. Clone this per figure. */
@@ -145,11 +152,8 @@ export function buildSoldierTemplate(
   let rifleGeo: THREE.BufferGeometry | null = null;
   if (rifle) {
     const wristIndex = bones.findIndex((b) => /^wrist_?r$/i.test(b.name));
-    const wristL = bones.find((b) => /^wrist_?l$/i.test(b.name));
-    if (wristIndex >= 0 && wristL) {
-      rifleGeo = attachRifle(
-        rifle, source, animations, meshes[0].skeleton, wristIndex, wristL.name, height,
-      );
+    if (wristIndex >= 0) {
+      rifleGeo = attachRifle(rifle, source, animations, meshes[0].skeleton, wristIndex, height);
     }
   }
 
@@ -194,48 +198,44 @@ function attachRifle(
   animations: THREE.AnimationClip[],
   skeleton: THREE.Skeleton,
   wristIndex: number,
-  wristLName: string,
   height: number,
 ): THREE.BufferGeometry | null {
-  // 1. POSE A THROWAWAY COPY into the stance the rifle has to suit. The copy matters: the loader
-  //    caches the scene and anything else asking for this file must get it unposed.
+  // 1. POSE A THROWAWAY COPY into the stance the rifle has to suit — an AIMING one, because that is
+  //    the pose in which "where should the barrel point" has an unambiguous answer. The copy matters:
+  //    the loader caches the scene and anything else asking for this file must get it unposed.
   const probe = SkeletonUtils.clone(scene) as THREE.Object3D;
-  const pose = animations.find((a) => /idle_?gun$/i.test(a.name.split('|').pop() ?? ''))
-    ?? animations.find((a) => /gun/i.test(a.name));
+  const named = (re: RegExp) => animations.find((a) => re.test(a.name.split('|').pop() ?? ''));
+  const pose = named(/^idle_?gun_?shoot$/i) ?? named(/^run_?shoot$/i)
+    ?? named(/^gun_?shoot$/i) ?? named(/gun/i);
   if (pose) {
     const mixer = new THREE.AnimationMixer(probe);
-    const action = mixer.clipAction(pose);
-    action.play();
-    mixer.update(0.001);
+    mixer.clipAction(pose).play();
+    mixer.update(pose.duration * 0.5);
   }
   probe.updateMatrixWorld(true);
 
   const handR = probe.getObjectByName(skeleton.bones[wristIndex].name);
-  const handL = probe.getObjectByName(wristLName);
-  if (!handR || !handL) return null;
-
+  if (!handR) return null;
+  const gripPos = new THREE.Vector3().setFromMatrixPosition(handR.matrixWorld);
   const posedR = handR.matrixWorld.clone();
-  const gripPos = new THREE.Vector3().setFromMatrixPosition(posedR);
-  const supportPos = new THREE.Vector3().setFromMatrixPosition(handL.matrixWorld);
 
-  // 2. THE BARREL IS THE LINE BETWEEN THE HANDS. If the supporting hand is not out in front — some
-  //    idle poses drop it to the side — fall back to the forearm's own direction, which is never
-  //    wrong by more than the wrist angle.
-  const barrel = supportPos.clone().sub(gripPos);
-  if (barrel.length() < height * 0.08) {
-    const elbow = probe.getObjectByName(skeleton.bones[Math.max(0, wristIndex - 1)].name);
-    if (!elbow) return null;
-    barrel.copy(gripPos).sub(new THREE.Vector3().setFromMatrixPosition(elbow.matrixWorld));
-  }
-  if (barrel.lengthSq() < 1e-12) return null;
-  barrel.normalize();
-
-  // Up is the character's own up, squared off against the barrel — a rifle carried level has its
-  // magazine down and its sights up, and that is the only roll angle that reads as correct.
+  // 2. THE BARREL POINTS WHERE THE CHARACTER IS FACING. That is what aiming MEANS, and it is the
+  //    only definition that does not depend on the rig telling the truth about something else.
+  //
+  //    The first version derived it from the line between the two hands, on the reasoning that a
+  //    rifle is held with both. Measurement killed that: in EVERY gun pose this model has, the hands
+  //    are 0.52 to 0.78 m apart on a 1.79 m man — far too wide to both be on one weapon. These are
+  //    stylised poses, not motion-captured rifle holds. Built on that false premise the barrel came
+  //    out pointing across the soldier's chest and off to his left, which is what Geoff saw.
+  //
+  //    A palm frame from the finger bones was the other candidate and is not available either: every
+  //    finger's base bone in this rig sits at the SAME point as the wrist, so there is no knuckle
+  //    spread to take a direction from. The rig simply does not carry that information.
+  //
+  //    The model's local +Z is its front — the same convention every other renderer here uses when
+  //    it maps local +Z to a heading — and the template root sits at identity, so world +Z is it.
+  const barrel = new THREE.Vector3(0, 0, 1);
   const up = new THREE.Vector3(0, 1, 0);
-  up.addScaledVector(barrel, -up.dot(barrel));
-  if (up.lengthSq() < 1e-9) up.set(0, 0, 1).addScaledVector(barrel, -barrel.z);
-  up.normalize();
   const side = new THREE.Vector3().crossVectors(barrel, up).normalize();
 
   // 3. MERGE THE WEAPON'S OWN PARTS, flattening its four flat-coloured pieces into vertex colours
