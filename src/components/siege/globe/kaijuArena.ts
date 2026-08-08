@@ -35,7 +35,7 @@ import { queueStrike, stepStrikeQueue } from './kaijuImpact';
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
   torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac,
-  MELEE_GATE_BODIES, bodyFracFor, type Capsule,
+  MELEE_GATE_BODIES, separationFracFor, type Capsule,
 } from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
@@ -921,7 +921,7 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     // EACH CREATURE'S OWN CHEST, not one number for all four. A Red Demon is markedly narrower than
     // a Fort Golem and holding them apart by the same distance is wrong in one direction for one of
     // them whichever number is chosen.
-    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, bodyFracFor(a.isPlayer, a.monsterType));
+    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, separationFracFor(a.isPlayer, a.monsterType));
   }
   // Several relaxation passes, because resolving one pair can push a body into another. A single
   // pass left them touching at about 97% of their combined width — visibly clipping. Three passes
@@ -957,12 +957,28 @@ export function stepArena(dt: number, playerControlled: boolean): void {
         B.body.dir.applyAxisAngle(_tmp, (depth * shareB) / Math.max(1, B.body.radius)).normalize();
         reTangentOf(B.body, B.body.forward);
       }
+
+      // BODIES THAT COLLIDE SHOULD FEEL IT. Geoff: "there are no collider effects when kaijus meet."
+      //
+      // Being held apart is invisible — correct separation looks like nothing happening at all. So a
+      // real collision also drives a flinch through both skeletons, from the point where the two
+      // chests met, which is what makes contact read as contact.
+      //
+      // First relaxation pass only, and only for an overlap worth noticing: the later passes are
+      // resolving the same contact, and two Kaiju leaning on each other would otherwise shudder
+      // continuously. The strike queue coalesces anything that slips through.
+      if (pass === 0 && depth > ARENA_HEIGHT * 0.04) {
+        const shove = Math.min(0.35, depth / ARENA_HEIGHT);
+        _hitAt.copy(A.capsule.a).lerp(B.capsule.a, 0.5).addScaledVector(A.body.dir, ARENA_HEIGHT * 0.5);
+        queueStrike(A.id, _hitAt, _tmp.copy(_axis).negate(), shove);
+        queueStrike(B.id, _hitAt, _axis, shove);
+      }
     }
   }
     // Refresh after each pass, or later passes resolve against stale positions.
     for (const a of agents) {
       if (a.alive) {
-        torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, bodyFracFor(a.isPlayer, a.monsterType));
+        torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, separationFracFor(a.isPlayer, a.monsterType));
       }
     }
   }

@@ -137,7 +137,11 @@ export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsu
  * the measured chest width per model — 0.244 on a Red Demon, 0.287 on a Fort Golem — which holds
  * them about 170 m apart: close enough to hit each other, far enough that neither is standing inside
  * the other. The arms are the melee system's business, and they have real bone capsules now.
- */const TORSO_FRAC = 0.287;   // the widest chest in the roster, for anything without a type
+ *
+ * SUPERSEDED by SEPARATION_BY_TYPE below, which is per model and measured in the WALK clip. This
+ * remains only as the fallback for a Kaiju whose type is not in that table.
+ */
+const TORSO_FRAC = 0.453;   // the widest WALKING chest in the roster
 
 /**
  * The widest this may go before a swing can no longer reach a touching target.
@@ -158,7 +162,7 @@ export const TORSO_FRAC_CEILING = 0.80;
  * and out of the decision every frame.
  */
 export const MELEE_GATE_BODIES = (meleeRangeBodies: number): number =>
-  Math.max(meleeRangeBodies + 0.4, TORSO_FRAC * 2 + 0.06);
+  Math.max(meleeRangeBodies + 0.4, MAX_SEPARATION_FRAC * 2 + 0.06);
 
 /**
  * The always-available torso capsule: feet to shoulders, up the body's own local up.
@@ -222,15 +226,66 @@ export const BULLET_TORSO_FRAC = 0.34;
  * catalog's monster type so a Kaiju that is not in the list falls back to the average rather than to
  * something confidently wrong.
  */
+/**
+ * MEASURED IN THE POSE THEY ARE DRAWN IN, which is walking, not idling.
+ *
+ * These were the IDLE torso — 0.287 for a Fort Golem — and a golem's chest is 0.444 while it walks.
+ * A Kaiju spends its fight walking, so the bullet collider was a third narrower than the creature
+ * for almost the whole time it mattered. Numbers from scripts/measure-glb-width, which evaluates
+ * each model's own clips.
+ */
 export const BULLET_TORSO_BY_TYPE: Record<number, number> = {
-  8: 0.244,    // Red Demon
-  15: 0.274,   // Elemental Golem
-  16: 0.280,   // Mechanical Golem — same family as the other two golems
-  17: 0.287,   // Fort Golem
+  8: 0.313,    // Red Demon,       walk
+  15: 0.453,   // Elemental Golem, walk
+  16: 0.450,   // Mechanical Golem — same family as the other two golems
+  17: 0.444,   // Fort Golem,      walk
 };
 
 export const bulletTorsoFrac = (monsterType: number): number =>
   BULLET_TORSO_BY_TYPE[monsterType] ?? BULLET_TORSO_FRAC;
+
+/**
+ * HOW WIDE A KAIJU IS FOR THE PURPOSE OF NOT STANDING INSIDE ANOTHER ONE.
+ *
+ * Geoff: "there are no collider effects when kaijus meet... they go right through each other. Also,
+ * the kaiju I have somehow ended up on top of the other one."
+ *
+ * THIS NUMBER HAS NOW BEEN WRONG IN BOTH DIRECTIONS, and the middle is not a compromise — it is a
+ * specific, measurable thing.
+ *
+ *   0.70, the FULL ARM REACH. Rejected, by Geoff, in these words: "there's a big red cylinder around
+ *   each kaiju and when another kaiju approaches me our oversized huge red colliders collide and it
+ *   blocks its ability to get near me, so we can't fight." Correct: it holds two golems 412 m apart
+ *   when their arms only reach 206 m each, so they can never touch. Unable to fight, in a fighting
+ *   game.
+ *
+ *   0.287, THE CHEST — BUT MEASURED WHILE IDLING. The overcorrection, and where it stood until now.
+ *   A Kaiju spends its entire fight WALKING, and a walking golem's chest is 0.444 of its height, not
+ *   0.287. So the collider was a third narrower than the creature for the whole time it mattered:
+ *   two golems held 172 m apart with 266 m of combined chest, which is 94 m of torso inside torso.
+ *   That is "they go right through each other", and on sloping ground it is also how one ends up
+ *   drawn on top of the other.
+ *
+ * THE CHEST, IN THE POSE IT IS ACTUALLY IN. Torsos then just touch and never interpenetrate, while
+ * the arms still overlap by 145 m so the two can reach each other and brawl. Which is the whole
+ * point: two bodies occupying one space is a bug, arms passing through each other during a swing is
+ * what fighting looks like.
+ *
+ * Walk-clip measurements from scripts/measure-glb-width:
+ *
+ *     red demon        chest 0.313   reach 0.548
+ *     fort golem       chest 0.444   reach 0.686
+ *     elemental golem  chest 0.453   reach 0.672
+ */
+export const SEPARATION_BY_TYPE: Record<number, number> = {
+  8: 0.313,    // Red Demon
+  15: 0.453,   // Elemental Golem
+  16: 0.450,   // Mechanical Golem — unmeasured; the family average
+  17: 0.444,   // Fort Golem
+};
+
+/** The widest any Kaiju separates at. The melee gate is derived from this so the two cannot drift. */
+export const MAX_SEPARATION_FRAC = Math.max(...Object.values(SEPARATION_BY_TYPE));
 
 /**
  * What the PLAYER'S Kaiju is currently drawn as. Pushed in by the renderer, never read from it.
@@ -245,9 +300,16 @@ export function setPlayerVisual(type: number, height: number): void {
   playerVisual.height = height;
 }
 
-/** The body width to use for an agent, preferring what is actually on screen for the player. */
-export const bodyFracFor = (isPlayer: boolean, monsterType: number): number =>
-  bulletTorsoFrac(isPlayer && playerVisual.type >= 0 ? playerVisual.type : monsterType);
+/**
+ * How wide this agent is for SEPARATION, preferring whatever is actually on screen for the player.
+ *
+ * Deliberately NOT called something generic like `bodyFracFor`. A name that does not say which of
+ * the two body widths it means is how the bullet collider ended up doing the physics.
+ */
+export const separationFracFor = (isPlayer: boolean, monsterType: number): number => {
+  const t = isPlayer && playerVisual.type >= 0 ? playerVisual.type : monsterType;
+  return SEPARATION_BY_TYPE[t] ?? TORSO_FRAC;
+};
 
 /** Exported so the collision check can assert the capsule still covers the measured bodies. */
 export const torsoRadiusFrac = TORSO_FRAC;

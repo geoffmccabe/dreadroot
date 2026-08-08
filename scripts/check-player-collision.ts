@@ -20,6 +20,7 @@ import { BREEDS } from '../src/components/siege/globe/kaijuStats';
 import { body as playerBody, stepBodyOf, reTangentOf } from '../src/components/siege/globe/kaijuBody';
 import {
   torsoCapsule, capsuleOverlap, torsoRadiusFrac, TORSO_FRAC_CEILING, MELEE_GATE_BODIES,
+  separationFracFor,
 } from '../src/components/siege/globe/kaijuColliders';
 import { WEAPONS } from '../src/components/siege/globe/kaijuWeapons';
 import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
@@ -30,10 +31,12 @@ import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
  * at a distance where their chests still intersect — which is exactly what "the red demon walks
  * right through me" was, with the separation maths working perfectly the whole time.
  */
-const MEASURED_TORSO: [string, number][] = [
-  ['red demon', 0.313],
-  ['fort golem', 0.444],
-  ['elemental golem', 0.453],
+const MEASURED_TORSO: [string, number, number, number][] = [
+  // name, monster type, chest half-width while WALKING, full arm reach — all x height,
+  // from scripts/measure-glb-width run against each model's own walk clip.
+  ['red demon', 8, 0.313, 0.548],
+  ['fort golem', 17, 0.444, 0.686],
+  ['elemental golem', 15, 0.453, 0.672],
 ];
 
 /**
@@ -76,18 +79,27 @@ console.log('\n== You cannot walk through another Kaiju ==\n');
 
 // FIRST: is the collider even the right SHAPE? No amount of correct separation maths helps if it
 // is separating a body narrower than the one on screen.
-// The collider must cover each creature's BODY. The figures below are the walk-clip spread, which
-// includes the arms swinging; the separation radius is now the idle spread, which is the core. So
-// the test is that it covers the core, not the reach — see the long note in kaijuColliders.
-for (const [name, halfWidth] of MEASURED_TORSO) {
-  ok(torsoRadiusFrac >= halfWidth * 0.6,
-     `the collider covers the ${name}'s body core`,
-     `collider ${torsoRadiusFrac.toFixed(3)} vs walk-spread ${halfWidth.toFixed(3)} x height`);
+// THE COLLIDER MUST COVER THE CHEST IN THE POSE THE CREATURE IS ACTUALLY IN, which is walking. It
+// was set from the IDLE chest, and a walking golem is a third wider than an idling one — so two of
+// them stood 172 m apart with 266 m of combined chest and 94 m of torso inside torso. That is what
+// "they go right through each other" was, and it is what this asserts can never return.
+for (const [name, type, walkChest] of MEASURED_TORSO) {
+  const r = separationFracFor(false, type);
+  ok(r >= walkChest - 1e-6,
+     `the collider covers the ${name}'s chest while it WALKS`,
+     `collider ${r.toFixed(3)} vs walking chest ${walkChest.toFixed(3)} x height`);
 }
-// ...and two of them at contact must be CLOSE ENOUGH TO FIGHT. This is the check that would have
-// stopped the 0.70 disaster: it passed every gate and still put a body height of air between them.
-ok(torsoRadiusFrac * 2 < 0.75, 'two Kaiju at contact are close enough to brawl',
-   `${(torsoRadiusFrac * 2 * 300).toFixed(0)} m apart, ${(torsoRadiusFrac * 2).toFixed(2)} body heights`);
+// ...AND THEY MUST STILL BE ABLE TO REACH EACH OTHER. This is the check that would have stopped the
+// 0.70 disaster, and it is deliberately DERIVED rather than a threshold somebody chose: two Kaiju
+// at contact are 2r apart, and if that exceeds what their arms can span they can never touch. Geoff
+// on the version that did: "our oversized huge red colliders collide and it blocks its ability to
+// get near me, so we can't fight."
+for (const [name, type, , reach] of MEASURED_TORSO) {
+  const contact = separationFracFor(false, type) * 2;
+  ok(contact < reach * 2,
+     `two ${name}s at contact can still reach each other`,
+     `${(contact * 300).toFixed(0)} m apart, arms span ${(reach * 2 * 300).toFixed(0)} m`);
+}
 // ...and it must not be so wide that nothing can ever reach anything. TWO separate gates, and the
 // tighter one is not the obvious one.
 ok(torsoRadiusFrac * 2 < WEAPONS.melee.rangeBodies + torsoRadiusFrac,
