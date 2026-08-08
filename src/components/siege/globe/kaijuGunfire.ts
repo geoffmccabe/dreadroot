@@ -35,6 +35,7 @@ import {
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+
 // The COSMETIC stream, never the simulation's. See the long note on fxRand: drawing scatter and
 // reload times from the shared seeded source silently changed who won the fight.
 import { fxRand as rand } from './kaijuRandom';
@@ -164,6 +165,21 @@ for (let i = 0; i < MAX_SPARKS; i++) {
 let bCursor = 0;
 let sCursor = 0;
 
+/**
+ * What the PLAYER'S Kaiju is currently drawn as. Pushed in by the renderer, never read from it.
+ *
+ * The lab state that owns this lives behind the monster catalog, which is a .tsx module — importing
+ * it here would make the whole simulation unloadable outside a browser and take every headless check
+ * with it. Same rule as the limb capsules: the renderer hands the simulation what it drew, and the
+ * simulation never reaches into the renderer. `type: -1` means nothing has been reported yet, in
+ * which case the agent's own build is used.
+ */
+export const playerVisual = { type: -1, height: ARENA_HEIGHT };
+export function setPlayerVisual(type: number, height: number): void {
+  playerVisual.type = type;
+  playerVisual.height = height;
+}
+
 /** Live counters, so "are they even shooting?" is answered by looking rather than guessing. */
 export const gunfireDiag = { fired: 0, hits: 0, live: 0 };
 
@@ -200,9 +216,17 @@ const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radi
  */
 function collidersFor(a: Agent, out: Capsule[]): Capsule[] {
   out.length = 0;
-  // THIS CREATURE'S OWN measured chest width — not the separation radius, which is 210 m wide on
-  // purpose, and not one average for all four, which stood proud of the Demon and inside the golems.
-  torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, _cap, bulletTorsoFrac(a.monsterType));
+  // WHICH CREATURE IS ACTUALLY ON SCREEN.
+  //
+  // For the player these are TWO DIFFERENT THINGS and I had been reading the wrong one. The agent's
+  // build says which breed you were dealt; the Kaiju LAB says which model is being drawn and how
+  // tall it is — and the lab is what `[` `]` and `-` `=` change. Cycle to a different Kaiju and the
+  // collider stayed shaped like the one you left, sitting in mid-air in front of the one you are
+  // looking at. Reading the lab for the player means the hit test and the mesh cannot disagree.
+  const lab = a.isPlayer && playerVisual.type >= 0 ? playerVisual : null;
+  const height = lab ? lab.height : ARENA_HEIGHT;
+  const type = lab ? lab.type : a.monsterType;
+  torsoCapsule(a.body.dir, a.body.radius, height, _cap, bulletTorsoFrac(type));
   out.push(_cap);
   for (const c of limbCapsules(a.id)) out.push(c);
   return out;

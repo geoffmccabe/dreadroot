@@ -208,7 +208,18 @@ export function torsoCapsule(
 export const BULLET_TORSO_FRAC = 0.34;
 
 /**
- * ...and PER MODEL, because one number cannot match four differently shaped creatures.
+ * ...and PER MODEL, and narrower than it looks, because the arms have their own colliders now.
+ *
+ * SECOND ATTEMPT at this, and the first one was still too wide. measure-glb-width reports two
+ * numbers per model: the spread during the WALK clip and during IDLE. I used walk — 0.444 on a Fort
+ * Golem — on the reasoning that it is the pose you usually see. But that band runs from hips to
+ * shoulders and therefore INCLUDES THE UPPER ARMS AS THEY SWING, so it measures the creature's
+ * widest reach rather than its chest. A capsule that size stands 40 m proud of the body, and a round
+ * that stops 40 m short sparks in clear air: Geoff's invisible wall, twice.
+ *
+ * The IDLE figures are the body core, which is what this should always have been. The arms are not
+ * missing from the hit test — they have their own bone capsules, which is the whole point of having
+ * wired the rig up. Torso for the chest, limbs for the limbs, nothing pretending to be both.
  *
  * Geoff: "when they shoot at my kaiju, the bullets don't hit my kaiju... they are hitting an
  * invisible wall between my kaiju and them, as if the colliders are in the wrong place and don't
@@ -223,13 +234,12 @@ export const BULLET_TORSO_FRAC = 0.34;
  * something confidently wrong.
  */
 export const BULLET_TORSO_BY_TYPE: Record<number, number> = {
-  8: 0.313,    // Red Demon
-  15: 0.453,   // Elemental Golem
-  16: 0.450,   // Mechanical Golem — same family as the other two golems
-  17: 0.444,   // Fort Golem
+  8: 0.244,    // Red Demon
+  15: 0.274,   // Elemental Golem
+  16: 0.280,   // Mechanical Golem — same family as the other two golems
+  17: 0.287,   // Fort Golem
 };
 
-/** The measured chest half-width for one monster type, as a fraction of its height. */
 export const bulletTorsoFrac = (monsterType: number): number =>
   BULLET_TORSO_BY_TYPE[monsterType] ?? BULLET_TORSO_FRAC;
 

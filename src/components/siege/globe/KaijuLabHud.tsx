@@ -16,7 +16,7 @@ import { nearestKaijuMetres, getAgents } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
 import { rigLimbCount } from './kaijuColliders';
 import { failedLayers } from './GlobeErrorBoundary';
-import { isKaijuWalkActive, subscribeKaijuWalk, cameraSubjectName } from './KaijuWalkController';
+import { isKaijuWalkActive, subscribeKaijuWalk, cameraSubjectName, walkInputDiag } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import { kaijuDiag } from './kaijuDiag';
 import { currentLandmark, subscribeLandmark } from './landmarkJump';
@@ -144,6 +144,11 @@ export function KaijuLabHud() {
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
       {row('Limb colliders', `${getAgents().reduce((n, a) => n + rigLimbCount(a.id), 0)} on ${getAgents().length} Kaiju`)}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
+      {/* THE INPUT CHAIN. Four links; whichever one is wrong is where the break is. */}
+      {row('Keys held', walkInputDiag.typing
+        ? 'NONE — A TEXT BOX HAS FOCUS'
+        : (walkInputDiag.keys || '-'))}
+      {row('Move speed', `${(walkInputDiag.moveSpeed * 100).toFixed(1)} m/s`)}
       {row('Camera on', cameraSubjectName())}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}

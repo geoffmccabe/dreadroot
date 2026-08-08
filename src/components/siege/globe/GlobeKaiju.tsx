@@ -43,6 +43,7 @@ import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
 import { registerRig, unregisterRig, updateRigCapsules } from './kaijuColliders';
+import { setPlayerVisual } from './kaijuGunfire';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -209,6 +210,11 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       const bX = new THREE.Vector3().crossVectors(bUp, bFwd).normalize();
       basis.current.makeBasis(bX, bUp, bFwd.clone().normalize());
       g.quaternion.setFromRotationMatrix(basis.current);
+
+      // TELL THE SIMULATION WHAT IS ACTUALLY BEING DRAWN. The bullet collider is shaped from this,
+      // and `[` `]` and `-` `=` change it at any moment — so reading it once would leave the hit
+      // test shaped like whichever Kaiju you last left.
+      setPlayerVisual(state.type, h);
 
       // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.
       //

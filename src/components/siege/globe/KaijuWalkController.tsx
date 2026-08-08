@@ -100,6 +100,27 @@ export function cameraSubjectName(): string {
   return a ? (a.isPlayer ? `${a.name} (you)` : a.name) : 'you';
 }
 
+/**
+ * THE INPUT CHAIN, VISIBLE.
+ *
+ * Geoff: "WASD still does nothing, so I can't walk." I have not been able to reproduce it and have
+ * now guessed wrong about the cause more than once, so this stops being a guess. Every link in the
+ * chain between a key going down and the body moving is reported on screen:
+ *
+ *   mode      — walk mode off means the handler never even records a key
+ *   focus     — a text field anywhere (the command panel) swallows every keystroke by design
+ *   keys      — what the controller currently believes is held
+ *   speed     — what the body did with it
+ *
+ * Whichever of those four is wrong says exactly where the break is, and they need different fixes.
+ */
+export const walkInputDiag = {
+  keys: '' as string,
+  moveSpeed: 0,
+  freeCam: false,
+  typing: false,
+};
+
 let walkActive = false;
 const listeners = new Set<() => void>();
 /** FortressControls checks this to stand down. Read by the shared controller, so keep it cheap. */
@@ -201,7 +222,14 @@ export function KaijuWalkController() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       // Typing in a panel: drop anything still held, or the last movement key sticks down.
-      if (isTypingTarget(e.target)) { keys.current.clear(); return; }
+      if (isTypingTarget(e.target)) {
+        keys.current.clear();
+        // Reported, because this is silent and total: click the command panel's text box and every
+        // movement key stops working with nothing on screen to say why.
+        walkInputDiag.typing = true;
+        return;
+      }
+      walkInputDiag.typing = false;
       if (e.code === 'KeyG' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (!walkActive) {
           // Entering walk mode: drop the Kaiju onto the ground beneath the camera so you do not
@@ -371,6 +399,10 @@ export function KaijuWalkController() {
       setWalkZoom(Math.hypot(distUnits, eyeUnits) / Math.max(1e-4, h * CAM_ORBIT));
       haveCam.current = false;                       // snap, do not sail in from the old position
     }
+
+    walkInputDiag.keys = [...k].map((c) => c.replace('Key', '').replace('Digit', '')).join(' ');
+    walkInputDiag.moveSpeed = body.moveSpeed;
+    walkInputDiag.freeCam = freeCam;
 
     const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
     const right = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
