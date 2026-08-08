@@ -25,7 +25,7 @@
 // battlefield feel large.
 
 import * as THREE from 'three';
-import { playKaijuSound, playKaijuBuffer } from './kaijuAudio';
+import { playKaijuSound } from './kaijuAudio';
 import { getAudioContext } from '@/lib/spatialAudio';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { fxRand as rand } from './kaijuRandom';
@@ -34,13 +34,16 @@ import { fxRand as rand } from './kaijuRandom';
 const RICOCHET_URL = '/ricochet_sound.mp3';
 
 /**
- * Shots we are willing to actually voice, per second.
+ * Bursts we are willing to actually voice, per second.
  *
- * Nine. Below about six the fire reads as sparse and deliberate rather than as a firefight; above a
- * dozen it is mud and costs more. Thirty-six are fired; you hear the nearest nine and they stand in
- * for the rest.
+ * TWO, not nine, and the recordings are why. These are not single cracks — they run two to four
+ * seconds of automatic fire each. At nine a second there would be twenty-odd overlapping at any
+ * moment, which is not a firefight, it is white noise. At two a second roughly six overlap, which
+ * IS what two hundred rifles sound like: continuous, layered, with individual bursts still audible
+ * inside it. Thirty-six shots a second are fired; you hear the nearest two as bursts and they stand
+ * in for the rest.
  */
-const SHOTS_PER_SEC = 9;
+const SHOTS_PER_SEC = 2;
 /** Ricochets are rarer and more interesting, so they get their own smaller budget. */
 const RICOCHETS_PER_SEC = 6;
 /** Past this, a rifle crack is inaudible against everything else and is not worth a voice. */
@@ -97,46 +100,29 @@ export function noteRicochet(pos: THREE.Vector3): void {
 }
 
 /**
- * The synthesised rifle crack.
+ * Geoff's five machine-gun recordings, played at random.
  *
- * There is no US service-rifle sample in this project — the only gun sound here is a sci-fi one —
- * so it is generated, once, and then pitched and filtered differently on every shot. That last part
- * is the reason this is better than a sample even if we had one: a single .mp3 fired nine times a
- * second is instantly recognisable as a loop, and the one thing that gives away a cheap firefight is
- * hearing the SAME crack over and over.
+ * "I made these 5 sounds for the sounds of the soldiers firing. When they fire, play one of these
+ * randomly. Also modify each shot so it's +-10% higher/lower pitch and +-10% higher/lower speed too
+ * ... that will give it more organic sound."
  *
- * Two layers, which is what a rifle actually is:
- *   THE CRACK  a very short burst of noise, gone in about 30 ms. This is the supersonic snap and
- *              carries the whole sense of "rifle".
- *   THE BODY   a low thump under it, decaying over ~150 ms, which is the muzzle blast. Without it
- *              the shot sounds like a stick breaking.
+ * Which replaces the synthesised crack entirely — a real recording beats a generated one, and five
+ * of them beats any amount of cleverness applied to a single sample.
  *
- * If a real recording is wanted later, this is the only function to replace.
+ * ON PITCH AND SPEED BEING TWO KNOBS: in a browser they are ONE. Changing a sample's playback rate
+ * resamples it, so it gets higher AND shorter together — that is what resampling is, and separating
+ * them needs a pitch-shifter, which is a real cost at this rate. So the rate carries the ±10% (both
+ * at once, which is the organic wobble that was actually wanted), and a per-shot TONE TILT carries
+ * the rest: a couple of dB brighter or duller, which changes the character without touching the
+ * length. Two bursts at the same rate still do not sound like the same recording.
  */
-let crackBuffer: AudioBuffer | null = null;
-function rifleCrack(ctx: AudioContext): AudioBuffer | null {
-  if (crackBuffer) return crackBuffer;
-  const sr = ctx.sampleRate;
-  const len = Math.floor(sr * 0.22);
-  const buf = ctx.createBuffer(1, len, sr);
-  const d = buf.getChannelData(0);
-  let lp = 0;
-  for (let i = 0; i < len; i++) {
-    const t = i / sr;
-    // The snap: white noise under a very fast exponential decay.
-    const snap = (Math.random() * 2 - 1) * Math.exp(-t / 0.012);
-    // The blast: a low tone that falls in pitch as it decays, which is what a body of air escaping
-    // sounds like. Sweeping the frequency down is what stops it reading as a beep.
-    const f = 110 * Math.exp(-t / 0.09) + 45;
-    const body = Math.sin(2 * Math.PI * f * t) * Math.exp(-t / 0.075) * 0.55;
-    // A little filtered noise tail for the report bouncing off everything nearby.
-    lp += ((Math.random() * 2 - 1) - lp) * 0.08;
-    const tail = lp * Math.exp(-t / 0.13) * 0.35;
-    d[i] = Math.max(-1, Math.min(1, snap * 0.9 + body + tail));
-  }
-  crackBuffer = buf;
-  return buf;
-}
+const BURST_URLS = [
+  '/light_machinggun_v1.mp3',
+  '/light_machinggun_v2.mp3',
+  '/light_machinggun_v3.mp3',
+  '/light_machinggun_v4.mp3',
+  '/light_machinggun_v5.mp3',
+];
 
 /**
  * Decide what is worth hearing and play it. Called once a frame.
@@ -162,26 +148,27 @@ export function flushGunAudio(
     // two kilometres away is a texture, and dropping it costs nothing anybody can hear.
     shots.sort((a, b) => a.dist - b.dist);
 
-    const buf = rifleCrack(ctx);
     let played = 0;
     for (const s of shots) {
       if (shotTokens < 1 || s.dist > MAX_AUDIBLE_UNITS) break;
       shotTokens -= 1;
       played++;
-      // Every shot is a different rifle at a different angle. Pitch and level vary per shot, which
-      // is what stops nine a second from sounding like one sample on repeat.
-      playKaijuBuffer(buf!, s.pos, listenerPos, listenerDir, {
-        volume: 0.30 + rand() * 0.10,
-        rate: 0.88 + rand() * 0.28,
-        // A rifle is a person-sized source: it is loud where you stand and drops off fast. 1.5 units
-        // is 150 m, so by half a kilometre it is already a fifth of its level.
-        refUnits: 1.5,
-        rolloff: 1.4,
-        maxUnits: MAX_AUDIBLE_UNITS,
-        // Equalpower rather than HRTF. Nine head-model convolutions a second is not worth paying
-        // for on a sound whose direction you cannot pick out of a firefight anyway.
-        panning: 'equalpower',
-      });
+      playKaijuSound(BURST_URLS[Math.floor(rand() * BURST_URLS.length) % BURST_URLS.length],
+        s.pos, listenerPos, listenerDir, {
+          volume: 0.34 + rand() * 0.12,
+          // +-10%, as asked. One knob, because in a browser pitch and speed are one knob.
+          rate: 0.90 + rand() * 0.20,
+          // ...and the tone tilt for the variety that rate cannot give: +-3 dB of brightness.
+          tiltDb: (rand() * 2 - 1) * 3,
+          // A rifle is a person-sized source: loud where you stand, gone quickly. 1.5 units is
+          // 150 m, so by half a kilometre it is already a fifth of its level.
+          refUnits: 1.5,
+          rolloff: 1.4,
+          maxUnits: MAX_AUDIBLE_UNITS,
+          // Equalpower rather than HRTF. Head-model convolution is not worth paying for on a sound
+          // whose direction nobody can pick out of a firefight anyway.
+          panning: 'equalpower',
+        });
     }
     gunAudioDiag.played += played;
     gunAudioDiag.dropped += shots.length - played;
@@ -200,6 +187,7 @@ export function flushGunAudio(
       playKaijuSound(RICOCHET_URL, r.pos, listenerPos, listenerDir, {
         volume: 0.5 + rand() * 0.18,
         rate: 0.85 + rand() * 0.4,
+        tiltDb: (rand() * 2 - 1) * 3,
         // 2 units, not 5. Geoff: "I could hear the ricochets but they sound like they're coming
         // from right on top of me and don't sound far away." At 5 the reference distance was 500 m
         // — which is roughly where the Kaiju STANDS in the scale view, so every impact was playing

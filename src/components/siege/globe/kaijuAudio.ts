@@ -106,7 +106,7 @@ export async function playKaijuSound(
   listenerDir: THREE.Vector3,
   opts: {
     volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
-    rolloff?: number; panning?: PanningModelType; reverb?: boolean;
+    rolloff?: number; panning?: PanningModelType; reverb?: boolean; tiltDb?: number;
   } = {},
 ): Promise<void> {
   const buffer = await loadAudioBuffer(url);
@@ -182,7 +182,7 @@ export function playKaijuBuffer(
   listenerDir: THREE.Vector3,
   opts: {
     volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
-    rolloff?: number; panning?: PanningModelType; reverb?: boolean;
+    rolloff?: number; panning?: PanningModelType; reverb?: boolean; tiltDb?: number;
   } = {},
 ): void {
   const ctx = getAudioContext();
@@ -213,6 +213,20 @@ export function playKaijuBuffer(
   const km = (distUnits * METRES_PER_UNIT) / 1000;
   lp.frequency.value = Math.max(260, 20000 / (1 + km * 6));
 
+  // A TONE TILT, per sound.
+  //
+  // Playback rate changes pitch and length together — that is what resampling IS, and there is no
+  // cheap way to move one without the other in a browser. So variety that is NOT length comes from
+  // here: a shelf that brightens or dulls the sound a couple of dB. Two shots at the same rate still
+  // do not sound like the same recording.
+  let tilt: BiquadFilterNode | null = null;
+  if (opts.tiltDb) {
+    tilt = ctx.createBiquadFilter();
+    tilt.type = 'highshelf';
+    tilt.frequency.value = 1400;
+    tilt.gain.value = opts.tiltDb;
+  }
+
   const panner = ctx.createPanner();
   // EQUALPOWER, not HRTF, when asked for. HRTF convolves every sound against a head model — lovely
   // for a handful of sources and ruinous at nine a second, which is the rate the rifles fire at.
@@ -237,7 +251,9 @@ export function playKaijuBuffer(
     l.setOrientation(listenerDir.x, listenerDir.y, listenerDir.z, 0, 1, 0);
   }
 
-  src.connect(lp); lp.connect(gain); gain.connect(panner); panner.connect(bus(ctx));
+  src.connect(lp);
+  if (tilt) { lp.connect(tilt); tilt.connect(gain); } else { lp.connect(gain); }
+  gain.connect(panner); panner.connect(bus(ctx));
 
   // THE DISTANCE TAIL. Nothing at point-blank, most of the sound by a couple of kilometres — which
   // is what turns a crack into a roll and is the strongest single cue that something is far away.
@@ -270,7 +286,8 @@ export function playKaijuBuffer(
   // able to matter.
   src.onended = () => {
     try {
-      src.disconnect(); lp.disconnect(); gain.disconnect(); panner.disconnect(); send?.disconnect();
+      src.disconnect(); lp.disconnect(); tilt?.disconnect();
+      gain.disconnect(); panner.disconnect(); send?.disconnect();
     } catch { /* already torn down */ }
   };
 }
