@@ -274,13 +274,30 @@ function attachRifle(
   if (longest < 1e-6) return null;
   const scale = (height * RIFLE_FRAC) / longest;
 
-  // Bring the gun to the origin with its own barrel along +X, then hold it GRIP_FRAC along its
-  // length — which is where a hand actually goes, rather than at its centre of mass.
+  // Bring the gun's long axis to X...
   const toX = new THREE.Matrix4();
   if (axis === 'y') toX.makeRotationZ(-Math.PI / 2);
   else if (axis === 'z') toX.makeRotationY(Math.PI / 2);
-  const centre = bb.getCenter(new THREE.Vector3());
-  const local = new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z).premultiply(toX);
+  gun.applyMatrix4(toX);
+
+  // ...AND WORK OUT WHICH END IS THE MUZZLE.
+  //
+  // Geoff: "The soldiers have their guns flipped around the wrong way." They were: the code mapped
+  // the model's +X to the barrel direction, and on this AK the muzzle is at MINUS X — so every
+  // soldier was aiming his own butt-stock at the monster.
+  //
+  // Rather than hard-code the flip for this one file, the muzzle is FOUND: a weapon is thin at the
+  // muzzle and bulky at the receiver, so slicing it along its length and comparing the thickness of
+  // the two ends says which way round it is. On this model the outer slices measure 0.06 at one end
+  // against 0.44 at the other, which is not a close call. Any future weapon orients itself.
+  if (!muzzleAtPlusX(gun)) gun.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI));
+
+  // ...then hold it GRIP_FRAC along its length FROM THE BUTT, which is where a hand actually goes
+  // rather than at its centre of mass.
+  gun.computeBoundingBox();
+  const bb2 = gun.boundingBox!;
+  const centre = bb2.getCenter(new THREE.Vector3());
+  const local = new THREE.Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z);
   local.premultiply(new THREE.Matrix4().makeTranslation(longest * (0.5 - GRIP_FRAC), 0, 0));
   local.premultiply(new THREE.Matrix4().makeScale(scale, scale, scale));
 
@@ -303,4 +320,36 @@ function attachRifle(
   gun.setAttribute('skinIndex', new THREE.BufferAttribute(idx, 4));
   gun.setAttribute('skinWeight', new THREE.BufferAttribute(wgt, 4));
   return gun;
+}
+
+/**
+ * Is this weapon's muzzle at +X? Assumes the long axis is already X.
+ *
+ * A gun is THIN where the barrel comes out and BULKY where the receiver, magazine and grip are, so
+ * comparing how thick the two ends are answers it without knowing anything about the model. Measured
+ * over the outer sixth at each end, which is far enough out to be past the receiver on anything
+ * shaped like a firearm.
+ */
+function muzzleAtPlusX(geo: THREE.BufferGeometry): boolean {
+  geo.computeBoundingBox();
+  const bb = geo.boundingBox;
+  if (!bb) return true;
+  const len = bb.max.x - bb.min.x;
+  if (len < 1e-9) return true;
+  const edge = len / 6;
+  const p = geo.attributes.position;
+  let loY = 0, loZ = 0, hiY = 0, hiZ = 0;
+  const loBox = new THREE.Box3(), hiBox = new THREE.Box3();
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    if (v.x < bb.min.x + edge) loBox.expandByPoint(v);
+    else if (v.x > bb.max.x - edge) hiBox.expandByPoint(v);
+  }
+  if (loBox.isEmpty() || hiBox.isEmpty()) return true;
+  const a = loBox.getSize(new THREE.Vector3()); loY = a.y; loZ = a.z;
+  const b = hiBox.getSize(new THREE.Vector3()); hiY = b.y; hiZ = b.z;
+  // Thinner end wins. Compared on area rather than either dimension alone, so a tall thin stock
+  // cannot be mistaken for a barrel.
+  return (hiY * hiZ) < (loY * loZ);
 }

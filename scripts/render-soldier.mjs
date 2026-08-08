@@ -86,4 +86,27 @@ console.log('wrote', process.argv[3] || '/tmp/soldier.svg', `| ${pts.length} poi
     '| longest', Math.max(gs.x, gs.y, gs.z).toFixed(4),
     '| wanted', (bs.y * 0.49).toFixed(3));
   console.log('gun centre     :', gunBox.getCenter(new THREE.Vector3()).toArray().map(v => v.toFixed(3)).join(', '));
+
+  // WHICH END IS FORWARD. The thin end of a gun is the muzzle, so the thin end has to be the end
+  // furthest out in front of the soldier. Reported as a number because "it looks right" is exactly
+  // what missed the weapon being back to front the first time.
+  const gv = [];
+  for (let i = bodyVerts; i < pos.count; i++) { mesh.getVertexPosition(i, w); gv.push(w.clone()); }
+  if (gv.length) {
+    const ax = new THREE.Vector3().subVectors(
+      gv.reduce((m, p) => (p.z > m.z ? p : m), gv[0]),
+      gv.reduce((m, p) => (p.z < m.z ? p : m), gv[0]),
+    ).normalize();
+    const proj = gv.map((p) => p.dot(ax));
+    const lo = Math.min(...proj), hi = Math.max(...proj), len = hi - lo;
+    const thick = (from, to) => {
+      const b = new THREE.Box3();
+      gv.forEach((p, i) => { const t = (proj[i] - lo) / len; if (t >= from && t <= to) b.expandByPoint(p); });
+      const s2 = b.getSize(new THREE.Vector3());
+      return s2.y * s2.x;
+    };
+    const rear = thick(0, 0.17), front = thick(0.83, 1);
+    console.log(`ends: rear area ${rear.toFixed(4)}  front area ${front.toFixed(4)}  ->`,
+      front < rear ? 'MUZZLE FORWARD (correct)' : 'STOCK FORWARD (gun is backwards)');
+  }
 }
