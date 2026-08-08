@@ -81,8 +81,16 @@ ok(resolveGait(FORT_GOLEM, 'attack') === 'swipe', 'attack still prefers "swipe" 
    String(resolveGait(FORT_GOLEM, 'attack')));
 ok(resolveGait(FORT_GOLEM, 'walk') === 'walk', 'walk finds "walk"');
 ok(resolveGait(FORT_GOLEM, 'run') === 'run', 'run finds "run"');
-ok(resolveGait(FORT_GOLEM, 'idle') === 'breathidle', 'idle prefers "breathidle"',
+// IDLE MUST SHARE A POSE SPACE WITH WALK, which on these models means "idle" and not "breathidle".
+// Averaged over each clip, the Fort Golem's thigh sits 125 degrees from rest in idle, 141 in walk —
+// and 43 in breathidle. Standing on breathidle and walking on walk meant every first step blended
+// across a hundred degrees of hip rotation, which is exactly the swivel Geoff reported. This is the
+// check that stops someone restoring the prettier idle without knowing what it costs.
+ok(resolveGait(FORT_GOLEM, 'idle') === 'idle',
+   'idle picks the clip that shares a pose space with walk, not the prettier one',
    String(resolveGait(FORT_GOLEM, 'idle')));
+ok(resolveGait([{ name: 'breathidle', duration: 4 }, { name: 'walk', duration: 1 }], 'idle') === 'breathidle',
+   'a model that only ships breathidle still gets it');
 ok(resolveGait(FORT_GOLEM, 'dead') === 'death', 'dead finds "death"');
 
 console.log('\n-- Rules --');

@@ -94,7 +94,31 @@ export function pickClip(clips: ClipInfo[], wanted: string[]): string | null {
 export const CLIP_WANTS: Record<string, string[]> = {
   walk:   ['walk', 'walking'],
   run:    ['run', 'running', 'jog', 'walk', 'walking'],
-  idle:   ['breathidle', 'idle', 'breath'],
+  // 'idle' BEFORE 'breathidle', and that order is measured rather than a matter of taste.
+  //
+  // Geoff: "It looks fine until it starts to walk, then the hips swivel in a weird way... the hips
+  // swivel around 45-60 degrees just as it starts to walk."
+  //
+  // The golems' clips do not all live in the same pose space. Averaged over each clip, here is how
+  // far the leg bones sit from their rest pose on the Fort Golem:
+  //
+  //                    idle     walk      run   breathidle
+  //     Thigh_L       124.9    141.4    141.4      42.9
+  //     Foot_L        162.4    170.0    168.5      18.4
+  //
+  // idle, walk and run agree with each other. breathidle is somewhere else entirely — a hundred
+  // degrees away at the thigh. These monsters had their animation sets retargeted from more than one
+  // source rig, and breathidle plainly did not come from the same one as the walk.
+  //
+  // The renderer stands still on the idle clip and moves on the walk clip, so with breathidle chosen
+  // first EVERY transition from standing to walking crossed about a hundred degrees of hip and thigh
+  // rotation in a quarter-second blend. That is the swivel — and it is why standing looks correct
+  // and the first step does not.
+  //
+  // Preferring 'idle' keeps standing and walking in one pose space, so the blend between them is a
+  // few degrees instead of a hundred. Models that only ship breathidle are unaffected: it is still
+  // in the list, just second.
+  idle:   ['idle', 'breathidle', 'breath'],
   attack: ['swipe', 'attack', 'melee', 'punch', 'strike', 'jumpattack'],
   dead:   ['death', 'die', 'dead', 'topple'],
   glide:  ['flex', 'jumpattack', 'fall', 'idle'],
