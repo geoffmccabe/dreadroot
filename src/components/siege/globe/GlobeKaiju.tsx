@@ -46,6 +46,8 @@ import { sampleGlobeNormal } from './globeGround';
 import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules, setPlayerVisual } from './kaijuColliders';
 import { registerHitMesh, unregisterHitMesh, hasHitMesh } from './kaijuMeshHit';
 import { consumeStrikes, applySkeletonImpact, bodyLean } from './kaijuImpact';
+import { findLegRig, plantFeet, clearFootIK, type LegRig } from './kaijuFootIK';
+import { sampleGlobeNormal as groundNormal } from './globeGround';
 
 
 /** Model-local X, the axis a body topples about when it falls forward. */
@@ -134,10 +136,14 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const _leanQ = useRef(new THREE.Quaternion());
   /** Every bone, gathered when the model changes — the impact springs live on these. */
   const impactBones = useRef<THREE.Object3D[]>([]);
+  const legs = useRef<LegRig | null>(null);
+  const _knee = useRef(new THREE.Vector3());
   useEffect(() => {
     const bs: THREE.Object3D[] = [];
     model.traverse((o) => { if ((o as THREE.Bone).isBone) bs.push(o); });
     impactBones.current = bs;
+    legs.current = findLegRig(model);
+    clearFootIK('player');
   }, [model]);
   const deathNrm = useRef(new THREE.Vector3());
   const deathFwd = useRef(new THREE.Vector3());
@@ -289,6 +295,19 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
         const lean = bodyLean(rigId.current, _lean.current);
         const la = lean.length();
         if (la > 1e-5) g.quaternion.multiply(_leanQ.current.setFromAxisAngle(lean.divideScalar(la), la));
+      }
+
+      // FEET ON THE ACTUAL GROUND. Geoff: "one foot may be floating in the air, because the ground
+      // isn't even." Runs after the flinch and before the colliders are read.
+      if (legs.current?.left || legs.current?.right) {
+        plantFeet(
+          'player', legs.current, g, b.radius,
+          (d) => {
+            const m = sampleGlobeSurface(d.x, d.y, d.z);
+            return m == null ? null : PLANET_RADIUS + m / METRES_PER_UNIT;
+          },
+          groundNormal, dt, 1, facingVector(_knee.current),
+        );
       }
 
       // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.

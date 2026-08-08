@@ -32,6 +32,9 @@ import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { registerRig, unregisterRig, updateRigCapsules, rigLimbCount } from './kaijuColliders';
 import { consumeStrikes, applySkeletonImpact, bodyLean } from './kaijuImpact';
+import { findLegRig, plantFeet, clearFootIK, type LegRig } from './kaijuFootIK';
+import { PLANET_RADIUS } from './cubeSphere';
+import { sampleGlobeSurface, sampleGlobeNormal } from './globeGround';
 import { registerHitMesh, unregisterHitMesh } from './kaijuMeshHit';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
@@ -134,6 +137,9 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const _leanQ = useRef(new THREE.Quaternion());
   /** Every bone in this Kaiju, gathered once — the impact springs live on these. */
   const impactBones = useRef<THREE.Object3D[]>([]);
+  /** Legs, for planting the feet on ground the animation knows nothing about. */
+  const legs = useRef<LegRig | null>(null);
+  const _knee = useRef(new THREE.Vector3());
   const _tip = useRef(new THREE.Quaternion());
   // THE LIMB COLLIDERS, FINALLY CONNECTED.
   //
@@ -147,6 +153,8 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     const bs: THREE.Object3D[] = [];
     model.traverse((o) => { if ((o as THREE.Bone).isBone) bs.push(o); });
     impactBones.current = bs;
+    legs.current = findLegRig(model);
+    clearFootIK(agent.id);
     registerRig(agent.id, model);
     // ...and the model ITSELF as the bullet collider. Triangles, in the pose being drawn.
     registerHitMesh(agent.id, model);
@@ -194,6 +202,21 @@ function AgentAvatar({ agent }: { agent: Agent }) {
       const lean = bodyLean(agent.id, _lean.current);
       const a = lean.length();
       if (a > 1e-5) g.quaternion.multiply(_leanQ.current.setFromAxisAngle(lean.divideScalar(a), a));
+    }
+
+    // FEET ON THE ACTUAL GROUND. The clip was authored on a flat floor, so on a hillside one foot
+    // hangs in the air and the other is buried. Runs after the flinch — it corrects whatever pose the
+    // animation and the hit reaction between them produced — and before anything reads bone
+    // positions, or the colliders describe a pose the screen never showed.
+    if (legs.current?.left || legs.current?.right) {
+      plantFeet(
+        agent.id, legs.current, g, b.radius,
+        (d) => {
+          const m = sampleGlobeSurface(d.x, d.y, d.z);
+          return m == null ? null : PLANET_RADIUS + m / METRES_PER_UNIT;
+        },
+        sampleGlobeNormal, dt, 1, _knee.current.copy(b.forward),
+      );
     }
 
     // Re-read the limb capsules from the pose the mixer just produced. It has to happen HERE, after
