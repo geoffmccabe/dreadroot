@@ -29,7 +29,7 @@ import {
 } from '../src/components/siege/globe/kaijuColliders';
 import {
   fireBullet, stepGunfire, getBullets, getSparks, clearGunfire, gunfireDiag,
-  chooseTarget, aimPoint, nextShotDelay, SPARK_LIFE,
+  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, SPARK_LIFE,
 } from '../src/components/siege/globe/kaijuGunfire';
 import { METRES_PER_UNIT, PLANET_RADIUS } from '../src/components/siege/globe/cubeSphere';
 
@@ -239,30 +239,70 @@ console.log('\n== The army shoots at the monster ==\n');
 }
 
 // --- 5. TARGET CHOICE ----------------------------------------------------------------------------
+// Geoff: "They should pick the closest Kaiju and shoot at it... the closer the kaiju, the more
+// likely they will choose it. So if a kaiju walks closer, it will start drawing fire, and the closer
+// it gets, the more soldiers fire at it." That is a behaviour over DISTANCE, so it is measured over
+// distance rather than sampled once and eyeballed.
 {
   initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]], 0x5EED, 6);
   const agents = getAgents();
+  // Stand where the crowd actually stands — about 350 m out, not glued to the creature's ankle.
+  // Testing from distance zero makes the near Kaiju infinitely preferred and hides the gradient.
+  const here = agents[0].body.dir.clone()
+    .lerp(agents[2].body.dir, (1.2 * ARENA_HEIGHT) / agents[0].body.dir.angleTo(agents[2].body.dir)
+      / agents[0].body.radius).normalize();
+
+  // Standing right next to agent 0, almost every rifle should be pointed at it.
   const counts = new Map<string, number>();
-  for (let i = 0; i < 400; i++) {
-    // Everyone standing in the same place, so any spread comes from the CHOICE and not from where
-    // they happen to be.
-    const id = chooseTarget(agents[0].body.dir, null);
+  for (let i = 0; i < 2000; i++) {
+    const id = chooseTarget(here);
     if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
-  ok(counts.size >= 3, 'the crowd splits across several Kaiju rather than all picking one',
+  const nearShare = (counts.get(agents[0].id) ?? 0) / 2000;
+  ok(nearShare > 0.8, 'the Kaiju you are standing next to takes most of the fire',
+     `${(nearShare * 100).toFixed(0)}%`);
+  ok(counts.size > 1, '...but not literally all of it — a distant one still draws a trickle',
      [...counts.entries()].map(([k, v]) => `${k}:${v}`).join(' '));
+
+  // NOW WALK ONE IN. Take the far Kaiju and step it toward the crowd, and the share of soldiers
+  // shooting at it must rise the whole way. This is the actual requested behaviour.
+  const far = agents[1];
+  const start = far.body.dir.clone();
+  const shares: number[] = [];
+  for (const bodies of [12, 9, 6, 3, 1]) {
+    // Place it `bodies` body-heights away along the surface from the crowd.
+    const axis = new THREE.Vector3().crossVectors(here, start).normalize();
+    far.body.dir.copy(here).applyAxisAngle(axis, (bodies * ARENA_HEIGHT) / far.body.radius).normalize();
+    let n = 0;
+    for (let i = 0; i < 4000; i++) if (chooseTarget(here) === far.id) n++;
+    shares.push(n / 4000);
+  }
+  const rising = shares.every((v, i) => i === 0 || v > shares[i - 1]);
+  ok(rising, 'the closer a Kaiju walks, the more soldiers switch to it',
+     shares.map((v, i) => `${[12, 9, 6, 3, 1][i]}b:${(v * 100).toFixed(0)}%`).join(' '));
+  ok(shares[0] < 0.15, 'a Kaiju right across the battlefield draws only a trickle',
+     `${(shares[0] * 100).toFixed(0)}% at 12 body-heights`);
+  ok(shares[shares.length - 1] > 0.35, 'and one standing on top of you draws a real share of it',
+     `${(shares[shares.length - 1] * 100).toFixed(0)}% at 1 body-height`);
+  far.body.dir.copy(start);
 
   // A dead Kaiju must stop being shot at, or the army spends the fight firing into a corpse.
   agents[1].alive = false;
   const after = new Set<string>();
-  for (let i = 0; i < 300; i++) { const id = chooseTarget(agents[0].body.dir, agents[1].id); if (id) after.add(id); }
+  for (let i = 0; i < 300; i++) { const id = chooseTarget(here); if (id) after.add(id); }
   ok(!after.has(agents[1].id), 'nobody keeps shooting at a Kaiju that has fallen');
+  agents[1].alive = true;
 
   for (let i = 0; i < 200; i++) {
     const d = nextShotDelay();
     if (d < 1 || d > 10) { ok(false, 'shot delays stay inside the 1-10 second window', `${d}`); break; }
   }
   ok(true, 'shot delays stay inside the 1-10 second window');
+  for (let i = 0; i < 200; i++) {
+    const d = nextRetargetDelay();
+    if (d < 5 || d > 15) { ok(false, 'targets are reconsidered about every ten seconds', `${d}`); break; }
+  }
+  ok(true, 'targets are reconsidered about every ten seconds');
 }
 
 // --- 6. THEY DO NO DAMAGE ------------------------------------------------------------------------

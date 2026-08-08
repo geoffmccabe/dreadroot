@@ -53,10 +53,25 @@ const GRAVITY = M(9.81);
  * time of flight both come out right without tuning either separately.
  */
 const DRAG = 0.11;
-/** A deformed, tumbling ricochet is not a bullet shape any more and sheds speed far faster. */
-const RICOCHET_DRAG = DRAG * 5;
-/** Fraction of speed kept through the bounce. */
-const RESTITUTION = 0.34;
+/**
+ * A ricochet is a deformed, tumbling lump, not a bullet, and it sheds speed enormously faster.
+ *
+ * 12x. Drag scales with frontal area and with the drag coefficient: a bullet flying point-first has
+ * a coefficient around 0.3 and presents its 5.7 mm nose; the same bullet tumbling sideways after
+ * flattening on armour presents several times the area at a coefficient near 1. An order of
+ * magnitude is the physically honest figure, not a fudge for the look — and it is also what makes
+ * the arc visible, because a fragment still doing 200 m/s travels in a straight line and gravity has
+ * nothing to work with until it is down to a few tens of metres a second.
+ */
+const RICOCHET_DRAG = DRAG * 12;
+/**
+ * Fraction of speed kept through the bounce.
+ *
+ * Measured ricochet studies put the retained velocity of a rifle round off hard steel at roughly a
+ * quarter to a half, depending almost entirely on how shallow the strike is. 0.28 sits in that band
+ * and toward the lossy end, which is right for a round striking something close to head-on.
+ */
+const RESTITUTION = 0.28;
 
 /** The muzzle flash. Short: it is a pop, not a lamp. */
 export const MUZZLE_LIFE = 0.055;
@@ -65,7 +80,7 @@ export const SPARK_LIFE = 0.38;
 /** Longest a round stays in the world before it is given up on. */
 const MAX_LIFE = 3.0;
 /** How long a ricochet is followed after it bounces. */
-const RICOCHET_LIFE = 1.9;
+const RICOCHET_LIFE = 2.6;
 /**
  * Streak length, expressed as seconds of travel: the trail is (speed x this) long, so it stretches
  * when the round is fast and collapses as it slows.
@@ -117,6 +132,12 @@ export interface Spark {
   pos: THREE.Vector3;
   /** Outward surface normal at the impact, so the flash can be lifted clear of the skin. */
   nrm: THREE.Vector3;
+  /**
+   * What was struck. A round off a Kaiju throws a bright white spark; a round into the dirt throws
+   * a dull, smaller puff. Drawing both the same makes a battlefield where the ground and the monster
+   * look equally worth shooting at.
+   */
+  kind: 'hide' | 'dirt';
   age: number;
   live: boolean;
 }
@@ -133,7 +154,12 @@ for (let i = 0; i < MAX_BULLETS; i++) {
   });
 }
 const sparks: Spark[] = [];
-for (let i = 0; i < MAX_SPARKS; i++) sparks.push({ pos: new THREE.Vector3(), nrm: new THREE.Vector3(0, 1, 0), age: 0, live: false });
+for (let i = 0; i < MAX_SPARKS; i++) {
+  sparks.push({
+    pos: new THREE.Vector3(), nrm: new THREE.Vector3(0, 1, 0),
+    kind: 'hide', age: 0, live: false,
+  });
+}
 
 let bCursor = 0;
 let sCursor = 0;
@@ -160,6 +186,7 @@ const _up = new THREE.Vector3();
 const _nrm = new THREE.Vector3();
 const _axisPt = new THREE.Vector3();
 const _centre = new THREE.Vector3();
+const _weights: number[] = [];
 const _norm2 = new THREE.Vector3();
 const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
 
@@ -181,11 +208,12 @@ function collidersFor(a: Agent, out: Capsule[]): Capsule[] {
   return out;
 }
 
-function addSpark(at: THREE.Vector3, normal?: THREE.Vector3): void {
+function addSpark(at: THREE.Vector3, normal: THREE.Vector3 | null, kind: Spark['kind']): void {
   const s = sparks[sCursor];
   sCursor = (sCursor + 1) % MAX_SPARKS;
   s.pos.copy(at);
   if (normal) s.nrm.copy(normal); else s.nrm.copy(at).normalize();
+  s.kind = kind;
   s.age = 0;
   s.live = true;
 }
@@ -292,7 +320,7 @@ export function stepGunfire(dt: number): void {
         if (n.lengthSq() < 1e-12) n.copy(_up); else n.normalize();
         // The spark is created AFTER the normal exists, so it can be lifted off the skin at draw
         // time. Created before, it had no normal and there was nothing to lift it with.
-        addSpark(_nrm, n);
+        addSpark(_nrm, n, 'hide');
         // Reflect, keep a third of the speed, and throw it well off the mirror angle. Real ricochets
         // are chaotic; a clean reflection reads as a snooker ball rather than as a bullet coming
         // apart on armour plate.
@@ -314,14 +342,22 @@ export function stepGunfire(dt: number): void {
         live++;
         continue;
       }
-    } else {
-      // Ricochets bury themselves in the ground. Only checked after the bounce: an incoming round is
-      // aimed upward at a 300 m creature and would never meet the terrain on the way in.
+    }
+
+    // THE DIRT. Every round that comes down finds the ground, not just the ones that bounced.
+    //
+    // Geoff: "They should also make a small flash when they hit the terrain." This used to run only
+    // AFTER a ricochet, on the reasoning that an incoming round is aimed upward at a 300 m creature
+    // and would never meet the terrain on the way in — which is true of the ones that HIT. The ones
+    // that miss carry on over its shoulder and land somewhere, and those are the rounds that make a
+    // battlefield look like a battlefield.
+    {
       const len = b.pos.length();
       if (len > 1e-6) {
         const gm = sampleGlobeSurface(b.pos.x / len, b.pos.y / len, b.pos.z / len);
         if (gm != null && len < PLANET_RADIUS + gm / METRES_PER_UNIT) {
-          addSpark(b.pos);
+          _up.copy(b.pos).normalize();
+          addSpark(b.pos, _up, 'dirt');
           b.live = false;
           continue;
         }
@@ -339,21 +375,53 @@ export function stepGunfire(dt: number): void {
 }
 
 /**
- * Pick which Kaiju a person is going to follow and shoot at.
+ * Pick which Kaiju a person is going to follow and shoot at, by how close it is.
  *
- * Not simply "the nearest": two hundred people all choosing the nearest target is two hundred people
- * standing in one clump, and the moment a second Kaiju walks past they all switch at once, which
- * reads as a flock rather than as a crowd. So it is mostly-nearest with a real chance of picking
- * someone else — a soldier who has committed to a target and is not re-evaluating it.
+ * Geoff: "They should pick the closest Kaiju and shoot at it. If a Kaiju gets within shooting
+ * distance, then there should be a reasonable chance that any soldier will start to fire at the
+ * other one... the closer the kaiju, the more likely they will choose it."
+ *
+ * So this is a WEIGHTED draw rather than a nearest-wins rule or a coin flip. Each Kaiju's weight
+ * falls off with the cube of its distance, which produces exactly the behaviour described: the one
+ * standing on top of you takes nearly all the fire, a second one walking in starts pulling a trickle
+ * as soon as it is in range, and that trickle becomes the majority as it closes. At equal distance
+ * they split evenly, which is what stops the crowd behaving as one animal.
+ *
+ * The exponent is the whole design, and it was MEASURED rather than picked. At 3 the falloff is so
+ * steep that a Kaiju anywhere past six body heights draws literally nothing, so there is no gradient
+ * to see until it is already on top of you — check-kaiju-gunfire caught that by walking one in and
+ * watching the share. At 2.5 the share runs roughly 0.5%, 1%, 3%, 15%, 50% as it closes from twelve
+ * body heights to one, which is the behaviour asked for: a trickle that becomes the majority.
  */
-export function chooseTarget(dir: THREE.Vector3, previous: string | null): string | null {
+const FALLOFF_POWER = 2.5;
+/**
+ * Closest a Kaiju is allowed to count as, in body heights.
+ *
+ * A soldier can end up standing AT a Kaiju's feet, and dividing by nearly zero there makes that one
+ * creature take literally every shot on the map — the gradient collapses and the behaviour Geoff
+ * asked for disappears at exactly the moment it matters most. 1.5 body heights is 450 m, which is
+ * about where the crowd actually stands.
+ */
+const MIN_BODIES = 1.5;
+/** Beyond this, in body heights, a Kaiju is simply too far to bother shooting at. */
+const MAX_ENGAGE_BODIES = 14;
+
+export function chooseTarget(dir: THREE.Vector3, _previous?: string | null): string | null {
   const alive = getAgents().filter((a) => a.alive);
   if (!alive.length) return null;
-  if (previous && alive.some((a) => a.id === previous) && rand() < 0.75) return previous;
-  // 0.9, not 0.65. Geoff: "They aren't shooting at my Kaiju even though they're right next to me."
-  // One rifleman in three picking a target at random across the whole battlefield was enough to make
-  // the crowd look like it was firing at nothing in particular.
-  if (rand() < 0.9) {
+
+  let total = 0;
+  _weights.length = 0;
+  for (const a of alive) {
+    // Great-circle distance along the surface, in body heights.
+    const bodies = (dir.angleTo(a.body.dir) * a.body.radius) / ARENA_HEIGHT;
+    const d = Math.max(MIN_BODIES, bodies);
+    const w = bodies > MAX_ENGAGE_BODIES ? 0 : 1 / Math.pow(d, FALLOFF_POWER);
+    _weights.push(w);
+    total += w;
+  }
+  // Nothing in range: keep shooting at the nearest anyway rather than standing there doing nothing.
+  if (total <= 0) {
     let best = alive[0];
     let bestD = Infinity;
     for (const a of alive) {
@@ -362,8 +430,23 @@ export function chooseTarget(dir: THREE.Vector3, previous: string | null): strin
     }
     return best.id;
   }
-  return alive[Math.floor(rand() * alive.length)].id;
+
+  let roll = rand() * total;
+  for (let i = 0; i < alive.length; i++) {
+    roll -= _weights[i];
+    if (roll <= 0) return alive[i].id;
+  }
+  return alive[alive.length - 1].id;
 }
+
+/**
+ * Seconds until a soldier reconsiders who to shoot at. Geoff asked for about ten.
+ *
+ * Jittered, because two hundred people re-evaluating on the same tick makes the whole field switch
+ * targets at once — which is the flock behaviour this weighting exists to avoid, just on a ten
+ * second cycle instead of every frame.
+ */
+export function nextRetargetDelay(): number { return 7 + rand() * 6; }
 
 /**
  * Where on a Kaiju a rifleman aims.

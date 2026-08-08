@@ -40,7 +40,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { resolveGait } from './kaijuClips';
 import { getAgents, arenaStarted, type Agent } from './kaijuArena';
 import {
-  chooseTarget, aimPoint, nextShotDelay, fireBullet,
+  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet,
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout } from './kaijuShouts';
@@ -93,6 +93,17 @@ interface Person {
   targetId: string | null;
   /** Seconds until this person's next shot. */
   fireIn: number;
+  /**
+   * Seconds until this person reconsiders who they are shooting at.
+   *
+   * Geoff: "maybe it re-rolls every 10 seconds and then the closer the kaiju, the more likely they
+   * will choose it. So if a kaiju walks closer, it will start drawing fire, and the closer it gets,
+   * the more soldiers fire at it."
+   *
+   * Ten seconds is slow enough that an individual reads as having committed to a target, and fast
+   * enough that a Kaiju walking into the crowd visibly pulls fire onto itself within a few seconds.
+   */
+  retargetIn: number;
 }
 
 let crowdOn = false;
@@ -175,10 +186,11 @@ function makePeople(): Person[] {
       out.push({
         dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
-        targetId: chooseTarget(dir, null),
+        targetId: chooseTarget(dir),
         // Stagger the OPENING shots across the whole 1-10 second window, or two hundred rifles go
         // off within a tenth of a second of each other the instant the crowd appears.
         fireIn: nextShotDelay(),
+        retargetIn: nextRetargetDelay(),
       });
     }
     return out;
@@ -202,8 +214,9 @@ function makePeople(): Person[] {
       timer: rand() * 3,
       phase: rand(),
       speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
-      targetId: chooseTarget(dir, null),
+      targetId: chooseTarget(dir),
       fireIn: nextShotDelay(),
+      retargetIn: nextRetargetDelay(),
     });
   }
   return out;
@@ -312,8 +325,12 @@ function Crowd() {
       // fall back to the player's body exactly as they did before, so the plain scale shot — a
       // crowd and one Kaiju, no battle — is unchanged.
       let target = p.targetId ? byId.get(p.targetId) : undefined;
-      if (fighting && (!target || !target.alive)) {
-        p.targetId = chooseTarget(p.dir, null);
+      // Reconsider on a timer, and immediately if the one they were shooting at has fallen. The
+      // draw is weighted by distance, so this is what makes an approaching Kaiju pull fire.
+      p.retargetIn -= dt;
+      if (fighting && (p.retargetIn <= 0 || !target || !target.alive)) {
+        p.retargetIn = nextRetargetDelay();
+        p.targetId = chooseTarget(p.dir);
         target = p.targetId ? byId.get(p.targetId) : undefined;
       }
       const kaiju = target?.body.dir ?? playerBody.dir;

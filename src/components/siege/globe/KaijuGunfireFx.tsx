@@ -59,6 +59,8 @@ const DASH_DUTY = 0.55;
  */
 const TRACER_WIDTH_M = 3;
 const WIDTH_UNITS = TRACER_WIDTH_M / METRES_PER_UNIT;
+/** Shorter than this and it is not a streak, it is a speck. Skipped rather than drawn as a block. */
+const MIN_DASH_UNITS = 6 / METRES_PER_UNIT;
 
 /** A muzzle flash, in metres. Roughly a rifle's own flash — read as a dot at any real distance. */
 const MUZZLE_M = 1.6;
@@ -72,6 +74,8 @@ const MUZZLE_M = 1.6;
 const SPARK_M = 9;
 /** How far out from the hide the flash sits, so it is never swallowed by the mesh it landed on. */
 const SPARK_LIFT_M = 4;
+/** A round into the dirt. Smaller than a strike on the monster, because it matters less. */
+const DIRT_M = 5;
 
 /**
  * A star, painted into a canvas: hot white core, yellow bloom, and spikes of alternating length.
@@ -121,6 +125,22 @@ function starSprite(points = 7, size = 128): THREE.Texture {
   return tex;
 }
 
+/**
+ * Teach PointsMaterial to read a per-point `size` attribute.
+ *
+ * three.js builds gl_PointSize from a single uniform. Rather than write a whole material to vary one
+ * number, the stock shader is patched: declare the attribute and multiply it in. This is the
+ * documented extension point and survives three.js upgrades far better than a hand-rolled copy of
+ * the built-in shader would.
+ */
+function perPointSize(shader: { vertexShader: string }): void {
+  // The attribute is `aSize`, NOT `size`: three.js already declares `uniform float size` in this
+  // shader, and a second declaration under the same name is a compile error that shows up as a
+  // silently blank material rather than as anything readable.
+  shader.vertexShader = 'attribute float aSize;\n'
+    + shader.vertexShader.replace('gl_PointSize = size;', 'gl_PointSize = aSize;');
+}
+
 export function KaijuGunfireFx() {
   const tracers = useRef<THREE.InstancedMesh>(null);
   const camera = useThree((st) => st.camera);
@@ -136,6 +156,7 @@ export function KaijuGunfireFx() {
     muzzleCol: new Float32Array(MAX_POINTS * 3),
     sparkPos: new Float32Array(MAX_POINTS * 3),
     sparkCol: new Float32Array(MAX_POINTS * 3),
+    sparkSize: new Float32Array(MAX_POINTS),
   }), []);
 
   const _v = useMemo(() => new THREE.Vector3(), []);
@@ -185,8 +206,21 @@ export function KaijuGunfireFx() {
         q.b.copy(b.tail).lerp(b.pos, t1);
         q.dir.copy(q.b).sub(q.a);
         const len = q.dir.length();
-        if (len < 1e-6) continue;
+
+        // THE WIDE RECTANGLES. A streak is (speed x time) long and a FIXED 3 m wide, so the moment
+        // a round is slow or its dash is clipped, the width wins and the "streak" becomes a card
+        // wider than it is long. Two ways that happens, and both were happening constantly:
+        //
+        //   * A RICOCHET slows to tens of metres a second, so its whole trail shrinks to a few
+        //     metres and every dash on it is a 3 m x 1 m brick, floating for two seconds.
+        //   * The sliding dash pattern CLIPS the last dash at the end of the streak, so one of the
+        //     three is always a stub however fast the round is going.
+        //
+        // Anything too short to be a streak is skipped, and the width is never allowed past a third
+        // of the length — so a slowing round tapers away to a thin sliver instead of squaring up.
+        if (len < MIN_DASH_UNITS) continue;
         q.dir.divideScalar(len);
+        const w = Math.min(WIDTH_UNITS, len * 0.33);
         q.mid.copy(q.a).lerp(q.b, 0.5);
 
         // Turn the quad edge-on to the viewer, so a streak is the same width whichever way it is
@@ -195,7 +229,7 @@ export function KaijuGunfireFx() {
         q.side.crossVectors(q.dir, q.toCam);
         if (q.side.lengthSq() < 1e-12) q.side.set(1, 0, 0); else q.side.normalize();
         q.nrm.crossVectors(q.side, q.dir);
-        q.side.multiplyScalar(WIDTH_UNITS);
+        q.side.multiplyScalar(w);
         q.dir.multiplyScalar(len);
         q.m.makeBasis(q.side, q.dir, q.nrm);
         q.m.setPosition(q.mid);
@@ -216,13 +250,23 @@ export function KaijuGunfireFx() {
       if (!sp.live || nS >= MAX_POINTS) continue;
       const f = 1 - sp.age / SPARK_LIFE;
       const o = nS * 3;
-      // LIFT IT OFF THE SKIN. The capsule is an approximation of a limb, so a point exactly on its
-      // surface can sit a few metres inside the mesh it is supposed to be marking — and a flash
+      // LIFT IT OFF THE SURFACE. The capsule is an approximation of a limb, so a point exactly on
+      // its surface can sit a few metres inside the mesh it is supposed to be marking — and a flash
       // hidden inside the creature that stopped the bullet is a flash nobody ever sees.
       _v.copy(sp.pos).addScaledVector(sp.nrm, SPARK_LIFT_M / METRES_PER_UNIT);
       buf.sparkPos[o] = _v.x; buf.sparkPos[o + 1] = _v.y; buf.sparkPos[o + 2] = _v.z;
-      // Cools white -> orange as it dies, like a real strike on armour.
-      buf.sparkCol[o] = f; buf.sparkCol[o + 1] = f * (0.45 + 0.5 * f); buf.sparkCol[o + 2] = f * f * 0.55;
+      if (sp.kind === 'dirt') {
+        // Dirt is a dull tan puff, not a spark. A round into the ground has nothing hard to strike
+        // and throws no metal, so drawing it as white fire would make the terrain look like it was
+        // the interesting thing to be shooting at.
+        buf.sparkCol[o] = f * 0.55; buf.sparkCol[o + 1] = f * 0.42; buf.sparkCol[o + 2] = f * 0.26;
+      } else {
+        // Cools white -> orange as it dies, like a real strike on armour.
+        buf.sparkCol[o] = f; buf.sparkCol[o + 1] = f * (0.45 + 0.5 * f); buf.sparkCol[o + 2] = f * f * 0.55;
+      }
+      // Per-point size, so a dirt puff can be smaller than a strike on the hide without needing a
+      // second draw call of its own.
+      buf.sparkSize[nS] = (sp.kind === 'dirt' ? DIRT_M : SPARK_M) / METRES_PER_UNIT;
       nS++;
     }
 
@@ -235,6 +279,7 @@ export function KaijuGunfireFx() {
     S.geometry.setDrawRange(0, nS);
     S.geometry.attributes.position.needsUpdate = true;
     S.geometry.attributes.color.needsUpdate = true;
+    S.geometry.attributes.aSize.needsUpdate = true;
   });
 
   return (
@@ -275,6 +320,10 @@ export function KaijuGunfireFx() {
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[buf.sparkPos, 3]} usage={THREE.DynamicDrawUsage} />
           <bufferAttribute attach="attributes-color" args={[buf.sparkCol, 3]} usage={THREE.DynamicDrawUsage} />
+          {/* Per-point size. PointsMaterial has one size for the whole cloud, so a strike on the
+              monster and a round into the dirt would have to be two separate draws to differ. One
+              line of shader patching is cheaper than a second point cloud. */}
+          <bufferAttribute attach="attributes-aSize" args={[buf.sparkSize, 1]} usage={THREE.DynamicDrawUsage} />
         </bufferGeometry>
         <pointsMaterial
           map={star}
@@ -285,6 +334,7 @@ export function KaijuGunfireFx() {
           depthWrite={false}
           toneMapped={false}
           blending={THREE.AdditiveBlending}
+          onBeforeCompile={perPointSize}
         />
       </points>
     </>
