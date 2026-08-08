@@ -326,9 +326,23 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       // sinking into the ground rather than gathering itself. The group's origin is at the feet,
       // so scaling y alone keeps the feet planted and brings the head down — which is what a
       // squat actually is. Deepened from 12% to 30% so it is visible at all.
-      const baseScale = h / Math.max(0.01, modelHeight);
-      const squash = b.crouchFrac > 0 ? 1 - b.crouchFrac * 0.30 : 1;
-      g.scale.set(baseScale, baseScale * squash, baseScale);
+      //
+      // THE SQUASH IS GONE, AND IT HAD TO BE. It set a NON-UNIFORM scale on this group — the same
+      // group that carries the body's rotation quaternion — with the whole animated skeleton
+      // underneath.
+      //
+      // three.js composes a node as translation x rotation x scale, and every child inherits that
+      // product. So a bone with its own rotation R ends up evaluated as S x R with S non-uniform,
+      // and a non-uniform scale applied before a rotation is a SHEAR, not a squash. Bones that are
+      // rotated relative to the body get skewed; bones aligned with it do not. During a walk the
+      // legs are exactly the bones that rotate most, which is precisely the reported symptom:
+      // twisted legs and feet.
+      //
+      // A vertical squash of a skinned character cannot be done with a transform at all — it is
+      // inherently non-uniform, so it inherently shears. Real crouches are animated, and these
+      // models already ship a stand_to_crouch clip that the gait resolver knows how to find.
+      // Losing a brief pre-jump compression is a fair price for a rig that cannot skew.
+      g.scale.setScalar(h / Math.max(0.01, modelHeight));
       return;
     }
 
