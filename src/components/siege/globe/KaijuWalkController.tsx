@@ -21,9 +21,11 @@ import { sampleGlobeSurface } from './globeGround';
 
 import {
   body, stepBody, placeOnSurface, walkSpeed, runSpeed, reTangent, turnTangent,
+  reTangentOf, turnTangentOf,
 } from './kaijuBody';
 import { getKaijuLab, subscribeKaijuLab } from './kaijuLabState';
 import { getWalkZoom, nudgeWalkZoom, resetWalkZoom, setWalkZoom, flyZoomDelta } from './globeZoom';
+import { getAgents } from './kaijuArena';
 
 /**
  * ONE CAMERA. It orbits the Kaiju at a DISTANCE and a PITCH, and that is all it does.
@@ -56,6 +58,47 @@ const LOOK_SENS = 0.0022;
 const CAM_CLEAR_METRES = 2;
 /** Eye height as a fraction of body height. A 300 m Kaiju sees from about 270 m. */
 const EYE_FRAC = 0.9;
+
+/**
+ * THE CAMERA IS NO LONGER WELDED TO ONE CREATURE.
+ *
+ * Geoff: "don't limit my camera movement so much... It seems fixated on a single kaiju but the game
+ * will have multiple ones that the player owns and can control, so we need more free camera
+ * movement."
+ *
+ * Three additions, and they compose rather than each being a mode of its own:
+ *
+ *   SUBJECT  — who the camera orbits. Tab cycles it through every Kaiju in the fight. Your own is
+ *              index 0, so Tab from the far end brings you straight home.
+ *   PAN      — a sideways offset from the subject, on middle-drag. The camera keeps following, it
+ *              just is not centred any more, which is how you watch a fight you are standing in.
+ *   FREE     — C detaches entirely. WASD then flies the CAMERA and the Kaiju stands still.
+ *
+ * WASD still drives YOUR Kaiju while the camera is watching somebody else; switching which one you
+ * actually control is a bigger change than a camera one, because the player's body is a single
+ * shared object the whole engine reads.
+ */
+/** Which agent the camera orbits, by index into the arena. 0 is always the player. */
+let followIndex = 0;
+/** Detached camera: WASD flies the camera and nothing drives the Kaiju. */
+let freeCam = false;
+/** Sideways offset from the subject, in the camera's own right/up axes, in body heights. */
+const panOffset = { right: 0, up: 0 };
+/**
+ * Extra look-around yaw that does NOT steer.
+ *
+ * Alt + right-drag. Ordinary right-drag turns the camera heading, and W then walks along it — so
+ * looking around and choosing a direction are the same act, and you cannot glance left while still
+ * running forward. This offset moves the VIEW only; the steering heading is untouched.
+ */
+let lookYaw = 0;
+
+export function cameraSubjectName(): string {
+  const agents = getAgents();
+  if (freeCam) return 'FREE CAMERA';
+  const a = agents[followIndex];
+  return a ? (a.isPlayer ? `${a.name} (you)` : a.name) : 'you';
+}
 
 let walkActive = false;
 const listeners = new Set<() => void>();
@@ -152,6 +195,8 @@ export function KaijuWalkController() {
   const feet = useRef(new THREE.Vector3());
   const want = useRef(new THREE.Vector3());
   const target = useRef(new THREE.Vector3());
+  /** The VIEW heading: the steering heading plus the alt-drag glance. Never fed back into steering. */
+  const view = useRef(new THREE.Vector3());
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -178,6 +223,22 @@ export function KaijuWalkController() {
       }
       if (!walkActive) return;
       if (e.code === 'KeyV') { firstPerson.current = !firstPerson.current; haveCam.current = false; e.preventDefault(); return; }
+      // TAB — watch the next Kaiju. Wraps back to your own, so it is never a dead end.
+      if (e.code === 'Tab') {
+        const n = Math.max(1, getAgents().length);
+        followIndex = (followIndex + 1) % n;
+        panOffset.right = 0; panOffset.up = 0;
+        haveCam.current = false;
+        e.preventDefault();
+        return;
+      }
+      // C — detach the camera. WASD flies it; the Kaiju stops taking orders until you come back.
+      if (e.code === 'KeyC' && !e.metaKey && !e.ctrlKey) {
+        freeCam = !freeCam;
+        haveCam.current = false;
+        e.preventDefault();
+        return;
+      }
       keys.current.add(e.code);
     };
     const up = (e: KeyboardEvent) => keys.current.delete(e.code);
@@ -192,15 +253,45 @@ export function KaijuWalkController() {
     // and left-click is already taken by the flamethrower, so clicking to acquire a lock fires
     // instead. Right-drag is the convention everywhere else and costs nothing to support: the
     // same yaw and pitch, just a different way of delivering them.
-    const dragging = { on: false };
-    const mouseDown = (e: MouseEvent) => { if (walkActive && e.button === 2) dragging.on = true; };
-    const mouseUp = (e: MouseEvent) => { if (e.button === 2) dragging.on = false; };
+    const dragging = { on: false, alt: false };
+    // MIDDLE BUTTON: drag to pan the camera off the subject, click (no drag) to snap back.
+    const panning = { on: false, moved: 0 };
+    const mouseDown = (e: MouseEvent) => {
+      if (!walkActive) return;
+      if (e.button === 2) { dragging.on = true; dragging.alt = e.altKey; }
+      if (e.button === 1) { panning.on = true; panning.moved = 0; e.preventDefault(); }
+    };
+    const mouseUp = (e: MouseEvent) => {
+      if (e.button === 2) { dragging.on = false; dragging.alt = false; }
+      if (e.button === 1) {
+        // A click, not a drag: recentre. The threshold is what tells the two apart, and without it
+        // a pan that ends with a twitch would snap back and undo itself.
+        if (panning.on && panning.moved < 6) { panOffset.right = 0; panOffset.up = 0; }
+        panning.on = false;
+      }
+    };
     // Without this the browser's context menu opens on top of the drag and eats the mouse-up.
     const noMenu = (e: MouseEvent) => { if (walkActive) e.preventDefault(); };
 
     const move = (e: MouseEvent) => {
       if (!walkActive) return;
+      if (panning.on) {
+        panning.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+        // In body heights, so panning feels the same at any Kaiju size or zoom level.
+        panOffset.right -= e.movementX * LOOK_SENS * 3;
+        panOffset.up += e.movementY * LOOK_SENS * 3;
+        return;
+      }
       if (document.pointerLockElement == null && !dragging.on) return;
+      if (dragging.alt) {
+        // ALT — look around WITHOUT steering. The view swings; the direction W walks in does not.
+        lookYaw -= e.movementX * LOOK_SENS;
+        orbitPitch.current = Math.max(-0.9, Math.min(1.2, orbitPitch.current + e.movementY * LOOK_SENS));
+        return;
+      }
+      // An ordinary drag re-centres the look offset as it goes, or the view would stay skewed by
+      // however far you had glanced last time.
+      lookYaw *= 0.85;
       pendingYaw.current -= e.movementX * LOOK_SENS;
       orbitPitch.current = Math.max(-0.9, Math.min(1.2, orbitPitch.current + e.movementY * LOOK_SENS));
     };
@@ -304,6 +395,46 @@ export function KaijuWalkController() {
     // Underwater the same keys mean vertical thrust rather than a jump: Space rises, Z or Ctrl
     // dives. Held, not edge-triggered, because swimming up is continuous.
     const up = (k.has('Space') ? 1 : 0) - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
+
+    // --- FREE CAMERA ----------------------------------------------------------------------------
+    //
+    // The camera flies and NOTHING drives the Kaiju. Deliberately an early return rather than a
+    // flag threaded through the orbit code below: two movers arguing over one camera is the exact
+    // failure this file was written to stop, and the cleanest way to have two behaviours is for
+    // only one of them to run.
+    if (freeCam) {
+      camRight.current.crossVectors(camFwd.current, camera.position).normalize();
+      // Look direction = the heading, pitched. Same two dials the orbit uses, so C does not feel
+      // like a different game.
+      steer.current.copy(camFwd.current)
+        .multiplyScalar(Math.cos(orbitPitch.current))
+        .addScaledVector(camPos.current.clone().normalize(), -Math.sin(orbitPitch.current))
+        .normalize();
+      // Speed scales with altitude above the ground, so the same stick crosses a battlefield from
+      // up high and creeps between two Kaiju from down low.
+      const overGround = Math.max(h * 0.5, camera.position.length() - body.radius);
+      const flySpeed = overGround * (running ? 2.2 : 0.7);
+      if (fwd !== 0 || right !== 0) {
+        camPos.current
+          .addScaledVector(steer.current, fwd * flySpeed * dt)
+          .addScaledVector(camRight.current, right * flySpeed * dt);
+      }
+      if (up !== 0) camPos.current.addScaledVector(camPos.current.clone().normalize(), up * flySpeed * dt);
+      // Never underground, measured where the CAMERA is — the same rule the orbit obeys.
+      {
+        const cd = camPos.current.clone().normalize();
+        const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
+        if (gm != null) {
+          const floor = PLANET_RADIUS + gm / METRES_PER_UNIT + CAM_CLEAR_METRES / METRES_PER_UNIT;
+          if (camPos.current.length() < floor) camPos.current.setLength(floor);
+        }
+      }
+      camera.position.copy(camPos.current);
+      camera.up.copy(camPos.current).normalize();
+      camera.lookAt(target.current.copy(camera.position).addScaledVector(steer.current, h * 8));
+      return;
+    }
+
     stepBody(dt, fwd, right, jump && !body.submerged, running, h, desired, up);
     if (jump && !body.submerged) k.delete('Space');   // edge-trigger the jump only
 
@@ -313,10 +444,27 @@ export function KaijuWalkController() {
     reTangent(camFwd.current);
 
     // --- camera ---------------------------------------------------------------------------
-    feet.current.copy(body.dir).multiplyScalar(body.radius);
+    //
+    // WHO IS BEING WATCHED. Tab cycles this; index 0 is always the player, so the ordinary case is
+    // byte-for-byte what it always was. Falls back to your own body whenever the chosen agent has
+    // gone — a Kaiju dying should not strand the camera.
+    const agents = getAgents();
+    if (followIndex >= agents.length) followIndex = 0;
+    const subj = agents[followIndex]?.body ?? body;
+
+    feet.current.copy(subj.dir).multiplyScalar(subj.radius);
+    // The view heading = the steering heading plus however far you have GLANCED with alt-drag.
+    // Kept separate so looking around never changes where W takes you.
+    view.current.copy(camFwd.current);
+    if (Math.abs(lookYaw) > 1e-4) {
+      // Tangent to the SUBJECT's ground, not the player's — otherwise glancing while watching a
+      // Kaiju on the far side of a hill tilts the view off the horizon.
+      reTangentOf(subj, view.current);
+      turnTangentOf(subj, view.current, lookYaw);
+    }
     const cp = Math.cos(orbitPitch.current), sp = Math.sin(orbitPitch.current);
-    want.current.copy(camFwd.current).multiplyScalar(-cp)
-      .addScaledVector(body.dir, sp)
+    want.current.copy(view.current).multiplyScalar(-cp)
+      .addScaledVector(subj.dir, sp)
       .normalize();
 
     if (firstPerson.current) {
@@ -328,6 +476,14 @@ export function KaijuWalkController() {
       // makes a 500 m, 1.8 m scale shot reachable with the same two dials as every other view.
       target.current.copy(feet.current)
         .addScaledVector(want.current, h * CAM_ORBIT * getWalkZoom());
+    }
+    // PAN. Applied to the orbit point rather than to the camera, so the camera keeps circling the
+    // same place it is now looking at instead of swinging round a subject it is no longer aimed at.
+    if (panOffset.right !== 0 || panOffset.up !== 0) {
+      camRight.current.crossVectors(want.current, subj.dir).normalize();
+      target.current
+        .addScaledVector(camRight.current, panOffset.right * h)
+        .addScaledVector(subj.dir, panOffset.up * h);
     }
 
     // NEVER UNDERGROUND — MEASURED WHERE THE CAMERA ACTUALLY IS.
@@ -352,13 +508,19 @@ export function KaijuWalkController() {
 
     // Look along the heading (first person) or at the body (third person). camera.up is local up
     // either way, which is what keeps the horizon level on a sphere.
-    camera.up.copy(body.dir);
+    camera.up.copy(subj.dir);
     if (firstPerson.current) {
       target.current.copy(camera.position)
-        .addScaledVector(camFwd.current, h * 4)
-        .addScaledVector(body.dir, Math.tan(-orbitPitch.current) * h * 4);
+        .addScaledVector(view.current, h * 4)
+        .addScaledVector(subj.dir, Math.tan(-orbitPitch.current) * h * 4);
     } else {
-      target.current.copy(feet.current).addScaledVector(body.dir, h * 0.55);
+      target.current.copy(feet.current).addScaledVector(subj.dir, h * 0.55);
+      if (panOffset.right !== 0 || panOffset.up !== 0) {
+        camRight.current.crossVectors(want.current, subj.dir).normalize();
+        target.current
+          .addScaledVector(camRight.current, panOffset.right * h)
+          .addScaledVector(subj.dir, panOffset.up * h);
+      }
     }
     camera.lookAt(target.current);
   }, 1);   // priority 1: run AFTER the shared controller so the camera write wins

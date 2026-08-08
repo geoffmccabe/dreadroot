@@ -29,7 +29,7 @@ import {
 } from '../src/components/siege/globe/kaijuColliders';
 import {
   fireBullet, stepGunfire, getBullets, getSparks, clearGunfire, gunfireDiag,
-  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, SPARK_LIFE,
+  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, SPARK_LIFE, MAX_RANGE_UNITS,
 } from '../src/components/siege/globe/kaijuGunfire';
 import { METRES_PER_UNIT, PLANET_RADIUS } from '../src/components/siege/globe/cubeSphere';
 
@@ -261,29 +261,44 @@ console.log('\n== The army shoots at the monster ==\n');
   const nearShare = (counts.get(agents[0].id) ?? 0) / 2000;
   ok(nearShare > 0.8, 'the Kaiju you are standing next to takes most of the fire',
      `${(nearShare * 100).toFixed(0)}%`);
-  ok(counts.size > 1, '...but not literally all of it — a distant one still draws a trickle',
+  // The demo fight spawns everyone six body heights apart — 1800 m — which is more than twice a
+  // rifle's reach, so at the start of a battle the only thing worth shooting at IS the near one.
+  ok(counts.size === 1, 'and the ones out of range draw nothing at all',
      [...counts.entries()].map(([k, v]) => `${k}:${v}`).join(' '));
 
   // NOW WALK ONE IN. Take the far Kaiju and step it toward the crowd, and the share of soldiers
   // shooting at it must rise the whole way. This is the actual requested behaviour.
+  //
+  // The distances are inside RIFLE RANGE, not across the map. A round is spent by 2.78 body heights
+  // (833 m, derived from its own drag curve), so beyond that a soldier does not engage at all —
+  // which is the other half of what Geoff asked for: "they shouldn't shoot at a kaiju that they
+  // can't hit with a bullet." Testing the gradient at 12 body heights would only ever measure zero.
   const far = agents[1];
   const start = far.body.dir.clone();
-  const shares: number[] = [];
-  for (const bodies of [12, 9, 6, 3, 1]) {
-    // Place it `bodies` body-heights away along the surface from the crowd.
+  const place = (bodies: number) => {
     const axis = new THREE.Vector3().crossVectors(here, start).normalize();
     far.body.dir.copy(here).applyAxisAngle(axis, (bodies * ARENA_HEIGHT) / far.body.radius).normalize();
+  };
+  const shareAt = (bodies: number) => {
+    place(bodies);
     let n = 0;
     for (let i = 0; i < 4000; i++) if (chooseTarget(here) === far.id) n++;
-    shares.push(n / 4000);
-  }
+    return n / 4000;
+  };
+
+  // Out of reach: it must draw NOTHING, however big it is.
+  ok(shareAt(5) === 0, 'a Kaiju beyond rifle range draws no fire at all',
+     `range limit ${(MAX_RANGE_UNITS * 100).toFixed(0)} m`);
+
+  const steps = [2.7, 2.3, 1.9, 1.5, 1.1];
+  const shares = steps.map(shareAt);
   const rising = shares.every((v, i) => i === 0 || v > shares[i - 1]);
   ok(rising, 'the closer a Kaiju walks, the more soldiers switch to it',
-     shares.map((v, i) => `${[12, 9, 6, 3, 1][i]}b:${(v * 100).toFixed(0)}%`).join(' '));
-  ok(shares[0] < 0.15, 'a Kaiju right across the battlefield draws only a trickle',
-     `${(shares[0] * 100).toFixed(0)}% at 12 body-heights`);
-  ok(shares[shares.length - 1] > 0.35, 'and one standing on top of you draws a real share of it',
-     `${(shares[shares.length - 1] * 100).toFixed(0)}% at 1 body-height`);
+     shares.map((v, i) => `${steps[i]}b:${(v * 100).toFixed(0)}%`).join(' '));
+  ok(shares[0] < 0.25, 'one at the edge of range draws only a trickle',
+     `${(shares[0] * 100).toFixed(0)}% at ${steps[0]} body-heights`);
+  ok(shares[shares.length - 1] > 0.4, 'and one standing on top of you draws most of it',
+     `${(shares[shares.length - 1] * 100).toFixed(0)}% at ${steps[steps.length - 1]} body-heights`);
   far.body.dir.copy(start);
 
   // A dead Kaiju must stop being shot at, or the army spends the fight firing into a corpse.

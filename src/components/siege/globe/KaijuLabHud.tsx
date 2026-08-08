@@ -16,7 +16,7 @@ import { nearestKaijuMetres, getAgents } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
 import { rigLimbCount } from './kaijuColliders';
 import { failedLayers } from './GlobeErrorBoundary';
-import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
+import { isKaijuWalkActive, subscribeKaijuWalk, cameraSubjectName } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
 import { kaijuDiag } from './kaijuDiag';
 import { currentLandmark, subscribeLandmark } from './landmarkJump';
@@ -144,6 +144,7 @@ export function KaijuLabHud() {
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
       {row('Limb colliders', `${getAgents().reduce((n, a) => n + rigLimbCount(a.id), 0)} on ${getAgents().length} Kaiju`)}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
+      {row('Camera on', cameraSubjectName())}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}
       {row('Kaiju at', kaijuDiag.finite
@@ -154,7 +155,9 @@ export function KaijuLabHud() {
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
         , . fly to landmark · K LAND (starts walking) · G toggle · V view<br />
         WASD move · Shift run<br />
-        Space jump / swim up · Z swim down
+        Space jump / swim up · Z swim down<br />
+        <b>TAB</b> watch next Kaiju · <b>C</b> free camera · <b>MIDDLE-drag</b> pan (click = centre)<br />
+        <b>ALT+right-drag</b> look without turning
       </div>
     </div>
   );

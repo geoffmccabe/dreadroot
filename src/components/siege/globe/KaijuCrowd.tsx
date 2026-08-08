@@ -38,9 +38,9 @@ import { body as playerBody } from './kaijuBody';
 import { fxRand as rand } from './kaijuRandom';
 import { SkeletonUtils } from 'three-stdlib';
 import { resolveGait } from './kaijuClips';
-import { getAgents, arenaStarted, type Agent } from './kaijuArena';
+import { getAgents, arenaStarted, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
-  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet,
+  chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet, inRange,
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
@@ -345,7 +345,16 @@ function Crowd() {
           if (_toKaiju.lengthSq() < 1e-12) _toKaiju.copy(p.fwd);
           _toKaiju.normalize();
           _axis.copy(p.dir);
-          p.fwd.copy(_toKaiju).applyAxisAngle(_axis, (rand() - 0.5) * 1.5).normalize();
+          // STANDOFF. Inside about one body height they stop closing and work sideways instead.
+          //
+          // Two reasons, and the second is the one that matters. Infantry do not walk up and hug
+          // something 300 m tall. And a soldier who closes all the way is a soldier whose chosen
+          // target is permanently the nearest thing to him — so he never reconsiders, which is
+          // exactly Geoff's "once they shoot at another Kaiju they never switch back". Keeping a
+          // distance is what leaves room for a second Kaiju to become the closer one.
+          const gap = p.dir.angleTo(kaiju) * PLANET_RADIUS;
+          const turn = gap < ARENA_HEIGHT ? Math.PI * 0.5 + (rand() - 0.5) * 1.2 : (rand() - 0.5) * 1.5;
+          p.fwd.copy(_toKaiju).applyAxisAngle(_axis, turn).normalize();
         }
       }
 
@@ -391,7 +400,9 @@ function Crowd() {
       _muzzle.copy(f.obj.position)
         .addScaledVector(p.dir, MUZZLE_UP_UNITS)
         .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
-      if (p.fireIn <= 0 && target) {
+      // HOLD FIRE IF IT IS OUT OF REACH. The range comes from the round's own drag curve, so a
+      // soldier will not empty a magazine at something a bullet could never arrive at.
+      if (p.fireIn <= 0 && target && inRange(p.dir, target)) {
         p.fireIn = nextShotDelay();
         fireBullet(_muzzle, aimPoint(target, _aim));
         // ...and one shot in fifty, say something about it. The odds live in kaijuShouts with the

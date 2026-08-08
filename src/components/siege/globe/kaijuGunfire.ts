@@ -31,7 +31,7 @@
 import * as THREE from 'three';
 import { getAgents, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
-  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, BULLET_TORSO_FRAC, type Capsule,
+  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, bulletTorsoFrac, type Capsule,
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -200,9 +200,9 @@ const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radi
  */
 function collidersFor(a: Agent, out: Capsule[]): Capsule[] {
   out.length = 0;
-  // BULLET_TORSO_FRAC, not the separation radius. See the long note on it: the collider that keeps
-  // two Kaiju apart is 210 m wide on purpose, and shooting at that is shooting at thin air.
-  torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, _cap, BULLET_TORSO_FRAC);
+  // THIS CREATURE'S OWN measured chest width — not the separation radius, which is 210 m wide on
+  // purpose, and not one average for all four, which stood proud of the Demon and inside the golems.
+  torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, _cap, bulletTorsoFrac(a.monsterType));
   out.push(_cap);
   for (const c of limbCapsules(a.id)) out.push(c);
   return out;
@@ -409,12 +409,30 @@ const FALLOFF_POWER = 2.5;
  *
  * A soldier can end up standing AT a Kaiju's feet, and dividing by nearly zero there makes that one
  * creature take literally every shot on the map — the gradient collapses and the behaviour Geoff
- * asked for disappears at exactly the moment it matters most. 1.5 body heights is 450 m, which is
- * about where the crowd actually stands.
+ * asked for disappears at exactly the moment it matters most.
+ *
+ * 0.9 body heights is 270 m. It has to sit well inside the 2.78 body-height engagement range or
+ * there is no room left for a gradient AT ALL: at 1.5 the whole usable band was 1.5 to 2.78 and
+ * every target came out roughly equally likely. The crowd also now keeps a standoff of about one
+ * body height, so this is close to the nearest anybody actually gets.
  */
-const MIN_BODIES = 1.5;
-/** Beyond this, in body heights, a Kaiju is simply too far to bother shooting at. */
-const MAX_ENGAGE_BODIES = 14;
+const MIN_BODIES = 0.9;
+/**
+ * How far a rifleman can actually reach, DERIVED from the round he is firing.
+ *
+ * Geoff: "they shouldn't shoot at a kaiju that they can't hit with a bullet... we know the bullet
+ * velocity and so you can estimate it and use that."
+ *
+ * With quadratic drag, dv/dx = -k*v, so speed decays as v = v0 * e^(-k*x) and the range at which a
+ * round has fallen to any given fraction of muzzle speed is exactly ln(1/fraction)/k. At 40% — about
+ * 320 m/s, below which a rifle round is no longer worth aiming at anything — that is 833 m. Which is
+ * also, satisfyingly, the published maximum effective range of 5.56 NATO on an area target.
+ *
+ * So this is not a tuned number. Change the muzzle velocity or the drag and the soldiers' willingness
+ * to open fire follows on its own.
+ */
+const RANGE_SPEED_FRAC = 0.4;
+export const MAX_RANGE_UNITS = Math.log(1 / RANGE_SPEED_FRAC) / DRAG;
 
 export function chooseTarget(dir: THREE.Vector3, _previous?: string | null): string | null {
   const alive = getAgents().filter((a) => a.alive);
@@ -426,7 +444,10 @@ export function chooseTarget(dir: THREE.Vector3, _previous?: string | null): str
     // Great-circle distance along the surface, in body heights.
     const bodies = (dir.angleTo(a.body.dir) * a.body.radius) / ARENA_HEIGHT;
     const d = Math.max(MIN_BODIES, bodies);
-    const w = bodies > MAX_ENGAGE_BODIES ? 0 : 1 / Math.pow(d, FALLOFF_POWER);
+    // Out of reach is out of the draw entirely. A soldier emptying a magazine at something a mile
+    // and a half away is not aiming, and it is most of why the fire looked scattered.
+    const distUnits = bodies * ARENA_HEIGHT;
+    const w = distUnits > MAX_RANGE_UNITS ? 0 : 1 / Math.pow(d, FALLOFF_POWER);
     _weights.push(w);
     total += w;
   }
@@ -474,6 +495,11 @@ export function aimPoint(target: Agent, out: THREE.Vector3): THREE.Vector3 {
   out.y += (rand() * 2 - 1) * SCATTER;
   out.z += (rand() * 2 - 1) * SCATTER;
   return out;
+}
+
+/** Is this Kaiju close enough that a bullet would still arrive with something left? */
+export function inRange(dir: THREE.Vector3, target: Agent): boolean {
+  return dir.angleTo(target.body.dir) * target.body.radius <= MAX_RANGE_UNITS;
 }
 
 /** Seconds until this person fires again. Geoff asked for one shot every 1-10 seconds. */

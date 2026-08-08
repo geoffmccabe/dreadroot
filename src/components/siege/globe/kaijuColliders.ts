@@ -207,6 +207,32 @@ export function torsoCapsule(
  */
 export const BULLET_TORSO_FRAC = 0.34;
 
+/**
+ * ...and PER MODEL, because one number cannot match four differently shaped creatures.
+ *
+ * Geoff: "when they shoot at my kaiju, the bullets don't hit my kaiju... they are hitting an
+ * invisible wall between my kaiju and them, as if the colliders are in the wrong place and don't
+ * match with my mesh."
+ *
+ * A single 0.34 was a compromise between a Red Demon whose chest is 0.313 of its height and golems
+ * whose chests are 0.444 — so it stood 8 m proud of the Demon and 40 m inside a golem. Proud is what
+ * reads as an invisible wall: the round stops, sparks and bounces in clear air short of the body.
+ *
+ * These are measured, by scripts/measure-glb-width.mjs, off each model's own walk clip. Keyed by the
+ * catalog's monster type so a Kaiju that is not in the list falls back to the average rather than to
+ * something confidently wrong.
+ */
+export const BULLET_TORSO_BY_TYPE: Record<number, number> = {
+  8: 0.313,    // Red Demon
+  15: 0.453,   // Elemental Golem
+  16: 0.450,   // Mechanical Golem — same family as the other two golems
+  17: 0.444,   // Fort Golem
+};
+
+/** The measured chest half-width for one monster type, as a fraction of its height. */
+export const bulletTorsoFrac = (monsterType: number): number =>
+  BULLET_TORSO_BY_TYPE[monsterType] ?? BULLET_TORSO_FRAC;
+
 /** Exported so the collision check can assert the capsule still covers the measured bodies. */
 export const torsoRadiusFrac = TORSO_FRAC;
 
