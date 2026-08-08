@@ -127,6 +127,15 @@ export const SHOUT_FADE = 0.25;
 export interface Shout {
   /** The speaker's head, in world space. The bubble's tail points here. */
   anchor: THREE.Vector3;
+  /**
+   * Which member of the crowd said it.
+   *
+   * Geoff: "they should stay above the soldier shouting, so if he's moving, then they move with
+   * him." A bubble anchored to a fixed point in the world is a bubble the speaker walks out from
+   * under, and the tail then points at open ground. So the crowd rewrites the anchor every frame for
+   * whoever is still talking, and this is how it knows which bubble belongs to which person.
+   */
+  speaker: number;
   line: number;
   age: number;
   life: number;
@@ -144,7 +153,7 @@ const MAX_SHOUTS = 12;
 
 const shouts: Shout[] = [];
 for (let i = 0; i < MAX_SHOUTS; i++) {
-  shouts.push({ anchor: new THREE.Vector3(), line: 0, age: 0, life: 0, live: false });
+  shouts.push({ anchor: new THREE.Vector3(), speaker: -1, line: 0, age: 0, life: 0, live: false });
 }
 let cursor = 0;
 
@@ -157,11 +166,12 @@ export function clearShouts(): void { for (const s of shouts) s.live = false; }
  * Rolls the dice here rather than at the call site so the odds live with the thing they govern.
  * Returns true if a bubble was spawned, which is only used by the check script.
  */
-export function maybeShout(head: THREE.Vector3): boolean {
+export function maybeShout(head: THREE.Vector3, speaker: number): boolean {
   if (rand() >= SHOUT_CHANCE) return false;
   const s = shouts[cursor];
   cursor = (cursor + 1) % MAX_SHOUTS;
   s.anchor.copy(head);
+  s.speaker = speaker;
   s.line = Math.floor(rand() * SHOUTS.length) % SHOUTS.length;
   s.age = 0;
   // 1-3 seconds, as asked. Long enough to read up close, short enough that the field never fills
@@ -169,6 +179,14 @@ export function maybeShout(head: THREE.Vector3): boolean {
   s.life = 1 + rand() * 2;
   s.live = true;
   return true;
+}
+
+/**
+ * Move a live bubble with the person who said it. Called from the crowd's own loop each frame,
+ * because that is the only place a soldier's current position exists.
+ */
+export function updateShoutAnchor(speaker: number, head: THREE.Vector3): void {
+  for (const s of shouts) if (s.live && s.speaker === speaker) s.anchor.copy(head);
 }
 
 export function stepShouts(dt: number): void {

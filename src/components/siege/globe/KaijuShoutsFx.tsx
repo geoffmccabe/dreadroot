@@ -108,8 +108,12 @@ function bubbleTexture(text: string): THREE.CanvasTexture {
   // bottom edge is nearly flat, so a few degrees of angle covers a huge span of x — the first values
   // tried opened a gap across two thirds of the bubble's width and produced a lampshade. These give
   // a base about a third of the width, which is what a comic tail actually looks like.
-  const tailFrom = -Math.PI * 0.545;   // left side of the tail's base
-  const tailTo = -Math.PI * 0.475;     // right side of it
+  //
+  // HALVED, on Geoff's note that the base was too wide where it meets the bubble. Symmetric about
+  // straight down now, spanning about a tenth of the bubble's width rather than a fifth. The length
+  // is unchanged.
+  const tailFrom = -Math.PI * 0.5031;   // left side of the tail's base
+  const tailTo = -Math.PI * 0.4969;     // right side of it
   const p = { x: 0, y: 0 };
 
   ctx.beginPath();
@@ -127,13 +131,21 @@ function bubbleTexture(text: string): THREE.CanvasTexture {
   // leans — which looks better in isolation — would point at a patch of ground beside them. The two
   // curves are swept in opposite directions, which keeps the hook of a comic tail without moving
   // the tip off centre.
+  //
+  // The control points come in with the base. Left where they were, the curve bulged out past the
+  // narrowed attachment and the tail still LOOKED wide however narrow the join actually was, which
+  // is the thing being complained about. Verified by rendering it, not by reasoning about it.
   const tipY = TEX_H - stroke;
-  ctx.quadraticCurveTo(cx - a * 0.34, bodyH + (TEX_H - bodyH) * 0.35, cx, tipY);
+  ctx.quadraticCurveTo(cx - a * 0.075, bodyH + (TEX_H - bodyH) * 0.5, cx, tipY);
   squirclePoint(tailTo, cx, cy, a, b, p);
-  ctx.quadraticCurveTo(cx + a * 0.14, bodyH + (TEX_H - bodyH) * 0.30, p.x, p.y);
+  ctx.quadraticCurveTo(cx + a * 0.035, bodyH + (TEX_H - bodyH) * 0.5, p.x, p.y);
   ctx.closePath();
 
-  ctx.fillStyle = '#ffffff';
+  // 75% opaque, not solid. Geoff: "make the white in the bubble 75% opaque so it's not so bright
+  // white." The ALPHA of the fill, deliberately, rather than the mesh's opacity — dimming the whole
+  // material would take the black text and the outline down with it, and a grey bubble with grey
+  // lettering is far less readable than a translucent one with solid black on it.
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
   ctx.fill();
   ctx.lineJoin = 'round';
   ctx.lineWidth = stroke;

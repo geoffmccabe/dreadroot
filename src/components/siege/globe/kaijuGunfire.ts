@@ -252,7 +252,11 @@ export function fireBullet(from: THREE.Vector3, aimAt: THREE.Vector3): void {
  * point test at the new position. At 800 m/s a round covers 13 m in a frame, so a point test would
  * miss a thin limb entirely most of the time and hits would look random.
  */
+/** Frame counter, so the terrain test can be spread across frames rather than run for every round. */
+let groundTick = 0;
+
 export function stepGunfire(dt: number): void {
+  groundTick++;
   let live = 0;
   const agents = getAgents();
 
@@ -351,7 +355,13 @@ export function stepGunfire(dt: number): void {
     // and would never meet the terrain on the way in — which is true of the ones that HIT. The ones
     // that miss carry on over its shoulder and land somewhere, and those are the rounds that make a
     // battlefield look like a battlefield.
-    {
+    //
+    // STAGGERED, one round in three per frame. A terrain sample walks the patch index to find which
+    // piece of ground was actually drawn under a direction, and doing that for two hundred rounds
+    // sixty times a second is real work for an effect nobody is grading frame by frame. Rounds are
+    // spread across three frames by index, so the cost is a third and the worst error is a puff of
+    // dirt landing two frames late.
+    if ((groundTick + b.flicker) % 3 < 1) {
       const len = b.pos.length();
       if (len > 1e-6) {
         const gm = sampleGlobeSurface(b.pos.x / len, b.pos.y / len, b.pos.z / len);

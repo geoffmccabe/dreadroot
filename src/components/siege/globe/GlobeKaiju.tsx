@@ -114,6 +114,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   // a fresh set of agents. A one-shot registration at mount would bind to whatever the id was then,
   // which is usually nothing at all.
   const rigId = useRef<string | null>(null);
+  const rigBroken = useRef(false);
   const ensureRig = () => {
     const want = playerAgent()?.id ?? null;
     if (want === rigId.current) return;
@@ -210,8 +211,22 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       g.quaternion.setFromRotationMatrix(basis.current);
 
       // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.
-      ensureRig();
-      if (rigId.current) updateRigCapsules(rigId.current, h);
+      //
+      // WRAPPED, AND IT MATTERS. This is the one thing in this frame loop that reaches into another
+      // system, and everything AFTER it is what makes the Kaiju walk — the gait choice, the clip,
+      // the animation rate. A throw here would leave the body simulating correctly while the model
+      // stood frozen with its legs still, which reads as "you broke walking" and points at entirely
+      // the wrong file. Cosmetic hit-detection is never worth taking the player's avatar down with
+      // it, so it fails once, says so, and switches itself off.
+      if (!rigBroken.current) {
+        try {
+          ensureRig();
+          if (rigId.current) updateRigCapsules(rigId.current, h);
+        } catch (err) {
+          rigBroken.current = true;
+          console.error('[kaiju] limb colliders disabled after error', err);
+        }
+      }
 
       const alt = b.radius - (groundRadiusCached(b) ?? b.radius);
       const altH = alt / Math.max(0.001, h);

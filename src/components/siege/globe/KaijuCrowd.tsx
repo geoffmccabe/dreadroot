@@ -43,7 +43,7 @@ import {
   chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet,
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
-import { maybeShout } from './kaijuShouts';
+import { maybeShout, updateShoutAnchor } from './kaijuShouts';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -388,16 +388,19 @@ function Crowd() {
       // The rifle points where the person is facing, not at the Kaiju: someone running for their
       // life and firing over their shoulder is the shot. Aim only decides where the BULLET goes.
       p.fireIn -= dt;
+      _muzzle.copy(f.obj.position)
+        .addScaledVector(p.dir, MUZZLE_UP_UNITS)
+        .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
       if (p.fireIn <= 0 && target) {
         p.fireIn = nextShotDelay();
-        _muzzle.copy(f.obj.position)
-          .addScaledVector(p.dir, MUZZLE_UP_UNITS)
-          .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
         fireBullet(_muzzle, aimPoint(target, _aim));
-        // ...and one shot in fifty, say something about it. The anchor is the speaker's head, which
-        // is where the bubble's tail has to point; the odds live in kaijuShouts with the lines.
-        maybeShout(_muzzle);
+        // ...and one shot in fifty, say something about it. The odds live in kaijuShouts with the
+        // lines; `i` identifies the speaker so the bubble can follow them.
+        maybeShout(_muzzle, i);
       }
+      // A bubble belongs to a PERSON, not to a spot on the ground. Keeping it over their head means
+      // the tail still points at them a second later, when they have run fifty metres.
+      updateShoutAnchor(i, _muzzle);
     }
   });
 

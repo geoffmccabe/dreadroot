@@ -33,7 +33,7 @@ ok(longest.length <= 70, 'the longest line still fits a bubble', `${longest.leng
   const head = new THREE.Vector3(0, 0, 1);
   let said = 0;
   const TRIES = 100_000;
-  for (let i = 0; i < TRIES; i++) if (maybeShout(head)) said++;
+  for (let i = 0; i < TRIES; i++) if (maybeShout(head, 0)) said++;
   const rate = said / TRIES;
   // Geoff asked for 1 in 50. Over a hundred thousand rolls the observed rate should sit very close.
   ok(Math.abs(rate - SHOUT_CHANCE) < SHOUT_CHANCE * 0.12,
@@ -46,7 +46,7 @@ ok(longest.length <= 70, 'the longest line still fits a bubble', `${longest.leng
   clearShouts();
   const head = new THREE.Vector3(0, 0, 1);
   // Force one into existence regardless of the odds.
-  while (!getShouts().some((s) => s.live)) maybeShout(head);
+  while (!getShouts().some((s) => s.live)) maybeShout(head, 0);
   const s = getShouts().find((x) => x.live)!;
 
   ok(s.life >= 1 && s.life <= 3, 'it lasts between one and three seconds', `${s.life.toFixed(2)} s`);
@@ -67,7 +67,7 @@ ok(longest.length <= 70, 'the longest line still fits a bubble', `${longest.leng
 
   // The whole thing must actually retire, or the field fills up with frozen speech.
   clearShouts();
-  while (!getShouts().some((x) => x.live)) maybeShout(head);
+  while (!getShouts().some((x) => x.live)) maybeShout(head, 0);
   for (let i = 0; i < 400; i++) stepShouts(1 / 60);
   ok(getShouts().every((x) => !x.live), 'every bubble eventually goes away');
 }
@@ -77,7 +77,7 @@ ok(longest.length <= 70, 'the longest line still fits a bubble', `${longest.leng
   clearShouts();
   const head = new THREE.Vector3(0, 0, 1);
   const before = getShouts().length;
-  for (let i = 0; i < 200_000; i++) maybeShout(head);
+  for (let i = 0; i < 200_000; i++) maybeShout(head, 0);
   ok(getShouts().length === before, 'the bubble pool never grows', `${getShouts().length}`);
   // Every live bubble must point at a real line, or a bubble renders blank.
   ok(getShouts().every((s) => !s.live || (s.line >= 0 && s.line < SHOUTS.length)),
