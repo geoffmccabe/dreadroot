@@ -32,10 +32,19 @@ import {
 } from './kaijuStats';
 import { seedKaiju, rand } from './kaijuRandom';
 import { queueStrike, stepStrikeQueue } from './kaijuImpact';
+import { meshSeparation, meshSepDiag } from './kaijuMeshSeparate';
+
+/**
+ * Broad-phase radius, as a fraction of height. Full arm reach plus a little.
+ *
+ * This decides only WHETHER to run the mesh test, so it must be wider than anything the mesh test
+ * could find. Too tight and two Kaiju whose arms are overlapping never get looked at.
+ */
+const BROAD_FRAC = MAX_REACH_FRAC + 0.08;
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
   torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac,
-  MELEE_GATE_BODIES, separationFracFor, type Capsule,
+  MELEE_GATE_BODIES, separationFracFor, MAX_REACH_FRAC, type Capsule,
 } from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
@@ -116,6 +125,8 @@ export interface Agent {
   orderAnswered: boolean;
   /** Reusable body capsule, refreshed each tick. */
   capsule: Capsule;
+  /** A wider capsule used only as the broad phase for the mesh separation. */
+  broad: Capsule;
   /**
    * Tangent knockback velocity, in units/sec, decaying over time.
    *
@@ -343,6 +354,7 @@ export function initArenaWith(
       intentMove: false, intentDir: new THREE.Vector3(0, 0, 1), intentRun: false, intentSpeedMul: 1,
       order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
       capsule: torsoCapsule(dir, body.radius, ARENA_HEIGHT),
+      broad: torsoCapsule(dir, body.radius, ARENA_HEIGHT, undefined, BROAD_FRAC),
       knock: new THREE.Vector3(), stagger: 0, burning: 0, screamCooldown: 0, screamed: false,
       swingTimer: 0, swingLanded: false,
     });
@@ -922,6 +934,8 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     // a Fort Golem and holding them apart by the same distance is wrong in one direction for one of
     // them whichever number is chosen.
     torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, separationFracFor(a.isPlayer, a.monsterType));
+    // ...and a generous one purely to decide whether the pair is worth a mesh test at all.
+    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.broad, BROAD_FRAC);
   }
   // Several relaxation passes, because resolving one pair can push a body into another. A single
   // pass left them touching at about 97% of their combined width — visibly clipping. Three passes
@@ -933,7 +947,27 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     for (let j = i + 1; j < agents.length; j++) {
       const B = agents[j];
       if (!B.alive) continue;
-      const depth = capsuleOverlap(A.capsule, B.capsule, _axis);
+      // BROAD PHASE. The capsule's only job now is to answer "are these two anywhere near each
+      // other" cheaply, so the expensive question is asked at most once and usually never. It is
+      // deliberately generous — full arm reach — because a shape that decides when to LOOK must
+      // never be tighter than the shape being looked for.
+      const near = capsuleOverlap(A.broad, B.broad, _axis);
+      if (near <= 0) continue;
+      meshSepDiag.pairsTested++;
+
+      // NARROW PHASE: the real triangles of the real animated meshes. Geoff: "they should be
+      // separated at all except for their mesh colliders not going through each other."
+      //
+      // Falls back to the capsule when either model has not loaded — headless, or the first second
+      // of a battle — because the fight must not depend on art being present. That fallback is the
+      // ONLY place a cylinder still decides anything.
+      let depth = meshSeparation(A.id, B.id, clock, _axis);
+      if (depth < 0) {
+        depth = capsuleOverlap(A.capsule, B.capsule, _axis);
+        meshSepDiag.capsulePairs++;
+      } else {
+        meshSepDiag.meshPairs++;
+      }
       if (depth <= 0) continue;
       // Never shove the body the PLAYER is driving. Being pushed by physics you did not initiate
       // reads as the Kaiju sliding around on its own; the AI body absorbs the whole separation
@@ -979,6 +1013,7 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     for (const a of agents) {
       if (a.alive) {
         torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, separationFracFor(a.isPlayer, a.monsterType));
+        torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.broad, BROAD_FRAC);
       }
     }
   }

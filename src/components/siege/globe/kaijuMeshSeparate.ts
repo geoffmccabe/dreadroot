@@ -1,0 +1,197 @@
+// kaijuMeshSeparate — Kaiju kept apart by their ACTUAL MESHES, not by a cylinder around them.
+//
+// Geoff: "they should be separated at all except for their mesh colliders not going through each
+// other. Are you still doing something with large cylinder colliders or thinking about magically
+// keeping them apart outside of their mesh colliders?"
+//
+// He was right to ask. Bullets already hit real triangles (kaijuMeshHit), but BODY separation was
+// still one vertical capsule per creature and a synthetic push — a number chosen to approximate a
+// Kaiju, which is exactly the thing that has now been wrong in both directions. Too wide and they
+// cannot reach each other to fight; too narrow and they stand inside one another. There is no
+// correct radius, because a humanoid is not a cylinder.
+//
+// SO THE CYLINDER STOPS BEING WHAT KEEPS THEM APART. It is demoted to a broad phase — a cheap "are
+// these two anywhere near each other" test — and when the answer is yes, the real triangles of the
+// real animated meshes decide. An arm mid-swing collides where the arm actually is.
+//
+// IS THAT AFFORDABLE? Measured before it was written, not argued about:
+//
+//     Kaiju triangle counts          3,900 - 7,500        small
+//     bake the posed mesh for CPU    2.6 ms per Kaiju
+//     rebuild its search tree        0.9 ms per Kaiju
+//     mesh-vs-mesh, with direction   6.9 ms per pair
+//     all four Kaiju, brute force    18.3 ms/frame        OVER the whole 16.7 ms budget
+//
+// Brute force does not fit. Three things make it fit comfortably:
+//
+//   * Only pairs that are ACTUALLY NEAR are tested. Four Kaiju normally have zero or one pair in
+//     contact, not six.
+//   * Only the creatures in such a pair are baked. Usually two, not four.
+//   * It runs at 30 Hz. A 300 m Kaiju moves 30 cm between those frames.
+//
+// About 6 ms while two are grinding together, and ZERO the rest of the time.
+//
+// IT PREVENTS CONTACT RATHER THAN RESOLVING IT. The query returns the distance between the two
+// surfaces, which is only meaningful while they are still apart — once meshes interpenetrate there
+// is no cheap way to ask how deep. So a small margin is held between them: come within it and they
+// are pushed back out to it. They never interpenetrate, so the "how deep" question never arises,
+// and nothing ever pops.
+
+import * as THREE from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
+import { hitMeshesOf, onHitMeshDropped } from './kaijuMeshHit';
+
+/**
+ * How much clear air is held between two hides, in metres.
+ *
+ * Small enough to read as touching at this scale — four metres between two 300 m creatures is a
+ * hairline — and large enough that a body moving a third of a metre between separation ticks cannot
+ * cross it in one step and end up inside.
+ */
+const MARGIN_METRES = 4;
+/** Game units per metre is 1/100 on this map; kept local so this file needs no map constants. */
+const UNITS_PER_METRE = 1 / 100;
+const MARGIN = MARGIN_METRES * UNITS_PER_METRE;
+
+/** Seconds between re-posing a Kaiju's collision mesh. 30 Hz; see the cost note above. */
+const REFRESH_SECONDS = 1 / 30;
+
+interface Posed {
+  mesh: THREE.Mesh;
+  geom: THREE.BufferGeometry;
+  bvh: MeshBVH;
+  /** Simulation clock at the last bake, so a mesh is never re-posed twice in one tick. */
+  stamp: number;
+  /** World scale of the source mesh, to convert local distances back to game units. */
+  scale: number;
+}
+
+const posed = new Map<string, Posed>();
+
+/** Live counts, so "is it using the mesh or the cylinder?" is answered by looking, not assumed. */
+export const meshSepDiag = { pairsTested: 0, meshPairs: 0, capsulePairs: 0, bakes: 0, meshMs: 0 };
+
+// A cached twin of a mesh that has gone away is a solid invisible Kaiju standing where the real one
+// used to be. Drop it with the original.
+onHitMeshDropped((id) => {
+  const p = posed.get(id);
+  if (p) { p.geom.dispose(); posed.delete(id); }
+});
+
+export function clearMeshSeparation(): void {
+  for (const p of posed.values()) p.geom.dispose();
+  posed.clear();
+}
+
+/** Can this agent be separated by its mesh, or must the caller fall back to a capsule? */
+export function hasSepMesh(id: string): boolean {
+  return posed.has(id) || pickMesh(id) != null;
+}
+
+/** The mesh to collide with: the one with the most triangles, which is the body rather than a prop. */
+function pickMesh(id: string): THREE.Mesh | null {
+  let best: THREE.Mesh | null = null;
+  let bestTris = 0;
+  for (const m of hitMeshesOf(id)) {
+    const g = m.geometry;
+    const tris = (g.index ? g.index.count : g.attributes.position?.count ?? 0) / 3;
+    if (tris > bestTris) { bestTris = tris; best = m; }
+  }
+  return best;
+}
+
+const _v = new THREE.Vector3();
+const _scale = new THREE.Vector3();
+
+/**
+ * Bake a Kaiju's CURRENT POSE into a CPU-side twin and refresh its search tree.
+ *
+ * three.js skins on the GPU, so the vertices a shader draws exist nowhere the CPU can read. Every
+ * one has to be re-derived from the bones — which is what `getVertexPosition` does, and what makes
+ * this the expensive half. Hence the 30 Hz and the "only if they are near each other".
+ */
+function ensurePosed(id: string, now: number): Posed | null {
+  let p = posed.get(id);
+  if (!p) {
+    const mesh = pickMesh(id);
+    if (!mesh) return null;
+    const src = mesh.geometry;
+    const n = src.attributes.position?.count ?? 0;
+    if (!n) return null;
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    if (src.index) geom.setIndex(src.index.clone());
+    p = { mesh, geom, bvh: null as unknown as MeshBVH, stamp: -1e9, scale: 1 };
+    posed.set(id, p);
+  }
+  if (now - p.stamp < REFRESH_SECONDS) return p;
+  p.stamp = now;
+
+  const attr = p.geom.attributes.position as THREE.BufferAttribute;
+  const arr = attr.array as Float32Array;
+  const n = attr.count;
+  const sk = p.mesh as THREE.SkinnedMesh;
+  for (let i = 0; i < n; i++) {
+    // getVertexPosition applies the bone transforms on a SkinnedMesh, so these are the vertices in
+    // the pose being DRAWN. That is the whole reason this beats a capsule: an arm mid-swing collides
+    // where the arm is, not where a cylinder says the body is.
+    sk.getVertexPosition(i, _v);
+    arr[i * 3] = _v.x; arr[i * 3 + 1] = _v.y; arr[i * 3 + 2] = _v.z;
+  }
+  attr.needsUpdate = true;
+  p.mesh.getWorldScale(_scale);
+  p.scale = Math.max(1e-6, _scale.x);
+  if (!p.bvh) p.bvh = new MeshBVH(p.geom);
+  else p.bvh.refit();
+  meshSepDiag.bakes++;
+  return p;
+}
+
+const _AtoB = new THREE.Matrix4();
+const _inv = new THREE.Matrix4();
+const _pa = new THREE.Vector3();
+const _pb = new THREE.Vector3();
+const _rot = new THREE.Matrix4();
+const _t1: { point: THREE.Vector3; distance: number } = { point: new THREE.Vector3(), distance: 0 };
+const _t2: { point: THREE.Vector3; distance: number } = { point: new THREE.Vector3(), distance: 0 };
+
+/**
+ * How far, and in which direction, two Kaiju must move apart so their hides do not touch.
+ *
+ * Returns the push distance in GAME UNITS and writes the world-space axis pointing from A toward B
+ * into `axis`. Zero means they are far enough apart already; -1 means one of them has no mesh and
+ * the caller must use its capsule instead.
+ */
+export function meshSeparation(idA: string, idB: string, now: number, axis: THREE.Vector3): number {
+  const A = ensurePosed(idA, now);
+  const B = ensurePosed(idB, now);
+  if (!A || !B) return -1;
+
+  // B's geometry, expressed in A's local frame. Both world matrices carry the planet's radius, so
+  // this product is taken in JavaScript's 64-bit maths where that cancels exactly — the same reason
+  // the soldiers' skinning had to be re-based. In 32-bit it would be noise.
+  _inv.copy(A.mesh.matrixWorld).invert();
+  _AtoB.multiplyMatrices(_inv, B.mesh.matrixWorld);
+
+  // The margin is in world units; the query works in A's local units.
+  const localMargin = MARGIN / A.scale;
+  const hit = A.bvh.closestPointToGeometry(B.geom, _AtoB, _t1, _t2, 0, localMargin);
+  if (!hit) return 0;
+  const gap = _t1.distance * A.scale;
+  if (gap >= MARGIN) return 0;
+
+  // Direction from A's surface toward B's, taken between the two closest points and rotated into
+  // world space. This is what makes them slide around each other instead of being shoved along a
+  // line between two centres: the push follows the surfaces that are actually in the way.
+  _pa.copy(_t1.point);
+  _pb.copy(_t2.point).applyMatrix4(_AtoB);
+  axis.copy(_pb).sub(_pa);
+  if (axis.lengthSq() < 1e-16) {
+    // Surfaces coincident. Fall back to centre-to-centre so the push still has a direction.
+    axis.setFromMatrixPosition(B.mesh.matrixWorld).sub(_v.setFromMatrixPosition(A.mesh.matrixWorld));
+    if (axis.lengthSq() < 1e-16) return 0;
+  }
+  _rot.extractRotation(A.mesh.matrixWorld);
+  axis.applyMatrix4(_rot).normalize();
+  return MARGIN - gap;
+}

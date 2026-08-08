@@ -28,6 +28,7 @@
     "check:player-collision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-player-collision.ts",
     "check:kaiju-gunfire": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-gunfire.ts",
     "check:limb-bones": "node scripts/check-limb-bones.mjs",
+    "check:mesh-separate": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-mesh-separate.ts",
     "check:kaiju-footik": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-footik.ts",
     "check:kaiju-impact": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-impact.ts",
     "check:skin-precision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-skin-precision.ts",

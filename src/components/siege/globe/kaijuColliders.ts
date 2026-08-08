@@ -284,6 +284,16 @@ export const SEPARATION_BY_TYPE: Record<number, number> = {
   17: 0.444,   // Fort Golem
 };
 
+/**
+ * Full arm reach per model, from the same walk-clip measurement. NOT used for separation — this is
+ * how far a creature can put a limb, which is what the mesh broad phase has to cover.
+ */
+export const REACH_BY_TYPE: Record<number, number> = {
+  8: 0.548, 15: 0.672, 16: 0.686, 17: 0.686,
+};
+/** The furthest any Kaiju can reach. The mesh test's broad phase is derived from this. */
+export const MAX_REACH_FRAC = Math.max(...Object.values(REACH_BY_TYPE));
+
 /** The widest any Kaiju separates at. The melee gate is derived from this so the two cannot drift. */
 export const MAX_SEPARATION_FRAC = Math.max(...Object.values(SEPARATION_BY_TYPE));
 

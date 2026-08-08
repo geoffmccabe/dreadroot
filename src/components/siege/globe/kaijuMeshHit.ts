@@ -84,7 +84,26 @@ export function registerHitMesh(id: string, root: THREE.Object3D): void {
   registry.set(id, { root, meshes, flesh });
 }
 
-export function unregisterHitMesh(id: string): void { registry.delete(id); }
+export function unregisterHitMesh(id: string): void {
+  registry.delete(id);
+  for (const fn of dropListeners) fn(id);
+}
+
+/**
+ * Told when an agent's mesh goes away, so anything caching a derived copy of it can drop that too.
+ *
+ * Body separation builds a posed, CPU-side twin of each mesh with its own search tree. Left behind
+ * after the model unmounts, that twin is a solid invisible Kaiju standing wherever the real one used
+ * to be — the same class of bug as stale limb capsules, and harder to see.
+ */
+const dropListeners = new Set<(id: string) => void>();
+export function onHitMeshDropped(fn: (id: string) => void): () => void {
+  dropListeners.add(fn);
+  return () => { dropListeners.delete(fn); };
+}
+
+/** The registered meshes for an agent, so a second collider can share this one registry. */
+export function hitMeshesOf(id: string): THREE.Mesh[] { return registry.get(id)?.meshes ?? []; }
 
 /** Does this agent have a real mesh to hit? If not, the caller must fall back to capsules. */
 export function hasHitMesh(id: string): boolean {
