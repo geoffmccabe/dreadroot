@@ -104,7 +104,10 @@ export async function playKaijuSound(
   worldPos: THREE.Vector3,
   listenerPos: THREE.Vector3,
   listenerDir: THREE.Vector3,
-  opts: { volume?: number; rate?: number; refUnits?: number; maxUnits?: number } = {},
+  opts: {
+    volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
+    rolloff?: number; panning?: PanningModelType; reverb?: boolean;
+  } = {},
 ): Promise<void> {
   const buffer = await loadAudioBuffer(url);
   if (buffer) playKaijuBuffer(buffer, worldPos, listenerPos, listenerDir, opts);
@@ -119,12 +122,68 @@ export async function playKaijuSound(
  * easy to give it its own quietly different playback path and then spend a day wondering why one
  * sound obeyed the speed of sound and another did not.
  */
+/**
+ * ONE reverb for the whole battlefield, and the reason distance is audible at all.
+ *
+ * Geoff: "the ricochets... I think the sound itself would warp over that kind of distance, can you
+ * research how sound distorts over long distances in the air?"
+ *
+ * The research says two things happen, and only one of them was implemented here.
+ *
+ * AIR ABSORPTION eats high frequencies far faster than low ones — roughly 20 dB above 1 kHz by two
+ * miles — so the sharp crack of a gunshot is gone at distance and what is left is a low thump. That
+ * was already here as a lowpass, but far too gentle: it put the corner at 8 kHz a kilometre out,
+ * where reality is nearer 3.
+ *
+ * THE TAIL is the one that was missing, and it is the bigger cue by a distance. A far-off gunshot
+ * does not just get quieter and duller — it stops being an EVENT and becomes a roll, because the
+ * report arrives smeared by reflections off ground and terrain and by thermal turbulence in the air
+ * it crossed. It is exactly why distant thunder rumbles for seconds and close thunder is a single
+ * bang, and it is the difference between "quiet gunshot" and "gunshot a mile away".
+ *
+ * Done as ONE shared convolver that everything sends to, with the send level rising with distance.
+ * A reverb per sound would be a convolution per sound, which at nine shots a second is not affordable
+ * — this is one node for the entire scene, and the only per-sound cost is a gain.
+ */
+let reverbIn: GainNode | null = null;
+function distanceReverb(ctx: AudioContext): GainNode {
+  if (reverbIn) return reverbIn;
+  // A procedurally generated impulse response: noise under a decaying envelope, darkened as it
+  // decays, because late reflections have crossed more air than early ones.
+  const seconds = 1.8;
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / ctx.sampleRate;
+      // A short gap before the first reflections: sound has to reach something and come back.
+      const pre = t < 0.03 ? 0 : 1;
+      const env = Math.exp(-t * 2.6);
+      lp += ((Math.random() * 2 - 1) - lp) * (0.35 - 0.28 * (t / seconds));
+      d[i] = lp * env * pre;
+    }
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = ir;
+  const inGain = ctx.createGain();
+  inGain.gain.value = 1;
+  inGain.connect(conv);
+  conv.connect(bus(ctx));
+  reverbIn = inGain;
+  return inGain;
+}
+
 export function playKaijuBuffer(
   buffer: AudioBuffer,
   worldPos: THREE.Vector3,
   listenerPos: THREE.Vector3,
   listenerDir: THREE.Vector3,
-  opts: { volume?: number; rate?: number; refUnits?: number; maxUnits?: number } = {},
+  opts: {
+    volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
+    rolloff?: number; panning?: PanningModelType; reverb?: boolean;
+  } = {},
 ): void {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -143,19 +202,25 @@ export function playKaijuBuffer(
   gain.gain.value = opts.volume ?? 0.8;
 
   // AIR ABSORPTION. High frequencies die first over distance, which is why far-off thunder is a
-  // rumble and close thunder is a crack. This does more for the sense of distance than volume
-  // alone, and it is one filter node.
+  // rumble and close thunder is a crack.
+  //
+  // The divisor was 1.4, which put the corner at 8 kHz a kilometre away. Published figures give
+  // roughly 20 dB of absorption above 1 kHz by two miles, so the crack of a rifle is simply GONE at
+  // that range and what survives is a low thump. 6 gives about 3 kHz at a kilometre and 1 kHz at
+  // three, which is the right shape.
   const lp = ctx.createBiquadFilter();
   lp.type = 'lowpass';
   const km = (distUnits * METRES_PER_UNIT) / 1000;
-  lp.frequency.value = Math.max(320, 20000 / (1 + km * 1.4));
+  lp.frequency.value = Math.max(260, 20000 / (1 + km * 6));
 
   const panner = ctx.createPanner();
-  panner.panningModel = 'HRTF';
+  // EQUALPOWER, not HRTF, when asked for. HRTF convolves every sound against a head model — lovely
+  // for a handful of sources and ruinous at nine a second, which is the rate the rifles fire at.
+  panner.panningModel = opts.panning ?? 'HRTF';
   panner.distanceModel = 'inverse';
   panner.refDistance = opts.refUnits ?? 12;
   panner.maxDistance = opts.maxUnits ?? 260;
-  panner.rolloffFactor = 1.0;
+  panner.rolloffFactor = opts.rolloff ?? 1.0;
   if (panner.positionX) {
     panner.positionX.value = toRenderX(sx);
     panner.positionY.value = toRenderY(sy);
@@ -173,9 +238,41 @@ export function playKaijuBuffer(
   }
 
   src.connect(lp); lp.connect(gain); gain.connect(panner); panner.connect(bus(ctx));
+
+  // THE DISTANCE TAIL. Nothing at point-blank, most of the sound by a couple of kilometres — which
+  // is what turns a crack into a roll and is the strongest single cue that something is far away.
+  let send: GainNode | null = null;
+  if (opts.reverb !== false) {
+    const wet = Math.min(0.85, Math.max(0, (km - 0.15) / 2.2));
+    if (wet > 0.02) {
+      send = ctx.createGain();
+      send.gain.value = wet;
+      panner.connect(send);
+      send.connect(distanceReverb(ctx));
+    }
+  }
+
   // The whole point: start it LATER, by however long the sound takes to cross the distance.
   src.start(ctx.currentTime + delay);
-  src.stop(ctx.currentTime + delay + buffer.duration / Math.max(0.05, src.playbackRate.value) + 0.1);
+  const stopAt = ctx.currentTime + delay + buffer.duration / Math.max(0.05, src.playbackRate.value) + 0.1;
+  src.stop(stopAt);
+
+  // TAKE THE NODES BACK DOWN AGAIN.
+  //
+  // Geoff: "the game got slower and slower until it was so slow it stopped... there may be a memory
+  // leak." There was, and this is it. Every sound built four or five Web Audio nodes and left every
+  // one of them connected to the output for the life of the page. At the handful of roars and
+  // footsteps this was written for that was survivable; at nine rifle cracks and six ricochets a
+  // second it is nine hundred permanently live nodes a minute, most of them HRTF panners, and the
+  // audio thread strangles the whole tab.
+  //
+  // `onended` fires when the source finishes, which is the moment the rest of the chain stops being
+  // able to matter.
+  src.onended = () => {
+    try {
+      src.disconnect(); lp.disconnect(); gain.disconnect(); panner.disconnect(); send?.disconnect();
+    } catch { /* already torn down */ }
+  };
 }
 
 // --- footsteps -----------------------------------------------------------------------------------

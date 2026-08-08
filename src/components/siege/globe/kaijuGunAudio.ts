@@ -48,6 +48,23 @@ const MAX_AUDIBLE_UNITS = 22;   // 2.2 km
 
 interface Pending { pos: THREE.Vector3; dist: number }
 
+/**
+ * POOLED, not allocated.
+ *
+ * Thirty-six shots a second, each cloning a vector into a fresh object, is a couple of thousand
+ * short-lived allocations a minute for the collector to sweep. It is not the leak that stopped the
+ * game — that was the audio graph — but a scene that quietly generates garbage in its hot loop is
+ * how a frame-time creep starts, and this costs nothing to avoid.
+ */
+function makePool(n: number): Pending[] {
+  const out: Pending[] = [];
+  for (let i = 0; i < n; i++) out.push({ pos: new THREE.Vector3(), dist: 0 });
+  return out;
+}
+const shotPool = makePool(64);
+const ricPool = makePool(32);
+let shotCount = 0;
+let ricCount = 0;
 const shots: Pending[] = [];
 const ricochets: Pending[] = [];
 let shotTokens = SHOTS_PER_SEC;
@@ -64,15 +81,19 @@ export const gunAudioDiag = { offered: 0, played: 0, dropped: 0 };
  * can only happen after they have all arrived.
  */
 export function noteGunshot(pos: THREE.Vector3): void {
-  if (shots.length >= 64) return;         // a hard ceiling; the frame is about to sort these
-  shots.push({ pos: pos.clone(), dist: 0 });
+  if (shotCount >= shotPool.length) return;   // a hard ceiling; the frame is about to sort these
+  shotPool[shotCount].pos.copy(pos);
+  shots[shotCount] = shotPool[shotCount];
+  shotCount++;
   gunAudioDiag.offered++;
 }
 
 /** A round struck a Kaiju. Same deal. */
 export function noteRicochet(pos: THREE.Vector3): void {
-  if (ricochets.length >= 32) return;
-  ricochets.push({ pos: pos.clone(), dist: 0 });
+  if (ricCount >= ricPool.length) return;
+  ricPool[ricCount].pos.copy(pos);
+  ricochets[ricCount] = ricPool[ricCount];
+  ricCount++;
 }
 
 /**
@@ -131,10 +152,11 @@ export function flushGunAudio(
   ricTokens = Math.min(RICOCHETS_PER_SEC, ricTokens + RICOCHETS_PER_SEC * dt);
 
   const ctx = getAudioContext();
-  if (!ctx) { shots.length = 0; ricochets.length = 0; return; }
+  if (!ctx) { shots.length = 0; ricochets.length = 0; shotCount = 0; ricCount = 0; return; }
 
   // --- rifle fire ------------------------------------------------------------------------------
-  if (shots.length) {
+  if (shotCount) {
+    shots.length = shotCount;
     for (const s of shots) s.dist = s.pos.distanceTo(listenerPos);
     // NEAREST FIRST. Those are the ones whose direction and timing can be perceived at all; a shot
     // two kilometres away is a texture, and dropping it costs nothing anybody can hear.
@@ -151,32 +173,47 @@ export function flushGunAudio(
       playKaijuBuffer(buf!, s.pos, listenerPos, listenerDir, {
         volume: 0.30 + rand() * 0.10,
         rate: 0.88 + rand() * 0.28,
-        refUnits: 3,
+        // A rifle is a person-sized source: it is loud where you stand and drops off fast. 1.5 units
+        // is 150 m, so by half a kilometre it is already a fifth of its level.
+        refUnits: 1.5,
+        rolloff: 1.4,
         maxUnits: MAX_AUDIBLE_UNITS,
+        // Equalpower rather than HRTF. Nine head-model convolutions a second is not worth paying
+        // for on a sound whose direction you cannot pick out of a firefight anyway.
+        panning: 'equalpower',
       });
     }
     gunAudioDiag.played += played;
     gunAudioDiag.dropped += shots.length - played;
     shots.length = 0;
+    shotCount = 0;
   }
 
   // --- ricochets -------------------------------------------------------------------------------
-  if (ricochets.length) {
+  if (ricCount) {
+    ricochets.length = ricCount;
     for (const r of ricochets) r.dist = r.pos.distanceTo(listenerPos);
     ricochets.sort((a, b) => a.dist - b.dist);
     for (const r of ricochets) {
       if (ricTokens < 1 || r.dist > MAX_AUDIBLE_UNITS) break;
       ricTokens -= 1;
       playKaijuSound(RICOCHET_URL, r.pos, listenerPos, listenerDir, {
-        volume: 0.45 + rand() * 0.15,
+        volume: 0.5 + rand() * 0.18,
         rate: 0.85 + rand() * 0.4,
-        // A ricochet off a 300 m creature is a big, hard sound; it carries further than a rifle
-        // report from a person and is worth hearing from further away.
-        refUnits: 5,
+        // 2 units, not 5. Geoff: "I could hear the ricochets but they sound like they're coming
+        // from right on top of me and don't sound far away." At 5 the reference distance was 500 m
+        // — which is roughly where the Kaiju STANDS in the scale view, so every impact was playing
+        // at full reference level and of course sounded like it was in the room. At 2 units (200 m)
+        // with a steeper rolloff, an impact half a kilometre away arrives at about a fifth, and the
+        // air absorption and the reverb tail do the rest.
+        refUnits: 2,
+        rolloff: 1.5,
         maxUnits: MAX_AUDIBLE_UNITS,
+        panning: 'equalpower',
       });
     }
     ricochets.length = 0;
+    ricCount = 0;
   }
 }
 
