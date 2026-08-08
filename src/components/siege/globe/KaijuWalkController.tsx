@@ -122,6 +122,14 @@ export const walkInputDiag = {
   walking: false,
 };
 
+/** 'w' -> 'KeyW', so a keyboard that reports no `code` still steers. Ignored for anything longer. */
+function keyAlias(e: KeyboardEvent): string | null {
+  const k = e.key;
+  if (!k || k.length !== 1) return null;
+  const c = k.toUpperCase();
+  return c >= 'A' && c <= 'Z' ? `Key${c}` : null;
+}
+
 let walkActive = false;
 const listeners = new Set<() => void>();
 /** FortressControls checks this to stand down. Read by the shared controller, so keep it cheap. */
@@ -279,9 +287,18 @@ export function KaijuWalkController() {
         e.preventDefault();
         return;
       }
+      // BOTH the physical code and a normalised name. `e.code` is layout-independent, which is
+      // right, but it is empty on some remappers and virtual keyboards; falling back on the letter
+      // costs one string and removes a whole class of "it works on my machine".
       keys.current.add(e.code);
+      const alt = keyAlias(e);
+      if (alt) keys.current.add(alt);
     };
-    const up = (e: KeyboardEvent) => keys.current.delete(e.code);
+    const up = (e: KeyboardEvent) => {
+      keys.current.delete(e.code);
+      const alt = keyAlias(e);
+      if (alt) keys.current.delete(alt);
+    };
 
     // RIGHT-DRAG ORBITS, AND IT DOES NOT NEED POINTER LOCK.
     //
@@ -376,7 +393,30 @@ export function KaijuWalkController() {
      *
      * Clearing on every way focus can be lost is the standard remedy and it is cheap.
      */
+    /**
+     * THIS IS WHY JUMP WORKED AND WASD DID NOT.
+     *
+     * Geoff: "I still can't move, I can't walk, WASD does nothing. Jump works." That one sentence
+     * is the whole diagnosis, because both keys are read out of the SAME set a line apart — so the
+     * set was being emptied, and only a key that keeps re-arriving could survive it.
+     *
+     * On macOS, holding a LETTER key does not repeat: press-and-hold shows the accent menu instead,
+     * so 'KeyW' arrives exactly once and then has to stay in the set to keep working. Space is not
+     * a letter, repeats normally, and is re-added thirty times a second. Empty the set periodically
+     * and you get precisely this: movement dead, jump fine.
+     *
+     * What was emptying it was `pointerlockchange`. Clicking to fire the flamethrower makes the
+     * shared controls acquire or release the pointer lock, and every one of those was being treated
+     * as "the player has let go of everything". It never was: pointer lock changing says nothing at
+     * all about which keys are held.
+     *
+     * Only genuine focus loss clears now — the window blurring or the tab being hidden — which are
+     * the two cases where a keyup really will never arrive. Also clears on the way OUT of a lock
+     * only, never on the way in, for the one real case: pressing Escape to leave a lock does not
+     * deliver keyups for anything still held.
+     */
     const forgetKeys = () => keys.current.clear();
+    const lockChange = () => { if (document.pointerLockElement == null) keys.current.clear(); };
     window.addEventListener('keydown', down, true);
     window.addEventListener('keyup', up, true);
     window.addEventListener('mousemove', move);
@@ -385,7 +425,7 @@ export function KaijuWalkController() {
     window.addEventListener('contextmenu', noMenu);
     window.addEventListener('blur', forgetKeys);
     document.addEventListener('visibilitychange', forgetKeys);
-    document.addEventListener('pointerlockchange', forgetKeys);
+    document.addEventListener('pointerlockchange', lockChange);
     // Not passive: this needs preventDefault so the page does not scroll behind the canvas.
     window.addEventListener('wheel', wheel, { passive: false });
     return () => {
@@ -398,7 +438,7 @@ export function KaijuWalkController() {
       window.removeEventListener('wheel', wheel);
       window.removeEventListener('blur', forgetKeys);
       document.removeEventListener('visibilitychange', forgetKeys);
-      document.removeEventListener('pointerlockchange', forgetKeys);
+      document.removeEventListener('pointerlockchange', lockChange);
     };
   }, [camera]);
 

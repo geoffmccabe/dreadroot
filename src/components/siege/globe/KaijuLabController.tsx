@@ -34,6 +34,7 @@ import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuGunfireFx } from './KaijuGunfireFx';
 import { KaijuShoutsFx } from './KaijuShoutsFx';
+import { KaijuColliderDebug, toggleColliderDebug } from './KaijuColliderDebug';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
@@ -299,6 +300,9 @@ export function KaijuLabController() {
           else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
           break;
         }
+        // O — OUTLINE THE COLLIDERS. See KaijuColliderDebug: four wrong diagnoses in a row about
+        // where the bullets are stopping is three too many to keep guessing.
+        case 'KeyO': toggleColliderDebug(); break;
         case 'KeyK': {
           // Land here: drop straight down to just above the ground at the current position.
           // Descending by hand from orbit takes over a minute, and stopping at the right height
@@ -352,6 +356,9 @@ export function KaijuLabController() {
       </GlobeErrorBoundary>
       <GlobeErrorBoundary label="kaiju-shouts">
         <KaijuShoutsFx />
+      </GlobeErrorBoundary>
+      <GlobeErrorBoundary label="kaiju-colliders">
+        <KaijuColliderDebug />
       </GlobeErrorBoundary>
     </>
   );
