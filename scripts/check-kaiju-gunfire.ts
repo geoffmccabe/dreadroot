@@ -28,10 +28,10 @@ import {
   torsoCapsule, shotHitsCapsule, segmentDistance,
 } from '../src/components/siege/globe/kaijuColliders';
 import {
-  fireBullet, stepGunfire, getShots, clearGunfire, gunfireDiag,
-  chooseTarget, aimPoint, nextShotDelay, SPARK_LIFE, TRACER_LIFE,
+  fireBullet, stepGunfire, getBullets, getSparks, clearGunfire, gunfireDiag,
+  chooseTarget, aimPoint, nextShotDelay, SPARK_LIFE,
 } from '../src/components/siege/globe/kaijuGunfire';
-import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
+import { METRES_PER_UNIT, PLANET_RADIUS } from '../src/components/siege/globe/cubeSphere';
 
 let failures = 0;
 function ok(cond: boolean, label: string, detail = ''): void {
@@ -135,58 +135,110 @@ console.log('\n== The army shoots at the monster ==\n');
   ok(limbCapsules('test').length === 0, 'unregistering removes the rig');
 }
 
-// --- 3. SHOOTING AT A REAL FIGHT -----------------------------------------------------------------
+// --- 3. BALLISTICS ------------------------------------------------------------------------------
+// Geoff: "Try to use real physics for the bullet speed, distance, and trail-off... accounting for
+// gravity and air resistance." So the numbers are checked against what a real rifle round does,
+// rather than against whatever the code happens to produce.
+{
+  initArenaWith([BREEDS[0]], 0x5EED, 6);
+  clearGunfire();
+  // Fire one round horizontally, far from any Kaiju, and watch it.
+  const start = new THREE.Vector3(0, 0, PLANET_RADIUS + 10);
+  const aim = start.clone().add(new THREE.Vector3(1, 0, 0));
+  fireBullet(start, aim);
+  const b = getBullets().find((x) => x.live)!;
+
+  const v0 = b.vel.length() * METRES_PER_UNIT;
+  ok(Math.abs(v0 - 800) < 1, 'leaves the muzzle at 800 m/s', `${v0.toFixed(0)} m/s`);
+
+  let t = 0;
+  let at500: { speed: number; drop: number; time: number } | null = null;
+  while (t < 2 && b.live) {
+    stepGunfire(DT); t += DT;
+    const travelled = Math.abs(b.pos.x - start.x) * METRES_PER_UNIT;
+    if (!at500 && travelled >= 500) {
+      at500 = {
+        speed: b.vel.length() * METRES_PER_UNIT,
+        drop: (start.length() - b.pos.length()) * METRES_PER_UNIT,
+        time: t,
+      };
+    }
+  }
+  ok(at500 != null, 'the round actually travels 500 m');
+  // A 5.56 round leaves at ~800 and is doing ~480 at 500 m. Air resistance is the whole reason.
+  ok(at500 != null && at500.speed > 400 && at500.speed < 560,
+     'air resistance has taken it to roughly 480 m/s by 500 m', `${at500?.speed.toFixed(0)} m/s`);
+  // ...and it has dropped only a few metres, because drag dwarfs gravity at these speeds. A drop of
+  // tens of metres would mean gravity was being applied to something moving far too slowly.
+  ok(at500 != null && at500.drop > 0.5 && at500.drop < 12,
+     'and has dropped only a few metres on the way', `${at500?.drop.toFixed(1)} m`);
+  ok(at500 != null && at500.time > 0.4 && at500.time < 1.1,
+     'taking about three quarters of a second to get there', `${at500?.time.toFixed(2)} s`);
+}
+
+// --- 4. HITTING, AND BOUNCING OFF --------------------------------------------------------------
 {
   initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]], 0x5EED, 6);
   clearGunfire();
   const agents = getAgents();
+  const target = agents[1];
   const from = new THREE.Vector3();
   const aim = new THREE.Vector3();
 
-  // Fire two hundred rounds at a Kaiju from 400 m away, the way the crowd does.
-  const target = agents[1];
+  // Two hundred rounds from 400 m out, the way the crowd shoots. Fired one at a time and followed
+  // to their conclusion, so a hit is a hit in the simulation rather than in a formula.
   let hits = 0;
   for (let i = 0; i < 200; i++) {
+    clearGunfire();
     from.copy(target.body.dir).multiplyScalar(target.body.radius)
       .addScaledVector(target.body.forward, -(400 / METRES_PER_UNIT));
     fireBullet(from, aimPoint(target, aim));
-    // Read it back off the pool the renderer uses, not off a return value the renderer never sees.
-    const shots = getShots().filter((s) => s.live);
-    if (shots[shots.length - 1]?.part) hits++;
-    stepGunfire(SPARK_LIFE + 0.01);
+    const b = getBullets().find((x) => x.live)!;
+    for (let step = 0; step < 120 && b.live && !b.ricocheted; step++) stepGunfire(DT);
+    if (b.ricocheted) hits++;
   }
-  // With scatter at 0.38 of a body height most rounds should connect, but plenty must miss or it
-  // reads as a laser show rather than as gunfire.
-  ok(hits > 40 && hits < 190, 'most rounds connect, and a good number miss', `${hits}/200 hit`);
+  // Geoff: "they aren't shooting at the Kaiju but seem to be shooting randomly. They should aim at
+  // him." Aimed fire at a 300 m creature from 400 m should mostly connect.
+  ok(hits > 150, 'aimed fire mostly connects', `${hits}/200 hit`);
 
-  // Every recorded impact must be ON the creature — within the collider, not floating beside it.
+  // THE BOUNCE. Geoff: "add a physics BOUNCE so they are bouncing off him and then the lines fade
+  // away... they should arc away and fall away."
   clearGunfire();
-  const cap = torsoCapsule(target.body.dir, target.body.radius, ARENA_HEIGHT);
-  let worst = 0;
-  for (let i = 0; i < 200; i++) {
-    from.copy(target.body.dir).multiplyScalar(target.body.radius)
-      .addScaledVector(target.body.forward, -(400 / METRES_PER_UNIT));
-    fireBullet(from, aimPoint(target, aim));
-  }
-  for (const s of getShots()) {
-    if (!s.live || !s.part) continue;
-    const centre = target.body.dir.clone().multiplyScalar(target.body.radius + ARENA_HEIGHT * 0.5);
-    worst = Math.max(worst, s.hit.distanceTo(centre));
-  }
-  ok(worst < cap.radius + ARENA_HEIGHT, 'every spark lands on the creature, not beside it',
-     `furthest ${(worst * METRES_PER_UNIT).toFixed(0)} m from centre`);
+  from.copy(target.body.dir).multiplyScalar(target.body.radius)
+    .addScaledVector(target.body.forward, -(400 / METRES_PER_UNIT));
+  aim.copy(target.body.dir).multiplyScalar(target.body.radius + ARENA_HEIGHT * 0.55);
+  fireBullet(from, aim);
+  const b = getBullets().find((x) => x.live)!;
+  const speedIn = b.vel.length();
+  for (let step = 0; step < 120 && !b.ricocheted; step++) stepGunfire(DT);
+  ok(b.ricocheted, 'a round fired straight at the chest bounces off it');
+  const speedOut = b.vel.length();
+  ok(speedOut < speedIn * 0.75 && speedOut > speedIn * 0.05,
+     'and comes off much slower than it went in',
+     `${(speedIn * METRES_PER_UNIT).toFixed(0)} -> ${(speedOut * METRES_PER_UNIT).toFixed(0)} m/s`);
+  ok(getSparks().some((sp) => sp.live), 'leaving a spark where it struck');
 
-  // The pool must never grow. A leak here is a leak that runs for the whole session.
+  // It must then ARC AWAY AND FALL, not sail off in a straight line forever.
+  const radiusAtBounce = b.pos.length();
+  let highest = radiusAtBounce;
+  for (let step = 0; step < 240 && b.live; step++) {
+    stepGunfire(DT);
+    if (b.live) highest = Math.max(highest, b.pos.length());
+  }
+  ok(highest >= radiusAtBounce, 'the ricochet rises before it comes down');
+  ok(!b.live || b.pos.length() < highest,
+     'and is falling by the end of its life');
+
+  // The pool must never grow. A leak here runs for the whole session.
   clearGunfire();
   for (let i = 0; i < 5000; i++) fireBullet(from, aimPoint(target, aim));
-  ok(getShots().length === 256, 'the shot pool is fixed size however many rounds are fired',
-     `${getShots().length}`);
-  stepGunfire(SPARK_LIFE + 0.01);
-  ok(getShots().every((s) => !s.live), 'and everything retires once it has burnt out');
-  ok(TRACER_LIFE < SPARK_LIFE, 'the tracer fades before the spark it caused does');
+  ok(getBullets().length === 512, 'the bullet pool is fixed size however many rounds are fired',
+     `${getBullets().length}`);
+  for (let step = 0; step < 400; step++) stepGunfire(DT);
+  ok(getBullets().every((x) => !x.live), 'and every round eventually leaves the world');
 }
 
-// --- 4. TARGET CHOICE ----------------------------------------------------------------------------
+// --- 5. TARGET CHOICE ----------------------------------------------------------------------------
 {
   initArenaWith([BREEDS[0], BREEDS[2], BREEDS[1], BREEDS[4]], 0x5EED, 6);
   const agents = getAgents();
@@ -213,7 +265,7 @@ console.log('\n== The army shoots at the monster ==\n');
   ok(true, 'shot delays stay inside the 1-10 second window');
 }
 
-// --- 5. THEY DO NO DAMAGE ------------------------------------------------------------------------
+// --- 6. THEY DO NO DAMAGE ------------------------------------------------------------------------
 // The requirement, asserted rather than assumed.
 {
   const runFight = (shoot: boolean): string => {

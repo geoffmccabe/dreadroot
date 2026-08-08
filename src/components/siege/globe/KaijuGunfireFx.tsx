@@ -27,11 +27,27 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import {
-  getShots, stepGunfire, TRACER_LIFE, MUZZLE_LIFE, SPARK_LIFE,
+  getBullets, getSparks, stepGunfire, MUZZLE_LIFE, SPARK_LIFE,
 } from './kaijuGunfire';
 
-/** Same ceiling as the shot pool, so a full pool can always be drawn. */
-const MAX = 256;
+/** Same ceilings as the pools, so a full pool can always be drawn. */
+const MAX_TRAILS = 512;
+const MAX_POINTS = 512;
+
+/**
+ * How many separate dashes a single round's streak is broken into.
+ *
+ * Geoff: "the bullet lines... are too heavy and don't look realistic. Can you make them more
+ * stuttered and also varying from 10-40% opacity?"
+ *
+ * A tracer is not a solid rod of light — it is a fast-moving point smeared by the eye and by the
+ * shutter, which comes out broken. So each streak is drawn as three short dashes with gaps between
+ * them, and the gaps MOVE along the streak from frame to frame, which is what reads as stutter
+ * rather than as a dotted line.
+ */
+const DASHES = 3;
+/** Fraction of each dash slot that is actually drawn. The rest is gap. */
+const DASH_DUTY = 0.45;
 
 /** A muzzle flash, in metres. Roughly a rifle's own flash — read as a dot at any real distance. */
 const MUZZLE_M = 1.6;
@@ -96,63 +112,78 @@ export function KaijuGunfireFx() {
 
   // One allocation each, for the life of the component.
   const buf = useMemo(() => ({
-    tracerPos: new Float32Array(MAX * 2 * 3),
-    tracerCol: new Float32Array(MAX * 2 * 3),
-    muzzlePos: new Float32Array(MAX * 3),
-    muzzleCol: new Float32Array(MAX * 3),
-    sparkPos: new Float32Array(MAX * 3),
-    sparkCol: new Float32Array(MAX * 3),
+    tracerPos: new Float32Array(MAX_TRAILS * DASHES * 2 * 3),
+    tracerCol: new Float32Array(MAX_TRAILS * DASHES * 2 * 3),
+    muzzlePos: new Float32Array(MAX_POINTS * 3),
+    muzzleCol: new Float32Array(MAX_POINTS * 3),
+    sparkPos: new Float32Array(MAX_POINTS * 3),
+    sparkCol: new Float32Array(MAX_POINTS * 3),
   }), []);
 
   const _v = useMemo(() => new THREE.Vector3(), []);
+  const clock = useRef(0);
 
   useFrame((_, rawDt) => {
-    stepGunfire(Math.min(rawDt, 0.05));
+    const dt = Math.min(rawDt, 0.05);
+    stepGunfire(dt);
+    clock.current += dt;
     const T = tracers.current, M = muzzles.current, S = sparks.current;
     if (!T || !M || !S) return;
 
+    const maxT = MAX_TRAILS * DASHES;
     let nT = 0, nM = 0, nS = 0;
-    for (const s of getShots()) {
-      if (!s.live) continue;
 
-      // TRACER. A hot line for a tenth of a second. WebGL draws every line one pixel wide whatever
-      // linewidth says, which here is not a limitation but exactly the brief: "very thin, almost
-      // invisible lines". Brightness carries the fade instead of thickness.
-      if (s.age < TRACER_LIFE && nT < MAX) {
-        const f = 1 - s.age / TRACER_LIFE;
-        const o = nT * 6;
-        buf.tracerPos[o] = s.from.x; buf.tracerPos[o + 1] = s.from.y; buf.tracerPos[o + 2] = s.from.z;
-        buf.tracerPos[o + 3] = s.to.x; buf.tracerPos[o + 4] = s.to.y; buf.tracerPos[o + 5] = s.to.z;
-        // Dim at the muzzle, bright at the leading end — which is the way a tracer actually reads,
-        // and the cheapest possible way to show which direction it is travelling.
-        buf.tracerCol[o] = 0.55 * f; buf.tracerCol[o + 1] = 0.42 * f; buf.tracerCol[o + 2] = 0.16 * f;
-        buf.tracerCol[o + 3] = 1.0 * f; buf.tracerCol[o + 4] = 0.86 * f; buf.tracerCol[o + 5] = 0.5 * f;
-        nT++;
-      }
+    for (const b of getBullets()) {
+      if (!b.live) continue;
 
-      // MUZZLE FLASH. Brief and very bright: it is the pop of ignition, not a lamp.
-      if (s.age < MUZZLE_LIFE && nM < MAX) {
-        const f = 1 - s.age / MUZZLE_LIFE;
+      // MUZZLE FLASH. Brief and very bright: the pop of ignition, not a lamp.
+      if (!b.ricocheted && b.age < MUZZLE_LIFE && nM < MAX_POINTS) {
+        const f = 1 - b.age / MUZZLE_LIFE;
         const o = nM * 3;
-        buf.muzzlePos[o] = s.from.x; buf.muzzlePos[o + 1] = s.from.y; buf.muzzlePos[o + 2] = s.from.z;
+        buf.muzzlePos[o] = b.origin.x; buf.muzzlePos[o + 1] = b.origin.y; buf.muzzlePos[o + 2] = b.origin.z;
         buf.muzzleCol[o] = f; buf.muzzleCol[o + 1] = f * 0.97; buf.muzzleCol[o + 2] = f * 0.78;
         nM++;
       }
 
-      // IMPACT. Only where a capsule was genuinely crossed — `part`, not `hit`, because the impact
-      // vector is pooled and a miss leaves the previous shot's value sitting in it.
-      if (s.part && s.age < SPARK_LIFE && nS < MAX) {
-        const f = 1 - s.age / SPARK_LIFE;
-        // Nudge toward the shooter. The capsule is an approximation of a limb, so a point exactly on
-        // its surface can sit a metre inside the skin it is meant to be on — and a spark occluded by
-        // the creature it just hit is a spark nobody sees.
-        _v.copy(s.hit).lerp(s.from, 0.02);
-        const o = nS * 3;
-        buf.sparkPos[o] = _v.x; buf.sparkPos[o + 1] = _v.y; buf.sparkPos[o + 2] = _v.z;
-        // Cools white -> orange as it dies, like a real strike on armour.
-        buf.sparkCol[o] = f; buf.sparkCol[o + 1] = f * (0.45 + 0.5 * f); buf.sparkCol[o + 2] = f * f * 0.55;
-        nS++;
+      if (!b.tracer) continue;
+
+      // THE STREAK, BROKEN INTO DASHES. The gaps slide along it over time, so a round in flight
+      // shimmers instead of being a clean stripe. Every round has its own random phase, or the
+      // whole volley would blink in unison and read as a strobe.
+      const slide = (clock.current * 9 + b.flicker) % 1;
+      for (let d = 0; d < DASHES && nT < maxT; d++) {
+        const base = (d + slide) / DASHES;
+        let t0 = base % 1;
+        let t1 = t0 + DASH_DUTY / DASHES;
+        if (t1 > 1) { t1 = 1; }
+        if (t1 - t0 < 1e-3) continue;
+        // A little per-dash jitter in brightness. Nothing about real gunfire is even.
+        const jitter = 0.55 + 0.45 * Math.abs(Math.sin((clock.current * 30 + b.flicker + d) * 3.7));
+        const a = b.alpha * jitter;
+        const o = nT * 6;
+        // tail -> pos is the streak; t is the fraction along it.
+        _v.copy(b.tail).lerp(b.pos, t0);
+        buf.tracerPos[o] = _v.x; buf.tracerPos[o + 1] = _v.y; buf.tracerPos[o + 2] = _v.z;
+        _v.copy(b.tail).lerp(b.pos, t1);
+        buf.tracerPos[o + 3] = _v.x; buf.tracerPos[o + 4] = _v.y; buf.tracerPos[o + 5] = _v.z;
+        // Dim at the back, bright at the leading end — the cheapest possible way to show which way
+        // it is travelling. A ricochet runs hotter orange because it is a tumbling fragment.
+        const warm = b.ricocheted ? 0.45 : 0.78;
+        const back = a * t0, front = a * t1;
+        buf.tracerCol[o] = 0.95 * back; buf.tracerCol[o + 1] = 0.78 * back; buf.tracerCol[o + 2] = warm * back * 0.6;
+        buf.tracerCol[o + 3] = 1.0 * front; buf.tracerCol[o + 4] = 0.86 * front; buf.tracerCol[o + 5] = warm * front;
+        nT++;
       }
+    }
+
+    for (const sp of getSparks()) {
+      if (!sp.live || nS >= MAX_POINTS) continue;
+      const f = 1 - sp.age / SPARK_LIFE;
+      const o = nS * 3;
+      buf.sparkPos[o] = sp.pos.x; buf.sparkPos[o + 1] = sp.pos.y; buf.sparkPos[o + 2] = sp.pos.z;
+      // Cools white -> orange as it dies, like a real strike on armour.
+      buf.sparkCol[o] = f; buf.sparkCol[o + 1] = f * (0.45 + 0.5 * f); buf.sparkCol[o + 2] = f * f * 0.55;
+      nS++;
     }
 
     T.geometry.setDrawRange(0, nT * 2);
