@@ -70,7 +70,7 @@ const RICOCHET_LIFE = 1.9;
  * Streak time constant. The visible trail is roughly speed x this, so it is LONG while the round is
  * fast and shortens as it slows — which is what makes a ricochet read as losing energy.
  */
-const TRAIL_TAU = 0.05;
+const TRAIL_TAU = 0.10;
 
 /**
  * One round in flight.
@@ -97,7 +97,7 @@ export interface Bullet {
    * "the bullet lines are too heavy".
    */
   tracer: boolean;
-  /** Per-round brightness, 10-40%. Geoff asked for the variation by name. */
+  /** Per-round brightness. Varies per round, which is what stops the volley looking printed on. */
   alpha: number;
   /** Random phase, so the stutter is per-round rather than the whole volley blinking together. */
   flicker: number;
@@ -190,8 +190,11 @@ export function fireBullet(from: THREE.Vector3, aimAt: THREE.Vector3): void {
   b.age = 0;
   b.live = true;
   b.ricocheted = false;
-  b.tracer = rand() < 0.25;
-  b.alpha = 0.10 + rand() * 0.30;
+  // Half the rounds, not a quarter. Geoff: "now I don't see the lines at all... The effect now is
+  // very subtle." Between one-in-four tracers, a 10% floor on opacity and a streak drawn as a
+  // one-pixel GL line, the trails had been tuned into invisibility.
+  b.tracer = rand() < 0.5;
+  b.alpha = 0.30 + rand() * 0.45;
   b.flicker = rand() * 100;
   gunfireDiag.fired++;
 }
@@ -277,7 +280,7 @@ export function stepGunfire(dt: number): void {
         // A ricochet is a bright, tumbling fragment — visible even when the round that made it
         // was not, which is exactly how it looks in real footage.
         b.tracer = true;
-        b.alpha = 0.18 + rand() * 0.22;
+        b.alpha = 0.45 + rand() * 0.35;
         live++;
         continue;
       }

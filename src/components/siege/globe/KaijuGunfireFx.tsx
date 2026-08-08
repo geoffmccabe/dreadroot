@@ -23,7 +23,7 @@
 // THREE.TextureLoader().load('/siege/fx/muzzle.webp') and nothing else in this file changes.
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import {
@@ -47,7 +47,18 @@ const MAX_POINTS = 512;
  */
 const DASHES = 3;
 /** Fraction of each dash slot that is actually drawn. The rest is gap. */
-const DASH_DUTY = 0.45;
+const DASH_DUTY = 0.55;
+
+/**
+ * How wide a tracer streak is, in metres.
+ *
+ * THIS is why the trails were invisible, and no amount of opacity would have fixed it. They were
+ * drawn with GL lines, and WebGL renders every line exactly one pixel wide however wide you ask for
+ * — so at 500 m a tracer was a single faint pixel. They are now camera-facing quads with a real
+ * width in the world, which is the only way to have any control over this at all.
+ */
+const TRACER_WIDTH_M = 3;
+const WIDTH_UNITS = TRACER_WIDTH_M / METRES_PER_UNIT;
 
 /** A muzzle flash, in metres. Roughly a rifle's own flash — read as a dot at any real distance. */
 const MUZZLE_M = 1.6;
@@ -103,7 +114,8 @@ function starSprite(points = 7, size = 128): THREE.Texture {
 }
 
 export function KaijuGunfireFx() {
-  const tracers = useRef<THREE.LineSegments>(null);
+  const tracers = useRef<THREE.InstancedMesh>(null);
+  const camera = useThree((st) => st.camera);
   const muzzles = useRef<THREE.Points>(null);
   const sparks = useRef<THREE.Points>(null);
 
@@ -112,8 +124,6 @@ export function KaijuGunfireFx() {
 
   // One allocation each, for the life of the component.
   const buf = useMemo(() => ({
-    tracerPos: new Float32Array(MAX_TRAILS * DASHES * 2 * 3),
-    tracerCol: new Float32Array(MAX_TRAILS * DASHES * 2 * 3),
     muzzlePos: new Float32Array(MAX_POINTS * 3),
     muzzleCol: new Float32Array(MAX_POINTS * 3),
     sparkPos: new Float32Array(MAX_POINTS * 3),
@@ -121,6 +131,13 @@ export function KaijuGunfireFx() {
   }), []);
 
   const _v = useMemo(() => new THREE.Vector3(), []);
+  // Scratch for building each streak's transform. One set, reused for every quad every frame.
+  const q = useMemo(() => ({
+    a: new THREE.Vector3(), b: new THREE.Vector3(), mid: new THREE.Vector3(),
+    dir: new THREE.Vector3(), toCam: new THREE.Vector3(),
+    side: new THREE.Vector3(), nrm: new THREE.Vector3(),
+    m: new THREE.Matrix4(), colour: new THREE.Color(),
+  }), []);
   const clock = useRef(0);
 
   useFrame((_, rawDt) => {
@@ -152,26 +169,37 @@ export function KaijuGunfireFx() {
       // whole volley would blink in unison and read as a strobe.
       const slide = (clock.current * 9 + b.flicker) % 1;
       for (let d = 0; d < DASHES && nT < maxT; d++) {
-        const base = (d + slide) / DASHES;
-        let t0 = base % 1;
-        let t1 = t0 + DASH_DUTY / DASHES;
-        if (t1 > 1) { t1 = 1; }
+        let t0 = ((d + slide) / DASHES) % 1;
+        let t1 = Math.min(1, t0 + DASH_DUTY / DASHES);
         if (t1 - t0 < 1e-3) continue;
-        // A little per-dash jitter in brightness. Nothing about real gunfire is even.
-        const jitter = 0.55 + 0.45 * Math.abs(Math.sin((clock.current * 30 + b.flicker + d) * 3.7));
-        const a = b.alpha * jitter;
-        const o = nT * 6;
-        // tail -> pos is the streak; t is the fraction along it.
-        _v.copy(b.tail).lerp(b.pos, t0);
-        buf.tracerPos[o] = _v.x; buf.tracerPos[o + 1] = _v.y; buf.tracerPos[o + 2] = _v.z;
-        _v.copy(b.tail).lerp(b.pos, t1);
-        buf.tracerPos[o + 3] = _v.x; buf.tracerPos[o + 4] = _v.y; buf.tracerPos[o + 5] = _v.z;
-        // Dim at the back, bright at the leading end — the cheapest possible way to show which way
-        // it is travelling. A ricochet runs hotter orange because it is a tumbling fragment.
-        const warm = b.ricocheted ? 0.45 : 0.78;
-        const back = a * t0, front = a * t1;
-        buf.tracerCol[o] = 0.95 * back; buf.tracerCol[o + 1] = 0.78 * back; buf.tracerCol[o + 2] = warm * back * 0.6;
-        buf.tracerCol[o + 3] = 1.0 * front; buf.tracerCol[o + 4] = 0.86 * front; buf.tracerCol[o + 5] = warm * front;
+
+        q.a.copy(b.tail).lerp(b.pos, t0);
+        q.b.copy(b.tail).lerp(b.pos, t1);
+        q.dir.copy(q.b).sub(q.a);
+        const len = q.dir.length();
+        if (len < 1e-6) continue;
+        q.dir.divideScalar(len);
+        q.mid.copy(q.a).lerp(q.b, 0.5);
+
+        // Turn the quad edge-on to the viewer, so a streak is the same width whichever way it is
+        // travelling and never flattens to nothing when it comes toward the camera.
+        q.toCam.copy(camera.position).sub(q.mid).normalize();
+        q.side.crossVectors(q.dir, q.toCam);
+        if (q.side.lengthSq() < 1e-12) q.side.set(1, 0, 0); else q.side.normalize();
+        q.nrm.crossVectors(q.side, q.dir);
+        q.side.multiplyScalar(WIDTH_UNITS);
+        q.dir.multiplyScalar(len);
+        q.m.makeBasis(q.side, q.dir, q.nrm);
+        q.m.setPosition(q.mid);
+        T.setMatrixAt(nT, q.m);
+
+        // A little per-dash jitter in brightness. Nothing about real gunfire is even. Brighter at
+        // the leading end; ricochets run hotter orange because they are tumbling fragments.
+        const jitter = 0.6 + 0.4 * Math.abs(Math.sin((clock.current * 30 + b.flicker + d) * 3.7));
+        const a = b.alpha * jitter * (0.35 + 0.65 * t1);
+        const warm = b.ricocheted ? 0.42 : 0.72;
+        q.colour.setRGB(a, a * 0.85, a * warm);
+        T.setColorAt(nT, q.colour);
         nT++;
       }
     }
@@ -186,9 +214,9 @@ export function KaijuGunfireFx() {
       nS++;
     }
 
-    T.geometry.setDrawRange(0, nT * 2);
-    T.geometry.attributes.position.needsUpdate = true;
-    T.geometry.attributes.color.needsUpdate = true;
+    T.count = nT;
+    T.instanceMatrix.needsUpdate = true;
+    if (T.instanceColor) T.instanceColor.needsUpdate = true;
     M.geometry.setDrawRange(0, nM);
     M.geometry.attributes.position.needsUpdate = true;
     M.geometry.attributes.color.needsUpdate = true;
@@ -201,19 +229,18 @@ export function KaijuGunfireFx() {
     <>
       {/* frustumCulled off on all three: the bounding sphere is computed once from an empty buffer,
           so left on, the whole effect vanishes the moment the camera is not looking at the origin. */}
-      <lineSegments ref={tracers} frustumCulled={false}>
-        <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[buf.tracerPos, 3]} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-color" args={[buf.tracerCol, 3]} usage={THREE.DynamicDrawUsage} />
-        </bufferGeometry>
-        <lineBasicMaterial
-          vertexColors
+      <instancedMesh ref={tracers} args={[undefined, undefined, MAX_TRAILS * DASHES]} frustumCulled={false}>
+        {/* A unit plane. The instance matrix stretches it along the streak and turns it edge-on to
+            the camera, so ONE geometry draws every tracer in the scene. */}
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
           transparent
           depthWrite={false}
           toneMapped={false}
+          side={THREE.DoubleSide}
           blending={THREE.AdditiveBlending}
         />
-      </lineSegments>
+      </instancedMesh>
 
       <points ref={muzzles} frustumCulled={false}>
         <bufferGeometry>
