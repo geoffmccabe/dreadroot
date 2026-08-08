@@ -82,6 +82,8 @@ const STRIDE_FRAC = 1.4;
  * with Walk, Run, Run_Shoot, Gun_Shoot, Idle_Gun and Death.
  */
 const SOLDIER_URL = '/siege/characters/soldier.glb';
+/** The rifle. Four flat-coloured pieces, no textures, so it merges into the man carrying it. */
+const RIFLE_URL = '/siege/weapons/ak47.glb';
 
 interface Person {
   /** Unit direction from the planet centre. */
@@ -202,6 +204,7 @@ function makePeople(): Person[] {
         // off within a tenth of a second of each other the instant the crowd appears.
         fireIn: nextShotDelay(),
         retargetIn: nextRetargetDelay(),
+        shootFor: 0,
       });
     }
     return out;
@@ -228,6 +231,7 @@ function makePeople(): Person[] {
       targetId: chooseTarget(dir),
       fireIn: nextShotDelay(),
       retargetIn: nextRetargetDelay(),
+      shootFor: 0,
     });
   }
   return out;
@@ -256,6 +260,9 @@ function Crowd() {
   // skinning cost to a third without anyone being able to see the difference at 1.8 m. If it turns
   // out too heavy, the answer is fewer people or a fixed VAT — not a broken one.
   const { scene, animations } = useGLTF(`${SOLDIER_URL}?v=${APP_VERSION}`);
+  // The weapon is a SEPARATE file: this soldier's clips were authored around a rifle that is not in
+  // his model. Merged into his geometry below, so it still costs one draw call between them.
+  const { scene: rifleScene } = useGLTF(`${RIFLE_URL}?v=${APP_VERSION}`);
   const group = useRef<THREE.Group>(null);
   const people = useMemo<Person[]>(() => makePeople(), []);
 
@@ -265,7 +272,10 @@ function Crowd() {
    * Falls back to the raw glTF if the merge is refused — slower (eleven draws a man instead of one)
    * but correct, which is the right way round for a fallback.
    */
-  const template = useMemo(() => buildSoldierTemplate(scene), [scene]);
+  const template = useMemo(
+    () => buildSoldierTemplate(scene, animations, rifleScene),
+    [scene, animations, rifleScene],
+  );
 
   /** One clone + mixer per figure. Built once; the frame loop only moves them. */
   const figures = useMemo(() => {
@@ -281,9 +291,12 @@ function Crowd() {
     const byName = (n: string | null) => (n ? animations.find((a) => a.name === n) ?? null : null);
     const moveClip = byName(pickClip(info, ['run_shoot', 'run', 'jog', 'walk']));
     const idleClip = byName(pickClip(info, ['idle_gun', 'idle', 'breathidle']));
+    // A THIRD clip: standing and firing. Without it a stationary soldier's rifle flashes while he
+    // holds a completely still pose, which reads as the flash belonging to something else.
+    const shootClip = byName(pickClip(info, ['idle_gun_shoot', 'gun_shoot', 'shoot']));
     const clip = moveClip ?? idleClip;
 
-    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null; idle: THREE.AnimationAction | null }[] = [];
+    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null; idle: THREE.AnimationAction | null; shoot: THREE.AnimationAction | null }[] = [];
     let localised = 0;
     for (let i = 0; i < CROWD_SIZE; i++) {
       const obj = SkeletonUtils.clone(source) as THREE.Group;
@@ -312,14 +325,21 @@ function Crowd() {
         idle.play();
         idle.setEffectiveWeight(0);
       }
-      out.push({ obj, mixer, action, idle });
+      let shoot: THREE.AnimationAction | null = null;
+      if (shootClip && shootClip !== moveClip && shootClip !== idleClip) {
+        shoot = mixer.clipAction(shootClip);
+        shoot.play();
+        shoot.setEffectiveWeight(0);
+      }
+      out.push({ obj, mixer, action, idle, shoot });
     }
     crowdDiag.modelOk = out.length > 0 && clip != null;
     crowdDiag.scale = scale;
     console.log(`[crowd] ${out.length} soldiers from ${SOLDIER_URL} | clip "${clip?.name ?? 'none'}"`
-      + ` | move "${moveClip?.name ?? 'none'}" idle "${idleClip?.name ?? 'none'}"`
+      + ` | move "${moveClip?.name ?? 'none'}" idle "${idleClip?.name ?? 'none'}" shoot "${shootClip?.name ?? 'none'}"`
       + ` | model height ${modelHeight.toFixed(3)} -> scale ${scale.toFixed(5)}`
       + ` | merged ${template ? 'YES (1 draw each)' : 'NO (fallback)'}`
+      + ` | rifle ${template?.hasRifle ? 'attached' : 'MISSING'}`
       + ` | skinning localised on ${localised} meshes`);
     return out;
   }, [scene, animations, template]);
@@ -412,13 +432,20 @@ function Crowd() {
       // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m
       // against a 300 m Kaiju nobody can see the difference.
+      if (p.shootFor > 0) p.shootFor -= dt;
       if ((i % STAGGER) === (frame.current % STAGGER)) {
-        // Moving or standing. An instant weight swap rather than a crossfade: with the mixer only
-        // ticking every third frame a fade would stutter, and at 1.8 m against a 300 m monster the
-        // pop is invisible.
+        // THREE STATES: advancing, standing, and standing-while-firing. Instant weight swaps rather
+        // than crossfades — with the mixer only ticking every third frame a fade would stutter, and
+        // at 1.8 m against a 300 m monster the pop is invisible.
+        //
+        // Firing only overrides STANDING. The running clip is already Run_Shoot, which shows him
+        // firing on the move, so cutting to a stationary shoot pose mid-stride would be a downgrade.
+        const shootNow = p.shootFor > 0 && !p.running && f.shoot != null;
         if (f.action) f.action.setEffectiveWeight(p.running ? 1 : 0);
-        if (f.idle) f.idle.setEffectiveWeight(p.running ? 0 : 1);
-        // The idle still has to tick while standing, or a stopped soldier freezes mid-stride.
+        if (f.idle) f.idle.setEffectiveWeight(!p.running && !shootNow ? 1 : 0);
+        if (f.shoot) f.shoot.setEffectiveWeight(shootNow ? 1 : 0);
+        // Everything ticks, always. Weighting an action to zero does not stop it, and a stopped
+        // soldier whose idle is not advancing freezes mid-stride.
         f.mixer.update(dt * STAGGER);
       }
 
@@ -452,6 +479,11 @@ function Crowd() {
       if (p.fireIn <= 0 && target && inRange(p.dir, target)) {
         p.fireIn = nextShotDelay();
         fireBullet(_muzzle, aimPoint(target, _aim));
+        // Play the firing animation from its first frame, so the recoil starts with the flash.
+        if (f.shoot && !p.running) {
+          p.shootFor = f.shoot.getClip().duration;
+          f.shoot.reset().play();
+        }
         // ...and one shot in fifty, say something about it. The odds live in kaijuShouts with the
         // lines; `i` identifies the speaker so the bubble can follow them.
         maybeShout(_muzzle, i);
