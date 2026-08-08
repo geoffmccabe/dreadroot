@@ -67,10 +67,19 @@ const MAX_LIFE = 3.0;
 /** How long a ricochet is followed after it bounces. */
 const RICOCHET_LIFE = 1.9;
 /**
- * Streak time constant. The visible trail is roughly speed x this, so it is LONG while the round is
- * fast and shortens as it slows — which is what makes a ricochet read as losing energy.
+ * Streak length, expressed as seconds of travel: the trail is (speed x this) long, so it stretches
+ * when the round is fast and collapses as it slows.
+ *
+ * 0.20 gives about 160 m at muzzle speed — twice what it was, as asked.
+ *
+ * It is now derived from VELOCITY. It used to be the time constant of a lag filter chasing the
+ * round, which had a fatal flaw: for the first fifth of a second after firing the trail had not
+ * caught up yet, so the streak was SHORTER THAN IT WAS WIDE. Geoff: "they are now wide rectangles
+ * that don't make sense." A round only flies for about half a second, so a good part of every shot
+ * looked like a floating brick. Measuring back along the velocity means it is the right length on
+ * the very first frame.
  */
-const TRAIL_TAU = 0.10;
+const TRAIL_SECONDS = 0.20;
 
 /**
  * One round in flight.
@@ -194,7 +203,7 @@ export function fireBullet(from: THREE.Vector3, aimAt: THREE.Vector3): void {
   // very subtle." Between one-in-four tracers, a 10% floor on opacity and a streak drawn as a
   // one-pixel GL line, the trails had been tuned into invisibility.
   b.tracer = rand() < 0.5;
-  b.alpha = 0.30 + rand() * 0.45;
+  b.alpha = 0.45 + rand() * 0.55;   // 50% brighter than before, as asked
   b.flicker = rand() * 100;
   gunfireDiag.fired++;
 }
@@ -230,8 +239,15 @@ export function stepGunfire(dt: number): void {
     b.vel.addScaledVector(_up, -GRAVITY * dt);
     b.pos.addScaledVector(b.vel, dt);
 
-    // The streak's trailing end chases the round, so it stretches when fast and collapses when slow.
-    b.tail.lerp(b.pos, 1 - Math.exp(-dt / TRAIL_TAU));
+    // The streak is the last TRAIL_SECONDS of travel, laid back along the line of flight. Never
+    // longer than the round has actually flown, so a fresh shot does not appear with a trail
+    // reaching back through the rifleman who fired it.
+    {
+      const sp = b.vel.length();
+      const back = Math.min(sp * TRAIL_SECONDS, b.pos.distanceTo(b.origin));
+      if (sp > 1e-9) b.tail.copy(b.pos).addScaledVector(b.vel, -back / sp);
+      else b.tail.copy(b.pos);
+    }
 
     if (!b.ricocheted) {
       // Which Kaiju, if any, did it cross? Nearest along the path wins, so a round clipping an
@@ -275,12 +291,15 @@ export function stepGunfire(dt: number): void {
         b.vel.z += (rand() * 2 - 1) * MUZZLE_SPEED * 0.10;
         b.pos.copy(_nrm).addScaledVector(n, M(2));
         b.tail.copy(b.pos);
+        // The trail is measured from the BOUNCE now. Without this the ricochet's streak would still
+        // be anchored to the rifle and stretch back across the whole battlefield.
+        b.origin.copy(b.pos);
         b.ricocheted = true;
         b.age = Math.max(0, MAX_LIFE - RICOCHET_LIFE);
         // A ricochet is a bright, tumbling fragment — visible even when the round that made it
         // was not, which is exactly how it looks in real footage.
         b.tracer = true;
-        b.alpha = 0.45 + rand() * 0.35;
+        b.alpha = 0.68 + rand() * 0.32;
         live++;
         continue;
       }
@@ -320,7 +339,10 @@ export function chooseTarget(dir: THREE.Vector3, previous: string | null): strin
   const alive = getAgents().filter((a) => a.alive);
   if (!alive.length) return null;
   if (previous && alive.some((a) => a.id === previous) && rand() < 0.75) return previous;
-  if (rand() < 0.65) {
+  // 0.9, not 0.65. Geoff: "They aren't shooting at my Kaiju even though they're right next to me."
+  // One rifleman in three picking a target at random across the whole battlefield was enough to make
+  // the crowd look like it was firing at nothing in particular.
+  if (rand() < 0.9) {
     let best = alive[0];
     let bestD = Infinity;
     for (const a of alive) {

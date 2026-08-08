@@ -43,6 +43,7 @@ import {
   chooseTarget, aimPoint, nextShotDelay, fireBullet,
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
+import { maybeShout } from './kaijuShouts';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -376,6 +377,9 @@ function Crowd() {
           .addScaledVector(p.dir, MUZZLE_UP_UNITS)
           .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
         fireBullet(_muzzle, aimPoint(target, _aim));
+        // ...and one shot in fifty, say something about it. The anchor is the speaker's head, which
+        // is where the bubble's tail has to point; the odds live in kaijuShouts with the lines.
+        maybeShout(_muzzle);
       }
     }
   });

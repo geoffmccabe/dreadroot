@@ -33,6 +33,7 @@ import {
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuGunfireFx } from './KaijuGunfireFx';
+import { KaijuShoutsFx } from './KaijuShoutsFx';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
@@ -348,6 +349,9 @@ export function KaijuLabController() {
           would cut every effect dead the moment the people vanished. */}
       <GlobeErrorBoundary label="kaiju-gunfire">
         <KaijuGunfireFx />
+      </GlobeErrorBoundary>
+      <GlobeErrorBoundary label="kaiju-shouts">
+        <KaijuShoutsFx />
       </GlobeErrorBoundary>
     </>
   );
