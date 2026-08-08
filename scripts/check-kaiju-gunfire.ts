@@ -32,6 +32,9 @@ import {
   chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, SPARK_LIFE, MAX_RANGE_UNITS,
 } from '../src/components/siege/globe/kaijuGunfire';
 import { METRES_PER_UNIT, PLANET_RADIUS } from '../src/components/siege/globe/cubeSphere';
+import {
+  registerHitMesh, unregisterHitMesh, hasHitMesh, meshHit, beginMeshHitFrame,
+} from '../src/components/siege/globe/kaijuMeshHit';
 
 let failures = 0;
 function ok(cond: boolean, label: string, detail = ''): void {
@@ -41,6 +44,7 @@ function ok(cond: boolean, label: string, detail = ''): void {
 
 const DT = 1 / 60;
 console.log('\n== The army shoots at the monster ==\n');
+beginMeshHitFrame();
 
 // --- 1. THE GEOMETRY -----------------------------------------------------------------------------
 // Everything downstream is a lie if a bullet cannot tell a hit from a miss.
@@ -365,6 +369,63 @@ console.log('\n== The army shoots at the monster ==\n');
      quiet === loud ? 'identical health, positions and outcome' : 'the fight diverged');
   ok(gunfireDiag.fired > 30000, 'and the test really did fire that whole time',
      `${gunfireDiag.fired} rounds`);
+}
+
+
+// --- 7. MESH COLLIDERS ---------------------------------------------------------------------------
+// Geoff: "You didn't do mesh colliders like I told you to do. Instead you made cylinders and they
+// are really bad and will never work for a game like this where it's all about realism."
+//
+// So this proves the mesh path does what a capsule cannot: hit the SHAPE, in the POSE, and miss the
+// empty space a cylinder would have filled. Built from a real THREE.SkinnedMesh rather than the
+// game's .glb files, because the point is the mechanism, not the art.
+{
+  const geo = new THREE.BoxGeometry(1, 4, 1);
+  const bone = new THREE.Bone();
+  const skeleton = new THREE.Skeleton([bone]);
+  const pos = geo.attributes.position;
+  // Bind every vertex to the single bone, so moving the bone moves the whole slab.
+  const idx: number[] = [];
+  const wgt: number[] = [];
+  for (let i = 0; i < pos.count; i++) { idx.push(0, 0, 0, 0); wgt.push(1, 0, 0, 0); }
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(idx, 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(wgt, 4));
+  const mesh = new THREE.SkinnedMesh(geo, new THREE.MeshBasicMaterial());
+  mesh.add(bone);
+  mesh.bind(skeleton);
+  mesh.updateMatrixWorld(true);
+
+  registerHitMesh('mesh-test', mesh);
+  ok(hasHitMesh('mesh-test'), 'a model registers as a hit surface');
+
+  const pt = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+
+  // Straight through the middle: a hit, on the NEAR face, with a normal pointing back at the shooter.
+  const t = meshHit('mesh-test', new THREE.Vector3(-10, 0, 0), new THREE.Vector3(10, 0, 0), pt, nrm);
+  ok(t != null, 'a round through the slab hits it');
+  ok(t != null && Math.abs(pt.x + 0.5) < 0.02,
+     'the impact is on the NEAR surface of the actual geometry', `x = ${pt.x.toFixed(3)}`);
+  ok(nrm.x < -0.9, 'and the surface normal points back at the shooter', `nx = ${nrm.x.toFixed(2)}`);
+
+  // THE WHOLE POINT. A round passing beside the slab must MISS. A capsule wide enough to contain
+  // this shape would have stopped it in clear air — which is the invisible wall.
+  ok(meshHit('mesh-test', new THREE.Vector3(-10, 0, 3), new THREE.Vector3(10, 0, 3), pt, nrm) == null,
+     'a round passing beside it misses, where a capsule would have stopped it');
+
+  // ...AND IT FOLLOWS THE POSE. Move the bone and the geometry moves with it: the shot that hit
+  // must now miss, and a shot at the new position must hit. This is the thing a static collider
+  // cannot do and the reason an arm mid-swing is hittable where the arm actually is.
+  bone.position.set(0, 0, 6);
+  mesh.updateMatrixWorld(true);
+  skeleton.update();
+  ok(meshHit('mesh-test', new THREE.Vector3(-10, 0, 0), new THREE.Vector3(10, 0, 0), pt, nrm) == null,
+     'moving the skeleton moves the collider off the old spot');
+  ok(meshHit('mesh-test', new THREE.Vector3(-10, 0, 6), new THREE.Vector3(10, 0, 6), pt, nrm) != null,
+     'and onto the new one');
+
+  unregisterHitMesh('mesh-test');
+  ok(!hasHitMesh('mesh-test'), 'and it can be taken down again');
 }
 
 console.log(`\n${failures === 0 ? 'GUNFIRE CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);

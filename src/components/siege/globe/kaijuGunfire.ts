@@ -35,6 +35,7 @@ import {
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+import { meshHit, hasHitMesh, beginMeshHitFrame } from './kaijuMeshHit';
 
 // The COSMETIC stream, never the simulation's. See the long note on fxRand: drawing scatter and
 // reload times from the shared seeded source silently changed who won the fight.
@@ -205,6 +206,10 @@ const _centre = new THREE.Vector3();
 const _weights: number[] = [];
 const _norm2 = new THREE.Vector3();
 const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
+const _meshPt = new THREE.Vector3();
+const _meshNrm = new THREE.Vector3();
+const _faceNormal = new THREE.Vector3();
+let _haveFaceNormal = false;
 
 /**
  * The collider for one Kaiju, as good as is available right now.
@@ -281,6 +286,7 @@ let groundTick = 0;
 
 export function stepGunfire(dt: number): void {
   groundTick++;
+  beginMeshHitFrame();
   let live = 0;
   const agents = getAgents();
 
@@ -321,20 +327,40 @@ export function stepGunfire(dt: number): void {
       let hitAny = false;
       for (const a of agents) {
         if (!a.alive) continue;
-        // Cheap reject: a round nowhere near this creature cannot have hit any part of it.
+        // BROAD PHASE. One sphere test to reject the rounds that are nowhere near this creature,
+        // so the exact test only runs when it can possibly matter.
         _centre.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
         if (_prev.distanceTo(_centre) > ARENA_HEIGHT * 2.5 + speed * dt) continue;
+
+        // THE REAL MESH, when there is one. Exact triangles in the pose being drawn, and the exact
+        // surface normal of the face struck — which is what makes both the spark position and the
+        // ricochet direction true rather than approximated. See kaijuMeshHit.
+        const mt = meshHit(a.id, _prev, b.pos, _meshPt, _meshNrm);
+        if (mt != null) {
+          if (mt < bestT) {
+            bestT = mt;
+            hitAny = true;
+            _nrm.copy(_meshPt);
+            _faceNormal.copy(_meshNrm);
+            _haveFaceNormal = true;
+          }
+          continue;
+        }
+        // A registered mesh that reported no hit means the round genuinely MISSED the creature.
+        // Falling through to the capsule here is what created the invisible wall: the capsule is an
+        // approximation and stops rounds the model never would.
+        if (hasHitMesh(a.id)) continue;
+
+        // No model loaded (or the frame's ray budget is spent): capsules, as before.
         for (const c of collidersFor(a, _caps)) {
           const t = shotHitsCapsule(_prev, b.pos, c, _hitTmp);
           if (t == null || t >= bestT) continue;
           bestT = t;
           hitAny = true;
-          // COPY the winning capsule. `_cap` is scratch shared by every agent, so holding a
-          // reference would mean computing the bounce off whichever creature happened to be checked
-          // last rather than off the one that was actually struck.
           _bestCap.a.copy(c.a); _bestCap.b.copy(c.b);
           _bestCap.radius = c.radius; _bestCap.part = c.part;
           _nrm.copy(_hitTmp);
+          _haveFaceNormal = false;
         }
       }
 
@@ -343,9 +369,16 @@ export function stepGunfire(dt: number): void {
         // Surface normal at the impact: straight out from the capsule's own axis. Two separate
         // vectors, because writing the impact point into the same one used for the axis point
         // subtracts it from itself and gives a normal of exactly zero.
-        closestOnSegment(_bestCap.a, _bestCap.b, _nrm, _axisPt);
-        const n = _norm2.copy(_nrm).sub(_axisPt);
-        if (n.lengthSq() < 1e-12) n.copy(_up); else n.normalize();
+        let n: THREE.Vector3;
+        if (_haveFaceNormal) {
+          // The triangle's own normal. A round striking a sloped shoulder deflects off that slope,
+          // which is the entire reason for doing this against the mesh rather than a cylinder.
+          n = _norm2.copy(_faceNormal);
+        } else {
+          closestOnSegment(_bestCap.a, _bestCap.b, _nrm, _axisPt);
+          n = _norm2.copy(_nrm).sub(_axisPt);
+          if (n.lengthSq() < 1e-12) n.copy(_up); else n.normalize();
+        }
         // The spark is created AFTER the normal exists, so it can be lifted off the skin at draw
         // time. Created before, it had no normal and there was nothing to lift it with.
         addSpark(_nrm, n, 'hide');

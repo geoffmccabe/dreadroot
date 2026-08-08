@@ -21,6 +21,7 @@ import {
   limbCapsules, torsoCapsule, bulletTorsoFrac, torsoRadiusFrac, type Capsule,
 } from './kaijuColliders';
 import { playerVisual } from './kaijuGunfire';
+import { hasHitMesh } from './kaijuMeshHit';
 
 let on = false;
 const listeners = new Set<() => void>();
@@ -112,11 +113,16 @@ function Outlines() {
       const height = lab ? lab.height : ARENA_HEIGHT;
       const type = lab ? lab.type : a.monsterType;
       // The SEPARATION capsule, dim red. Enormous on purpose and NOT a bullet target — drawing it
-      // is the whole point, because mistaking it for the hit shape is the error I keep making.
+      // is the whole point, because mistaking it for the hit shape is the error I kept making.
       draw(torsoCapsule(a.body.dir, a.body.radius, height, v.cap, torsoRadiusFrac), 0.35, 0.05, 0.05);
-      // What a bullet actually tests against.
-      draw(torsoCapsule(a.body.dir, a.body.radius, height, v.cap, bulletTorsoFrac(type)), 0.1, 1, 0.2);
-      for (const c of limbCapsules(a.id)) draw(c, 0.1, 0.9, 1);
+      // THE BULLET SHAPE. Once a model has loaded this is the MESH ITSELF — real triangles, in the
+      // pose being drawn — so there is nothing to outline and drawing a cylinder here would be a
+      // lie about what is being tested. Capsules appear only while a model is still loading, or
+      // headless, which is exactly when they are the shape in use.
+      if (!hasHitMesh(a.id)) {
+        draw(torsoCapsule(a.body.dir, a.body.radius, height, v.cap, bulletTorsoFrac(type)), 0.1, 1, 0.2);
+        for (const c of limbCapsules(a.id)) draw(c, 0.1, 0.9, 1);
+      }
     }
 
     L.geometry.setDrawRange(0, n);

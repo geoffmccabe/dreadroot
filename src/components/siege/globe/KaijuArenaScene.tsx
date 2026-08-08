@@ -30,6 +30,7 @@ import { getProjectiles } from './kaijuWeapons';
 import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { registerRig, unregisterRig, updateRigCapsules, rigLimbCount } from './kaijuColliders';
+import { registerHitMesh, unregisterHitMesh } from './kaijuMeshHit';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
 /** Clip preferences per gait, matching GlobeKaiju so both look the same. */
@@ -138,8 +139,10 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   // somewhere to put bullet impacts.
   useEffect(() => {
     registerRig(agent.id, model);
-    console.log(`[kaiju] ${agent.name} rig: ${rigLimbCount(agent.id)} limb capsules`);
-    return () => unregisterRig(agent.id);
+    // ...and the model ITSELF as the bullet collider. Triangles, in the pose being drawn.
+    registerHitMesh(agent.id, model);
+    console.log(`[kaiju] ${agent.name} rig: ${rigLimbCount(agent.id)} limb capsules, mesh collider on`);
+    return () => { unregisterRig(agent.id); unregisterHitMesh(agent.id); };
   }, [model, agent.id, agent.name]);
 
   useEffect(() => {

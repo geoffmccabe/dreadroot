@@ -14,6 +14,7 @@ import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
 import { nearestKaijuMetres, getAgents } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
+import { meshHitDiag } from './kaijuMeshHit';
 import { rigLimbCount } from './kaijuColliders';
 import { failedLayers } from './GlobeErrorBoundary';
 import { isKaijuWalkActive, subscribeKaijuWalk, cameraSubjectName, walkInputDiag } from './KaijuWalkController';
@@ -142,7 +143,9 @@ export function KaijuLabHud() {
           every bullet is hitting a plain cylinder, which is what this whole system did silently for
           weeks before anyone noticed. */}
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
-      {row('Limb colliders', `${getAgents().reduce((n, a) => n + rigLimbCount(a.id), 0)} on ${getAgents().length} Kaiju`)}
+      {row('Bullet collider', meshHitDiag.meshes > 0
+        ? `MESH on ${meshHitDiag.meshes} Kaiju (exact triangles)`
+        : 'capsules (no model loaded)')}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {/* THE INPUT CHAIN. Four links; whichever one is wrong is where the break is. */}
       {row('Keys held', walkInputDiag.typing

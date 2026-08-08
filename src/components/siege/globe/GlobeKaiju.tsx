@@ -43,6 +43,7 @@ import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
 import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules } from './kaijuColliders';
+import { registerHitMesh, unregisterHitMesh, hasHitMesh } from './kaijuMeshHit';
 import { setPlayerVisual } from './kaijuGunfire';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
@@ -118,12 +119,20 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   const rigBroken = useRef(false);
   const ensureRig = () => {
     const want = playerAgent()?.id ?? null;
-    if (want === rigId.current) return;
-    if (rigId.current) unregisterRig(rigId.current);
+    // Re-register if the mesh was dropped (fly mode drops it, because there the model is carried by
+    // the camera and its triangles are nowhere near the body). Checking rather than assuming, or
+    // coming back from fly mode would leave you permanently bullet-proof.
+    if (want === rigId.current) {
+      if (want && !hasHitMesh(want)) registerHitMesh(want, model);
+      return;
+    }
+    if (rigId.current) { unregisterRig(rigId.current); unregisterHitMesh(rigId.current); }
     rigId.current = want;
-    if (want) registerRig(want, model);
+    if (want) { registerRig(want, model); registerHitMesh(want, model); }
   };
-  useEffect(() => () => { if (rigId.current) { unregisterRig(rigId.current); rigId.current = null; } }, []);
+  useEffect(() => () => {
+    if (rigId.current) { unregisterRig(rigId.current); unregisterHitMesh(rigId.current); rigId.current = null; }
+  }, []);
   const gait = useRef<Gait>('glide');
   const current = useRef<THREE.AnimationAction | null>(null);
   const landTimer = useRef(0);
@@ -281,7 +290,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     // FLY MODE. The Kaiju is carried by the camera rather than simulated, so its body and its model
     // are in two different places — and the limb capsules captured in walk mode are still sitting in
     // world space where it used to stand. Left there they are invisible arms that stop bullets.
-    if (rigId.current) clearRigCapsules(rigId.current);
+    if (rigId.current) { clearRigCapsules(rigId.current); unregisterHitMesh(rigId.current); }
 
     // Place it relative to the CAMERA'S OWN axes, so it is always in frame.
     //
