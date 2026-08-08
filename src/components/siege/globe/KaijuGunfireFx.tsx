@@ -23,12 +23,13 @@
 // THREE.TextureLoader().load('/siege/fx/muzzle.webp') and nothing else in this file changes.
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import {
   getBullets, getSparks, stepGunfire, MUZZLE_LIFE, SPARK_LIFE,
 } from './kaijuGunfire';
+import { flushGunAudio, noteRicochet } from './kaijuGunAudio';
 
 /** Same ceilings as the pools, so a full pool can always be drawn. */
 const MAX_TRAILS = 1024;
@@ -146,6 +147,8 @@ export function KaijuGunfireFx() {
   const muzzles = useRef<THREE.Points>(null);
   const sparks = useRef<THREE.Points>(null);
 
+  const camera = useThree((s) => s.camera);
+  const listenDir = useMemo(() => new THREE.Vector3(), []);
   const star = useMemo(() => starSprite(), []);
   useEffect(() => () => star.dispose(), [star]);
 
@@ -166,6 +169,11 @@ export function KaijuGunfireFx() {
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
     stepGunfire(dt);
+    // The sim has just produced this frame's ricochets and the crowd has already offered its shots,
+    // so this is the one moment both lists are complete. Doing it here rather than at each firing
+    // point is what lets the audio pick the nearest few instead of playing everything.
+    camera.getWorldDirection(listenDir);
+    flushGunAudio(dt, camera.position, listenDir);
     clock.current += dt;
     const T = tracers.current, M = muzzles.current, S = sparks.current;
     if (!T || !M || !S) return;
@@ -216,7 +224,13 @@ export function KaijuGunfireFx() {
     }
 
     for (const sp of getSparks()) {
-      if (!sp.live || nS >= MAX_POINTS) continue;
+      if (!sp.live) continue;
+      // A spark that is one frame old is a strike that JUST happened, so this is where the ricochet
+      // sound is triggered. Reported from the renderer rather than from the simulation on purpose:
+      // the simulation must stay free of browser APIs or every headless check stops loading, which
+      // is exactly what happened the first time this was wired straight into the hit resolution.
+      if (sp.age <= dt && sp.kind === 'hide') noteRicochet(sp.pos);
+      if (nS >= MAX_POINTS) continue;
       const f = 1 - sp.age / SPARK_LIFE;
       const o = nS * 3;
       // LIFT IT OFF THE SURFACE. The capsule is an approximation of a limb, so a point exactly on

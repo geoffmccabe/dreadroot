@@ -121,7 +121,10 @@ export const meshHitDiag = { meshes: 0, testsThisFrame: 0, budgetHits: 0, tests:
  * this far — so the cap exists purely so that no future change can make this the frame budget.
  * Anything over it falls back to the capsule for that frame rather than being dropped.
  */
-const TESTS_PER_FRAME = 12;
+const TESTS_PER_FRAME = 48;
+
+/** Has this frame's ray budget been spent? The caller falls back to capsules rather than skipping. */
+export function meshBudgetLeft(): boolean { return meshHitDiag.testsThisFrame < TESTS_PER_FRAME; }
 
 export function beginMeshHitFrame(): void {
   meshHitDiag.testsThisFrame = 0;
@@ -161,9 +164,14 @@ export function meshHit(
   // three.js only refreshes world matrices during the render, which happens AFTER every frame
   // callback — so at the moment a bullet is resolved, the model's matrices and its bones still hold
   // the previous frame's values while the renderer has already written this frame's local
-  // transforms. Forcing the update costs a walk of a few dozen bones and makes the geometry tested
-  // exactly the geometry about to be drawn.
-  entry.root.updateMatrixWorld(true);
+  // transforms.
+  //
+  // updateWorldMatrix(PARENTS, children), not updateMatrixWorld. The first version used the latter,
+  // which starts at this object and multiplies by its parent's matrixWorld — and the parent is the
+  // group the renderer just moved, whose own matrixWorld is exactly as stale. So the model was
+  // faithfully updated against a stale ancestor and stayed a frame behind. Walking up first is the
+  // whole difference and it is one word.
+  entry.root.updateWorldMatrix(true, true);
 
   _raycaster.set(from, _dir);
   _raycaster.near = 0;

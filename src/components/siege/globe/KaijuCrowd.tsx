@@ -45,6 +45,7 @@ import {
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
+import { noteGunshot } from './kaijuGunAudio';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -479,6 +480,9 @@ function Crowd() {
       if (p.fireIn <= 0 && target && inRange(p.dir, target)) {
         p.fireIn = nextShotDelay();
         fireBullet(_muzzle, aimPoint(target, _aim));
+        // Offered, not played. The audio layer decides what is worth a voice once it can see all of
+        // this frame's shots at once — see kaijuGunAudio.
+        noteGunshot(_muzzle);
         // Play the firing animation from its first frame, so the recoil starts with the flash.
         if (f.shoot && !p.running) {
           p.shootFor = f.shoot.getClip().duration;

@@ -36,7 +36,7 @@ import {
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
-import { meshHit, hasHitMesh, beginMeshHitFrame } from './kaijuMeshHit';
+import { meshHit, hasHitMesh, beginMeshHitFrame, meshBudgetLeft } from './kaijuMeshHit';
 
 // The COSMETIC stream, never the simulation's. See the long note on fxRand: drawing scatter and
 // reload times from the shared seeded source silently changed who won the fight.
@@ -219,6 +219,7 @@ const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radi
 const _meshPt = new THREE.Vector3();
 const _meshNrm = new THREE.Vector3();
 const _faceNormal = new THREE.Vector3();
+const _broad: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
 let _haveFaceNormal = false;
 
 /**
@@ -337,29 +338,42 @@ export function stepGunfire(dt: number): void {
       let hitAny = false;
       for (const a of agents) {
         if (!a.alive) continue;
-        // BROAD PHASE. One sphere test to reject the rounds that are nowhere near this creature,
-        // so the exact test only runs when it can possibly matter.
+
+        // BROAD PHASE, AND IT HAS TO BE TIGHT.
+        //
+        // This was a point test at 750 m, which during sustained fire from a crowd standing 350 m
+        // away passes for DOZENS of rounds every frame — far more than the ray budget below allows.
+        // Everything past the budget was then skipped outright, so most rounds were never tested at
+        // all and simply flew through. That is Geoff's "they don't seem to hit the kaiju all the
+        // time", and it is why it looked random: which rounds got tested depended on the order they
+        // happened to sit in the pool.
+        //
+        // A SEGMENT test against a sphere that actually fits the creature (190 m for a 300 m body)
+        // passes for the one or two rounds a frame that could genuinely connect, which is what makes
+        // the budget irrelevant instead of load-bearing.
         _centre.copy(a.body.dir).multiplyScalar(a.body.radius + ARENA_HEIGHT * 0.5);
-        if (_prev.distanceTo(_centre) > ARENA_HEIGHT * 2.5 + speed * dt) continue;
+        _broad.a.copy(_centre); _broad.b.copy(_centre);
+        _broad.radius = ARENA_HEIGHT * 0.65;
+        if (shotHitsCapsule(_prev, b.pos, _broad, _hitTmp) == null) continue;
 
         // THE REAL MESH, when there is one. Exact triangles in the pose being drawn, and the exact
         // surface normal of the face struck — which is what makes both the spark position and the
         // ricochet direction true rather than approximated. See kaijuMeshHit.
-        const mt = meshHit(a.id, _prev, b.pos, _meshPt, _meshNrm);
-        if (mt != null) {
-          if (mt < bestT) {
+        const useMesh = hasHitMesh(a.id) && meshBudgetLeft();
+        if (useMesh) {
+          const mt = meshHit(a.id, _prev, b.pos, _meshPt, _meshNrm);
+          if (mt != null && mt < bestT) {
             bestT = mt;
             hitAny = true;
             _nrm.copy(_meshPt);
             _faceNormal.copy(_meshNrm);
             _haveFaceNormal = true;
           }
+          // A registered mesh that reported no hit means the round genuinely MISSED. Falling through
+          // to the capsule here is what built the invisible wall: a capsule is an approximation and
+          // stops rounds the model never would.
           continue;
         }
-        // A registered mesh that reported no hit means the round genuinely MISSED the creature.
-        // Falling through to the capsule here is what created the invisible wall: the capsule is an
-        // approximation and stops rounds the model never would.
-        if (hasHitMesh(a.id)) continue;
 
         // No model loaded (or the frame's ray budget is spent): capsules, as before.
         for (const c of collidersFor(a, _caps)) {

@@ -15,6 +15,7 @@ import { crowdDiag } from './KaijuCrowd';
 import { nearestKaijuMetres, getAgents, playerAgent } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
 import { meshHitDiag } from './kaijuMeshHit';
+import { gunAudioDiag } from './kaijuGunAudio';
 import { rigLimbCount } from './kaijuColliders';
 import { failedLayers } from './GlobeErrorBoundary';
 import { isKaijuWalkActive, subscribeKaijuWalk, cameraSubjectName, walkInputDiag } from './KaijuWalkController';
@@ -152,6 +153,7 @@ export function KaijuLabHud() {
           every bullet is hitting a plain cylinder, which is what this whole system did silently for
           weeks before anyone noticed. */}
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
+      {row('Gun audio', `${gunAudioDiag.played} heard / ${gunAudioDiag.offered} fired`)}
       {row('Bullet collider', meshHitDiag.meshes > 0
         ? `MESH x${meshHitDiag.meshes} — ${meshHitDiag.hits}/${meshHitDiag.tests} rays hit`
         : 'capsules (no model loaded)')}

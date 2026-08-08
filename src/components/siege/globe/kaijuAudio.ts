@@ -106,6 +106,26 @@ export async function playKaijuSound(
   listenerDir: THREE.Vector3,
   opts: { volume?: number; rate?: number; refUnits?: number; maxUnits?: number } = {},
 ): Promise<void> {
+  const buffer = await loadAudioBuffer(url);
+  if (buffer) playKaijuBuffer(buffer, worldPos, listenerPos, listenerDir, opts);
+}
+
+/**
+ * The same thing, from a buffer you already hold.
+ *
+ * Split out so a sound that is GENERATED rather than loaded gets the identical treatment —
+ * propagation delay, air absorption, 3D panning, the shared compressor. The rifle fire is
+ * synthesised (there is no US service-rifle sample in this project), and it would have been very
+ * easy to give it its own quietly different playback path and then spend a day wondering why one
+ * sound obeyed the speed of sound and another did not.
+ */
+export function playKaijuBuffer(
+  buffer: AudioBuffer,
+  worldPos: THREE.Vector3,
+  listenerPos: THREE.Vector3,
+  listenerDir: THREE.Vector3,
+  opts: { volume?: number; rate?: number; refUnits?: number; maxUnits?: number } = {},
+): void {
   const ctx = getAudioContext();
   if (!ctx) return;
 
@@ -114,9 +134,6 @@ export async function playKaijuSound(
   const delay = propagationDelay(distUnits);
   // Beyond about 25 km the delay is over a minute and the level is inaudible; do not schedule it.
   if (delay > 60) return;
-
-  const buffer = await loadAudioBuffer(url);
-  if (!buffer) return;
 
   const src = ctx.createBufferSource();
   src.buffer = buffer;
