@@ -27,6 +27,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
+import { fireSpriteSheet, fireMaterial } from './fireSprite';
 import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { registerRig, unregisterRig, updateRigCapsules, rigLimbCount } from './kaijuColliders';
@@ -277,92 +278,84 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   );
 }
 
-/** Every projectile as a single instanced draw, because the flamethrower emits a lot of them. */
+/**
+ * Every projectile, drawn as fire rather than as a pile of circles.
+ *
+ * Geoff: "they still look pathetically bad... not just a bunch of yellow circles."
+ *
+ * The old version was instanced SPHERES with a flat additive colour, and a sphere drawn additively
+ * is a disc — hard circular edge, no internal detail. A thousand of them is a thousand visible
+ * circles however many more you add. This is camera-facing quads carrying a flipbook of
+ * noise-generated flame masks (see fireSprite.ts): ragged silhouettes, lit interiors, sixteen
+ * different shapes, each spinning at its own rate.
+ *
+ * TWO PASSES, and both are needed. Hot fire is ADDITIVE, which is what makes overlapping flames
+ * build into a bright core the way real fire does. Smoke cannot be: additive black is invisible, so
+ * the cooling end of every particle is drawn again with normal blending. Two draw calls for the
+ * whole battlefield either way.
+ */
 function Projectiles() {
-  const mesh = useRef<THREE.InstancedMesh>(null);
-  // 1600, not 400. The flame alone keeps about 1000 alive; at 400 the jet was silently truncated
-  // to its first fraction, which is part of why it looked like a blob rather than a stream.
-  // One instanced draw either way — the cost is the buffer, not the count.
-  // 3000. A grenade throws 420 debris particles and several can be in the air at once; on top of
-  // ~1500 flame particles the old cap would have clipped the explosion away entirely.
+  // 3000: the flame alone keeps about 1500 alive and a grenade throws 420 debris particles.
   const MAX = 3000;
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const colour = useMemo(() => new THREE.Color(), []);
+  const sheet = useMemo(() => fireSpriteSheet(), []);
+  const hotMat = useMemo(() => fireMaterial(sheet, false), [sheet]);
+  const smokeMat = useMemo(() => fireMaterial(sheet, true), [sheet]);
+  useEffect(() => () => { sheet.dispose(); hotMat.dispose(); smokeMat.dispose(); }, [sheet, hotMat, smokeMat]);
+
+  const iPos = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3), []);
+  const iData = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4), []);
+
+  /**
+   * ONE geometry, shared by both passes.
+   *
+   * A plain quad with the per-particle attributes bolted on. InstancedMesh is not used because it
+   * insists on an instanceMatrix this shader has no use for — the billboarding happens in the
+   * vertex shader, so uploading 3000 unused 4x4 matrices every frame would be the most expensive
+   * thing in the effect.
+   */
+  const geom = useMemo(() => {
+    const quad = new THREE.PlaneGeometry(1, 1);
+    const g = new THREE.InstancedBufferGeometry();
+    g.index = quad.index;
+    g.setAttribute('position', quad.attributes.position);
+    g.setAttribute('uv', quad.attributes.uv);
+    g.setAttribute('iPos', iPos);
+    g.setAttribute('iData', iData);
+    g.instanceCount = 0;
+    // Never culled: the bounding sphere is computed from an empty buffer, so left on the whole
+    // effect vanishes the moment the camera is not looking at the planet's centre.
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), Infinity);
+    quad.dispose();
+    return g;
+  }, [iPos, iData]);
+  useEffect(() => () => geom.dispose(), [geom]);
 
   useFrame(() => {
-    const m = mesh.current;
-    if (!m) return;
     const list = getProjectiles();
     const n = Math.min(list.length, MAX);
+    const pos = iPos.array as Float32Array;
+    const dat = iData.array as Float32Array;
     for (let i = 0; i < n; i++) {
       const p = list[i];
-      dummy.position.copy(p.pos);
-
-      // FIRE GROWS AND COOLS. A flame ball that is one constant size and colour reads as a
-      // travelling pebble; real fire expands as it burns out and shifts white -> orange -> smoke.
-      // `age` runs 0 (just fired) to 1 (about to die).
-      const age = 1 - Math.max(0, Math.min(1, p.life / Math.max(0.01, p.maxLife)));
-      if (p.weapon === 'flame') {
-        // THE CONE IS MADE HERE, not by the firing spread.
-        //
-        // A 5-degree spread alone gives a narrow straight jet; what turns it into a cone is each
-        // particle GROWING as it burns. Tight at the mouth, eight times wider by the tip — which
-        // is how a real flame jet looks and is far cheaper than emitting a wider spread and
-        // hoping the shape falls out.
-        // Each stream stays a THREAD: much less growth than a single cone needed, because the
-        // shape now comes from six separate jets rather than from one particle fanning out.
-        dummy.scale.setScalar(p.size * (0.55 + age * age * 2.6));
-        // White-hot at the mouth, orange through the body, dim red smoke as it dies. Squaring the
-        // fade keeps the core bright much longer, so the jet has a hot centre and a cooling tail
-        // rather than a uniform wash.
-        // YELLOW into ORANGE, not white into red. Bright yellow at the mouth, orange through the
-        // body, dim red as it dies — which is the palette of burning gas rather than of a spark.
-        colour.setRGB(
-          1.0,
-          0.88 - age * 0.55,
-          0.30 - age * 0.28,
-        ).multiplyScalar(Math.max(0.06, 1 - age * age * 0.9));
-      } else if (p.visual === 'blast') {
-        // EXPLOSION DEBRIS. Each fragment expands as it burns and cools through the same sequence
-        // a real fireball does: white-hot, orange, then dark smoke that lingers. Because the sizes
-        // and lifetimes were drawn from a wide range, the cloud has fast bright motes tearing
-        // outward and slow dark chunks still tumbling long after — which is what makes it read as
-        // enormous rather than as a firework.
-        dummy.scale.setScalar(p.size * (1 + age * 2.2));
-        if (age < 0.28) {
-          const u = age / 0.28;                       // white-hot core, very brief
-          colour.setRGB(1, 0.95 - u * 0.12, 0.72 - u * 0.42);
-        } else {
-          const u = (age - 0.28) / 0.72;              // orange fire into cooling smoke
-          colour.setRGB(1 - u * 0.82, 0.83 - u * 0.72, 0.30 - u * 0.22)
-            .multiplyScalar(Math.max(0.08, 1 - u * u * 0.85));
-        }
-      } else {
-        dummy.scale.setScalar(p.size);
-        colour.setRGB(p.colour[0], p.colour[1], p.colour[2]);
-      }
-      dummy.updateMatrix();
-      m.setMatrixAt(i, dummy.matrix);
-      m.setColorAt(i, colour);
+      const o3 = i * 3, o4 = i * 4;
+      pos[o3] = p.pos.x; pos[o3 + 1] = p.pos.y; pos[o3 + 2] = p.pos.z;
+      // age 0 (just fired) to 1 (about to die).
+      dat[o4] = 1 - Math.max(0, Math.min(1, p.life / Math.max(1e-4, p.maxLife)));
+      dat[o4 + 1] = p.size;
+      dat[o4 + 2] = p.seed;
+      dat[o4 + 3] = p.visual === 'blast' ? 1 : 0;
     }
-    m.count = n;
-    m.instanceMatrix.needsUpdate = true;
-    if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    geom.instanceCount = n;
+    iPos.needsUpdate = true;
+    iData.needsUpdate = true;
   });
 
   return (
-    // Additive and depth-write off: overlapping flame particles accumulate into a bright core the
-    // way fire does, instead of showing every sphere's silhouette as a hard edge.
-    <instancedMesh ref={mesh} args={[undefined, undefined, MAX]} frustumCulled={false}>
-      <sphereGeometry args={[1, 10, 8]} />
-      <meshBasicMaterial
-        toneMapped={false}
-        transparent
-        opacity={0.85}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-      />
-    </instancedMesh>
+    <>
+      {/* Hot fire first, then the smoke over it. */}
+      <mesh geometry={geom} material={hotMat} frustumCulled={false} renderOrder={8} />
+      <mesh geometry={geom} material={smokeMat} frustumCulled={false} renderOrder={9} />
+    </>
   );
 }
 

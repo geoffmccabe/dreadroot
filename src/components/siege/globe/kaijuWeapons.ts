@@ -145,6 +145,15 @@ export interface Projectile {
   visual: WeaponId | 'blast';
   /** Flame only: has this particle touched the ground and started flowing along it? */
   grounded?: boolean;
+  /**
+   * A stable 0..1 value, fixed at birth.
+   *
+   * The renderer uses it to pick which flame shape this particle is and how fast it spins. It has to
+   * be STORED rather than derived from the position, which was the first attempt: a particle moves
+   * every frame, so a position-derived seed changes every frame, and the particle would strobe
+   * through all sixteen flipbook frames instead of drifting through them.
+   */
+  seed: number;
 }
 
 // --- burning terrain -----------------------------------------------------------------------------
@@ -244,7 +253,7 @@ function stepGroundFires(dt: number): void {
         colour: spec.colour,
         size: f.size * (0.8 + rand() * 0.8),
         dead: false,
-        visual: 'flame',
+        visual: 'flame', seed: rand(),
         grounded: true,
       });
     }
@@ -320,7 +329,7 @@ export function fireWeapon(
       colour: w.colour,
       size: w.size * heightUnits,
       dead: false,
-      visual: weapon,
+      visual: weapon, seed: rand(),
     });
   }
 }
@@ -563,7 +572,7 @@ export function spawnExplosion(at: THREE.Vector3, radiusUnits: number, count = 4
       colour: [1, 0.8, 0.35],
       size: radiusUnits * (0.02 + bigness * 0.20),
       dead: false,
-      visual: 'blast',
+      visual: 'blast', seed: rand(),
     });
   }
 }
