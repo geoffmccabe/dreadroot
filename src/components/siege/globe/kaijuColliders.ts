@@ -100,6 +100,19 @@ export function updateRigCapsules(id: string, heightUnits: number): void {
   }
 }
 
+/**
+ * Drop an agent's limb capsules without forgetting its rig.
+ *
+ * For when the model is no longer being posed where the capsules say it is. They are world-space
+ * positions captured from a pose, so the instant something stops refreshing them they become solid
+ * shapes floating wherever the creature USED to be — an arm hanging in the air that bullets bounce
+ * off. Better to have no limbs than limbs somewhere else.
+ */
+export function clearRigCapsules(id: string): void {
+  const rig = rigs.get(id);
+  if (rig) rig.capsules.length = 0;
+}
+
 /** The limb capsules for an agent, or an empty list if it has no model (headless). */
 export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsules ?? []; }
 

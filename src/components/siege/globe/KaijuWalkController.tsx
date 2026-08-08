@@ -119,6 +119,7 @@ export const walkInputDiag = {
   moveSpeed: 0,
   freeCam: false,
   typing: false,
+  walking: false,
 };
 
 let walkActive = false;
@@ -216,6 +217,7 @@ export function KaijuWalkController() {
   const feet = useRef(new THREE.Vector3());
   const want = useRef(new THREE.Vector3());
   const target = useRef(new THREE.Vector3());
+  const localUp = useRef(new THREE.Vector3());
   /** The VIEW heading: the steering heading plus the alt-drag glance. Never fed back into steering. */
   const view = useRef(new THREE.Vector3());
 
@@ -249,8 +251,18 @@ export function KaijuWalkController() {
         e.preventDefault();
         return;
       }
-      if (!walkActive) return;
-      if (e.code === 'KeyV') { firstPerson.current = !firstPerson.current; haveCam.current = false; e.preventDefault(); return; }
+      // KEYS ARE RECORDED IN BOTH MODES NOW.
+      //
+      // THIS IS THE "WASD DOES NOTHING" BUG, and it is not a regression — it is a hole that has
+      // always been here. This handler used to bail whenever walk mode was off, so in FLY mode the
+      // keys were never even recorded. And nothing else moves you on this map either: the shared
+      // FortressControls mover is built for a flat world, its ground sampler returns nothing on a
+      // sphere, and its own comment says so. So on the globe, out of walk mode, WASD was wired to
+      // literally nothing. Below, fly mode now flies the camera with the same code the detached
+      // camera uses.
+      if (e.code === 'KeyV' && walkActive) {
+        firstPerson.current = !firstPerson.current; haveCam.current = false; e.preventDefault(); return;
+      }
       // TAB — watch the next Kaiju. Wraps back to your own, so it is never a dead end.
       if (e.code === 'Tab') {
         const n = Math.max(1, getAgents().length);
@@ -285,6 +297,16 @@ export function KaijuWalkController() {
     // MIDDLE BUTTON: drag to pan the camera off the subject, click (no drag) to snap back.
     const panning = { on: false, moved: 0 };
     const mouseDown = (e: MouseEvent) => {
+      // CLICKING THE WORLD GIVES THE KEYBOARD BACK.
+      //
+      // The command panel's text box keeps focus once clicked, and a focused text box swallows
+      // every movement key by design — permanently, silently, with nothing on screen to say why.
+      // Clicking back into the 3D view plainly means "I am done typing", and every game treats it
+      // that way; this one did not, so the controls simply stopped working and stayed stopped.
+      if ((e.target as HTMLElement | null)?.tagName === 'CANVAS') {
+        const el = document.activeElement as HTMLElement | null;
+        if (el && el.tagName !== 'CANVAS' && el.tagName !== 'BODY') el.blur?.();
+      }
       if (!walkActive) return;
       if (e.button === 2) { dragging.on = true; dragging.alt = e.altKey; }
       if (e.button === 1) { panning.on = true; panning.moved = 0; e.preventDefault(); }
@@ -380,8 +402,74 @@ export function KaijuWalkController() {
     };
   }, [camera]);
 
+  /**
+   * FLY THE CAMERA. Used by fly mode and by the C-detached camera, which are the same behaviour.
+   *
+   * Written once and shared deliberately. Two camera movers with their own rules is the exact
+   * failure this file was created to end, and the Grand Canyon "second camera" is what it cost the
+   * last time: it could not be orbited, its ground clamp measured the wrong ground, and its aim was
+   * overwritten every frame by the chase code.
+   */
+  const flyCamera = (dt: number) => {
+    const k = keys.current;
+    const h = getKaijuLab().height;
+    const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
+    const right = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
+    const rise = (k.has('Space') ? 1 : 0) - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
+    const running = k.has('ShiftLeft') || k.has('ShiftRight');
+
+    if (!haveCam.current) { camPos.current.copy(camera.position); haveCam.current = true; }
+    if (camPos.current.lengthSq() < 1e-6) camPos.current.copy(camera.position);
+    localUp.current.copy(camPos.current).normalize();
+
+    // The heading, then pitched. Same two dials the orbit camera uses, so flying does not feel like
+    // a different game.
+    if (!haveFwd.current) { camFwd.current.copy(body.forward); haveFwd.current = true; }
+    if (pendingYaw.current !== 0) {
+      camFwd.current.applyAxisAngle(localUp.current, pendingYaw.current);
+      pendingYaw.current = 0;
+    }
+    camFwd.current.addScaledVector(localUp.current, -camFwd.current.dot(localUp.current)).normalize();
+    steer.current.copy(camFwd.current).multiplyScalar(Math.cos(orbitPitch.current))
+      .addScaledVector(localUp.current, -Math.sin(orbitPitch.current)).normalize();
+    camRight.current.crossVectors(steer.current, localUp.current).normalize();
+
+    // Speed scales with height above the GROUND, so the same key crosses a battlefield from up high
+    // and creeps between two Kaiju down low. Measured against the ground, never against sea level —
+    // that mistake has cost this project a day twice already.
+    const cd = camPos.current.clone().normalize();
+    const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
+    const floor = PLANET_RADIUS + (gm ?? 0) / METRES_PER_UNIT;
+    const overGround = Math.max(h * 0.4, camPos.current.length() - floor);
+    const speed = overGround * (running ? 2.4 : 0.8);
+
+    if (fwd !== 0 || right !== 0 || rise !== 0) {
+      camPos.current
+        .addScaledVector(steer.current, fwd * speed * dt)
+        .addScaledVector(camRight.current, right * speed * dt)
+        .addScaledVector(localUp.current, rise * speed * dt);
+    }
+    // Never underground, measured where the CAMERA is.
+    if (gm != null) {
+      const clear = floor + CAM_CLEAR_METRES / METRES_PER_UNIT;
+      if (camPos.current.length() < clear) camPos.current.setLength(clear);
+    }
+
+    camera.position.copy(camPos.current);
+    camera.up.copy(localUp.current);
+    camera.lookAt(target.current.copy(camera.position).addScaledVector(steer.current, h * 8));
+  };
+
   useFrame((_, rawDt) => {
-    if (!walkActive) return;
+    // Reported before anything can return, or the readout goes stale exactly when it is needed.
+    walkInputDiag.keys = [...keys.current].map((c) => c.replace('Key', '').replace('Digit', '')).join(' ');
+    walkInputDiag.moveSpeed = body.moveSpeed;
+    walkInputDiag.freeCam = freeCam;
+    walkInputDiag.walking = walkActive;
+
+    // FLY MODE FLIES THE CAMERA. Same dials, same code path as the detached camera; the only
+    // difference is that nothing is being followed.
+    if (!walkActive) { flyCamera(Math.min(rawDt, 0.05)); return; }
     if (pendingEnter) { pendingEnter = false; haveCam.current = false; haveFwd.current = false; resetWalkZoom(); }
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
@@ -399,10 +487,6 @@ export function KaijuWalkController() {
       setWalkZoom(Math.hypot(distUnits, eyeUnits) / Math.max(1e-4, h * CAM_ORBIT));
       haveCam.current = false;                       // snap, do not sail in from the old position
     }
-
-    walkInputDiag.keys = [...k].map((c) => c.replace('Key', '').replace('Digit', '')).join(' ');
-    walkInputDiag.moveSpeed = body.moveSpeed;
-    walkInputDiag.freeCam = freeCam;
 
     const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
     const right = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
@@ -428,44 +512,7 @@ export function KaijuWalkController() {
     // dives. Held, not edge-triggered, because swimming up is continuous.
     const up = (k.has('Space') ? 1 : 0) - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
 
-    // --- FREE CAMERA ----------------------------------------------------------------------------
-    //
-    // The camera flies and NOTHING drives the Kaiju. Deliberately an early return rather than a
-    // flag threaded through the orbit code below: two movers arguing over one camera is the exact
-    // failure this file was written to stop, and the cleanest way to have two behaviours is for
-    // only one of them to run.
-    if (freeCam) {
-      camRight.current.crossVectors(camFwd.current, camera.position).normalize();
-      // Look direction = the heading, pitched. Same two dials the orbit uses, so C does not feel
-      // like a different game.
-      steer.current.copy(camFwd.current)
-        .multiplyScalar(Math.cos(orbitPitch.current))
-        .addScaledVector(camPos.current.clone().normalize(), -Math.sin(orbitPitch.current))
-        .normalize();
-      // Speed scales with altitude above the ground, so the same stick crosses a battlefield from
-      // up high and creeps between two Kaiju from down low.
-      const overGround = Math.max(h * 0.5, camera.position.length() - body.radius);
-      const flySpeed = overGround * (running ? 2.2 : 0.7);
-      if (fwd !== 0 || right !== 0) {
-        camPos.current
-          .addScaledVector(steer.current, fwd * flySpeed * dt)
-          .addScaledVector(camRight.current, right * flySpeed * dt);
-      }
-      if (up !== 0) camPos.current.addScaledVector(camPos.current.clone().normalize(), up * flySpeed * dt);
-      // Never underground, measured where the CAMERA is — the same rule the orbit obeys.
-      {
-        const cd = camPos.current.clone().normalize();
-        const gm = sampleGlobeSurface(cd.x, cd.y, cd.z);
-        if (gm != null) {
-          const floor = PLANET_RADIUS + gm / METRES_PER_UNIT + CAM_CLEAR_METRES / METRES_PER_UNIT;
-          if (camPos.current.length() < floor) camPos.current.setLength(floor);
-        }
-      }
-      camera.position.copy(camPos.current);
-      camera.up.copy(camPos.current).normalize();
-      camera.lookAt(target.current.copy(camera.position).addScaledVector(steer.current, h * 8));
-      return;
-    }
+    if (freeCam) { flyCamera(dt); return; }
 
     stepBody(dt, fwd, right, jump && !body.submerged, running, h, desired, up);
     if (jump && !body.submerged) k.delete('Space');   // edge-trigger the jump only

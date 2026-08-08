@@ -42,7 +42,7 @@ import { resolveGait } from './kaijuClips';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
-import { registerRig, unregisterRig, updateRigCapsules } from './kaijuColliders';
+import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules } from './kaijuColliders';
 import { setPlayerVisual } from './kaijuGunfire';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
@@ -277,6 +277,11 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       g.scale.set(baseScale, baseScale * squash, baseScale);
       return;
     }
+
+    // FLY MODE. The Kaiju is carried by the camera rather than simulated, so its body and its model
+    // are in two different places — and the limb capsules captured in walk mode are still sitting in
+    // world space where it used to stand. Left there they are invisible arms that stop bullets.
+    if (rigId.current) clearRigCapsules(rigId.current);
 
     // Place it relative to the CAMERA'S OWN axes, so it is always in frame.
     //

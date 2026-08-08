@@ -148,7 +148,9 @@ export function KaijuLabHud() {
       {row('Keys held', walkInputDiag.typing
         ? 'NONE — A TEXT BOX HAS FOCUS'
         : (walkInputDiag.keys || '-'))}
-      {row('Move speed', `${(walkInputDiag.moveSpeed * 100).toFixed(1)} m/s`)}
+      {row('Move speed', walkInputDiag.walking
+        ? `${(walkInputDiag.moveSpeed * 100).toFixed(1)} m/s`
+        : 'flying (WASD moves the camera)')}
       {row('Camera on', cameraSubjectName())}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}
@@ -159,7 +161,7 @@ export function KaijuLabHud() {
       <div style={{ marginTop: 6, opacity: 0.65, lineHeight: 1.5 }}>
         [ ] cycle · - = size ({Math.round(SCALE_STEP * 100)}%) · 0 reset<br />
         , . fly to landmark · K LAND (starts walking) · G toggle · V view<br />
-        WASD move · Shift run<br />
+        WASD move (flies the camera out of walk mode) · Shift run<br />
         Space jump / swim up · Z swim down<br />
         <b>TAB</b> watch next Kaiju · <b>C</b> free camera · <b>MIDDLE-drag</b> pan (click = centre)<br />
         <b>ALT+right-drag</b> look without turning
