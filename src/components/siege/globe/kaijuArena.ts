@@ -31,6 +31,7 @@ import {
   type KaijuBuild, type DerivedStats,
 } from './kaijuStats';
 import { seedKaiju, rand } from './kaijuRandom';
+import { queueStrike, stepStrikeQueue } from './kaijuImpact';
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
   torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac,
@@ -192,6 +193,7 @@ const _tmp = new THREE.Vector3();
 const _aim = new THREE.Vector3();
 const _fwd = new THREE.Vector3();
 const _kb = new THREE.Vector3();
+const _hitAt = new THREE.Vector3();
 const _axis = new THREE.Vector3();
 
 /**
@@ -670,6 +672,23 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
       // Heavy blows also interrupt: a staggered Kaiju cannot act for a moment, which is what
       // makes a melee exchange read as a real trade rather than two loops running side by side.
       if (share > 0.5 && h.weapon === 'melee') t.stagger = Math.max(t.stagger, 0.7);
+
+      // ...AND THE SKELETON FEELS IT. Geoff: "he swipes and hits me but it passes right through."
+      //
+      // It did, and this line is why: the knockback above is zeroed every tick for the body the
+      // player is driving, on purpose, because being shoved by physics you did not initiate reads
+      // as broken controls. So a blow landed, took health, and moved nothing at all.
+      //
+      // A skeletal flinch has no such problem — it bends the creature without moving it, so it
+      // costs the player no control and applies to everyone equally. Contact is taken at the
+      // attacker's own reach rather than at either centre, so the bend radiates from where the arm
+      // actually arrived. See kaijuImpact.
+      queueStrike(
+        t.id,
+        _hitAt.copy(centreOf(src, new THREE.Vector3()))
+          .addScaledVector(_kb, ARENA_HEIGHT * WEAPONS.melee.rangeBodies * 0.8),
+        _kb, share,
+      );
     }
 
     // SET ALIGHT. Flame is the only weapon that keeps hurting after it stops touching you, which
@@ -695,6 +714,8 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
 export function stepArena(dt: number, playerControlled: boolean): void {
   if (!started) return;
   clock += dt;
+  // Age blows that are waiting for a renderer to pick them up. One owner, once a tick.
+  stepStrikeQueue(dt);
 
   // PROCESS AGENTS IN A SHUFFLED ORDER.
   //

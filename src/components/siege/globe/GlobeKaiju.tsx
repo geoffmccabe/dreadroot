@@ -45,6 +45,7 @@ import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
 import { sampleGlobeNormal } from './globeGround';
 import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules, setPlayerVisual } from './kaijuColliders';
 import { registerHitMesh, unregisterHitMesh, hasHitMesh } from './kaijuMeshHit';
+import { consumeStrikes, applySkeletonImpact, bodyLean } from './kaijuImpact';
 
 
 /** Model-local X, the axis a body topples about when it falls forward. */
@@ -129,6 +130,15 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   // a fresh set of agents. A one-shot registration at mount would bind to whatever the id was then,
   // which is usually nothing at all.
   const rigId = useRef<string | null>(null);
+  const _lean = useRef(new THREE.Vector3());
+  const _leanQ = useRef(new THREE.Quaternion());
+  /** Every bone, gathered when the model changes — the impact springs live on these. */
+  const impactBones = useRef<THREE.Object3D[]>([]);
+  useEffect(() => {
+    const bs: THREE.Object3D[] = [];
+    model.traverse((o) => { if ((o as THREE.Bone).isBone) bs.push(o); });
+    impactBones.current = bs;
+  }, [model]);
   const deathNrm = useRef(new THREE.Vector3());
   const deathFwd = useRef(new THREE.Vector3());
   const deathSide = useRef(new THREE.Vector3());
@@ -268,6 +278,17 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
         g.scale.setScalar(h / Math.max(0.01, modelHeight));
         if (rigId.current) clearRigCapsules(rigId.current);
         return;
+      }
+
+      // THE FLINCH. Geoff: "he swipes and hits me but it passes right through." Your knockback is
+      // deliberately zeroed — being shoved by physics you did not initiate reads as broken controls
+      // — so a blow moved nothing at all. A skeletal bend costs you no control and still lands.
+      if (impactBones.current.length && rigId.current) {
+        consumeStrikes(rigId.current, impactBones.current, h);
+        applySkeletonImpact(rigId.current, impactBones.current, dt, h, state.baseHeight * 100);
+        const lean = bodyLean(rigId.current, _lean.current);
+        const la = lean.length();
+        if (la > 1e-5) g.quaternion.multiply(_leanQ.current.setFromAxisAngle(lean.divideScalar(la), la));
       }
 
       // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.

@@ -31,6 +31,7 @@ import { fireSpriteSheet, fireMaterial } from './fireSprite';
 import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
 import { registerRig, unregisterRig, updateRigCapsules, rigLimbCount } from './kaijuColliders';
+import { consumeStrikes, applySkeletonImpact, bodyLean } from './kaijuImpact';
 import { registerHitMesh, unregisterHitMesh } from './kaijuMeshHit';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
@@ -129,6 +130,10 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const basis = useRef(new THREE.Matrix4());
   const footLift = useRef(0);
   const _normal = useRef(new THREE.Vector3());
+  const _lean = useRef(new THREE.Vector3());
+  const _leanQ = useRef(new THREE.Quaternion());
+  /** Every bone in this Kaiju, gathered once — the impact springs live on these. */
+  const impactBones = useRef<THREE.Object3D[]>([]);
   const _tip = useRef(new THREE.Quaternion());
   // THE LIMB COLLIDERS, FINALLY CONNECTED.
   //
@@ -139,6 +144,9 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   // animated bones each frame" described something that did not happen. Found while looking for
   // somewhere to put bullet impacts.
   useEffect(() => {
+    const bs: THREE.Object3D[] = [];
+    model.traverse((o) => { if ((o as THREE.Bone).isBone) bs.push(o); });
+    impactBones.current = bs;
     registerRig(agent.id, model);
     // ...and the model ITSELF as the bullet collider. Triangles, in the pose being drawn.
     registerHitMesh(agent.id, model);
@@ -175,6 +183,18 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     trueF.current.copy(b.forward).normalize();
     basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
+
+    // THE FLINCH, before anything reads the pose. A blow bends the skeleton away from where it
+    // landed and springs it back; the walk keeps running underneath. Applied here because the mixer
+    // has just overwritten every bone from the clip, and this multiplies on top of that — do it
+    // earlier and the clip erases it, later and the colliders read a pose the screen never showed.
+    if (impactBones.current.length) {
+      consumeStrikes(agent.id, impactBones.current, ARENA_HEIGHT);
+      applySkeletonImpact(agent.id, impactBones.current, dt, ARENA_HEIGHT, naturalMetres);
+      const lean = bodyLean(agent.id, _lean.current);
+      const a = lean.length();
+      if (a > 1e-5) g.quaternion.multiply(_leanQ.current.setFromAxisAngle(lean.divideScalar(a), a));
+    }
 
     // Re-read the limb capsules from the pose the mixer just produced. It has to happen HERE, after
     // the group is placed and before any of the early returns below, or a Kaiju that is swinging or
