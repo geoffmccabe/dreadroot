@@ -26,6 +26,8 @@
     "check:globe-transect": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-globe-transect.ts",
     "check:model-feet": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-model-feet.ts",
     "check:player-collision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-player-collision.ts",
+    "check:kaiju-gunfire": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-gunfire.ts",
+    "check:limb-bones": "node scripts/check-limb-bones.mjs",
     "bench:ground-sample": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-ground-sample.ts",
     "check:lod-seam": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-lod-seam.ts",
     "probe:canyon-sites": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/probe-canyon-sites.ts",

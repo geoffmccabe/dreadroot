@@ -125,26 +125,51 @@ export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsu
  * 0.92 apart with a combined reach of 1.23 means about 94 m of arm passing through the other one's
  * body, which at this scale reads exactly as Geoff's "the Kaiju just walk through each other".
  *
- * THE CEILING IS NOT THE MELEE HIT TEST. I claimed it was, and that was wrong: the hit test allows
- * the attacker's 0.9-body reach PLUS the target's radius, so it permits r up to 0.9. The real
- * ceiling is the behaviour tree's InMeleeRange gate, which only lets an agent swing when the target
- * is within melee range + 0.4 = 1.3 bodies. Two colliders touching sit 2r apart, so r > 0.65 means
- * an AI can never get close enough to decide to attack at all — the fight would silently stop.
+ * WHAT WAS HOLDING IT AT 0.60, AND WHY THAT WAS THE WRONG THING TO OBEY.
  *
- * 0.60 sits below that with room to spare: 1.20 apart, inside the 1.3 gate. It roughly halves the
- * limb overlap rather than eliminating it. Eliminating it needs per-limb capsules — kaijuColliders
- * already builds them, but separation still resolves torso-to-torso — and that is the real answer
- * to "ideally they match to the arms, legs, head, etc". This is the honest partial fix.
+ * The ceiling was set by the behaviour tree's InMeleeRange gate — an agent may only swing when the
+ * target is inside `melee range + 0.4` = 1.3 bodies. Two colliders touching sit 2r apart, so r above
+ * 0.65 meant an AI could never get close enough to DECIDE to attack and the fight would silently
+ * stop happening. 0.60 obeyed that, and left about 52 m of arm passing through the other creature.
+ *
+ * But that 0.4 was a hand-written constant that knew nothing about the collider it was constraining.
+ * Two numbers in two files, one of them quietly deciding how wide a Kaiju is allowed to be. The gate
+ * is now DERIVED from this value (see MELEE_GATE_BODIES below), so the real ceiling is the one that
+ * was always the true physical limit: the melee HIT test, which allows the attacker's 0.9-body reach
+ * plus the target's radius, and therefore permits r up to 0.9.
+ *
+ * 0.70 is what the models actually measure. Full bone reach — arms included, which is what a viewer
+ * sees overlapping — is 0.548 x height on the Red Demon and 0.686 on the golems. Two golems held
+ * 1.40 apart with a combined reach of 1.372 do not touch AT ALL: the arm overlap is gone rather than
+ * halved, which is the first time that has been true. The Red Demon has 30% clearance on top.
+ *
+ * This is a JUDGEMENT, and it is worth saying which way: it errs toward "they keep their distance"
+ * over "they clip through each other", because 210 m of arm inside another creature is unmissable
+ * and a slightly wide stance is not. If they now read as standing too far apart, this one number is
+ * the entire fix.
  */
-const TORSO_FRAC = 0.60;
+const TORSO_FRAC = 0.70;
 
 /**
- * The widest this may go before the AI stops being able to reach anything.
+ * The widest this may go before a swing can no longer reach a touching target.
  *
- * Kept next to the value it constrains, and asserted in check-player-collision, because the two
- * numbers live in different files and the failure mode is silent: combat simply stops happening.
+ * Now the genuine physical limit rather than a second constant's opinion: at contact two bodies are
+ * 2r apart and a swing reaches rangeBodies (0.9) + r, so combat survives while r < 0.9. Kept next to
+ * the value it constrains and asserted in check-player-collision, because the failure mode is
+ * silent — the Kaiju simply stop fighting and nothing anywhere says why.
  */
-export const TORSO_FRAC_CEILING = 0.65;
+export const TORSO_FRAC_CEILING = 0.80;
+
+/**
+ * How close an AI must get before it will decide to attack, in body heights.
+ *
+ * DERIVED, not chosen. It must always be a little further than two colliders touching, or widening
+ * the collider silently switches combat off — which is exactly the trap the previous hardcoded 1.3
+ * set. The 0.06 is one-off slack so an agent whose target drifts a few metres does not flicker in
+ * and out of the decision every frame.
+ */
+export const MELEE_GATE_BODIES = (meleeRangeBodies: number): number =>
+  Math.max(meleeRangeBodies + 0.4, TORSO_FRAC * 2 + 0.06);
 
 /**
  * The always-available torso capsule: feet to shoulders, up the body's own local up.
@@ -206,4 +231,80 @@ export function capsuleOverlap(a: Capsule, b: Capsule, axis: THREE.Vector3): num
 export function pointToCapsule(p: THREE.Vector3, c: Capsule): number {
   closestOnSegment(c.a, c.b, p, _p1);
   return _p1.distanceTo(p) - c.radius;
+}
+
+// --- BULLETS ------------------------------------------------------------------------------------
+//
+// A rifle bullet is a SEGMENT, not a point, so hitting a Kaiju with one is a segment-vs-capsule
+// question rather than the point-vs-capsule test above.
+//
+// WHY NOT A REAL MESH COLLIDER. three-mesh-bvh is already a dependency and would give exact
+// per-triangle hits — on a STATIC mesh. A Kaiju is a skinned mesh: its triangles only exist in the
+// pose after skinning, which happens on the GPU. Testing against them on the CPU means re-skinning
+// every vertex each frame and refitting the BVH, for every Kaiju, forever. That is the single most
+// expensive thing this scene could do, and it buys nothing visible: at 300 m tall a spark placed on
+// the surface of an arm-shaped capsule and a spark placed on the exact triangle of that arm are the
+// same handful of pixels. So the collider is the SKELETON — capsules that follow the real animated
+// bones — which is what shipped games do for exactly this reason.
+
+const _d1 = new THREE.Vector3();
+const _d2 = new THREE.Vector3();
+const _r = new THREE.Vector3();
+
+/**
+ * Closest approach between two segments. Returns the distance; writes the parameter along the first
+ * segment into `outT` (index 0) so a caller can work out WHERE along a bullet's flight it happened.
+ *
+ * The standard clamped solution — the degenerate cases (either segment a point, the two parallel)
+ * matter here because a bullet fired point-blank and a limb capsule can both collapse.
+ */
+export function segmentDistance(
+  p0: THREE.Vector3, p1: THREE.Vector3, q0: THREE.Vector3, q1: THREE.Vector3, outT: Float64Array,
+): number {
+  _d1.copy(p1).sub(p0);
+  _d2.copy(q1).sub(q0);
+  _r.copy(p0).sub(q0);
+  const a = _d1.dot(_d1), e = _d2.dot(_d2), f = _d2.dot(_r);
+  let s = 0, t = 0;
+  if (a < 1e-12 && e < 1e-12) { outT[0] = 0; return _r.length(); }
+  if (a < 1e-12) { t = Math.min(1, Math.max(0, f / e)); }
+  else {
+    const c = _d1.dot(_r);
+    if (e < 1e-12) { s = Math.min(1, Math.max(0, -c / a)); }
+    else {
+      const b = _d1.dot(_d2);
+      const denom = a * e - b * b;
+      s = denom > 1e-12 ? Math.min(1, Math.max(0, (b * f - c * e) / denom)) : 0;
+      t = (b * s + f) / e;
+      if (t < 0) { t = 0; s = Math.min(1, Math.max(0, -c / a)); }
+      else if (t > 1) { t = 1; s = Math.min(1, Math.max(0, (b - c) / a)); }
+    }
+  }
+  outT[0] = s;
+  _p1.copy(p0).addScaledVector(_d1, s);
+  _p2.copy(q0).addScaledVector(_d2, t);
+  return _p1.distanceTo(_p2);
+}
+
+const _tOut = new Float64Array(1);
+
+/**
+ * Where a bullet fired from `from` to `to` first meets a capsule, or null if it misses.
+ *
+ * Writes the ENTRY point — the near surface — into `out`, not the closest-approach point, because a
+ * spark belongs on the skin the bullet struck rather than buried inside the limb. Returns the
+ * fraction along the shot, so the nearest of several hits can be picked.
+ */
+export function shotHitsCapsule(
+  from: THREE.Vector3, to: THREE.Vector3, c: Capsule, out: THREE.Vector3,
+): number | null {
+  const d = segmentDistance(from, to, c.a, c.b, _tOut);
+  if (d > c.radius) return null;
+  const len = from.distanceTo(to);
+  if (len < 1e-9) return null;
+  // Step back from closest approach to where the bullet crossed the surface.
+  const halfChord = Math.sqrt(Math.max(0, c.radius * c.radius - d * d)) / len;
+  const t = Math.max(0, Math.min(1, _tOut[0] - halfChord));
+  out.copy(from).lerp(to, t);
+  return t;
 }

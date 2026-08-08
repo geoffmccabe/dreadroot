@@ -33,7 +33,8 @@ import {
 import { seedKaiju, rand } from './kaijuRandom';
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
-  torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac, type Capsule,
+  torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac,
+  MELEE_GATE_BODIES, type Capsule,
 } from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
@@ -462,7 +463,11 @@ function makeBoard(a: Agent) {
     // return a State. Returning a State from a condition throws at step time, which would leave the
     // Kaiju silently frozen. Verified against mistreevous 4.3.1 directly.
     HasTarget: () => targetOf(a) != null,
-    InMeleeRange: () => (a.perception?.targetDistBodies ?? 999) <= WEAPONS.melee.rangeBodies + 0.4,
+    // DERIVED FROM THE COLLIDER, not a constant of its own. This was `rangeBodies + 0.4`, a number
+    // that had no idea how wide a Kaiju is — and it was therefore the thing capping the collider,
+    // which is backwards. Widen the body and this follows, so combat can never be switched off by
+    // a change made in a different file. See MELEE_GATE_BODIES.
+    InMeleeRange: () => (a.perception?.targetDistBodies ?? 999) <= MELEE_GATE_BODIES(WEAPONS.melee.rangeBodies),
     InWeaponRange: () => (a.perception?.targetDistBodies ?? 999) <= WEAPONS[a.weapon].rangeBodies,
     TooClose: () => (a.perception?.targetDistBodies ?? 999) < WEAPONS[a.weapon].rangeBodies * 0.35,
 

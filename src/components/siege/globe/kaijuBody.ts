@@ -227,6 +227,21 @@ export function placeBodyOnSurface(b: KaijuBody, dir: THREE.Vector3, forward?: T
   b.radius = (g ?? PLANET_RADIUS) + 0.01;
   b.vertVel = 0;
   b.onGround = true;
+  // PLACED MEANS AT REST. Position, facing and vertical speed were reset here; the rest of the
+  // motion state was not, and the PLAYER's body is a module-level singleton reused by every battle.
+  // So a Kaiju that was sprinting when you jumped to a new site arrived at the next one still
+  // carrying that speed and turn rate — which made the whole simulation irreproducible: the same
+  // fight from the same seed came out differently on its first run than on every run after it,
+  // because the first run started from a body that had never fought. Found by check-kaiju-gunfire
+  // comparing a battle against itself; it silently undermines every balance comparison.
+  b.speed = 0;
+  b.moveSpeed = 0;
+  b.turnSpeed = 0;
+  b.crouchTimer = 0;
+  b.crouchFrac = 0;
+  b.submerged = false;
+  b.depthMetres = 0;
+  b.lastMoveQuat.identity();
 }
 export const placeOnSurface = (dir: THREE.Vector3, forward?: THREE.Vector3) =>
   placeBodyOnSurface(body, dir, forward);

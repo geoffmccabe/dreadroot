@@ -19,7 +19,7 @@ import {
 import { BREEDS } from '../src/components/siege/globe/kaijuStats';
 import { body as playerBody, stepBodyOf, reTangentOf } from '../src/components/siege/globe/kaijuBody';
 import {
-  torsoCapsule, capsuleOverlap, torsoRadiusFrac, TORSO_FRAC_CEILING,
+  torsoCapsule, capsuleOverlap, torsoRadiusFrac, TORSO_FRAC_CEILING, MELEE_GATE_BODIES,
 } from '../src/components/siege/globe/kaijuColliders';
 import { WEAPONS } from '../src/components/siege/globe/kaijuWeapons';
 import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
@@ -87,24 +87,27 @@ ok(torsoRadiusFrac * 2 < WEAPONS.melee.rangeBodies + torsoRadiusFrac,
    'two Kaiju at contact are still within melee HIT range',
    `${(torsoRadiusFrac * 2).toFixed(2)} apart vs `
    + `${(WEAPONS.melee.rangeBodies + torsoRadiusFrac).toFixed(2)} reach`);
-// THE REAL CEILING. The behaviour tree only swings when the target is inside melee range + 0.4.
-// Push the collider past half of that and the AI can never decide to attack — combat stops with
-// no error anywhere. This is the check that stops a future widening from silently killing the fight.
-ok(torsoRadiusFrac * 2 < WEAPONS.melee.rangeBodies + 0.4,
+// THE DECISION GATE. The behaviour tree only swings when the target is inside it, so a gate tighter
+// than contact means an AI can never decide to attack and combat stops with no error anywhere.
+// It is now derived from the collider so it cannot drift, and this asserts that it worked.
+ok(torsoRadiusFrac * 2 < MELEE_GATE_BODIES(WEAPONS.melee.rangeBodies),
    'an AI can still get close enough to DECIDE to attack',
    `contact at ${(torsoRadiusFrac * 2).toFixed(2)} vs InMeleeRange gate at `
-   + `${(WEAPONS.melee.rangeBodies + 0.4).toFixed(2)}`);
+   + `${MELEE_GATE_BODIES(WEAPONS.melee.rangeBodies).toFixed(2)}`);
 ok(torsoRadiusFrac <= TORSO_FRAC_CEILING, 'the collider is within its documented ceiling',
    `${torsoRadiusFrac} vs ${TORSO_FRAC_CEILING}`);
 
-// How much limb still passes through the other creature. Reported, not asserted: the torso capsule
-// cannot fix this, and pretending a number here is a pass/fail would hide that.
+// THE ARMS. This used to be a NOTE — a number printed with an apology, because the collider could
+// not be widened past 0.65 without the old hardcoded gate switching combat off. Now that the gate
+// follows the collider, it is a real assertion: the widest pair of creatures in the game must not be
+// able to put any part of themselves inside each other. This is the line Geoff has been reporting.
 {
   const worstPair = MEASURED_REACH.reduce((m, r) => Math.max(m, r[1]), 0) * 2;
   const gap = worstPair - torsoRadiusFrac * 2;
-  console.log(`  NOTE  widest limb overlap still possible: ${(gap * 100).toFixed(0)}% of a body `
-    + `height (~${(gap * 300).toFixed(0)} m). Torso capsules cannot remove this; per-limb `
-    + `capsules are the real fix and are not wired into separation yet.`);
+  ok(gap <= 0, 'no limb of the widest Kaiju can reach inside another one',
+     gap <= 0
+       ? `${(-gap * 300).toFixed(0)} m of clearance at contact`
+       : `${(gap * 300).toFixed(0)} m of arm still passes through`);
 }
 
 

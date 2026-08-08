@@ -41,7 +41,8 @@ import { footOffset, footOffsetRaw } from './modelFeet';
 import { resolveGait } from './kaijuClips';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
-import { ackFlashRemaining, playerBurning } from './kaijuArena';
+import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
+import { registerRig, unregisterRig, updateRigCapsules } from './kaijuColliders';
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -103,6 +104,24 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     kaijuDiag.loaded = true;
     return () => { kaijuDiag.loaded = false; stopKaijuFootsteps('player'); };
   }, []);
+
+  // YOUR OWN limb colliders, under the ARENA'S id for you rather than a made-up one — a bullet test
+  // looks up capsules by agent id, so registering as 'player' would mean the crowd could hit every
+  // Kaiju except the one you are standing in.
+  //
+  // Checked per frame rather than once, because this component outlives the fight: it mounts before
+  // any arena exists and stays mounted across every jump to a new battle site, each of which builds
+  // a fresh set of agents. A one-shot registration at mount would bind to whatever the id was then,
+  // which is usually nothing at all.
+  const rigId = useRef<string | null>(null);
+  const ensureRig = () => {
+    const want = playerAgent()?.id ?? null;
+    if (want === rigId.current) return;
+    if (rigId.current) unregisterRig(rigId.current);
+    rigId.current = want;
+    if (want) registerRig(want, model);
+  };
+  useEffect(() => () => { if (rigId.current) { unregisterRig(rigId.current); rigId.current = null; } }, []);
   const gait = useRef<Gait>('glide');
   const current = useRef<THREE.AnimationAction | null>(null);
   const landTimer = useRef(0);
@@ -189,6 +208,10 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       const bX = new THREE.Vector3().crossVectors(bUp, bFwd).normalize();
       basis.current.makeBasis(bX, bUp, bFwd.clone().normalize());
       g.quaternion.setFromRotationMatrix(basis.current);
+
+      // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.
+      ensureRig();
+      if (rigId.current) updateRigCapsules(rigId.current, h);
 
       const alt = b.radius - (groundRadiusCached(b) ?? b.radius);
       const altH = alt / Math.max(0.001, h);

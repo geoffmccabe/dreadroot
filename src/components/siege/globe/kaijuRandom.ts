@@ -44,3 +44,17 @@ export function randRange(lo: number, hi: number): number { return lo + next() *
 
 /** Uniform in [-half, +half). */
 export function randSigned(half: number): number { return (next() * 2 - 1) * half; }
+
+/**
+ * A SEPARATE stream, for things that are drawn on screen but are not part of the simulation.
+ *
+ * Cosmetic systems must never draw from the stream above. The crowd's rifle fire does no damage and
+ * cannot touch the fight — but the first version of it called `rand()` for scatter and reload times,
+ * and that alone was enough to change who won: every draw shifts the shared sequence, so the arena's
+ * own shuffle and cooldowns came out differently purely because two hundred people were shooting.
+ * check-kaiju-gunfire caught it by running the same battle with and without the army and comparing
+ * the final state, which is the only way a bug of this shape ever shows up.
+ *
+ * Same generator, its own seed, no interaction. Nothing that reads this may ever affect the outcome.
+ */
+export const fxRand: () => number = mulberry32(0xC0FFEE);

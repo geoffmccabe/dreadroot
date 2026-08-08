@@ -12,7 +12,9 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
-import { nearestKaijuMetres } from './kaijuArena';
+import { nearestKaijuMetres, getAgents } from './kaijuArena';
+import { gunfireDiag } from './kaijuGunfire';
+import { rigLimbCount } from './kaijuColliders';
 import { failedLayers } from './GlobeErrorBoundary';
 import { isKaijuWalkActive, subscribeKaijuWalk } from './KaijuWalkController';
 import { walkSpeed, runSpeed, body as kaijuBody } from './kaijuBody';
@@ -134,6 +136,13 @@ export function KaijuLabHud() {
         const n = nearestKaijuMetres();
         return n ? row('Nearest Kaiju', `${Math.round(n.gap)} m (touch at ${Math.round(n.contact)} m)`) : null;
       })()}
+      {/* THE ARMY. Two failures look identical from the outside — nobody is firing, and everybody is
+          firing but nothing is drawn — and they need opposite fixes. The shot count separates them.
+          The limb figure is the collider the sparks land on: 0 means the rigs did not attach and
+          every bullet is hitting a plain cylinder, which is what this whole system did silently for
+          weeks before anyone noticed. */}
+      {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
+      {row('Limb colliders', `${getAgents().reduce((n, a) => n + rigLimbCount(a.id), 0)} on ${getAgents().length} Kaiju`)}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {row('Landmark', lm ? lm.n : '- (, . to fly there)')}
       {row('Kaiju model', kaijuDiag.loaded ? 'loaded' : 'LOADING')}

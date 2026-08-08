@@ -29,6 +29,7 @@ import {
 import { getProjectiles } from './kaijuWeapons';
 import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
+import { registerRig, unregisterRig, updateRigCapsules, rigLimbCount } from './kaijuColliders';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 
 /** Clip preferences per gait, matching GlobeKaiju so both look the same. */
@@ -127,6 +128,20 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   const footLift = useRef(0);
   const _normal = useRef(new THREE.Vector3());
   const _tip = useRef(new THREE.Quaternion());
+  // THE LIMB COLLIDERS, FINALLY CONNECTED.
+  //
+  // kaijuColliders has built bone-following capsules for a head, two arms and two legs since the day
+  // it was written, and NOTHING HAS EVER CALLED IT. registerRig and updateRigCapsules had no callers
+  // anywhere in the repo, so limbCapsules() has always returned an empty list, melee has always
+  // silently degraded to the torso, and the file's own comment about "real limbs, read from the
+  // animated bones each frame" described something that did not happen. Found while looking for
+  // somewhere to put bullet impacts.
+  useEffect(() => {
+    registerRig(agent.id, model);
+    console.log(`[kaiju] ${agent.name} rig: ${rigLimbCount(agent.id)} limb capsules`);
+    return () => unregisterRig(agent.id);
+  }, [model, agent.id, agent.name]);
+
   useEffect(() => {
     const scale = ARENA_HEIGHT / Math.max(0.01, modelHeight);
     footLift.current = footOffset(model) * scale;
@@ -156,6 +171,12 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     trueF.current.copy(b.forward).normalize();
     basis.current.makeBasis(right.current, b.dir, trueF.current);
     g.quaternion.setFromRotationMatrix(basis.current);
+
+    // Re-read the limb capsules from the pose the mixer just produced. It has to happen HERE, after
+    // the group is placed and before any of the early returns below, or a Kaiju that is swinging or
+    // dead would freeze its colliders wherever they were when it started — and the arm you are
+    // watching swing is exactly the arm a bullet should be able to hit.
+    updateRigCapsules(agent.id, ARENA_HEIGHT);
 
     if (!agent.alive) {
       play('dead');

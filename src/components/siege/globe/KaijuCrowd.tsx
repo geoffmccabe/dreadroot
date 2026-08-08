@@ -31,9 +31,18 @@ import { CFG } from '../siegeMonsterCatalog';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { body as playerBody } from './kaijuBody';
-import { rand } from './kaijuRandom';
+// THE COSMETIC STREAM. The crowd used to draw from the simulation's own seeded source, which meant
+// two hundred people wandering about consumed random numbers the ARENA was going to use — so the
+// same battle came out differently depending on whether the crowd happened to be switched on. It
+// does no damage and decides nothing, so it has no business touching that sequence.
+import { fxRand as rand } from './kaijuRandom';
 import { SkeletonUtils } from 'three-stdlib';
 import { resolveGait } from './kaijuClips';
+import { getAgents, arenaStarted, type Agent } from './kaijuArena';
+import {
+  chooseTarget, aimPoint, nextShotDelay, fireBullet,
+  MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
+} from './kaijuGunfire';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -73,6 +82,16 @@ interface Person {
   /** Where this person is in the walk cycle, 0..1. Advanced by distance covered, not by time. */
   phase: number;
   speed: number;
+  /**
+   * Which Kaiju this individual has decided to follow and shoot at.
+   *
+   * Per PERSON, not per crowd. Geoff: "Each human should decide which Kaiju to follow and shoot at."
+   * That one word is what separates an army from a flock — with a shared target the whole crowd
+   * turns as one body every time a different Kaiju gets closer, which looks nothing like people.
+   */
+  targetId: string | null;
+  /** Seconds until this person's next shot. */
+  fireIn: number;
 }
 
 let crowdOn = false;
@@ -155,6 +174,10 @@ function makePeople(): Person[] {
       out.push({
         dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        targetId: chooseTarget(dir, null),
+        // Stagger the OPENING shots across the whole 1-10 second window, or two hundred rifles go
+        // off within a tenth of a second of each other the instant the crowd appears.
+        fireIn: nextShotDelay(),
       });
     }
     return out;
@@ -178,6 +201,8 @@ function makePeople(): Person[] {
       timer: rand() * 3,
       phase: rand(),
       speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+      targetId: chooseTarget(dir, null),
+      fireIn: nextShotDelay(),
     });
   }
   return out;
@@ -262,19 +287,35 @@ function Crowd() {
   const _axis = useMemo(() => new THREE.Vector3(), []);
   const _toKaiju = useMemo(() => new THREE.Vector3(), []);
   const _basis = useMemo(() => new THREE.Matrix4(), []);
+  const _muzzle = useMemo(() => new THREE.Vector3(), []);
+  const _aim = useMemo(() => new THREE.Vector3(), []);
   const frame = useRef(0);
 
   useFrame((_, rawDt) => {
     if (!group.current) return;
     const dt = Math.min(rawDt, 0.05);
-    const kaiju = playerBody.dir;
     const scale = PERSON_UNITS / Math.max(0.01, modelHeight);
     frame.current++;
     const STAGGER = 3;
+    // Look the roster up ONCE per frame, not once per person: getAgents returns the live array and
+    // two hundred linear searches a frame for the same four entries is two hundred too many.
+    const fighting = arenaStarted();
+    const byId = new Map<string, Agent>();
+    if (fighting) for (const a of getAgents()) byId.set(a.id, a);
 
     for (let i = 0; i < people.length && i < figures.length; i++) {
       const p = people[i];
       const f = figures[i];
+
+      // WHO THIS PERSON IS AFTER. Their own choice, kept until it dies. With no fight running they
+      // fall back to the player's body exactly as they did before, so the plain scale shot — a
+      // crowd and one Kaiju, no battle — is unchanged.
+      let target = p.targetId ? byId.get(p.targetId) : undefined;
+      if (fighting && (!target || !target.alive)) {
+        p.targetId = chooseTarget(p.dir, null);
+        target = p.targetId ? byId.get(p.targetId) : undefined;
+      }
+      const kaiju = target?.body.dir ?? playerBody.dir;
 
       p.timer -= dt;
       if (p.timer <= 0) {
@@ -318,6 +359,24 @@ function Crowd() {
       _basis.makeBasis(_side, _up, p.fwd);
       f.obj.quaternion.setFromRotationMatrix(_basis);
       f.obj.scale.setScalar(scale);
+
+      // PULL THE TRIGGER.
+      //
+      // Fired straight from the crowd loop rather than from a system of its own, because the shot
+      // needs the position and heading THIS person has right now — and those exist here and nowhere
+      // else. A separate shooting system would have to keep its own copy of where everybody is,
+      // which is how two sources of truth start.
+      //
+      // The rifle points where the person is facing, not at the Kaiju: someone running for their
+      // life and firing over their shoulder is the shot. Aim only decides where the BULLET goes.
+      p.fireIn -= dt;
+      if (p.fireIn <= 0 && target) {
+        p.fireIn = nextShotDelay();
+        _muzzle.copy(f.obj.position)
+          .addScaledVector(p.dir, MUZZLE_UP_UNITS)
+          .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
+        fireBullet(_muzzle, aimPoint(target, _aim));
+      }
     }
   });
 
