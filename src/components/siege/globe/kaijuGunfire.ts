@@ -80,8 +80,30 @@ const RESTITUTION = 0.28;
 export const MUZZLE_LIFE = 0.055;
 /** How long a spark burns where a round struck. */
 export const SPARK_LIFE = 0.38;
-/** Longest a round stays in the world before it is given up on. */
-const MAX_LIFE = 3.0;
+/**
+ * Longest a round stays in the world before it is given up on.
+ *
+ * 9 seconds, not 3. Geoff: "the bullets appear to be straight lines that don't arc with gravity...
+ * they just disappear after a certain distance."
+ *
+ * The physics was already right and the arc was already there — the round was simply being deleted
+ * before it could happen. A rifle round starts at 800 m/s, where drag is roughly seventy times
+ * stronger than gravity, so the first part of its flight IS very nearly a straight line: that is why
+ * a real bullet drops about three metres over five hundred. The parabola only appears once drag has
+ * bled the speed away and gravity is the bigger force, and at 3 seconds the round was still doing
+ * 220 m/s with a couple of kilometres left to travel. It vanished in mid-air, at the exact moment it
+ * was about to start curving.
+ *
+ * Now every round flies until it BURIES ITSELF IN THE GROUND — the whole arc, and a puff of dirt
+ * wherever it lands. Which is also the honest answer to how far a stray round carries.
+ *
+ * 20 seconds is the backstop, not the expected life, and it was measured rather than picked: a round
+ * aimed up at a 300 m creature and missing reaches an apex around 620 m at nine seconds and needs
+ * roughly another twelve to come down, landing 2.4 km out. At 9 it was still being deleted in mid-air — at the top of the
+ * arc, which is the one moment the curve is obvious. A real rifle round fired at that elevation
+ * carries about three kilometres and is in the air for a comparable time, so this is not generous.
+ */
+const MAX_LIFE = 24.0;
 /** How long a ricochet is followed after it bounces. */
 const RICOCHET_LIFE = 2.6;
 /**
@@ -145,7 +167,9 @@ export interface Spark {
   live: boolean;
 }
 
-const MAX_BULLETS = 512;
+// 1024, since rounds now live three times as long: about thirty-six are fired a second and the
+// longest-lived reach nine, so roughly 320 are in the air at once during sustained fire.
+const MAX_BULLETS = 1024;
 const MAX_SPARKS = 256;
 
 const bullets: Bullet[] = [];

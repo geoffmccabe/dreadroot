@@ -153,7 +153,7 @@ export function KaijuLabHud() {
           weeks before anyone noticed. */}
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
       {row('Bullet collider', meshHitDiag.meshes > 0
-        ? `MESH on ${meshHitDiag.meshes} Kaiju (exact triangles)`
+        ? `MESH x${meshHitDiag.meshes} — ${meshHitDiag.hits}/${meshHitDiag.tests} rays hit`
         : 'capsules (no model loaded)')}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {/* THE INPUT CHAIN. Four links; whichever one is wrong is where the break is. */}

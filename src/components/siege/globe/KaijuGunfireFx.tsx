@@ -31,8 +31,8 @@ import {
 } from './kaijuGunfire';
 
 /** Same ceilings as the pools, so a full pool can always be drawn. */
-const MAX_TRAILS = 512;
-const MAX_POINTS = 512;
+const MAX_TRAILS = 1024;
+const MAX_POINTS = 768;
 
 /**
  * How many separate dashes a single round's streak is broken into.

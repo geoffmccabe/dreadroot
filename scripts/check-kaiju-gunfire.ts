@@ -236,9 +236,9 @@ beginMeshHitFrame();
   // The pool must never grow. A leak here runs for the whole session.
   clearGunfire();
   for (let i = 0; i < 5000; i++) fireBullet(from, aimPoint(target, aim));
-  ok(getBullets().length === 512, 'the bullet pool is fixed size however many rounds are fired',
+  ok(getBullets().length === 1024, 'the bullet pool is fixed size however many rounds are fired',
      `${getBullets().length}`);
-  for (let step = 0; step < 400; step++) stepGunfire(DT);
+  for (let step = 0; step < 900; step++) stepGunfire(DT);
   ok(getBullets().every((x) => !x.live), 'and every round eventually leaves the world');
 }
 

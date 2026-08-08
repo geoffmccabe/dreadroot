@@ -33,6 +33,8 @@
 import * as THREE from 'three';
 
 interface Entry {
+  /** The model root, so its matrices can be forced up to date before a test. */
+  root: THREE.Object3D;
   meshes: THREE.Mesh[];
   /**
    * How far a vertex can sit from its bone, per mesh. Bind-pose bounding radius, which is an upper
@@ -60,42 +62,26 @@ export function registerHitMesh(id: string, root: THREE.Object3D): void {
     if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
     meshes.push(m);
     flesh.push(m.geometry.boundingSphere?.radius ?? 1);
+    const sk = m as THREE.SkinnedMesh;
+    if (sk.isSkinnedMesh) {
+      // NEVER LET THREE.JS REJECT THE RAY ON ITS OWN BOUNDS.
+      //
+      // Geoff: "if the kaiju isn't moving then they don't hit it... they go through. But if I start
+      // to move then it's as if the colliders appear."
+      //
+      // SkinnedMesh.raycast tests the ray against a bounding sphere BEFORE looking at a single
+      // triangle, and that sphere is whatever was computed the first time anyone asked — from
+      // whichever pose and whichever world transform happened to be current. Get it wrong and the
+      // creature is silently unhittable, with no error and nothing to see, until something moves and
+      // shakes the numbers loose. That is exactly the reported behaviour.
+      //
+      // The caller already does its own broad phase against the agent's position, so three's sphere
+      // test buys nothing here and can only ever be a way to lose hits. It is replaced with a sphere
+      // large enough to always pass, and the triangles decide.
+      sk.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
+    }
   });
-  registry.set(id, { meshes, flesh });
-}
-
-const _boneBox = new THREE.Box3();
-const _inv = new THREE.Matrix4();
-const _bp = new THREE.Vector3();
-
-/**
- * Keep the mesh's bounding sphere honest for the CURRENT pose.
- *
- * three.js rejects a ray against this sphere before testing a single triangle, and for a SkinnedMesh
- * it computes the sphere ONCE and then keeps it forever — from whatever pose happened to be current
- * at that moment. A creature that later reaches beyond it silently stops being hittable, with no
- * error and nothing to see. The headless check caught exactly that by moving a bone and watching a
- * round pass through the model.
- *
- * Recomputing it properly means transforming every vertex by its bones, which is thousands of
- * operations. The skeleton is a few dozen bones and bounds the same volume: take the box the BONES
- * occupy and pad it by how far flesh sits from bone in bind pose, which is an upper bound that
- * posing cannot exceed. Cheap enough to do on every shot, so it can never be stale.
- */
-function refreshSphere(mesh: THREE.Mesh, flesh: number): void {
-  const sk = mesh as THREE.SkinnedMesh;
-  if (!sk.isSkinnedMesh || !sk.skeleton) return;
-  const bones = sk.skeleton.bones;
-  if (!bones.length) return;
-  _inv.copy(mesh.matrixWorld).invert();
-  _boneBox.makeEmpty();
-  for (const b of bones) {
-    _bp.setFromMatrixPosition(b.matrixWorld).applyMatrix4(_inv);
-    _boneBox.expandByPoint(_bp);
-  }
-  if (!sk.boundingSphere) sk.boundingSphere = new THREE.Sphere();
-  _boneBox.getBoundingSphere(sk.boundingSphere);
-  sk.boundingSphere.radius += flesh;
+  registry.set(id, { root, meshes, flesh });
 }
 
 export function unregisterHitMesh(id: string): void { registry.delete(id); }
@@ -106,7 +92,7 @@ export function hasHitMesh(id: string): boolean {
 }
 
 /** Live counts, so "is it using the mesh or the cylinder?" is answered by looking. */
-export const meshHitDiag = { meshes: 0, testsThisFrame: 0, budgetHits: 0 };
+export const meshHitDiag = { meshes: 0, testsThisFrame: 0, budgetHits: 0, tests: 0, hits: 0 };
 
 /**
  * Rays allowed per frame.
@@ -127,6 +113,7 @@ const _raycaster = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
 const _nm = new THREE.Matrix3();
 const _hits: THREE.Intersection[] = [];
+const _sides: THREE.Side[] = [];
 
 /**
  * Where a shot from `from` to `to` first meets this agent's actual geometry.
@@ -143,23 +130,47 @@ export function meshHit(
   if (!entry || entry.meshes.length === 0) return null;
   if (meshHitDiag.testsThisFrame >= TESTS_PER_FRAME) { meshHitDiag.budgetHits++; return null; }
   meshHitDiag.testsThisFrame++;
+  meshHitDiag.tests++;
 
   _dir.copy(to).sub(from);
   const len = _dir.length();
   if (len < 1e-9) return null;
   _dir.divideScalar(len);
 
-  // The pose has moved since the last shot; make sure the broad-phase sphere knows it.
-  for (let i = 0; i < entry.meshes.length; i++) refreshSphere(entry.meshes[i], entry.flesh[i]);
+  // TEST THE POSE BEING DRAWN, NOT LAST FRAME'S.
+  //
+  // three.js only refreshes world matrices during the render, which happens AFTER every frame
+  // callback — so at the moment a bullet is resolved, the model's matrices and its bones still hold
+  // the previous frame's values while the renderer has already written this frame's local
+  // transforms. Forcing the update costs a walk of a few dozen bones and makes the geometry tested
+  // exactly the geometry about to be drawn.
+  entry.root.updateMatrixWorld(true);
 
   _raycaster.set(from, _dir);
   _raycaster.near = 0;
   _raycaster.far = len;
   _hits.length = 0;
+
+  // BOTH SIDES OF EVERY TRIANGLE.
+  //
+  // three.js skips back-facing triangles unless the material says otherwise, and these models are
+  // converted from FBX — where inverted winding on some or all of a mesh is common and invisible,
+  // because the renderer is happy to draw a surface lit from the wrong side. A ray, though, simply
+  // finds nothing. Flipping to double-sided for the duration of the test removes that as a way to
+  // lose hits, and it is restored immediately so nothing about the rendering changes.
+  for (let i = 0; i < entry.meshes.length; i++) {
+    const mat = entry.meshes[i].material as THREE.Material;
+    _sides[i] = mat.side;
+    mat.side = THREE.DoubleSide;
+  }
   // Not recursive: the list was flattened at registration, so this walks exactly the meshes and
   // nothing else — no bones, no helpers, no chance of picking up whatever gets parented later.
   _raycaster.intersectObjects(entry.meshes, false, _hits);
+  for (let i = 0; i < entry.meshes.length; i++) {
+    (entry.meshes[i].material as THREE.Material).side = _sides[i];
+  }
   if (_hits.length === 0) return null;
+  meshHitDiag.hits++;
 
   // intersectObjects sorts by distance, so the first is the near surface — which is where a spark
   // belongs, and is also the face whose normal the round should bounce off.
