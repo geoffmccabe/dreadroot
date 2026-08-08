@@ -39,7 +39,17 @@ const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').
  */
 export function isContainerClip(name: string): boolean {
   const n = name.toLowerCase();
-  return n.includes('armature|') || n.includes('mixamo.com') || n.includes('|layer');
+  if (n.includes('mixamo.com') || n.includes('|layer')) return true;
+  // WHAT COMES AFTER THE LAST BAR IS THE ANIMATION'S REAL NAME.
+  //
+  // This used to reject anything containing "armature|" outright, which was right for Mixamo's
+  // "Armature|Armature|Armature|mixamo.com|Layer0" and catastrophically wrong for the Quaternius
+  // packs, where EVERY clip is named "CharacterArmature|Run", "CharacterArmature|Walk" and so on.
+  // On that convention the old test threw away the entire animation list and left the model frozen
+  // in its bind pose, with no error anywhere — caught by check-kaiju-clips before it ever shipped,
+  // which is the only reason the soldiers are not standing rigid right now.
+  const tail = n.slice(n.lastIndexOf('|') + 1).trim();
+  return tail.length === 0;
 }
 
 export interface ClipInfo {

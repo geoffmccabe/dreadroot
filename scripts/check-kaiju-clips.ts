@@ -43,6 +43,20 @@ const FORT_GOLEM: ClipInfo[] = [
   { name: 'weapon_strike1', duration: 0.53 }, { name: 'weapon_strike2', duration: 0.93 },
 ];
 
+/**
+ * Verbatim from soldier.glb — the Quaternius convention, where EVERY clip carries the armature name.
+ *
+ * This list is the reason the container-clip test had to change. It used to reject anything
+ * containing "armature|", which on this pack throws away all twenty-four animations and leaves two
+ * hundred soldiers standing rigid in their bind pose with no error anywhere.
+ */
+const SOLDIER: ClipInfo[] = [
+  'Death', 'Gun_Shoot', 'HitRecieve', 'HitRecieve_2', 'Idle', 'Idle_Gun', 'Idle_Gun_Pointing',
+  'Idle_Gun_Shoot', 'Idle_Neutral', 'Idle_Sword', 'Interact', 'Kick_Left', 'Kick_Right',
+  'Punch_Left', 'Punch_Right', 'Roll', 'Run', 'Run_Back', 'Run_Left', 'Run_Right', 'Run_Shoot',
+  'Sword_Slash', 'Walk', 'Wave',
+].map((n) => ({ name: `CharacterArmature|${n}`, duration: 1.0 }));
+
 console.log('\n== The right clip gets picked on the real models ==\n');
 
 console.log('-- Red Demon (Mixamo names) --');
@@ -80,6 +94,35 @@ ok(pickClip(RED_DEMON, ['attack']) === 'Standing Melee Attack Horizontal',
 ok(pickClip([{ name: 'nothing', duration: 1 }], ['attack']) === null,
    'no match returns null rather than something arbitrary');
 ok(pickClip([], ['idle']) === null, 'an empty model returns null');
+
+
+console.log('\n-- Soldier (Quaternius "CharacterArmature|Name" convention) --');
+// EVERY clip is prefixed with the armature. None of them is a container track, and treating them as
+// one is what would have frozen the whole crowd.
+for (const c of SOLDIER) {
+  if (isContainerClip(c.name)) {
+    ok(false, 'no soldier clip is mistaken for a container track', c.name);
+    break;
+  }
+}
+ok(!SOLDIER.some((c) => isContainerClip(c.name)),
+   'no soldier clip is mistaken for a container track');
+// ...but the real Mixamo container must STILL be rejected, or the fix has simply traded one bug for
+// the other one.
+ok(isContainerClip('Armature|Armature|Armature|mixamo.com|Layer0'),
+   'the genuine Mixamo container track is still rejected');
+ok(isContainerClip('Armature|'), 'a name with nothing after the bar is still a container');
+
+ok(pickClip(SOLDIER, ['run_shoot', 'run', 'jog', 'walk']) === 'CharacterArmature|Run_Shoot',
+   'the crowd picks the advancing-and-firing clip',
+   String(pickClip(SOLDIER, ['run_shoot', 'run', 'jog', 'walk'])));
+ok(pickClip(SOLDIER, ['idle_gun', 'idle', 'breathidle']) === 'CharacterArmature|Idle_Gun',
+   'and rifle-up for standing still',
+   String(pickClip(SOLDIER, ['idle_gun', 'idle', 'breathidle'])));
+for (const gait of ['walk', 'run', 'idle', 'dead', 'attack']) {
+  const got = resolveGait(SOLDIER, gait);
+  ok(got != null, `${gait} resolves on the soldier rig`, String(got));
+}
 
 console.log(`\n${failures === 0 ? 'CLIP CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
 process.exit(failures === 0 ? 0 : 1);

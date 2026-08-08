@@ -27,7 +27,6 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { APP_VERSION } from '@/version';
-import { CFG } from '../siegeMonsterCatalog';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
 import { body as playerBody } from './kaijuBody';
@@ -37,7 +36,9 @@ import { body as playerBody } from './kaijuBody';
 // does no damage and decides nothing, so it has no business touching that sequence.
 import { fxRand as rand } from './kaijuRandom';
 import { SkeletonUtils } from 'three-stdlib';
-import { resolveGait } from './kaijuClips';
+import { pickClip } from './kaijuClips';
+import { localiseSkinning } from './skinPrecision';
+import { buildSoldierTemplate } from './soldierMesh';
 import { getAgents, arenaStarted, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
   chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet, inRange,
@@ -70,7 +71,17 @@ const RUN_MS = 5.5;   // a running human, not an athlete
  */
 const STRIDE_FRAC = 1.4;
 
-const MODEL_URL = '/siege/characters/player.glb';
+/**
+ * A REAL SOLDIER, not a 1.8 m demon.
+ *
+ * Geoff: "they seem to be based on the red demon model because they have identical colors... Look
+ * instead through all the Synty/polygon sets of models for one that says soldier or army."
+ *
+ * They were: the crowd used the game's own 1.8 m Demon Horde NPC, which was never the cause of the
+ * shattering but was certainly the wrong thing to be looking at. This one carries a rifle and ships
+ * with Walk, Run, Run_Shoot, Gun_Shoot, Idle_Gun and Death.
+ */
+const SOLDIER_URL = '/siege/characters/soldier.glb';
 
 interface Person {
   /** Unit direction from the planet centre. */
@@ -132,7 +143,7 @@ const listeners = new Set<() => void>();
 export function isCrowdOn(): boolean { return crowdOn; }
 
 /** Live state, so 'I don't see the humans' can be answered by looking rather than guessing. */
-export const crowdDiag = { on: false, spawned: 0, layout: 'none' as 'none' | 'ring' | 'corridor', modelOk: false };
+export const crowdDiag = { on: false, spawned: 0, layout: 'none' as 'none' | 'ring' | 'corridor', modelOk: false, scale: 0 };
 export function subscribeCrowd(fn: () => void): () => void {
   listeners.add(fn); return () => { listeners.delete(fn); };
 }
@@ -244,42 +255,74 @@ function Crowd() {
   // third of them per frame, with three times the delta), which is the standard trick and cuts the
   // skinning cost to a third without anyone being able to see the difference at 1.8 m. If it turns
   // out too heavy, the answer is fewer people or a fixed VAT — not a broken one.
-  const cfg = CFG[1 as keyof typeof CFG];
-  const url = cfg?.url ?? MODEL_URL;
-  const { scene, animations } = useGLTF(`${url}?v=${APP_VERSION}`);
+  const { scene, animations } = useGLTF(`${SOLDIER_URL}?v=${APP_VERSION}`);
   const group = useRef<THREE.Group>(null);
   const people = useMemo<Person[]>(() => makePeople(), []);
 
-  /** Natural height of the source model, so it can be scaled to a real 1.8 m person. */
-  const modelHeight = cfg?.modelHeight ?? 2;
+  /**
+   * The merged, one-draw-call rifleman, built once and cloned per figure.
+   *
+   * Falls back to the raw glTF if the merge is refused — slower (eleven draws a man instead of one)
+   * but correct, which is the right way round for a fallback.
+   */
+  const template = useMemo(() => buildSoldierTemplate(scene), [scene]);
 
   /** One clone + mixer per figure. Built once; the frame loop only moves them. */
   const figures = useMemo(() => {
-    const clipName = resolveGait(
-      animations.map((a) => ({ name: a.name, duration: a.duration })), 'walk',
-    );
-    const clip = animations.find((a) => a.name === clipName) ?? animations[0] ?? null;
-    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null }[] = [];
+    const source = template?.root ?? (scene as THREE.Group);
+    const modelHeight = template?.height ?? 1.8;
+    const scale = PERSON_UNITS / Math.max(1e-4, modelHeight);
+
+    // TWO CLIPS, because a soldier advancing with a rifle up and a soldier standing still are
+    // different pictures and this model ships both. Resolved through the shared picker rather than
+    // by exact name, so a future model with different clip names still gets something sensible
+    // instead of nothing — the failure mode that leaves a figure frozen in its bind pose.
+    const info = animations.map((a) => ({ name: a.name, duration: a.duration }));
+    const byName = (n: string | null) => (n ? animations.find((a) => a.name === n) ?? null : null);
+    const moveClip = byName(pickClip(info, ['run_shoot', 'run', 'jog', 'walk']));
+    const idleClip = byName(pickClip(info, ['idle_gun', 'idle', 'breathidle']));
+    const clip = moveClip ?? idleClip;
+
+    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null; idle: THREE.AnimationAction | null }[] = [];
+    let localised = 0;
     for (let i = 0; i < CROWD_SIZE; i++) {
-      const obj = SkeletonUtils.clone(scene) as THREE.Group;
+      const obj = SkeletonUtils.clone(source) as THREE.Group;
       obj.traverse((o) => {
         const m = o as THREE.Mesh;
         if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; }
       });
+      // THE WHOLE REASON THE CROWD WORKS AT ALL. Without this every vertex of every soldier picks up
+      // a third of a metre of noise from being six thousand kilometres out from the world origin —
+      // 21% of his own height, re-rolled every frame. See skinPrecision.ts.
+      localised += localiseSkinning(obj);
+      obj.scale.setScalar(scale);
+
       const mixer = new THREE.AnimationMixer(obj);
       let action: THREE.AnimationAction | null = null;
-      if (clip) {
-        action = mixer.clipAction(clip);
+      let idle: THREE.AnimationAction | null = null;
+      if (moveClip) {
+        action = mixer.clipAction(moveClip);
         // Start each figure at a different point in the cycle, or two hundred people march in step.
-        action.time = rand() * clip.duration;
+        action.time = rand() * moveClip.duration;
         action.play();
       }
-      out.push({ obj, mixer, action });
+      if (idleClip && idleClip !== moveClip) {
+        idle = mixer.clipAction(idleClip);
+        idle.time = rand() * idleClip.duration;
+        idle.play();
+        idle.setEffectiveWeight(0);
+      }
+      out.push({ obj, mixer, action, idle });
     }
     crowdDiag.modelOk = out.length > 0 && clip != null;
-    console.log(`[crowd] ${out.length} figures from ${url} using clip "${clip?.name ?? 'none'}"`);
+    crowdDiag.scale = scale;
+    console.log(`[crowd] ${out.length} soldiers from ${SOLDIER_URL} | clip "${clip?.name ?? 'none'}"`
+      + ` | move "${moveClip?.name ?? 'none'}" idle "${idleClip?.name ?? 'none'}"`
+      + ` | model height ${modelHeight.toFixed(3)} -> scale ${scale.toFixed(5)}`
+      + ` | merged ${template ? 'YES (1 draw each)' : 'NO (fallback)'}`
+      + ` | skinning localised on ${localised} meshes`);
     return out;
-  }, [scene, animations, url]);
+  }, [scene, animations, template]);
 
   // Attach the clones once, and take them down cleanly.
   useEffect(() => {
@@ -308,7 +351,6 @@ function Crowd() {
   useFrame((_, rawDt) => {
     if (!group.current) return;
     const dt = Math.min(rawDt, 0.05);
-    const scale = PERSON_UNITS / Math.max(0.01, modelHeight);
     frame.current++;
     const STAGGER = 3;
     // Look the roster up ONCE per frame, not once per person: getAgents returns the live array and
@@ -370,8 +412,14 @@ function Crowd() {
       // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m
       // against a 300 m Kaiju nobody can see the difference.
-      if (f.action && (i % STAGGER) === (frame.current % STAGGER)) {
-        f.mixer.update(p.running ? dt * STAGGER : 0);
+      if ((i % STAGGER) === (frame.current % STAGGER)) {
+        // Moving or standing. An instant weight swap rather than a crossfade: with the mixer only
+        // ticking every third frame a fade would stutter, and at 1.8 m against a 300 m monster the
+        // pop is invisible.
+        if (f.action) f.action.setEffectiveWeight(p.running ? 1 : 0);
+        if (f.idle) f.idle.setEffectiveWeight(p.running ? 0 : 1);
+        // The idle still has to tick while standing, or a stopped soldier freezes mid-stride.
+        f.mixer.update(dt * STAGGER);
       }
 
       // NEVER FALL BACK TO SEA LEVEL: on the canyon rim that is 2.1 km underground, which is why
@@ -385,7 +433,6 @@ function Crowd() {
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);
       f.obj.quaternion.setFromRotationMatrix(_basis);
-      f.obj.scale.setScalar(scale);
 
       // PULL THE TRIGGER.
       //
