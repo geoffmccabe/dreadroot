@@ -20,7 +20,7 @@ import { ARENA_HEIGHT, getAgents } from './kaijuArena';
 import {
   limbCapsules, torsoCapsule, bulletTorsoFrac, torsoRadiusFrac, type Capsule,
 } from './kaijuColliders';
-import { playerVisual } from './kaijuGunfire';
+import { playerVisual } from './kaijuColliders';
 import { hasHitMesh } from './kaijuMeshHit';
 
 let on = false;

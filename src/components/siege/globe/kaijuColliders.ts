@@ -117,51 +117,27 @@ export function clearRigCapsules(id: string): void {
 export function limbCapsules(id: string): Capsule[] { return rigs.get(id)?.capsules ?? []; }
 
 /**
- * Torso radius as a fraction of body height. MEASURED, not estimated.
+ * Separation radius as a fraction of body height. MEASURED, and it is the BODY.
  *
- * This was 0.25, described in a comment as "about right for these broad-shouldered golems". It was
- * not: scripts/measure-glb-width.mjs evaluates each model's own walk and idle clips and reports how
- * far the bones actually get from the body's centre line, in the TORSO band (hips to shoulders,
- * ignoring hands swinging forward, which are silhouette rather than bulk):
+ * THE HISTORY OF THIS NUMBER IS A LESSON IN OVERCORRECTING.
  *
- *     red demon        walk 0.313    idle 0.244
- *     fort golem       walk 0.444    idle 0.287    breathidle 0.532
- *     elemental golem  walk 0.453    idle 0.274    breathidle 0.541
+ * It was 0.25, guessed, and far too narrow — two Kaiju were held half a body apart while their
+ * chests reached 0.31 and 0.44, so roughly 78 m of a 300 m creature was inside the other one.
+ * Geoff: "the red demon still walks right through me."
  *
- * At 0.25 each, two Kaiju were held 0.5 x height apart while their chests reached 0.31 and 0.44 —
- * so roughly 78 m of a 300 m creature was inside the other one, before the arms are counted at
- * all. That is Geoff's "the red demon still walks right through me", and no amount of correct
- * separation maths could have fixed it, because the maths was correctly separating the wrong shape.
+ * So I widened it to cover the arms as well, at 0.70, reasoning that arms are what you SEE
+ * overlapping. That is when Geoff got this: "there's a big red cylinder around each kaiju and when
+ * another kaiju approaches me our oversized huge red colliders collide and it blocks its ability to
+ * get near me, so we can't fight." Which is exactly right, and worse than the problem it fixed. At
+ * 0.70 two Kaiju are held 420 m apart — more than a body height of clear air between two creatures
+ * that are supposed to be brawling. I had made them unable to touch each other in a fighting game.
  *
- * 0.46 was not enough, because the torso is not what you SEE overlapping. Full bone reach — arms
- * included — measures 0.548 x height on the Red Demon and 0.686 on the golems. Two of them held
- * 0.92 apart with a combined reach of 1.23 means about 94 m of arm passing through the other one's
- * body, which at this scale reads exactly as Geoff's "the Kaiju just walk through each other".
- *
- * WHAT WAS HOLDING IT AT 0.60, AND WHY THAT WAS THE WRONG THING TO OBEY.
- *
- * The ceiling was set by the behaviour tree's InMeleeRange gate — an agent may only swing when the
- * target is inside `melee range + 0.4` = 1.3 bodies. Two colliders touching sit 2r apart, so r above
- * 0.65 meant an AI could never get close enough to DECIDE to attack and the fight would silently
- * stop happening. 0.60 obeyed that, and left about 52 m of arm passing through the other creature.
- *
- * But that 0.4 was a hand-written constant that knew nothing about the collider it was constraining.
- * Two numbers in two files, one of them quietly deciding how wide a Kaiju is allowed to be. The gate
- * is now DERIVED from this value (see MELEE_GATE_BODIES below), so the real ceiling is the one that
- * was always the true physical limit: the melee HIT test, which allows the attacker's 0.9-body reach
- * plus the target's radius, and therefore permits r up to 0.9.
- *
- * 0.70 is what the models actually measure. Full bone reach — arms included, which is what a viewer
- * sees overlapping — is 0.548 x height on the Red Demon and 0.686 on the golems. Two golems held
- * 1.40 apart with a combined reach of 1.372 do not touch AT ALL: the arm overlap is gone rather than
- * halved, which is the first time that has been true. The Red Demon has 30% clearance on top.
- *
- * This is a JUDGEMENT, and it is worth saying which way: it errs toward "they keep their distance"
- * over "they clip through each other", because 210 m of arm inside another creature is unmissable
- * and a slightly wide stance is not. If they now read as standing too far apart, this one number is
- * the entire fix.
- */
-const TORSO_FRAC = 0.70;
+ * SEPARATION KEEPS BODIES OUT OF EACH OTHER. THAT IS ALL IT IS FOR. Arms passing through each other
+ * during a swing is what fighting looks like; two torsos occupying one space is not. So this is now
+ * the measured chest width per model — 0.244 on a Red Demon, 0.287 on a Fort Golem — which holds
+ * them about 170 m apart: close enough to hit each other, far enough that neither is standing inside
+ * the other. The arms are the melee system's business, and they have real bone capsules now.
+ */const TORSO_FRAC = 0.287;   // the widest chest in the roster, for anything without a type
 
 /**
  * The widest this may go before a swing can no longer reach a touching target.
@@ -255,6 +231,23 @@ export const BULLET_TORSO_BY_TYPE: Record<number, number> = {
 
 export const bulletTorsoFrac = (monsterType: number): number =>
   BULLET_TORSO_BY_TYPE[monsterType] ?? BULLET_TORSO_FRAC;
+
+/**
+ * What the PLAYER'S Kaiju is currently drawn as. Pushed in by the renderer, never read from it.
+ *
+ * Lives here rather than with the gunfire because the ARENA needs it too now, and the arena cannot
+ * import the gunfire without a cycle. `type: -1` means nothing has been reported yet, in which case
+ * the agent's own build is used.
+ */
+export const playerVisual = { type: -1, height: 0 };
+export function setPlayerVisual(type: number, height: number): void {
+  playerVisual.type = type;
+  playerVisual.height = height;
+}
+
+/** The body width to use for an agent, preferring what is actually on screen for the player. */
+export const bodyFracFor = (isPlayer: boolean, monsterType: number): number =>
+  bulletTorsoFrac(isPlayer && playerVisual.type >= 0 ? playerVisual.type : monsterType);
 
 /** Exported so the collision check can assert the capsule still covers the measured bodies. */
 export const torsoRadiusFrac = TORSO_FRAC;

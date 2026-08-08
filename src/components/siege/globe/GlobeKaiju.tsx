@@ -38,13 +38,17 @@ import { kaijuDiag } from './kaijuDiag';
 import { body as kaijuBodyState, facingVector, walkSpeed, runSpeed } from './kaijuBody';
 import { isKaijuWalkActive } from './KaijuWalkController';
 import { footOffset, footOffsetRaw } from './modelFeet';
-import { resolveGait } from './kaijuClips';
+import { resolveGait, stripRootMotion } from './kaijuClips';
 import { updateKaijuFootsteps, stopKaijuFootsteps } from './kaijuAudio';
 import { prepareFlash, applyFlash, flashIntensity, releaseFlash } from './kaijuFlash';
 import { ackFlashRemaining, playerBurning, playerAgent } from './kaijuArena';
-import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules } from './kaijuColliders';
+import { sampleGlobeNormal } from './globeGround';
+import { registerRig, unregisterRig, updateRigCapsules, clearRigCapsules, setPlayerVisual } from './kaijuColliders';
 import { registerHitMesh, unregisterHitMesh, hasHitMesh } from './kaijuMeshHit';
-import { setPlayerVisual } from './kaijuGunfire';
+
+
+/** Model-local X, the axis a body topples about when it falls forward. */
+const DEATH_AXIS = new THREE.Vector3(1, 0, 0);
 
 /** How far ahead of the camera the Kaiju stands, in multiples of its own height. */
 const AHEAD = 2.6;
@@ -59,7 +63,7 @@ const RUN_SPEED = 12;
 /** Speed below which it is standing still. */
 const STILL_SPEED = 0.6;
 
-type Gait = 'glide' | 'land' | 'walk' | 'run' | 'idle' | 'swim';
+type Gait = 'glide' | 'land' | 'walk' | 'run' | 'idle' | 'swim' | 'dead';
 
 // Clip choice is shared with the arena renderer (kaijuClips.ts). This file used to carry its own
 // exact-match table and its own names[0] fallback — two copies of the same brittle logic, which is
@@ -100,8 +104,17 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   }, [scene]);
   useEffect(() => () => releaseFlash(model), [model]);
 
+  // STRIP ROOT MOTION FROM THE DEATH CLIP before the mixer ever sees it. Left in, it drags the
+  // corpse hundreds of metres and then clamps there. Same treatment the AI Kaiju already get.
+  const deathReady = useMemo(() => {
+    const clips = animations.map((a) => ({ name: a.name, duration: a.duration }));
+    const deadName = resolveGait(clips, 'dead');
+    for (const a of animations) if (a.name === deadName) stripRootMotion(a);
+    return animations;
+  }, [animations]);
+
   // Bind the mixer to the CLONE, so the clips drive the clone's own bones.
-  const { actions, names, mixer } = useAnimations(animations, model);
+  const { actions, names, mixer } = useAnimations(deathReady, model);
   useEffect(() => {
     kaijuDiag.loaded = true;
     return () => { kaijuDiag.loaded = false; stopKaijuFootsteps('player'); };
@@ -116,6 +129,10 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   // a fresh set of agents. A one-shot registration at mount would bind to whatever the id was then,
   // which is usually nothing at all.
   const rigId = useRef<string | null>(null);
+  const deathNrm = useRef(new THREE.Vector3());
+  const deathFwd = useRef(new THREE.Vector3());
+  const deathSide = useRef(new THREE.Vector3());
+  const deathTip = useRef(new THREE.Quaternion());
   const rigBroken = useRef(false);
   const ensureRig = () => {
     const want = playerAgent()?.id ?? null;
@@ -170,7 +187,7 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     if (!next || next === current.current) return;
     current.current?.fadeOut(0.25);
     next.reset().fadeIn(0.25).play();
-    if (g === 'land') { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
+    if (g === 'land' || g === 'dead') { next.setLoop(THREE.LoopOnce, 1); next.clampWhenFinished = true; }
     else next.setLoop(THREE.LoopRepeat, Infinity);
     current.current = next;
   };
@@ -224,6 +241,34 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
       // and `[` `]` and `-` `=` change it at any moment — so reading it once would leave the hit
       // test shaped like whichever Kaiju you last left.
       setPlayerVisual(state.type, h);
+
+      // YOU CAN BE KILLED, AND YOU SHOULD BE ABLE TO SEE IT.
+      //
+      // Geoff: "you're allowing the other kaijus to be able to kill me so then I can't move... but I
+      // haven't fallen over... so I need a death animation." The AI Kaiju have had one for weeks;
+      // the player's own renderer never grew one, so being killed looked exactly like the controls
+      // breaking — which is most of why the last several days went the way they did.
+      const meAgent = playerAgent();
+      if (meAgent && !meAgent.alive) {
+        play('dead');
+        mixer.timeScale = 0.4;
+        stopKaijuFootsteps('player');
+        // Topple onto the SLOPE, easing over a couple of seconds, exactly as the AI corpses do.
+        const t = meAgent.deadFor ?? 0;
+        const ease = 1 - (1 - Math.min(1, t / 2.4)) * (1 - Math.min(1, t / 2.4));
+        const nrm = deathNrm.current;
+        sampleGlobeNormal(b.dir, nrm);
+        const flat = deathFwd.current.copy(b.forward).addScaledVector(nrm, -b.forward.dot(nrm));
+        if (flat.lengthSq() < 1e-9) flat.copy(b.dir);
+        flat.normalize();
+        const side = deathSide.current.crossVectors(nrm, flat).normalize();
+        basis.current.makeBasis(side, nrm, flat);
+        g.quaternion.setFromRotationMatrix(basis.current);
+        g.quaternion.multiply(deathTip.current.setFromAxisAngle(DEATH_AXIS, -Math.PI * 0.5 * ease));
+        g.scale.setScalar(h / Math.max(0.01, modelHeight));
+        if (rigId.current) clearRigCapsules(rigId.current);
+        return;
+      }
 
       // Limb capsules from the pose just drawn, so the crowd's bullets can spark on your own arms.
       //

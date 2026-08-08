@@ -12,7 +12,7 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
-import { nearestKaijuMetres, getAgents } from './kaijuArena';
+import { nearestKaijuMetres, getAgents, playerAgent } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
 import { meshHitDiag } from './kaijuMeshHit';
 import { rigLimbCount } from './kaijuColliders';
@@ -97,6 +97,15 @@ export function KaijuLabHud() {
       </div>
       {/* Speeds shown in REAL m/s, since units/sec at this scale are unintuitively tiny. */}
       {row('Walk / run', `${(walkSpeed(s.height) * 100).toFixed(0)} / ${(runSpeed(s.height) * 100).toFixed(0)} m/s`)}
+      {/* DEAD IS A STATE THE PLAYER MUST BE ABLE TO SEE. Being killed used to look exactly like the
+          controls breaking, which cost several days of hunting a movement bug that did not exist. */}
+      {playerAgent() && !playerAgent()!.alive && (
+        <div style={{
+          margin: '6px 0', padding: '3px 6px', borderRadius: 4, fontWeight: 700,
+          background: 'rgba(200,40,40,0.45)',
+        }}>YOUR KAIJU IS DEAD — press 1-9 to restart the fight</div>
+      )}
+      {playerAgent() && row('Health', `${Math.round(playerAgent()!.health)} / ${Math.round(playerAgent()!.maxHealth)}`)}
       {walking && row('State', kaijuBody.submerged
         ? `SWIMMING, ${Math.round(kaijuBody.depthMetres)} m deep`
         : kaijuBody.onGround

@@ -34,7 +34,7 @@ import { seedKaiju, rand } from './kaijuRandom';
 import { FLASH_SECONDS } from './kaijuFlash';
 import {
   torsoCapsule, capsuleOverlap, limbCapsules, pointToCapsule, torsoRadiusFrac,
-  MELEE_GATE_BODIES, type Capsule,
+  MELEE_GATE_BODIES, bodyFracFor, type Capsule,
 } from './kaijuColliders';
 
 /** Mount Everest. The arena floor is the highest ground on the planet, which is a fine stage. */
@@ -47,6 +47,8 @@ export const ARENA_LON = 86.9250;
 // 1000, which is wrong for every build. Read `agent.maxHealth`.
 /** All three start identical, per Geoff: same size, same health, different weapons. */
 export const ARENA_HEIGHT = 3;      // units = 300 m
+/** How much tougher the player's own Kaiju is than the breed it is built from. Geoff asked for 10x. */
+export const PLAYER_HEALTH_MUL = 10;
 
 export interface Agent {
   id: string;
@@ -287,6 +289,14 @@ export function feetOf(a: Agent, out: THREE.Vector3): THREE.Vector3 {
 export function initArenaWith(
   builds: KaijuBuild[], seed = 0x5EED, spreadBodies = 6,
   lat = ARENA_LAT, lon = ARENA_LON,
+  /**
+   * Give agent 0 the player's health bonus.
+   *
+   * OFF for the balance simulator, which has no player: there, agent 0 is just one of two builds
+   * being compared, and handing it ten times the health makes every duel a measurement of the seat
+   * rather than of the design. The check caught that the moment the bonus was added.
+   */
+  boostPlayer = true,
 ): THREE.Vector3 {
   agents.length = 0;
   events.length = 0;
@@ -313,6 +323,11 @@ export function initArenaWith(
     const facing = centre.clone().sub(dir).normalize();
     placeBodyOnSurface(body, dir, facing);
     const der = derive(build);
+    // THE PLAYER IS TOUGHER. Geoff: "increase my health by 10x." One creature against three, with
+    // no respawn and a fight that is meant to be watched rather than won, so being killed in the
+    // first thirty seconds ends the thing you came to look at. Applied to the player's agent only,
+    // and to BOTH current and maximum, or he starts at a tenth of his own health bar.
+    if (i === 0 && boostPlayer) { der.maxHealth *= PLAYER_HEALTH_MUL; }
     agents.push({
       id: `k${i}`, name: build.name, monsterType: build.monsterType, weapon: build.weapon,
       isPlayer: i === 0, build, d: der,
@@ -707,6 +722,19 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       // radius the body held at the moment of death is where it stayed. Stepping it with no input
       // keeps gravity and the ground snap running, so it drops and lands.
       a.deadFor = (a.deadFor ?? 0) + dt;
+      // ...BUT NEVER THE BODY THE PLAYER IS DRIVING, and this is the "WASD does nothing" bug.
+      //
+      // Geoff: "I also see that you're allowing the other kaijus to be able to kill me so then I
+      // can't move... but I haven't fallen over."
+      //
+      // He had been killed without any sign of it, and this line was then integrating his body with
+      // ZERO input every frame — immediately before the walk controller integrated the same body
+      // with his actual input. The two fought: the corpse step braked `moveSpeed` toward zero as
+      // fast as the controller could ramp it up, so walking cancelled out to nothing. Jump kept
+      // working because a jump is an instant change to vertical velocity rather than something that
+      // has to accumulate, which is exactly the symptom reported — "WASD does nothing, jump works" —
+      // and is what finally identified it.
+      if (a.isPlayer && playerControlled) continue;
       stepBodyOf(a.body, dt, 0, 0, false, false, ARENA_HEIGHT, null);
       continue;
     }
@@ -869,7 +897,10 @@ export function stepArena(dt: number, playerControlled: boolean): void {
   // exactly what "spinning in circles inside each other" looks like.
   for (const a of agents) {
     if (!a.alive) continue;
-    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule);
+    // EACH CREATURE'S OWN CHEST, not one number for all four. A Red Demon is markedly narrower than
+    // a Fort Golem and holding them apart by the same distance is wrong in one direction for one of
+    // them whichever number is chosen.
+    torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, bodyFracFor(a.isPlayer, a.monsterType));
   }
   // Several relaxation passes, because resolving one pair can push a body into another. A single
   // pass left them touching at about 97% of their combined width — visibly clipping. Three passes
@@ -909,7 +940,9 @@ export function stepArena(dt: number, playerControlled: boolean): void {
   }
     // Refresh after each pass, or later passes resolve against stale positions.
     for (const a of agents) {
-      if (a.alive) torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule);
+      if (a.alive) {
+        torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.capsule, bodyFracFor(a.isPlayer, a.monsterType));
+      }
     }
   }
 

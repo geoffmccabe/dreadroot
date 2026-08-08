@@ -31,7 +31,8 @@
 import * as THREE from 'three';
 import { getAgents, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
-  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, bulletTorsoFrac, type Capsule,
+  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, bulletTorsoFrac, playerVisual,
+  type Capsule,
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -165,21 +166,6 @@ for (let i = 0; i < MAX_SPARKS; i++) {
 
 let bCursor = 0;
 let sCursor = 0;
-
-/**
- * What the PLAYER'S Kaiju is currently drawn as. Pushed in by the renderer, never read from it.
- *
- * The lab state that owns this lives behind the monster catalog, which is a .tsx module — importing
- * it here would make the whole simulation unloadable outside a browser and take every headless check
- * with it. Same rule as the limb capsules: the renderer hands the simulation what it drew, and the
- * simulation never reaches into the renderer. `type: -1` means nothing has been reported yet, in
- * which case the agent's own build is used.
- */
-export const playerVisual = { type: -1, height: ARENA_HEIGHT };
-export function setPlayerVisual(type: number, height: number): void {
-  playerVisual.type = type;
-  playerVisual.height = height;
-}
 
 /** Live counters, so "are they even shooting?" is answered by looking rather than guessing. */
 export const gunfireDiag = { fired: 0, hits: 0, live: 0 };

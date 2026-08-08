@@ -76,11 +76,18 @@ console.log('\n== You cannot walk through another Kaiju ==\n');
 
 // FIRST: is the collider even the right SHAPE? No amount of correct separation maths helps if it
 // is separating a body narrower than the one on screen.
+// The collider must cover each creature's BODY. The figures below are the walk-clip spread, which
+// includes the arms swinging; the separation radius is now the idle spread, which is the core. So
+// the test is that it covers the core, not the reach — see the long note in kaijuColliders.
 for (const [name, halfWidth] of MEASURED_TORSO) {
-  ok(torsoRadiusFrac >= halfWidth,
-     `the collider covers the ${name}'s torso`,
-     `collider ${torsoRadiusFrac.toFixed(3)} vs measured ${halfWidth.toFixed(3)} x height`);
+  ok(torsoRadiusFrac >= halfWidth * 0.6,
+     `the collider covers the ${name}'s body core`,
+     `collider ${torsoRadiusFrac.toFixed(3)} vs walk-spread ${halfWidth.toFixed(3)} x height`);
 }
+// ...and two of them at contact must be CLOSE ENOUGH TO FIGHT. This is the check that would have
+// stopped the 0.70 disaster: it passed every gate and still put a body height of air between them.
+ok(torsoRadiusFrac * 2 < 0.75, 'two Kaiju at contact are close enough to brawl',
+   `${(torsoRadiusFrac * 2 * 300).toFixed(0)} m apart, ${(torsoRadiusFrac * 2).toFixed(2)} body heights`);
 // ...and it must not be so wide that nothing can ever reach anything. TWO separate gates, and the
 // tighter one is not the obvious one.
 ok(torsoRadiusFrac * 2 < WEAPONS.melee.rangeBodies + torsoRadiusFrac,
@@ -97,17 +104,21 @@ ok(torsoRadiusFrac * 2 < MELEE_GATE_BODIES(WEAPONS.melee.rangeBodies),
 ok(torsoRadiusFrac <= TORSO_FRAC_CEILING, 'the collider is within its documented ceiling',
    `${torsoRadiusFrac} vs ${TORSO_FRAC_CEILING}`);
 
-// THE ARMS. This used to be a NOTE — a number printed with an apology, because the collider could
-// not be widened past 0.65 without the old hardcoded gate switching combat off. Now that the gate
-// follows the collider, it is a real assertion: the widest pair of creatures in the game must not be
-// able to put any part of themselves inside each other. This is the line Geoff has been reporting.
+// THE ARMS. Reported, not asserted, and this is a deliberate reversal.
+//
+// For one build this WAS an assertion: the collider was widened to 0.70 so that no limb of one Kaiju
+// could reach inside another. It passed, and it was a bad idea. Geoff: "there's a big red cylinder
+// around each kaiju and when another kaiju approaches me our oversized huge red colliders collide
+// and it blocks its ability to get near me, so we can't fight." Two creatures held 420 m apart in a
+// fighting game — a body height of clear air between them — is worse than any amount of arm overlap.
+//
+// Separation keeps BODIES out of each other. Arms passing through during a swing is what fighting
+// looks like. So the number below is expected to be positive now, and printing it keeps it honest.
 {
   const worstPair = MEASURED_REACH.reduce((m, r) => Math.max(m, r[1]), 0) * 2;
   const gap = worstPair - torsoRadiusFrac * 2;
-  ok(gap <= 0, 'no limb of the widest Kaiju can reach inside another one',
-     gap <= 0
-       ? `${(-gap * 300).toFixed(0)} m of clearance at contact`
-       : `${(gap * 300).toFixed(0)} m of arm still passes through`);
+  console.log(`  NOTE  arm reach overlaps by ${(gap * 300).toFixed(0)} m at contact, by design. `
+    + `Bodies are held ${(torsoRadiusFrac * 2 * 300).toFixed(0)} m apart, which is close enough to fight.`);
 }
 
 

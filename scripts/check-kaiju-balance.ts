@@ -28,7 +28,9 @@ const MAX_SECONDS = 120;
 
 /** Fight two builds. Returns the winner's index, or -1 for a draw (both alive at the time limit). */
 function duel(a: KaijuBuild, b: KaijuBuild, seed: number): number {
-  initArenaWith([a, b], seed, 5);
+  // No player bonus: this is build-versus-build, and agent 0 is not a player here. With the bonus
+  // on, every duel measures which seat you were given rather than which Kaiju is better.
+  initArenaWith([a, b], seed, 5, undefined, undefined, false);
   const agents = getAgents();
   for (let t = 0; t < MAX_SECONDS / DT; t++) {
     stepArena(DT, false);
