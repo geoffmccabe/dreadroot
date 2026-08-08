@@ -179,13 +179,33 @@ export const MELEE_GATE_BODIES = (meleeRangeBodies: number): number =>
  */
 export function torsoCapsule(
   dir: THREE.Vector3, radiusUnits: number, heightUnits: number, out?: Capsule,
+  radiusFrac = TORSO_FRAC,
 ): Capsule {
   const feet = (out?.a ?? new THREE.Vector3()).copy(dir).multiplyScalar(radiusUnits);
   const top = (out?.b ?? new THREE.Vector3()).copy(dir).multiplyScalar(radiusUnits + heightUnits * 0.82);
-  const r = heightUnits * TORSO_FRAC;
+  const r = heightUnits * radiusFrac;
   if (out) { out.radius = r; out.part = 'torso'; return out; }
   return { a: feet, b: top, radius: r, part: 'torso' };
 }
+
+/**
+ * A MUCH narrower torso, for things that have to touch the creature you can SEE.
+ *
+ * Geoff: "there's no flash when it hits that kaiju... but I do see the bounce."
+ *
+ * Both halves of that are explained by one mistake. The separation collider above is deliberately
+ * generous — 0.70 of body height, sized so two Kaiju cannot put their ARMS inside each other, which
+ * makes it a cylinder 210 m in radius around a creature whose chest is about 100 m. That is correct
+ * for keeping bodies apart and completely wrong for a bullet: rounds were bouncing off thin air a
+ * hundred metres short of the monster, so the ricochet was visible and the impact spark was floating
+ * in the sky beside it rather than landing on its hide.
+ *
+ * 0.34 is the measured torso half-width: 0.313 on the Red Demon, 0.444 on the golems, from
+ * scripts/measure-glb-width.mjs. Sitting between the two means sparks land just proud of the Demon's
+ * chest and just inside the golems', which the render then nudges toward the camera to clear. The
+ * arms, legs and head are covered by their own bone capsules and are unaffected by this number.
+ */
+export const BULLET_TORSO_FRAC = 0.34;
 
 /** Exported so the collision check can assert the capsule still covers the measured bodies. */
 export const torsoRadiusFrac = TORSO_FRAC;

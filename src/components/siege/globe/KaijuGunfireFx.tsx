@@ -62,8 +62,16 @@ const WIDTH_UNITS = TRACER_WIDTH_M / METRES_PER_UNIT;
 
 /** A muzzle flash, in metres. Roughly a rifle's own flash — read as a dot at any real distance. */
 const MUZZLE_M = 1.6;
-/** A bullet strike on a 300 m creature. Small enough to stay a spark, big enough to catch the eye. */
-const SPARK_M = 5;
+/**
+ * A bullet strike on a 300 m creature. Small enough to stay a spark, big enough to catch the eye.
+ *
+ * 9 m, not 5. Geoff could see the ricochet but not the flash that caused it — mostly because the
+ * rounds were bouncing off the wrong collider entirely (see BULLET_TORSO_FRAC), but 5 m on a
+ * creature 300 m tall is also under 2% of its height, which is a speck.
+ */
+const SPARK_M = 9;
+/** How far out from the hide the flash sits, so it is never swallowed by the mesh it landed on. */
+const SPARK_LIFT_M = 4;
 
 /**
  * A star, painted into a canvas: hot white core, yellow bloom, and spikes of alternating length.
@@ -208,7 +216,11 @@ export function KaijuGunfireFx() {
       if (!sp.live || nS >= MAX_POINTS) continue;
       const f = 1 - sp.age / SPARK_LIFE;
       const o = nS * 3;
-      buf.sparkPos[o] = sp.pos.x; buf.sparkPos[o + 1] = sp.pos.y; buf.sparkPos[o + 2] = sp.pos.z;
+      // LIFT IT OFF THE SKIN. The capsule is an approximation of a limb, so a point exactly on its
+      // surface can sit a few metres inside the mesh it is supposed to be marking — and a flash
+      // hidden inside the creature that stopped the bullet is a flash nobody ever sees.
+      _v.copy(sp.pos).addScaledVector(sp.nrm, SPARK_LIFT_M / METRES_PER_UNIT);
+      buf.sparkPos[o] = _v.x; buf.sparkPos[o + 1] = _v.y; buf.sparkPos[o + 2] = _v.z;
       // Cools white -> orange as it dies, like a real strike on armour.
       buf.sparkCol[o] = f; buf.sparkCol[o + 1] = f * (0.45 + 0.5 * f); buf.sparkCol[o + 2] = f * f * 0.55;
       nS++;

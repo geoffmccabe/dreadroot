@@ -31,7 +31,7 @@
 import * as THREE from 'three';
 import { getAgents, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
-  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, type Capsule,
+  limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, BULLET_TORSO_FRAC, type Capsule,
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -113,7 +113,13 @@ export interface Bullet {
 }
 
 /** A hit mark: brief, and left behind wherever a round struck. */
-export interface Spark { pos: THREE.Vector3; age: number; live: boolean }
+export interface Spark {
+  pos: THREE.Vector3;
+  /** Outward surface normal at the impact, so the flash can be lifted clear of the skin. */
+  nrm: THREE.Vector3;
+  age: number;
+  live: boolean;
+}
 
 const MAX_BULLETS = 512;
 const MAX_SPARKS = 256;
@@ -127,7 +133,7 @@ for (let i = 0; i < MAX_BULLETS; i++) {
   });
 }
 const sparks: Spark[] = [];
-for (let i = 0; i < MAX_SPARKS; i++) sparks.push({ pos: new THREE.Vector3(), age: 0, live: false });
+for (let i = 0; i < MAX_SPARKS; i++) sparks.push({ pos: new THREE.Vector3(), nrm: new THREE.Vector3(0, 1, 0), age: 0, live: false });
 
 let bCursor = 0;
 let sCursor = 0;
@@ -167,16 +173,19 @@ const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radi
  */
 function collidersFor(a: Agent, out: Capsule[]): Capsule[] {
   out.length = 0;
-  torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, _cap);
+  // BULLET_TORSO_FRAC, not the separation radius. See the long note on it: the collider that keeps
+  // two Kaiju apart is 210 m wide on purpose, and shooting at that is shooting at thin air.
+  torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, _cap, BULLET_TORSO_FRAC);
   out.push(_cap);
   for (const c of limbCapsules(a.id)) out.push(c);
   return out;
 }
 
-function addSpark(at: THREE.Vector3): void {
+function addSpark(at: THREE.Vector3, normal?: THREE.Vector3): void {
   const s = sparks[sCursor];
   sCursor = (sCursor + 1) % MAX_SPARKS;
   s.pos.copy(at);
+  if (normal) s.nrm.copy(normal); else s.nrm.copy(at).normalize();
   s.age = 0;
   s.live = true;
 }
@@ -274,7 +283,6 @@ export function stepGunfire(dt: number): void {
       }
 
       if (hitAny) {
-        addSpark(_nrm);
         gunfireDiag.hits++;
         // Surface normal at the impact: straight out from the capsule's own axis. Two separate
         // vectors, because writing the impact point into the same one used for the axis point
@@ -282,6 +290,9 @@ export function stepGunfire(dt: number): void {
         closestOnSegment(_bestCap.a, _bestCap.b, _nrm, _axisPt);
         const n = _norm2.copy(_nrm).sub(_axisPt);
         if (n.lengthSq() < 1e-12) n.copy(_up); else n.normalize();
+        // The spark is created AFTER the normal exists, so it can be lifted off the skin at draw
+        // time. Created before, it had no normal and there was nothing to lift it with.
+        addSpark(_nrm, n);
         // Reflect, keep a third of the speed, and throw it well off the mirror angle. Real ricochets
         // are chaotic; a clean reflection reads as a snooker ball rather than as a bullet coming
         // apart on armour plate.
