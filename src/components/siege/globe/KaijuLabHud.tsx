@@ -126,7 +126,11 @@ export function KaijuLabHud() {
       {row('Planet radius', `${PLANET_RADIUS.toLocaleString()} u = 6,371 km`)}
 
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
-      {row('Tiles', `${tiles.cached} cached, ${tiles.inFlight} loading`)}
+      {/* EVICTIONS ARE THE NUMBER THAT MATTERS. A cache smaller than its working set does not
+          degrade, it collapses — every tile thrown out just before it is needed again — and the only
+          symptom from outside is that everything gets slower and holes appear in the ground. */}
+      {row('Tiles', `${tiles.cached}/${tiles.cap} cached, ${tiles.inFlight} loading`)}
+      {tiles.evicted > 0 && row('Tile evictions', `${tiles.evicted}`)}
       {/* Terrain diagnostics — these three lines identify WHY the planet is missing, if it is:
           patches 0 + wanted 0 = the LOD tree chose nothing; patches 0 + wanted > 0 = it wants them
           but they will not build; patches > 0 = the geometry is there and it is a camera problem. */}

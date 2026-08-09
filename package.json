@@ -32,6 +32,7 @@
     "check:kaiju-footik": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-footik.ts",
     "check:kaiju-impact": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-impact.ts",
     "check:skin-precision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-skin-precision.ts",
+    "check:tile-cache": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-tile-cache.ts",
     "check:meshhit-prefilter": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-meshhit-prefilter.ts",
     "bench:gunfire": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-gunfire.ts",
     "check:ballistics": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ballistics.ts",

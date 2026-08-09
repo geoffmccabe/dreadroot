@@ -78,21 +78,77 @@ export function getManifest(): EarthManifest | null { return manifest; }
 
 // --- cache ---------------------------------------------------------------------------------
 
-const MAX_CACHED = 512;                             // ~68 MB of decoded tiles
+/**
+ * How many decoded tiles to keep. MEASURED off a real session, not chosen.
+ *
+ * This was 512, and it was SMALLER THAN THE WORKING SET, which is the one thing an LRU must never
+ * be. Geoff's trace, over about a third of a session at one site, asked for 1,109 DISTINCT tiles and
+ * issued 8,836 requests for them — every tile fetched eight times over, evicted and re-fetched in a
+ * permanent loop that never converges.
+ *
+ * Everything he reported falls out of that one number:
+ *
+ *   THE SLOWDOWN     Eight thousand fetches, each decoding a fresh 132 KB Int16Array, is about a
+ *                    gigabyte of short-lived allocation. The trace shows scavenger GC up twentyfold
+ *                    and the animation frame climbing from 32 ms to 102 ms as it went.
+ *   THE MISSING      "There's a whole square missing of terrain underneath my kaiju." A patch asks
+ *   TERRAIN          for its tile, gets null because it was evicted between the request and the
+ *                    build, and draws nothing. With the cache thrashing, some patch is always in
+ *                    that state.
+ *   IT GOT WORSE     The longer you stay, the more of the pyramid the LOD tree wants, so the working
+ *                    set grows away from the cap and the thrash accelerates.
+ *
+ * 1600 covers the observed set with room to spare. It costs about 210 MB resident — which sounds
+ * worse than it is, because the thrash it replaces was CHURNING more than that every few seconds and
+ * making the collector chase it.
+ */
+const MAX_CACHED = 1600;
+/**
+ * Below this level, tiles are never evicted at all.
+ *
+ * The coarse pyramid is small — a few hundred tiles across all six faces — and EVERYTHING depends on
+ * it: every deep patch falls back to it while its own level loads, and the ground sampler reads it
+ * constantly. Letting the LRU throw those out to make room for one more deep tile is how a cache
+ * spends its capacity on exactly the wrong things.
+ */
+const PIN_LEVEL = 6;
 const cache = new Map<string, Int16Array>();        // Map preserves insertion order = LRU
 const inFlight = new Map<string, Promise<Int16Array | null>>();
 const failed = new Map<string, number>();           // key -> retry-after timestamp
 const RETRY_MS = 10_000;
 
+/** Evictions since load. Thrash is invisible without it, which is how this went unnoticed. */
+let evictions = 0;
+
+/** A key is `face/level/x_y`; the level is what decides whether it can be thrown away. */
+function levelOf(key: string): number {
+  const a = key.indexOf('/');
+  const b = key.indexOf('/', a + 1);
+  return a < 0 || b < 0 ? 99 : Number(key.slice(a + 1, b));
+}
+
 function touch(key: string, data: Int16Array): void {
   cache.delete(key);
   cache.set(key, data);
-  while (cache.size > MAX_CACHED) {
-    const oldest = cache.keys().next().value as string | undefined;
-    if (oldest === undefined) break;
-    cache.delete(oldest);
+  if (cache.size <= MAX_CACHED) return;
+  // Walk from the oldest, skipping anything pinned. Bounded by the cache size, and only runs on the
+  // frames that actually overflow.
+  for (const k of cache.keys()) {
+    if (cache.size <= MAX_CACHED) break;
+    if (levelOf(k) <= PIN_LEVEL) continue;
+    cache.delete(k);
+    evictions++;
   }
 }
+
+/**
+ * Put a tile straight into the cache. FOR TESTS ONLY.
+ *
+ * check-tile-cache drives the eviction policy directly, because the alternative is testing it
+ * through `fetch` — and the bug being guarded against here is a cache that is smaller than its
+ * working set, which is a property of the policy and nothing to do with the network.
+ */
+export function __putTileForTest(key: string, data: Int16Array): void { touch(key, data); }
 
 /**
  * Decoded tile if it is already in memory, else null (and a fetch is started).
@@ -178,12 +234,18 @@ export function sampleTileBilinear(tile: Int16Array, fx: number, fy: number): nu
 }
 
 /** Diagnostics for the debug overlay. */
-export function earthTileStats(): { cached: number; inFlight: number; failed: number } {
-  return { cached: cache.size, inFlight: inFlight.size, failed: failed.size };
+export function earthTileStats(): {
+  cached: number; inFlight: number; failed: number; evicted: number; cap: number;
+} {
+  return {
+    cached: cache.size, inFlight: inFlight.size, failed: failed.size,
+    evicted: evictions, cap: MAX_CACHED,
+  };
 }
 
 /** Drop everything. Called when leaving the map so the memory does not linger. */
 export function clearEarthTiles(): void {
   cache.clear();
+  evictions = 0;
   failed.clear();
 }
