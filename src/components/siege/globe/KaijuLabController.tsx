@@ -33,6 +33,7 @@ import {
 import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuGunfireFx } from './KaijuGunfireFx';
+import { KaijuParachutes } from './KaijuParachutes';
 import { KaijuShoutsFx } from './KaijuShoutsFx';
 import { KaijuColliderDebug, toggleColliderDebug } from './KaijuColliderDebug';
 import { KaijuCity } from './KaijuCity';
@@ -413,6 +414,11 @@ export function KaijuLabController() {
           would cut every effect dead the moment the people vanished. */}
       <GlobeErrorBoundary label="kaiju-gunfire">
         <KaijuGunfireFx />
+      </GlobeErrorBoundary>
+      {/* The canopies are their own layer: they OUTLIVE nothing and depend on nothing, and a bad
+          instance matrix must not be able to take the crowd down with it. */}
+      <GlobeErrorBoundary label="kaiju-chutes">
+        <KaijuParachutes />
       </GlobeErrorBoundary>
       <GlobeErrorBoundary label="kaiju-shouts">
         <KaijuShoutsFx />

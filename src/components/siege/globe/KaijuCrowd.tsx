@@ -40,12 +40,17 @@ import { SkeletonUtils } from 'three-stdlib';
 import { pickClip } from './kaijuClips';
 import { localiseSkinning } from './skinPrecision';
 import { buildSoldierTemplate } from './soldierMesh';
-import { getAgents, arenaStarted, ARENA_HEIGHT, type Agent } from './kaijuArena';
+import { getAgents, arenaStarted, arenaClock, ARENA_HEIGHT, type Agent } from './kaijuArena';
 import {
   chooseTarget, aimPoint, nextShotDelay, nextRetargetDelay, fireBullet, inRange,
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
+import {
+  DROP_ALTITUDE_M, TERMINAL_MS, FREEFALL_DRIVE_MS, CANOPY_MS, CANOPY_DRIVE_MS,
+  PARA_COUNT, CHUTE_COLOURS, openAltitude, driftMetres, dropSchedule,
+  beginCanopies, addCanopy, paraDiag,
+} from './kaijuParatroopers';
 import {
   ensureCityColliders, worldToCity, cityToWorld, steerAroundBuildings,
   resolveBuildings, buildingAt, clampToRoof, cityGroundRadius, type CityBox,
@@ -54,8 +59,10 @@ import { noteGunshot } from './kaijuGunAudio';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
-/** How many. Geoff asked for 200. */
+/** How many on the ground. Geoff asked for 200. */
 export const CROWD_SIZE = 200;
+/** ...plus the stick that comes in by air. One model pool covers both. */
+export const TOTAL_SOLDIERS = CROWD_SIZE + PARA_COUNT;
 /**
  * How far from the Kaiju they spread, in metres.
  *
@@ -259,6 +266,11 @@ function makePeople(): Person[] {
         side: 0,
         stuck: 0,
         roof: null,
+        altM: -1,
+        dropAt: -1,
+        chute: 0,
+        fallV: 0,
+        pinned: false,
       });
     }
     return out;
@@ -301,6 +313,11 @@ function makePeople(): Person[] {
         side: 0,
         stuck: 0,
         roof: null,
+        altM: -1,
+        dropAt: -1,
+        chute: 0,
+        fallV: 0,
+        pinned: false,
       });
       continue;
     }
@@ -325,8 +342,57 @@ function makePeople(): Person[] {
       side: 0,
       stuck: 0,
       roof: null,
+      altM: -1,
+      dropAt: -1,
+      chute: 0,
+      fallV: 0,
+      pinned: false,
     });
   }
+  // ---- THE STICK ------------------------------------------------------------------------------
+  //
+  // Fifty more, two kilometres up and upwind. They are ordinary Person records with an altitude and
+  // a jump time; nothing else about them is special, which is why they shoot and shout at exactly
+  // the rates the men on the ground do without a line of code saying so.
+  //
+  // WHERE THEY APPEAR is derived rather than chosen: driftMetres works out how far the fall and the
+  // canopy will carry them and puts the aircraft that far back, so the drop lands ON the fight. It
+  // moves itself if the altitude or either speed changes.
+  {
+    const drift = driftMetres() / PLANET_RADIUS / METRES_PER_UNIT;
+    const times = dropSchedule(PARA_COUNT);
+    for (let i = 0; i < PARA_COUNT; i++) {
+      // Aim each man at one of the combatants, then step BACK along his own approach by the drift.
+      const aim = (combatants.length ? combatants[Math.floor(rand() * combatants.length) % combatants.length]
+        : centre).clone();
+      const ang = rand() * Math.PI * 2;
+      const dir = aim.clone()
+        .addScaledVector(east, -Math.cos(ang) * drift)
+        .addScaledVector(north, -Math.sin(ang) * drift)
+        .normalize();
+      // Spread the stick out so fifty canopies are not one column.
+      const jitter = (SPREAD_M * 1.6) / PLANET_RADIUS / METRES_PER_UNIT;
+      dir.addScaledVector(east, (rand() * 2 - 1) * jitter)
+         .addScaledVector(north, (rand() * 2 - 1) * jitter)
+         .normalize();
+      const fwd = new THREE.Vector3().crossVectors(dir, east).normalize();
+      out.push({
+        dir, fwd,
+        running: false, timer: 1 + rand() * 2, phase: rand(),
+        speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        targetId: chooseTarget(dir),
+        fireIn: nextShotDelay(),
+        retargetIn: nextRetargetDelay(),
+        shootFor: 0, side: 0, stuck: 0, roof: null,
+        altM: DROP_ALTITUDE_M,
+        dropAt: times[i],
+        chute: Math.floor(rand() * CHUTE_COLOURS.length) % CHUTE_COLOURS.length,
+        fallV: 0,
+        pinned: false,
+      });
+    }
+  }
+
   // SCATTERED BETWEEN THE KAIJU, AND ON THE ROOFS.
   //
   // Geoff: "start them scattered everywhere between my Kaiju and the others... if they are inside a
@@ -340,6 +406,8 @@ function makePeople(): Person[] {
     const p = new THREE.Vector3();
     let onRoofs = 0;
     for (const person of out) {
+      // Not the paratroopers: they find out what they have landed on when they land on it.
+      if (person.altM >= 0) continue;
       p.copy(person.dir).multiplyScalar(playerBody.radius);
       if (!worldToCity(p, p)) break;
       const box = buildingAt(p.x, p.z);
@@ -419,7 +487,7 @@ function Crowd() {
       attached: boolean;
     }[] = [];
     let localised = 0;
-    for (let i = 0; i < CROWD_SIZE; i++) {
+    for (let i = 0; i < TOTAL_SOLDIERS; i++) {
       const obj = SkeletonUtils.clone(source) as THREE.Group;
       obj.traverse((o) => {
         const m = o as THREE.Mesh;
@@ -533,6 +601,11 @@ function Crowd() {
     const STAGGER = 3;
     // One check for the whole crowd, not one per soldier.
     const cityReady = ensureCityColliders();
+    // The battle clock drives the drop schedule, and the canopy list is rebuilt from scratch each
+    // frame — a man who lands simply stops being added, which is the whole of "the chute disappears".
+    const clock = arenaStarted() ? arenaClock() : 0;
+    beginCanopies();
+    let pending = 0, freefalling = 0, underCanopy = 0, landed = 0;
     // ONE radius for the whole crowd's city maths. The city is flat and level in its own frame, so
     // the exact altitude a given soldier stands at moves his position in that frame by centimetres —
     // far less than his own width, and not worth a terrain sample per person per frame just to get
@@ -561,6 +634,116 @@ function Crowd() {
         target = p.targetId ? byId.get(p.targetId) : undefined;
       }
       const kaiju = target?.body.dir ?? playerBody.dir;
+
+      // ---- UNDER THE CANOPY, OR STILL FALLING TO IT --------------------------------------------
+      //
+      // A paratrooper runs NONE of the ground behaviour below: no wandering, no standoff, no
+      // building avoidance. He has one job, which is to come down. Everything else about him — his
+      // target, his rifle, his shouting — is the shared code further on and is untouched.
+      if (p.dropAt >= 0 && p.altM < 0 && clock < p.dropAt) { pending++; f.obj.visible = false; continue; }
+      if (p.altM >= 0) {
+        f.obj.visible = true;
+
+        // WHAT IS UNDERNEATH HIM, which is what decides when the canopy opens. Geoff: "pop their
+        // chutes closer to the ground, building tops, or kaijus."
+        let belowM = 0;
+        let roofBox: CityBox | null = null;
+        if (cityReady) {
+          _cityPos.copy(p.dir).multiplyScalar(groundRadius);
+          if (worldToCity(_cityPos, _cityPos)) {
+            roofBox = buildingAt(_cityPos.x, _cityPos.z);
+            if (roofBox) belowM = roofBox.h;
+          }
+        }
+        // A Kaiju counts as ground for this purpose: nobody wants a canopy opening at ankle height
+        // beside something 300 m tall.
+        if (target) {
+          const gap = p.dir.angleTo(target.body.dir) * PLANET_RADIUS * METRES_PER_UNIT;
+          if (gap < ARENA_HEIGHT * METRES_PER_UNIT) {
+            belowM = Math.max(belowM, ARENA_HEIGHT * METRES_PER_UNIT);
+          }
+        }
+
+        const canopyOut = p.altM <= openAltitude(belowM);
+        if (canopyOut) { p.fallV = CANOPY_MS; underCanopy++; } else {
+          // Real freefall: gravity builds the speed up to terminal rather than starting there.
+          p.fallV = Math.min(TERMINAL_MS, p.fallV + 9.81 * dt);
+          freefalling++;
+        }
+        const drive = p.pinned ? 0 : (canopyOut ? CANOPY_DRIVE_MS : FREEFALL_DRIVE_MS);
+
+        // STEER AT THE FIGHT while descending, which is what makes the approach an angle rather
+        // than a plumb line.
+        if (drive > 0) {
+          _toKaiju.copy(kaiju).sub(p.dir);
+          _toKaiju.addScaledVector(p.dir, -_toKaiju.dot(p.dir));
+          if (_toKaiju.lengthSq() > 1e-12) p.fwd.copy(_toKaiju).normalize();
+          _axis.crossVectors(p.dir, p.fwd).normalize();
+          const ang = (drive / METRES_PER_UNIT) * dt / PLANET_RADIUS;
+          const before = _cityAhead.copy(p.dir);
+          p.dir.applyAxisAngle(_axis, ang).normalize();
+
+          // DID HE JUST FLY INTO THE SIDE OF A TOWER? Geoff: "If they hit the side of a building's
+          // colliders, they will just drop straight down from there at parachute-falling speed."
+          // A footprint whose roof is ABOVE him is a wall in his way; one below him is a roof he is
+          // about to clear. Reverting the step leaves him against the face, and `pinned` keeps him
+          // there for the rest of the descent.
+          if (cityReady) {
+            _cityPos.copy(p.dir).multiplyScalar(groundRadius);
+            if (worldToCity(_cityPos, _cityPos)) {
+              const hitBox = buildingAt(_cityPos.x, _cityPos.z);
+              if (hitBox && hitBox.h > p.altM && hitBox !== roofBox) {
+                p.dir.copy(before);
+                p.pinned = true;
+              }
+            }
+          }
+        }
+
+        p.altM -= p.fallV * dt;
+
+        // TOUCHDOWN. On a roof if he is over one, otherwise the street. Either way the canopy stops
+        // being drawn on the next frame and he becomes an ordinary soldier — the rest of this loop
+        // does not know or care that he arrived by air.
+        if (roofBox && p.altM <= roofBox.h) {
+          p.roof = roofBox; p.altM = -1; p.pinned = false; p.running = false; p.timer = 0.4;
+        } else if (p.altM <= 0) {
+          p.roof = null; p.altM = -1; p.pinned = false; p.running = false; p.timer = 0.4;
+        } else {
+          // Still in the air: place him, hang a canopy over him, and skip everything below.
+          const radius = (cityReady ? cityGroundRadius() : playerBody.radius)
+            + p.altM / METRES_PER_UNIT;
+          f.obj.position.copy(p.dir).multiplyScalar(radius);
+          _up.copy(p.dir);
+          _side.crossVectors(_up, p.fwd).normalize();
+          _basis.makeBasis(_side, _up, p.fwd);
+          f.obj.quaternion.setFromRotationMatrix(_basis);
+          // The canopy only exists once it is out. In freefall there is nothing above him.
+          if (canopyOut) addCanopy(f.obj.position, _up, p.fwd, p.chute);
+
+          // He still fires and still shouts, at exactly the rates the men on the ground use — the
+          // same lines of code, reached from here. The rifle will not reach a Kaiju from two
+          // kilometres up, and inRange knows that, so the firing starts on its own as he closes.
+          if (f.action) f.action.setEffectiveWeight(0);
+          if (f.idle) f.idle.setEffectiveWeight(1);
+          if (f.shoot) f.shoot.setEffectiveWeight(0);
+          if ((i % STAGGER) === (frame.current % STAGGER)) f.mixer.update(dt * STAGGER);
+
+          _muzzle.copy(f.obj.position)
+            .addScaledVector(p.dir, MUZZLE_UP_UNITS)
+            .addScaledVector(p.fwd, MUZZLE_FWD_UNITS);
+          p.fireIn -= dt;
+          if (p.fireIn <= 0 && target && inRange(p.dir, target)) {
+            p.fireIn = nextShotDelay();
+            fireBullet(_muzzle, aimPoint(target, _aim));
+            noteGunshot(_muzzle);
+            maybeShout(_muzzle, i);
+          }
+          updateShoutAnchor(i, _muzzle);
+          continue;
+        }
+      }
+      if (p.dropAt >= 0) landed++;
 
       p.timer -= dt;
       if (p.timer <= 0) {
@@ -727,6 +910,11 @@ function Crowd() {
       // the tail still points at them a second later, when they have run fifty metres.
       updateShoutAnchor(i, _muzzle);
     }
+
+    paraDiag.pending = pending;
+    paraDiag.freefall = freefalling;
+    paraDiag.canopy = underCanopy;
+    paraDiag.landed = landed;
   });
 
   return <group ref={group} />;

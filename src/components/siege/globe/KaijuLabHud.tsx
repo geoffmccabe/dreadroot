@@ -13,6 +13,7 @@ import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
 import { crowdDiag } from './KaijuCrowd';
+import { paraDiag } from './kaijuParatroopers';
 import { nearestKaijuMetres, getAgents, playerAgent } from './kaijuArena';
 import { gunfireDiag } from './kaijuGunfire';
 import { meshHitDiag } from './kaijuMeshHit';
@@ -126,6 +127,11 @@ export function KaijuLabHud() {
           but they will not build; patches > 0 = the geometry is there and it is a camera problem. */}
       {row('Patches', `${terrainDiag.patches} drawn / ${terrainDiag.wanted} wanted`)}
       {row('Deepest', `level ${terrainDiag.deepest}`)}
+      {/* THE DROP. Three states that look identical from outside — still in the aircraft, falling,
+          and under canopy — and one line that tells them apart. */}
+      {crowdDiag.on && row('Drop', paraDiag.pending || paraDiag.freefall || paraDiag.canopy
+        ? `${paraDiag.pending} waiting, ${paraDiag.freefall} falling, ${paraDiag.canopy} under canopy`
+        : `${paraDiag.landed} down`)}
       {row('Crowd', crowdDiag.on
         ? `${crowdDiag.spawned} ${crowdDiag.layout}${crowdDiag.onRoofs ? `, ${crowdDiag.onRoofs} on roofs` : ''}`
           + `${crowdDiag.modelOk ? '' : ' (NO MODEL)'}`
