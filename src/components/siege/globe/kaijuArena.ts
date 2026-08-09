@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { BehaviourTree, State } from 'mistreevous';
 import {
   createKaijuBody, stepBodyOf, placeBodyOnSurface, reTangentOf, rightVectorOf, turnTangentOf,
-  turnRate, body as playerBody, type KaijuBody,
+  turnRate, walkSpeed, body as playerBody, type KaijuBody,
 } from './kaijuBody';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -35,6 +35,46 @@ import { seedKaiju, rand } from './kaijuRandom';
 import { queueStrike, stepStrikeQueue } from './kaijuImpact';
 import { meshSeparation, meshSepDiag } from './kaijuMeshSeparate';
 import { stepBurns, clearBurns } from './kaijuBurn';
+
+/**
+ * Whether an AI Kaiju may ever run. It may not.
+ *
+ * A 300 m creature's run speed under the same Froude rule that sets its walk is 86 m/s — three
+ * hundred kilometres an hour — and the AI chose it almost every frame. Measured over a thirty-second
+ * fight, the four of them averaged 25 to 82 m/s against a walk of 27. That, and not any collider, is
+ * why they crossed the arena as if on ice. Geoff: "I don't want him moving unless he is slow-walking
+ * based on the physics we have set up for that."
+ *
+ * One line to change if running is ever wanted back, and visible here rather than scattered through
+ * the behaviour trees.
+ */
+const ALLOW_RUN = false;
+
+/**
+ * The hardest rule in the fight: no Kaiju may cover more ground in a tick than its own legs could.
+ *
+ * Geoff, after this went wrong four separate ways: "suggest fixes so they stop skating, circling,
+ * sliding, or moving so fast, EVER."
+ *
+ * Every one of those was a DIFFERENT term adding motion — the tree choosing to run, the knockback,
+ * a separation push applied repeatedly, the building steering. Fixing them one at a time is what has
+ * failed repeatedly, because the next new term starts the same bug again.
+ *
+ * So this is not another fix for a cause. It is a ceiling on the RESULT: whatever moved the body
+ * this tick, and however many things had a hand in it, it may not have travelled further than
+ * walking pace — and if it did, it is pulled back. A Kaiju can now only be made to slide by
+ * changing this number, which is something somebody has to do on purpose.
+ *
+ * 1.15 leaves headroom so a legitimate walk plus a small nudge is not clamped every frame, which
+ * would fight the movement rather than bound it.
+ */
+const SPEED_CEILING = 1.15;
+
+/**
+ * The same idea for rotation. A Kaiju may not turn faster than its own body allows, from any number
+ * of contributors combined. 1.1 is enough headroom that a legal turn is not clipped every frame.
+ */
+const TURN_CEILING = 1.1;
 
 /**
  * Anything shorter than this, a 300 m Kaiju simply walks over. Anything taller, it goes round.
@@ -65,6 +105,7 @@ let buildingSteer: BuildingSteer | null = null;
 export function setBuildingSteer(fn: BuildingSteer | null): void { buildingSteer = fn; }
 
 const _steerOut = new THREE.Vector3();
+const _turnRight = new THREE.Vector3();
 
 /**
  * Broad-phase radius, as a fraction of height. Full arm reach plus a little.
@@ -161,6 +202,10 @@ export interface Agent {
   capsule: Capsule;
   /** A wider capsule used only as the broad phase for the mesh separation. */
   broad: Capsule;
+  /** Where this body was at the start of the tick, for the speed ceiling. */
+  tickStart: THREE.Vector3;
+  /** ...and which way it was facing, for the turn ceiling. */
+  tickStartFwd: THREE.Vector3;
   /**
    * Tangent knockback velocity, in units/sec, decaying over time.
    *
@@ -284,11 +329,11 @@ const NATURAL_METRES: Record<number, number> = {
 const SWING_CONTACT = 0.58;
 
 /** Peak knockback speed, units/sec, for a blow worth ~8% of the victim's health. */
-const KNOCK_SPEED = 0.55;
+const KNOCK_SPEED = 0.12;
 /** How fast knockback bleeds off (per second). */
-const KNOCK_DECAY = 3.2;
+const KNOCK_DECAY = 5.5;
 /** Ceiling on accumulated knockback, units/sec. See the note where it is applied. */
-const KNOCK_MAX = 0.35;
+const KNOCK_MAX = 0.06;
 /**
  * How fast the player's Kaiju swings round to face the crosshair.
  *
@@ -456,6 +501,8 @@ export function initArenaWith(
       order: null, refusalNote: '', refusing: false, orderAnswered: false, ackFlash: 0,
       capsule: torsoCapsule(dir, body.radius, ARENA_HEIGHT),
       broad: torsoCapsule(dir, body.radius, ARENA_HEIGHT, undefined, BROAD_FRAC),
+      tickStart: dir.clone(),
+      tickStartFwd: facing.clone(),
       knock: new THREE.Vector3(), stagger: 0, burning: 0, screamCooldown: 0, screamed: false,
       swingTimer: 0, swingLanded: false,
     });
@@ -571,19 +618,48 @@ function makeBoard(a: Agent) {
     reTangentOf(a.body, dirWorld);
     a.intentDir.copy(dirWorld);
     a.intentMove = true;
-    a.intentRun = run;
+    // NEVER RUN. Geoff: "I don't want him moving unless he is slow-walking based on the physics we
+    // have set up for that." A 300 m creature's run speed under the same Froude rule that sets its
+    // walk is 86 m/s — three hundred kilometres an hour — and the AI chose it almost every frame.
+    // Measured over a thirty-second fight, the four of them averaged 25-82 m/s with a walk of 27.
+    // That, not any collider, is why they cross the arena like they are on ice.
+    //
+    // `run` is kept as a parameter rather than deleted so a future decision to allow it is one line
+    // and is visible here rather than scattered through the behaviour trees.
+    a.intentRun = run && ALLOW_RUN;
     // Speed scales the step, which leaves the sphere-rotation maths in stepBodyOf untouched.
     // Sprinter adds a burst, but only while closing on an enemy — that is what makes it a
     // short-range fighter's ability rather than simply more Speed.
     a.intentSpeedMul = a.d.moveMul * (closing && a.build.abilities.includes('sprinter') ? 1.35 : 1);
   };
+  /**
+   * Turn toward a heading AT THIS CREATURE'S OWN TURN RATE.
+   *
+   * Both places that aimed a Kaiju used to do `forward.lerp(aim, dt * 3)` — five percent of the
+   * remaining angle every frame, with no reference to turnRate at all. Facing something ninety
+   * degrees away that is four and a half degrees in one frame: two hundred and seventy degrees a
+   * second, on a creature whose rule is thirty-one.
+   *
+   * That is the circling. Walking at 27 m/s while pirouetting at 200 deg/s traces exactly the tight,
+   * fast circles Geoff kept describing, and no amount of work on the colliders could have touched
+   * it, because it was never about position at all.
+   *
+   * The same limit the player's aim uses, from the same Froude curve as the walk speed.
+   */
+  const turnToward = (aim: THREE.Vector3, dt: number) => {
+    reTangentOf(a.body, aim);
+    const cos = Math.max(-1, Math.min(1, a.body.forward.dot(aim)));
+    if (cos > 0.99995) return;
+    rightVectorOf(a.body, _turnRight);
+    const sign = aim.dot(_turnRight) >= 0 ? -1 : 1;
+    turnTangentOf(a.body, a.body.forward, sign * Math.min(Math.acos(cos), turnRate(ARENA_HEIGHT) * dt));
+  };
+
   const faceTarget = () => {
     const t = targetOf(a);
     if (!t) return false;
     _aim.copy(centreOf(t, _tmp)).sub(centreOf(a, new THREE.Vector3()));
-    reTangentOf(a.body, _aim);
-    a.body.forward.lerp(_aim, Math.min(1, ctx.dt * 3)).normalize();
-    reTangentOf(a.body, a.body.forward);
+    turnToward(_aim, ctx.dt);
     return true;
   };
 
@@ -606,9 +682,7 @@ function makeBoard(a: Agent) {
       const t = targetOf(a);
       if (!t) return State.FAILED;
       _aim.copy(centreOf(a, new THREE.Vector3())).sub(centreOf(t, _tmp));
-      reTangentOf(a.body, _aim);
-      a.body.forward.lerp(_aim, Math.min(1, ctx.dt * 3)).normalize();
-      reTangentOf(a.body, a.body.forward);
+      turnToward(_aim, ctx.dt);
       return State.SUCCEEDED;
     },
     MoveToTarget: () => {
@@ -842,9 +916,15 @@ function applyHits(hits: { targetId: string; ownerId: string; weapon: WeaponId; 
 }
 
 /** One simulation step. Called from the arena component's frame loop. */
+/** How often the ceiling had to intervene, so silent clamping every frame is visible. */
+export const speedClampDiag = { clamped: 0, worstMetres: 0, turnClamped: 0, worstTurnDeg: 0 };
+
 export function stepArena(dt: number, playerControlled: boolean): void {
   if (!started) return;
   clock += dt;
+  // Where every body started this tick, so the ceiling below can measure what actually happened to
+  // it rather than trusting each contributor to behave.
+  for (const a of agents) if (a.alive) { a.tickStart.copy(a.body.dir); a.tickStartFwd.copy(a.body.forward); }
   // Age blows that are waiting for a renderer to pick them up. One owner, once a tick.
   stepStrikeQueue(dt);
   // Fires burning ON the Kaiju: age them and move each to wherever its bone is now.
@@ -1175,6 +1255,50 @@ export function stepArena(dt: number, playerControlled: boolean): void {
         torsoCapsule(a.body.dir, a.body.radius, ARENA_HEIGHT, a.broad, BROAD_FRAC);
       }
     }
+  }
+
+  // --- THE SPEED CEILING ------------------------------------------------------------------------
+  //
+  // Applied AFTER everything that can move a body: locomotion, knockback, separation, steering. It
+  // does not care which of them did it. See SPEED_CEILING.
+  const maxStep = walkSpeed(ARENA_HEIGHT) * SPEED_CEILING * dt;
+  for (const a of agents) {
+    if (!a.alive) continue;
+    // The player's body is driven by the walk controller in its own frame callback, so measuring it
+    // here would clamp last frame's input and fight the controls.
+    if (a.isPlayer && playerControlled) continue;
+    const movedAngle = a.tickStart.angleTo(a.body.dir);
+    const moved = movedAngle * a.body.radius;
+    if (moved <= maxStep || movedAngle < 1e-12) continue;
+    // Pull it back along the arc it travelled, to exactly the distance its legs could have carried
+    // it. Lerp-and-normalise is a chord rather than an arc, but over a single frame's motion on a
+    // sphere this size the two differ by parts per billion.
+    a.body.dir.lerp(a.tickStart, 1 - maxStep / moved).normalize();
+    reTangentOf(a.body, a.body.forward);
+    speedClampDiag.clamped++;
+    speedClampDiag.worstMetres = Math.max(speedClampDiag.worstMetres, (moved / dt) * METRES_PER_UNIT);
+  }
+
+  // --- THE TURN CEILING -------------------------------------------------------------------------
+  //
+  // The same argument as the speed ceiling, for the same reason. Two separate systems turn a Kaiju
+  // — the behaviour tree aiming it at its target, and locomotion swinging it onto its heading — and
+  // each of them correctly limits itself to the creature's turn rate. Both running in one frame
+  // gives twice the rate, which measured at 61 deg/s against a rule of 31. Walking at 27 m/s while
+  // pirouetting at twice the legal rate is what draws a tight circle.
+  //
+  // Neither of them is wrong on its own, which is exactly why this belongs at the end rather than
+  // inside either: it bounds the total, whatever contributed to it.
+  const maxTurn = turnRate(ARENA_HEIGHT) * TURN_CEILING * dt;
+  for (const a of agents) {
+    if (!a.alive) continue;
+    if (a.isPlayer && playerControlled) continue;
+    const turned = a.tickStartFwd.angleTo(a.body.forward);
+    if (turned <= maxTurn || turned < 1e-12) continue;
+    a.body.forward.lerp(a.tickStartFwd, 1 - maxTurn / turned).normalize();
+    reTangentOf(a.body, a.body.forward);
+    speedClampDiag.turnClamped++;
+    speedClampDiag.worstTurnDeg = Math.max(speedClampDiag.worstTurnDeg, (turned / dt) * 180 / Math.PI);
   }
 
   const hits = stepProjectiles(dt, hitTargets(), (p) => {

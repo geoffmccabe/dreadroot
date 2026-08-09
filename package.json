@@ -28,6 +28,7 @@
     "check:player-collision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-player-collision.ts",
     "check:kaiju-gunfire": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-gunfire.ts",
     "check:limb-bones": "node scripts/check-limb-bones.mjs",
+    "check:kaiju-speed": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-speed.ts",
     "check:paratroopers": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-paratroopers.ts",
     "check:city-colliders": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-city-colliders.ts",
     "check:kaiju-burn": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-burn.ts",
