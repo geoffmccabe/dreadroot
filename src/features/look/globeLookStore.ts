@@ -251,16 +251,16 @@ function load(): GlobeLookState {
     // Spread the defaults UNDER the saved values: a stored blob from an older build is missing any
     // key added since, and without this those come back undefined and land in a shader as NaN.
     //
-    // `enabled` IS DELIBERATELY NOT RESTORED. Geoff: "Now the Kaijus startup with the kaiju and the
-    // planet and the space, is all ruined... and I didn't ask you to fuck that up."
+    // THE MASTER PERSISTS AGAIN, and only because the leak is now fixed at its source rather than
+    // worked around here.
     //
-    // He is right, and this is the structural answer rather than another guess at a value. Every
-    // TUNING value persists, so a look survives a reload and can be shared — but the master switch
-    // starts DOWN every session. That makes one thing true and keeps it true: loading the game gives
-    // you the game exactly as it has always been, whatever was left switched on last time, whatever
-    // a preset once wrote, whatever I get wrong next. Nothing in this feature can reach a fresh
-    // start-up any more.
-    if (raw) return { ...GLOBE_LOOK_DEFAULTS, ...JSON.parse(raw), enabled: false };
+    // It was forced off on every load after the Mini Earth's grade escaped onto every other map.
+    // That escape had two real causes and both are gone: the grade now also requires the globe to be
+    // ON SCREEN (globeActive), and exposure is written straight to the renderer instead of into the
+    // shared persisted store. With those fixed, "not persisting" was no longer protection — it was
+    // just a switch that silently turned itself off between every test, which is its own bug and the
+    // reason a whole round of testing reported "no change in the lighting".
+    if (raw) return { ...GLOBE_LOOK_DEFAULTS, ...JSON.parse(raw) };
   } catch { /* corrupt or blocked storage is not worth failing over */ }
   return { ...GLOBE_LOOK_DEFAULTS };
 }

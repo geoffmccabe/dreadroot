@@ -25,6 +25,19 @@ import * as THREE from 'three';
 import { bonesOf } from './kaijuMeshHit';
 import { fxRand as rand } from './kaijuRandom';
 
+/**
+ * How big a fire is, as a fraction of the CREATURE'S height — not of the flame particle that lit it.
+ *
+ * Geoff: "I don't see any flames persisting on the kaiju at all. At least it needs something."
+ *
+ * It was there and it was invisible. The size came from the particle that landed, and a flame
+ * particle is 0.05 units — five metres. On a creature 300 m tall that is a candle, and at any
+ * playable distance it is nothing at all. Sizing off the body instead makes a fresh patch about
+ * 25 m and a well-fed one about 90 m, which is a fire on something the size of a skyscraper.
+ */
+const START_FRAC = 0.085;
+const FED_FRAC = 0.3;
+
 /** How long a patch of fire stays alight, in seconds. Geoff asked for 10-15. */
 const BURN_MIN = 10;
 const BURN_MAX = 15;
@@ -93,7 +106,7 @@ const _bonePos = new THREE.Vector3();
  * in which case there is nothing sensible to do — fire that cannot follow the body would be worse
  * than no fire.
  */
-export function igniteMesh(agentId: string, at: THREE.Vector3, sizeUnits: number): boolean {
+export function igniteMesh(agentId: string, at: THREE.Vector3, bodyHeightUnits: number): boolean {
   const bones = bonesOf(agentId);
   if (!bones.length) return false;
 
@@ -116,7 +129,7 @@ export function igniteMesh(agentId: string, at: THREE.Vector3, sizeUnits: number
   for (const b of burns) {
     if (!b.live || b.agentId !== agentId || b.bone !== best) continue;
     if (b.local.distanceTo(_local) > mergeLocal) continue;
-    b.size = Math.min(b.size * 1.06 + sizeUnits * 0.15, sizeUnits * 6);
+    b.size = Math.min(b.size * 1.05 + bodyHeightUnits * 0.01, bodyHeightUnits * FED_FRAC);
     b.age = 0;                      // being fed keeps it burning
     burnDiag.merged++;
     return true;
@@ -128,7 +141,7 @@ export function igniteMesh(agentId: string, at: THREE.Vector3, sizeUnits: number
   b.bone = best;
   b.local.copy(_local);
   b.world.copy(at);
-  b.size = sizeUnits * 1.8;
+  b.size = bodyHeightUnits * START_FRAC;
   b.age = 0;
   b.life = BURN_MIN + rand() * (BURN_MAX - BURN_MIN);
   b.seed = rand() * 1000;

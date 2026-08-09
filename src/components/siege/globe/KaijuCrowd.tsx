@@ -67,6 +67,16 @@ export const CROWD_SIZE = 200;
  */
 const SPREAD_M = 350;
 /**
+ * A soldier's footprint and how far ahead he looks, in CITY METRES.
+ *
+ * Both were used throughout the building-avoidance code without ever being declared — seven
+ * ReferenceErrors waiting to fire, caught by check:undeclared. 0.45 m is a man's shoulders with a
+ * little clearance, and 4 m is about a second of running, which is when a swerve round a wall still
+ * looks like a decision rather than a bounce.
+ */
+const PERSON_RADIUS_M = 0.45;
+const LOOKAHEAD_M = 4;
+/**
  * Beyond this, a figure is detached from the scene graph entirely. In game units.
  *
  * THIS CONSTANT DID NOT EXIST. It was used twice, a hundred lines below, and never declared — so

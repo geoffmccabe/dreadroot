@@ -17,6 +17,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { setBuildingSteer } from './kaijuArena';
+import { steerKaijuAroundBuildings } from './cityColliders';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { loadCity, getCity, cityDistanceUnits, cityDiag, type City } from './cityData';
 import { applyCityWindows } from './cityWindows';
@@ -35,6 +37,15 @@ import { KaijuCityDetail } from './KaijuCityDetail';
 const DRAW_WITHIN_UNITS = 400;
 
 export function KaijuCity() {
+  // HAND THE ARENA ITS BUILDING AVOIDANCE while a city is mounted, and take it away again when it
+  // is not. Pushed in rather than imported by the arena, because the collider index reaches the
+  // database through cityData and the simulation must not — importing it there dragged the Supabase
+  // client into every headless check and broke all of them at load.
+  useEffect(() => {
+    setBuildingSteer(steerKaijuAroundBuildings);
+    return () => setBuildingSteer(null);
+  }, []);
+
   const [city, setCity] = useState<City | null>(getCity());
   useEffect(() => { loadCity().then(setCity); }, []);
   if (!city) return null;

@@ -354,8 +354,10 @@ export interface HitTarget {
   id: string;
   /** Centre of mass, roughly half body height above the feet. */
   centre: THREE.Vector3;
-  /** Hit radius in units. */
+  /** Hit radius in units. Only used as the fallback when the model has not loaded. */
   radius: number;
+  /** Body height in units, so a fire lit on this creature is sized against IT and not the spark. */
+  height: number;
   alive: boolean;
 }
 
@@ -523,7 +525,7 @@ export function stepProjectiles(
         // kaiju's mesh... the particular body part needs to burn, and if that kaiju is moving the
         // fire needs to move with them." See kaijuBurn: the patch is nailed to the nearest bone, so
         // a burning shoulder stays a burning shoulder through a walk, a swing and a death.
-        if (p.weapon === 'flame' && rand() < MESH_IGNITE_CHANCE) igniteMesh(t.id, _hitPt, p.size);
+        if (p.weapon === 'flame' && rand() < MESH_IGNITE_CHANCE) igniteMesh(t.id, _hitPt, t.height);
         detonate = true;
         break;
       }

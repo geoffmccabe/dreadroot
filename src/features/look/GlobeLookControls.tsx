@@ -15,6 +15,7 @@
 import React, { useState } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
+import { shadowDiag } from '@/components/siege/globe/GlobeLighting';
 import {
   useGlobeLook, globeLookStore, GLOBE_LOOK_DEFAULTS, GLOBE_LOOK_PRESETS, applyGlobePreset,
   globeLookToJson, globeLookFromJson,
@@ -75,6 +76,13 @@ function SliderRow(props: {
 
 export function GlobeLookControls() {
   const g = useGlobeLook();
+  // The runtime readout below is live state, not React state, so the panel has to repaint on its own
+  // or it would show whatever was true when it opened — which is exactly as misleading as no readout.
+  const [, tick] = useState(0);
+  React.useEffect(() => {
+    const id = window.setInterval(() => tick((n) => n + 1), 400);
+    return () => window.clearInterval(id);
+  }, []);
   const set = globeLookStore.set;
   /**
    * "Copied" / "Pasted", shown on the button itself.
@@ -217,6 +225,25 @@ export function GlobeLookControls() {
           <div style={noteStyle}>
             Smaller = sharper, but shadows stop existing further out. Kaiju cast; soldiers only
             receive (at 1.8 m their shadow is about one pixel of the map).
+          </div>
+          {/* LIVE RUNTIME STATE. Shadows have failed three times with every part looking correct in
+              the source, so these are read straight off the renderer and the scene. Each line is a
+              different fault with a different fix:
+                map OFF          the renderer is not drawing a shadow map at all
+                lights 0         no light is set to cast
+                casters 0        nothing is flagged to cast (models loaded before the switch)
+                receivers 0      nothing is flagged to receive, so there is nowhere to land */}
+          <div style={{ ...rowStyle, marginTop: '2px' }}>
+            <span style={labelStyle}>Runtime</span>
+            <span style={valueStyle}>
+              {`map ${shadowDiag.mapOn ? 'ON' : 'OFF'} · lights ${shadowDiag.casterLights}`}
+            </span>
+          </div>
+          <div style={rowStyle}>
+            <span style={labelStyle}>Meshes</span>
+            <span style={valueStyle}>
+              {`${shadowDiag.casters} cast · ${shadowDiag.receivers} receive`}
+            </span>
           </div>
 
           {/* --- GROUND ------------------------------------------------------------------------ */}

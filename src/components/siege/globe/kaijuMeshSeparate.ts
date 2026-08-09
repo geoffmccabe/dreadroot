@@ -70,7 +70,22 @@ const REFRESH_SECONDS = 1 / 30;
 const QUERY_SECONDS = 1 / 10;
 
 /** The last answer for a pair, so the frames between queries have something true to reuse. */
-interface PairResult { depth: number; axis: THREE.Vector3; stamp: number }
+interface PairResult {
+  depth: number;
+  axis: THREE.Vector3;
+  stamp: number;
+  /**
+   * Whether this measurement's push has already been handed out.
+   *
+   * A separation depth is a CORRECTION, not a force: it says "you are 3 m too close, move 3 m".
+   * Handing the same 3 m back on every read applies it over and over — and the arena reads it three
+   * times a frame (relaxation passes) for the fifteen frames between queries, so one measured
+   * overlap was being pushed about forty-five times. Geoff: "The Red Demon Kaiju is skating and
+   * sliding around... he seems to bounce back and forth." That is exactly what forty-five doses of
+   * one correction look like: flung apart, walks back in, flung again.
+   */
+  consumed: boolean;
+}
 const pairs = new Map<string, PairResult>();
 /** One mesh query per tick, whichever pair is stalest. Bounds the worst frame to a single search. */
 let lastQueryTick = -1;
@@ -229,11 +244,18 @@ export function meshSeparation(idA: string, idB: string, now: number, axis: THRE
   if (cached && (fresh || lastQueryTick === now)) {
     axis.copy(cached.axis);
     if (flip) axis.negate();
+    // ONE PUSH PER MEASUREMENT. See `consumed`.
+    if (cached.consumed) return 0;
+    cached.consumed = true;
     return cached.depth;
   }
   lastQueryTick = now;
-  if (!cached) { cached = { depth: 0, axis: new THREE.Vector3(), stamp: now }; pairs.set(key, cached); }
+  if (!cached) {
+    cached = { depth: 0, axis: new THREE.Vector3(), stamp: now, consumed: false };
+    pairs.set(key, cached);
+  }
   cached.stamp = now;
+  cached.consumed = true;   // this call is the one that gets the push
 
   // B's geometry, expressed in A's local frame. Both world matrices carry the planet's radius, so
   // this product is taken in JavaScript's 64-bit maths where that cancels exactly — the same reason

@@ -44,6 +44,23 @@ import { setGlobeActive } from '@/features/look/globeActive';
  */
 export const sunDirection = new THREE.Vector3(0, 1, 0);
 
+/**
+ * WHAT IS ACTUALLY TRUE AT RUNTIME, read straight off the renderer and the scene.
+ *
+ * Shadows have failed three times with every individual piece looking correct in the source, and
+ * scripts/check-globe-shadows proves the camera maths is right. So the remaining questions are all
+ * about live state — is the map switched on, did the renderer keep the shadow map enabled, does the
+ * light actually cast, is anything flagged to cast or receive — and every one of them is a fact that
+ * can simply be reported instead of reasoned about.
+ */
+export const shadowDiag = {
+  enabled: false,      // the panel's master switch
+  mapOn: false,        // gl.shadowMap.enabled, as the renderer currently has it
+  casterLights: 0,     // lights in the scene with castShadow
+  casters: 0,          // meshes flagged to cast
+  receivers: 0,        // meshes flagged to receive
+};
+
 /** Warm end of the sun ramp. A low sun IS orange: the blue has been scattered out of it. */
 const SUN_WARM = new THREE.Color(0xffc98a);
 const SUN_COOL = new THREE.Color(0xfff6ec);
@@ -80,6 +97,7 @@ export function GlobeLighting() {
     focus: new THREE.Vector3(),
   }), []);
   const sunColour = useMemo(() => new THREE.Color(), []);
+  const diagTick = useRef(0);
 
   const on = look.enabled;
 
@@ -233,6 +251,22 @@ export function GlobeLighting() {
     // Exposure, straight onto the renderer. See the note above on why this does not go through the
     // persisted store.
     if (g.enabled && g.gradeOn) gl.toneMappingExposure = g.exposure;
+
+    // REPORT WHAT IS TRUE. Cheap enough on a scene this size at a fifth of a second.
+    shadowDiag.enabled = g.enabled;
+    shadowDiag.mapOn = gl.shadowMap.enabled;
+    if (diagTick.current++ % 12 === 0) {
+      let cl = 0, cast = 0, recv = 0;
+      scene.traverse((o) => {
+        const l = o as THREE.Light;
+        if (l.isLight && l.castShadow) cl++;
+        const m = o as THREE.Mesh;
+        if (m.isMesh) { if (m.castShadow) cast++; if (m.receiveShadow) recv++; }
+      });
+      shadowDiag.casterLights = cl;
+      shadowDiag.casters = cast;
+      shadowDiag.receivers = recv;
+    }
 
     // HOLD THE SHADOW MAP ON, EVERY FRAME. This is why shadows still did not appear.
     //

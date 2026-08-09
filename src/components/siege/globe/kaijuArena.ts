@@ -36,6 +36,36 @@ import { meshSeparation, meshSepDiag } from './kaijuMeshSeparate';
 import { stepBurns, clearBurns } from './kaijuBurn';
 
 /**
+ * Anything shorter than this, a 300 m Kaiju simply walks over. Anything taller, it goes round.
+ *
+ * Geoff's number. It is also about where a building stops being scenery and starts being an
+ * obstacle at this scale: fifty metres is a sixth of the creature's height, roughly a kerb to it.
+ */
+const MIN_AVOID_HEIGHT_M = 50;
+/** How wide the Kaiju is for the purpose of not clipping a tower, in city metres. */
+const KAIJU_CITY_RADIUS_M = 140;
+/** How far ahead it looks. About a second of walking, which is when a turn still looks unhurried. */
+const KAIJU_LOOKAHEAD_M = 260;
+/**
+ * How a Kaiju avoids buildings, PUSHED IN by the renderer rather than imported.
+ *
+ * The city's collider index reaches the database through cityData, and the simulation must not:
+ * importing it here dragged the Supabase client into the import graph of every headless check and
+ * broke all of them at load. The same reason playerVisual is pushed in rather than read out.
+ *
+ * Null when there is no city — at Everest there is nothing to walk round, and the arena should not
+ * know or care.
+ */
+type BuildingSteer = (
+  worldPos: THREE.Vector3, worldDir: THREE.Vector3, radiusM: number, lookaheadM: number,
+  minHeightM: number, out: THREE.Vector3,
+) => boolean;
+let buildingSteer: BuildingSteer | null = null;
+export function setBuildingSteer(fn: BuildingSteer | null): void { buildingSteer = fn; }
+
+const _steerOut = new THREE.Vector3();
+
+/**
  * Broad-phase radius, as a fraction of height. Full arm reach plus a little.
  *
  * This decides only WHETHER to run the mesh test, so it must be wider than anything the mesh test
@@ -683,7 +713,7 @@ function makeBoard(a: Agent) {
 const _targets: HitTarget[] = [];
 function hitTargets(): HitTarget[] {
   while (_targets.length < agents.length) {
-    _targets.push({ id: '', centre: new THREE.Vector3(), radius: 0, alive: false });
+    _targets.push({ id: '', centre: new THREE.Vector3(), radius: 0, height: 0, alive: false });
   }
   _targets.length = agents.length;
   for (let i = 0; i < agents.length; i++) {
@@ -695,6 +725,9 @@ function hitTargets(): HitTarget[] {
     // "how wide is a Kaiju", alongside the torso capsule and the melee reach. Two of the three
     // were wrong, and nothing would have told us, because each was individually plausible.
     t.radius = ARENA_HEIGHT * torsoRadiusFrac;
+    // So a fire lit on this creature is sized against the CREATURE rather than against the spark
+    // that lit it — a flame particle is 5 m and a Kaiju is 300.
+    t.height = ARENA_HEIGHT;
     t.alive = a.alive;
   }
   return _targets;
@@ -1007,6 +1040,24 @@ export function stepArena(dt: number, playerControlled: boolean): void {
       } catch (e) {
         a.lastTreeState = 'ERROR';
         if (!treeErrorReported) { treeErrorReported = true; console.error('[kaiju] tree step failed', a.action, e); }
+      }
+    }
+
+    // WALK ROUND THE TOWERS. Geoff: "he walks through all the buildings and he should walk around
+    // anything taller than 50m until we have some way for him to step up onto it or destroy it."
+    //
+    // Reuses the city's own collider index — the same boxes the soldiers already flow around and
+    // the same six planes the renderer draws — with a height floor so a Kaiju only bothers about
+    // things it cannot simply step over. Steering only; nothing is pushed, so a Kaiju already
+    // standing in a tower walks out rather than being flung.
+    if (a.intentMove && buildingSteer) {
+      const turned = buildingSteer(
+        centreOf(a, _tmp), a.intentDir,
+        KAIJU_CITY_RADIUS_M, KAIJU_LOOKAHEAD_M, MIN_AVOID_HEIGHT_M, _steerOut,
+      );
+      if (turned) {
+        reTangentOf(a.body, _steerOut);
+        a.intentDir.copy(_steerOut);
       }
     }
 

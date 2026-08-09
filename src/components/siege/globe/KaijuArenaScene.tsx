@@ -374,7 +374,7 @@ function Projectiles() {
   useEffect(() => () => { sheet.dispose(); hotMat.dispose(); smokeMat.dispose(); }, [sheet, hotMat, smokeMat]);
 
   /** Licks of flame per burning patch. A fire is several small flames, not one sprite. */
-  const FLAMES_PER_BURN = 5;
+  const FLAMES_PER_BURN = 8;
   const _up2 = useMemo(() => new THREE.Vector3(), []);
   const _off = useMemo(() => new THREE.Vector3(), []);
   const iPos = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3), []);
