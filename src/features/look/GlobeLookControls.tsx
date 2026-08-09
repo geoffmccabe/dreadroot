@@ -15,7 +15,9 @@
 import React from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { useGlobeLook, globeLookStore, GLOBE_LOOK_DEFAULTS } from './globeLookStore';
+import {
+  useGlobeLook, globeLookStore, GLOBE_LOOK_DEFAULTS, GLOBE_LOOK_PRESETS, applyGlobePreset,
+} from './globeLookStore';
 
 const sectionStyle: React.CSSProperties = { marginBottom: '6px' };
 const sectionTitleStyle: React.CSSProperties = {
@@ -87,6 +89,51 @@ export function GlobeLookControls() {
 
       {g.enabled && (
         <>
+          {/* --- PRESETS ----------------------------------------------------------------------- */}
+          <div style={groupTitleStyle}>Presets — start here</div>
+          <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+            {GLOBE_LOOK_PRESETS.map((p) => (
+              <button key={p.key} style={{ ...btnStyle, flex: 1 }} onClick={() => applyGlobePreset(p.key)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div style={noteStyle}>
+            Each sets every slider below at once. Pick the nearest and then adjust — building a look
+            from defaults every time is a lot of dragging for no reason.
+          </div>
+
+          {/* --- THE ONE THAT WAS MISSING ------------------------------------------------------ */}
+          <div style={groupTitleStyle}>World lights — why it would never go dark</div>
+          <div style={noteStyle}>
+            This map carries three lights of its own (ambient, hemisphere and a sun) added to EVERY
+            world, and they were not on this panel — so turning my sun off still left it lit by
+            somebody else's midday. Drag this down for night.
+          </div>
+          <SliderRow
+            label="World lights" value={g.worldLights} display={`${(g.worldLights * 100).toFixed(0)}%`}
+            min={0} max={1} step={0.01} onChange={(v) => set('worldLights', v)}
+          />
+          <div style={rowStyle}>
+            <span style={labelStyle}>Sky</span>
+            <div style={{ display: 'flex', gap: '3px' }}>
+              {(['default', 'night'] as const).map((m) => (
+                <button
+                  key={m}
+                  style={{ ...btnStyle, opacity: g.skyMode === m ? 1 : 0.5 }}
+                  onClick={() => set('skyMode', m)}
+                >
+                  {m === 'default' ? 'Day dome' : 'Night'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={noteStyle}>
+            The blue background and the midday sky dome are not LIT — they are bright in themselves,
+            so dimming lights never touches them. Night hides the dome and goes dark, which is what
+            lets the city's window lights be the brightest thing on screen.
+          </div>
+
           {/* --- THE BIG ONE ------------------------------------------------------------------- */}
           <div style={groupTitleStyle}>Flat fill — the cause of "washed out"</div>
           <div style={noteStyle}>

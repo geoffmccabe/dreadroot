@@ -124,6 +124,23 @@ export function GlobeLighting() {
     };
   }, [gl, scene, on, look.shadowsOn, look.shadowSoft]);
 
+  /**
+   * Put everyone else's lights back.
+   *
+   * The scaler above writes directly into lights this file does not own, so leaving the map — or
+   * simply switching the master off — has to restore them. Without this, turning the panel off
+   * would leave the world permanently dark, which is a far worse bug than the one being fixed.
+   */
+  useEffect(() => {
+    if (on) return;
+    scene.traverse((o) => {
+      const l = o as THREE.Light;
+      if (l.isLight && l.userData.baseIntensity !== undefined) {
+        l.intensity = l.userData.baseIntensity;
+      }
+    });
+  }, [scene, on]);
+
   /** Render resolution. See the note on `dpr` in the store for why this is the sharpness lever. */
   useEffect(() => {
     if (!on || look.dpr <= 1) return;
@@ -146,9 +163,55 @@ export function GlobeLighting() {
     return () => { lookStore.set('exposure', had); };
   }, [on, look.gradeOn, look.exposure]);
 
+  /**
+   * THE NIGHT SKY.
+   *
+   * SiegeWorldScene paints a light blue background and mounts a drei <Sky> configured for midday.
+   * Neither is LIT — they are emissive by nature — so no amount of dimming the lights touches them,
+   * which is exactly why Geoff could turn every light off and still have a bright scene. The dome is
+   * hidden rather than unmounted, because it belongs to a component shared with every other map.
+   */
+  useEffect(() => {
+    if (!on) return;
+    const night = look.skyMode === 'night';
+    const hadBg = scene.background;
+    const hidden: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      // drei's Sky is a large mesh with a shader material and no name; identifying it by its
+      // material's uniforms is the reliable way, since matching on class would also catch the
+      // starfield and the cloud shells.
+      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+      if (m && m.uniforms && 'sunPosition' in m.uniforms && 'rayleigh' in m.uniforms) {
+        if (night && o.visible) { o.visible = false; hidden.push(o); }
+      }
+    });
+    if (night) scene.background = new THREE.Color(0x05070d);
+    return () => {
+      for (const o of hidden) o.visible = true;
+      scene.background = hadBg;
+    };
+  }, [scene, on, look.skyMode]);
+
   useFrame(() => {
-    const s = sun.current;
     const g = globeLook();
+
+    // SCALE EVERY LIGHT THAT IS NOT MINE.
+    //
+    // Three lights live in SiegeWorldScene — ambient 0.35, hemisphere 0.6, directional 1.1 — added
+    // to every world and never on this panel. They are why switching the sun off left the map lit by
+    // somebody else's midday. Held every frame rather than set once, because the shared day/night
+    // controller re-asserts intensities and would otherwise win; NightDimmer already does exactly
+    // this on the SciFi City map, which is the proof the approach holds.
+    if (g.enabled && g.worldLights < 1) {
+      scene.traverse((o) => {
+        const l = o as THREE.Light;
+        if (!l.isLight || l.userData.globeOwned) return;
+        if (l.userData.baseIntensity === undefined) l.userData.baseIntensity = l.intensity;
+        l.intensity = l.userData.baseIntensity * g.worldLights;
+      });
+    }
+
+    const s = sun.current;
     if (!s || !g.enabled || !g.sunOn) return;
 
     // THE SUN IS RELATIVE TO WHERE YOU STAND. Local up at the player, a compass bearing in that
@@ -193,15 +256,16 @@ export function GlobeLighting() {
     <>
       {/* The old flat fill, kept as sliders rather than deleted — so the difference between "washed
           out" and "lit" can be seen by dragging one control instead of being argued about. */}
-      {look.fillAmbient > 0 && <ambientLight intensity={look.fillAmbient} />}
+      {look.fillAmbient > 0 && <ambientLight intensity={look.fillAmbient} userData={{ globeOwned: true }} />}
       {look.fillHemi > 0 && (
-        <hemisphereLight args={[SKY_COLOUR, GROUND_BOUNCE, look.fillHemi]} />
+        <hemisphereLight args={[SKY_COLOUR, GROUND_BOUNCE, look.fillHemi]} userData={{ globeOwned: true }} />
       )}
 
       {look.sunOn && (
         <>
           <directionalLight
             ref={sun}
+            userData={{ globeOwned: true }}
             castShadow={look.shadowsOn}
             shadow-mapSize-width={SHADOW_MAP_SIZE}
             shadow-mapSize-height={SHADOW_MAP_SIZE}
@@ -229,7 +293,7 @@ export function GlobeLighting() {
           lights the shadow side of anything outdoors, and it keeps that side blue rather than black
           without flattening the form the sun just created. */}
       {look.skyBounce > 0 && (
-        <hemisphereLight args={[SKY_COLOUR, GROUND_BOUNCE, look.skyBounce]} />
+        <hemisphereLight args={[SKY_COLOUR, GROUND_BOUNCE, look.skyBounce]} userData={{ globeOwned: true }} />
       )}
     </>
   );

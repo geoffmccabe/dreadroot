@@ -29,6 +29,32 @@ export interface GlobeLookState {
   /** MASTER SWITCH. Off = the map renders exactly as it did before any of this existed. */
   enabled: boolean;
 
+  /**
+   * SCALES EVERY LIGHT ON THE MAP THAT IS NOT MINE.
+   *
+   * Geoff: "it's supposed to be a night scene but it's very bright... You added a sun but even when
+   * I turn it off everything is too bright. I tried all the settings but there's no way to make it
+   * look like a night scene."
+   *
+   * Because the panel did not control the lights that were doing it. SiegeWorldScene adds an
+   * ambient at 0.35, a hemisphere at 0.6 and a directional at 1.1 to EVERY world, and none of them
+   * were on the panel — so switching my sun off left the map lit by somebody else's midday.
+   *
+   * 1 = untouched, 0 = they contribute nothing. Same technique NightDimmer already uses on the
+   * SciFi City map, which is the proof it works here.
+   */
+  worldLights: number;
+
+  /**
+   * The sky dome and the background colour.
+   *
+   * SiegeWorldScene also paints a light blue background and a drei <Sky> configured for midday, at
+   * 45,000 units. No amount of dimming the LIGHTS touches either: they are not lit, they ARE the
+   * brightness. A night scene has to switch them off, which is what 'night' does — dark background,
+   * day dome hidden, and the starfield finally visible for what it is.
+   */
+  skyMode: 'default' | 'night';
+
   // --- THE FLAT FILL ------------------------------------------------------------------------------
   // The globe is classed as a "blank" map, which adds a bright directionless fill on top of the
   // world's own ambient — over 1.0 in total. Directionless light cannot make a bright side and a
@@ -137,6 +163,9 @@ export interface GlobeLookState {
 export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   enabled: false,
 
+  worldLights: 1,
+  skyMode: 'default',
+
   fillAmbient: 0.7,
   fillHemi: 0.6,
 
@@ -211,6 +240,129 @@ export const globeLookStore = {
   },
   subscribe: (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; },
 };
+
+/**
+ * WHOLE LOOKS, IN ONE CLICK.
+ *
+ * Fifteen sliders is the right amount of control and the wrong amount of work to reach a starting
+ * point. Each of these is a complete, coherent set — the thing to do is pick the nearest one and
+ * then adjust, rather than build a look from defaults every time.
+ */
+export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<GlobeLookState> }[] = [
+  {
+    key: 'night',
+    label: 'Night',
+    values: {
+      // The world's own lights nearly off — this is the setting that makes night POSSIBLE, and
+      // nothing else on the panel can substitute for it.
+      worldLights: 0.06,
+      skyMode: 'night',
+      fillAmbient: 0.02,
+      fillHemi: 0.04,
+      // MOONLIGHT. A real moon is about a 400,000th of the sun and reads cool because the eye's
+      // colour response falls away in the dark, not because moonlight is actually blue — but on a
+      // screen, cool IS how night reads, so the convention is worth keeping.
+      sunOn: true,
+      sunIntensity: 0.35,
+      sunElevation: 38,
+      sunWarmth: 0,
+      skyBounce: 0.06,
+      shadowsOn: true,
+      // Long, soft shadows are most of what makes a night exterior look expensive.
+      shadowSoft: true,
+      hazeOn: true,
+      hazeVisibilityKm: 90,
+      gradeOn: true,
+      // Exposure LOW: the whole point is that the lit windows are the brightest thing on screen,
+      // and they cannot be if the sky is competing with them.
+      exposure: 0.55,
+      contrast: 0.22,
+      saturation: -0.05,
+      vignette: 0.75,
+    },
+  },
+  {
+    key: 'twilight',
+    label: 'Twilight',
+    values: {
+      worldLights: 0.18,
+      skyMode: 'night',
+      fillAmbient: 0.06,
+      fillHemi: 0.14,
+      sunOn: true,
+      sunIntensity: 0.9,
+      sunElevation: -2,
+      sunBearing: 285,
+      sunWarmth: 1,
+      skyBounce: 0.22,
+      shadowsOn: true,
+      shadowSoft: true,
+      hazeOn: true,
+      hazeVisibilityKm: 70,
+      gradeOn: true,
+      exposure: 0.7,
+      contrast: 0.2,
+      saturation: 0.05,
+      vignette: 0.7,
+    },
+  },
+  {
+    key: 'golden',
+    label: 'Golden hour',
+    values: {
+      worldLights: 0.12,
+      skyMode: 'default',
+      fillAmbient: 0.05,
+      fillHemi: 0.2,
+      sunOn: true,
+      sunIntensity: 2.6,
+      sunElevation: 9,
+      sunWarmth: 0.85,
+      skyBounce: 0.35,
+      shadowsOn: true,
+      shadowSoft: true,
+      hazeOn: true,
+      hazeVisibilityKm: 120,
+      gradeOn: true,
+      exposure: 0.9,
+      contrast: 0.18,
+      saturation: -0.05,
+      vignette: 0.6,
+    },
+  },
+  {
+    key: 'day',
+    label: 'Midday',
+    values: {
+      worldLights: 0.25,
+      skyMode: 'default',
+      fillAmbient: 0.1,
+      fillHemi: 0.35,
+      sunOn: true,
+      sunIntensity: 3.2,
+      sunElevation: 62,
+      sunWarmth: 0.15,
+      skyBounce: 0.5,
+      shadowsOn: true,
+      shadowSoft: true,
+      hazeOn: true,
+      hazeVisibilityKm: 200,
+      gradeOn: true,
+      exposure: 1.0,
+      contrast: 0.12,
+      saturation: -0.05,
+      vignette: 0.45,
+    },
+  },
+];
+
+export function applyGlobePreset(key: string): void {
+  const p = GLOBE_LOOK_PRESETS.find((x) => x.key === key);
+  if (!p) return;
+  state = { ...state, ...p.values, enabled: true };
+  persist();
+  listeners.forEach((l) => l());
+}
 
 export function useGlobeLook(): GlobeLookState {
   return useSyncExternalStore(globeLookStore.subscribe, globeLookStore.get, globeLookStore.get);
