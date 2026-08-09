@@ -24,6 +24,34 @@
 
   <body>
     <div id="root"></div>
+    <!--
+      RECOVER FROM A STALE DEPLOY INSTEAD OF SHOWING A WHITE SCREEN.
+
+      Every build gives its bundles new hashed names. If a browser is holding an index.html from an
+      earlier deploy it asks for bundles that no longer exist, and because this is a single-page app
+      every unknown path returns index.html — so the browser is handed HTML where it expected
+      JavaScript, refuses to run it, and shows nothing at all. No error the player can act on, and
+      the console message ("Expected a JavaScript-or-Wasm module script") points at MIME types
+      rather than at the deploy.
+
+      This catches that one failure and reloads past the cache. Guarded by sessionStorage so a
+      genuine, permanent load failure shows the console error once rather than reloading forever.
+    -->
+    <script>
+      window.addEventListener('error', function (e) {
+        var el = e && e.target;
+        if (!el || (el.tagName !== 'SCRIPT' && el.tagName !== 'LINK')) return;
+        var url = el.src || el.href || '';
+        if (url.indexOf('/assets/') === -1) return;
+        if (sessionStorage.getItem('dr-stale-reload')) return;
+        sessionStorage.setItem('dr-stale-reload', '1');
+        console.warn('[dreadroot] a build asset is missing — this page is from an older deploy. Reloading.');
+        location.reload();
+      }, true);
+      // A load that got all the way to running means the page is current; clear the guard so a
+      // future stale deploy can recover too.
+      window.addEventListener('load', function () { sessionStorage.removeItem('dr-stale-reload'); });
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,0 +1,20 @@
+# CACHE RULES. Without these a stale deploy white-screens the game, which is what happened:
+# the browser held an index.html from an earlier deploy, asked for a bundle that had since been
+# replaced, and got the SPA fallback page instead of JavaScript. Chrome refuses to run HTML as a
+# module and the screen stays blank.
+#
+# The rule is the standard one for hashed builds, and the two halves are opposites on purpose.
+
+# THE HTML MUST NEVER BE CACHED. It is the only file whose name does not change between deploys,
+# so a cached copy is a copy pointing at bundles that no longer exist. It is 1 KB; re-fetching it
+# costs nothing and is the entire safeguard.
+/
+  Cache-Control: no-store, must-revalidate
+/index.html
+  Cache-Control: no-store, must-revalidate
+
+# THE BUNDLES CAN BE CACHED FOREVER, precisely because their names contain a content hash. A changed
+# file is a different URL, so there is no such thing as a stale one — and caching them hard is what
+# makes a repeat visit instant.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
