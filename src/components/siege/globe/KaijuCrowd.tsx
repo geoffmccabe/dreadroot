@@ -48,7 +48,7 @@ import {
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
 import {
   ensureCityColliders, worldToCity, cityToWorld, steerAroundBuildings,
-  resolveBuildings, findFreeSpot, isInsideBuilding,
+  resolveBuildings, buildingAt, clampToRoof, cityGroundRadius, type CityBox,
 } from './cityColliders';
 import { noteGunshot } from './kaijuGunAudio';
 
@@ -194,7 +194,7 @@ const listeners = new Set<() => void>();
 export function isCrowdOn(): boolean { return crowdOn; }
 
 /** Live state, so 'I don't see the humans' can be answered by looking rather than guessing. */
-export const crowdDiag = { on: false, spawned: 0, layout: 'none' as 'none' | 'ring' | 'corridor', modelOk: false, scale: 0 };
+export const crowdDiag = { on: false, spawned: 0, layout: 'none' as 'none' | 'ring' | 'corridor', modelOk: false, scale: 0, onRoofs: 0 };
 export function subscribeCrowd(fn: () => void): () => void {
   listeners.add(fn); return () => { listeners.delete(fn); };
 }
@@ -258,6 +258,7 @@ function makePeople(): Person[] {
         shootFor: 0,
         side: 0,
         stuck: 0,
+        roof: null,
       });
     }
     return out;
@@ -266,7 +267,43 @@ function makePeople(): Person[] {
   const centre = playerBody.dir.clone().normalize();
   const east = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), centre).normalize();
   const north = new THREE.Vector3().crossVectors(centre, east).normalize();
+
+  // BETWEEN THE COMBATANTS, when there is a fight to be between. Geoff: "start them scattered
+  // everywhere between my Kaiju and the others." Each man is dropped somewhere along the line
+  // joining two randomly chosen Kaiju, with lateral spread — which fills the whole contested ground
+  // rather than ringing one creature and leaving the rest of the battlefield empty.
+  const combatants = arenaStarted() ? getAgents().filter((a) => a.alive).map((a) => a.body.dir) : [];
+  const between = combatants.length >= 2;
+
   for (let i = 0; i < CROWD_SIZE; i++) {
+    if (between) {
+      const a = combatants[Math.floor(rand() * combatants.length) % combatants.length];
+      const b = combatants[Math.floor(rand() * combatants.length) % combatants.length];
+      // Biased toward the middle of the pair, so the ground between them is where the crowd is.
+      const t = 0.15 + rand() * 0.7;
+      const dir = a.clone().lerp(b, t).normalize();
+      const spread = (SPREAD_M * (0.6 + rand() * 1.6)) / PLANET_RADIUS;
+      const ang = rand() * Math.PI * 2;
+      dir.addScaledVector(east, Math.cos(ang) * spread)
+         .addScaledVector(north, Math.sin(ang) * spread)
+         .normalize();
+      out.push({
+        dir,
+        fwd: new THREE.Vector3().crossVectors(dir, east).normalize(),
+        running: rand() < 0.7,
+        timer: rand() * 3,
+        phase: rand(),
+        speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        targetId: chooseTarget(dir),
+        fireIn: nextShotDelay(),
+        retargetIn: nextRetargetDelay(),
+        shootFor: 0,
+        side: 0,
+        stuck: 0,
+        roof: null,
+      });
+      continue;
+    }
     // sqrt on the radius gives even area density instead of everyone bunched in the middle.
     const r = Math.sqrt(rand()) * (SPREAD_M / METRES_PER_UNIT);
     const ang = rand() * Math.PI * 2;
@@ -287,30 +324,29 @@ function makePeople(): Person[] {
       shootFor: 0,
       side: 0,
       stuck: 0,
+      roof: null,
     });
   }
-  // NOBODY STARTS INSIDE A BUILDING.
+  // SCATTERED BETWEEN THE KAIJU, AND ON THE ROOFS.
   //
-  // The ring and the corridor are laid out around the Kaiju with no idea the city is there, so in
-  // Dubai a good third of them land in a tower. Pushing out does not solve it — the footprints abut,
-  // so out of one wall is into the next — which is what findFreeSpot's spiral search is for. Done
-  // once, here, rather than left to the per-frame rescue: two hundred men teleporting out of walls
-  // over the first few seconds is a worse first impression than a moment's work at spawn.
+  // Geoff: "start them scattered everywhere between my Kaiju and the others... if they are inside a
+  // building then instead put them on top of the building."
+  //
+  // Two changes, and the second is the one that makes a city fight read. A ring around one Kaiju
+  // puts every man in the same street; scattering across the ground BETWEEN the combatants spreads
+  // them over the whole battlefield. And in a city three quarters of any scatter lands inside a
+  // building — so rather than searching for a gap in the traffic, they take the lift.
   if (inCity) {
     const p = new THREE.Vector3();
-    const fix = { x: 0, z: 0 };
-    let moved = 0;
+    let onRoofs = 0;
     for (const person of out) {
       p.copy(person.dir).multiplyScalar(playerBody.radius);
       if (!worldToCity(p, p)) break;
-      if (!isInsideBuilding(p.x, 1, p.z, PERSON_RADIUS_M)) continue;
-      if (!findFreeSpot(p.x, p.z, PERSON_RADIUS_M, fix)) continue;
-      p.set(fix.x, p.y, fix.z);
-      cityToWorld(p, p);
-      person.dir.copy(p).normalize();
-      moved++;
+      const box = buildingAt(p.x, p.z);
+      if (box) { person.roof = box; onRoofs++; }
     }
-    if (moved) console.log(`[crowd] moved ${moved} soldiers out of buildings at spawn`);
+    crowdDiag.onRoofs = onRoofs;
+    console.log(`[crowd] ${onRoofs} of ${out.length} soldiers are on rooftops`);
   }
 
   return out;
@@ -550,37 +586,45 @@ function Crowd() {
       }
 
       if (p.running) {
-        // AVOID THE BUILDINGS BEFORE MOVING, not after.
+        // THE CITY, IN ITS OWN FLAT FRAME.
         //
-        // The steering happens in the city's own flat frame — metres from the city origin, where the
-        // ground is level and the maths is two-dimensional — and the result is folded back into the
-        // heading before the sphere step uses it. Doing it the other way round, as a correction
-        // applied after the move, is what makes a crowd visibly stutter against walls.
+        // Steering happens in metres from the city origin, where the ground is level and the maths
+        // is two-dimensional, and the result is folded back into the heading BEFORE the sphere step
+        // uses it. Applied afterwards as a correction instead, a crowd visibly stutters against
+        // walls rather than flowing along them.
         if (cityReady) {
           _cityPos.copy(p.dir).multiplyScalar(groundRadius);
           if (worldToCity(_cityPos, _cityPos)) {
-            // The heading, expressed in the same flat frame: two points a metre apart along it.
-            _cityAhead.copy(p.dir).multiplyScalar(groundRadius).addScaledVector(p.fwd, 0.01);
+            // The heading in that same frame: a point a centimetre along it, converted and
+            // subtracted. Cheaper and less error-prone than rotating the frame's basis by hand.
+            _cityAhead.copy(p.dir).multiplyScalar(groundRadius).addScaledVector(p.fwd, 0.0001);
             if (worldToCity(_cityAhead, _cityAhead)) {
               const hx = _cityAhead.x - _cityPos.x, hz = _cityAhead.z - _cityPos.z;
               const hl = Math.hypot(hx, hz);
-              if (hl > 1e-6) {
-                _steer.side = p.side;
-                const deflected = steerAroundBuildings(
-                  _cityPos.x, _cityPos.z, hx / hl, hz / hl, PERSON_RADIUS_M, LOOKAHEAD_M, _steer,
-                );
-                p.side = deflected ? _steer.side : 0;
-                if (deflected) {
-                  // Back to a world heading: step a metre along the new flat direction and take the
-                  // difference. Cheaper and safer than rotating the quaternion by hand, and it
-                  // cannot get the frame's handedness wrong.
-                  _cityAhead.set(_cityPos.x + _steer.x, _cityPos.y, _cityPos.z + _steer.z);
-                  cityToWorld(_cityAhead, _cityAhead);
-                  cityToWorld(_cityPos, _cityPos);
-                  p.fwd.copy(_cityAhead).sub(_cityPos);
-                  p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir));
-                  if (p.fwd.lengthSq() > 1e-12) p.fwd.normalize();
+              if (hl > 1e-9) {
+                let nx = hx / hl, nz = hz / hl;
+                if (p.roof) {
+                  // ON A ROOF: nothing to walk around, only an edge not to walk off. Handled after
+                  // the move, by clamping — which removes the outward part of the step and leaves
+                  // the part running along the parapet, so he paces the edge instead of stopping.
+                  _steer.x = nx; _steer.z = nz;
+                } else {
+                  _steer.side = p.side;
+                  const deflected = steerAroundBuildings(
+                    _cityPos.x, _cityPos.z, nx, nz, PERSON_RADIUS_M, LOOKAHEAD_M, _steer,
+                  );
+                  p.side = deflected ? _steer.side : 0;
+                  if (!deflected) { _steer.x = nx; _steer.z = nz; }
                 }
+                nx = _steer.x; nz = _steer.z;
+                // Back to a world heading. Step a metre along the flat direction, convert both
+                // ends, take the difference — which cannot get the frame's handedness wrong.
+                _cityAhead.set(_cityPos.x + nx, _cityPos.y, _cityPos.z + nz);
+                cityToWorld(_cityAhead, _cityAhead);
+                cityToWorld(_cityPos, _cityPos);
+                p.fwd.copy(_cityAhead).sub(_cityPos);
+                p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir));
+                if (p.fwd.lengthSq() > 1e-12) p.fwd.normalize();
               }
             }
           }
@@ -594,47 +638,20 @@ function Crowd() {
         p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir)).normalize();
       }
 
-      // ...and the last resort, AFTER the move: anyone who has ended up in a wall is pushed out of
-      // it. Someone who cannot be pushed out — Dubai's footprints abut, so half the time there is no
-      // daylight to push into — is teleported to open ground after a second of being stuck, which is
-      // ugly once and better than a soldier standing inside a tower for the rest of the battle.
+      // KEEP HIM WHERE HE BELONGS — on his roof, or out of the walls.
       if (cityReady) {
         _cityPos.copy(p.dir).multiplyScalar(groundRadius);
         if (worldToCity(_cityPos, _cityPos)) {
-          if (resolveBuildings(_cityPos.x, _cityPos.z, PERSON_RADIUS_M, _fix)) {
-            p.stuck = isInsideBuilding(_fix.x, 1, _fix.z, PERSON_RADIUS_M) ? p.stuck + 1 : 0;
-            if (p.stuck > 60) { findFreeSpot(_fix.x, _fix.z, PERSON_RADIUS_M, _fix); p.stuck = 0; }
+          const fixed = p.roof
+            ? clampToRoof(p.roof, _cityPos.x, _cityPos.z, PERSON_RADIUS_M + 0.9, _fix)
+            : resolveBuildings(_cityPos.x, _cityPos.z, PERSON_RADIUS_M, _fix);
+          if (fixed) {
             _cityAhead.set(_fix.x, _cityPos.y, _fix.z);
             cityToWorld(_cityAhead, _cityAhead);
             p.dir.copy(_cityAhead).normalize();
-          } else p.stuck = 0;
+          }
         }
       }
-
-      // DISTANCE CULL, and it is the biggest single saving available here.
-      //
-      // A 1.8 m figure a kilometre and a half away is under a pixel. Skinning it and handing it to
-      // the GPU is pure cost — and hiding it also stops three.js walking its sixty-odd bones, which
-      // is most of the win: two hundred figures is over twelve thousand objects whose matrices are
-      // otherwise recomputed every single frame whether or not anyone can see them.
-      //
-      // The position is from LAST frame, which is correct: a person moves five metres a second and
-      // the threshold is fifteen hundred.
-      // OUT OF THE SCENE GRAPH ENTIRELY, not merely invisible.
-      //
-      // `visible = false` stops a figure being DRAWN and nothing else: three.js still walks it and
-      // every one of its bones in updateMatrixWorld, every frame, because that traversal does not
-      // look at visibility. Two hundred figures is over twelve thousand objects whose matrices were
-      // being composed and multiplied sixty times a second whether or not anyone could see them, and
-      // that traversal is most of what a crowd of skinned characters actually costs.
-      //
-      // Detaching is the only thing that skips it. Re-attached the moment it comes back in range.
-      const tooFar = f.obj.position.distanceToSquared(camera.position) > CULL_UNITS * CULL_UNITS;
-      if (tooFar) {
-        if (f.attached) { group.current.remove(f.obj); f.attached = false; }
-        continue;
-      }
-      if (!f.attached) { group.current.add(f.obj); f.attached = true; }
 
       // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m
@@ -658,10 +675,18 @@ function Crowd() {
 
       // NEVER FALL BACK TO SEA LEVEL: on the canyon rim that is 2.1 km underground, which is why
       // the crowd was once invisible. The Kaiju's own radius is always valid and is the same ground.
-      const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
-      const radius = metres != null
-        ? PLANET_RADIUS + metres / METRES_PER_UNIT
-        : playerBody.radius;
+      // HOW HIGH HE STANDS. A rooftop soldier is measured up from the city's own ground plane, not
+      // from the terrain: the terrain under Dubai is 87 m of sea water and the city overrides it, so
+      // adding a roof to a terrain sample would put him underwater on top of a tower.
+      let radius: number;
+      if (p.roof && cityReady) {
+        radius = cityGroundRadius() + p.roof.h / METRES_PER_UNIT;
+      } else {
+        const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
+        radius = metres != null
+          ? PLANET_RADIUS + metres / METRES_PER_UNIT
+          : playerBody.radius;
+      }
       f.obj.position.copy(p.dir).multiplyScalar(radius);
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();

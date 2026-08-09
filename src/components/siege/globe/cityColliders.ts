@@ -197,6 +197,52 @@ export function isInsideBuilding(x: number, y: number, z: number, margin = 0): b
   return hit;
 }
 
+/** The radius, in world units, of the city's own ground plane. Roofs are measured up from it. */
+export function cityGroundRadius(): number {
+  return indexedCity ? indexedCity.position.length() : 0;
+}
+
+/**
+ * The building standing at this point, or null for open ground. Tallest wins where they overlap.
+ *
+ * Geoff: "if they are inside a building then instead put them on top of the building." This is how
+ * a spawn point finds out which roof it is standing on, and how high that roof is.
+ */
+export function buildingAt(x: number, z: number): CityBox | null {
+  if (!indexedCity) return null;
+  let best: CityBox | null = null;
+  forEachNear(x, z, 2, (b) => {
+    toBox(b, x, z, _bp);
+    if (Math.abs(_bp.bx) > b.hw || Math.abs(_bp.bz) > b.hd) return;
+    if (!best || b.h > best.h) best = b;
+  });
+  return best;
+}
+
+/**
+ * Keep a point inside a building's footprint. Returns true if it had to be moved.
+ *
+ * Geoff: "If they are on a building they stay there and don't fall off the edge." A clamp rather
+ * than a bounce, and in the box's OWN frame, so a man walking at the parapet slides ALONG it instead
+ * of stopping dead — the outward part of his step is removed and the part running along the edge
+ * survives. Which is what a person on a roof does.
+ */
+export function clampToRoof(
+  b: CityBox, x: number, z: number, inset: number, out: { x: number; z: number },
+): boolean {
+  toBox(b, x, z, _bp);
+  // A parapet on a four-metre shed cannot be a metre and a half in from both sides; give ground
+  // rather than pinning him to the exact centre of a tiny roof.
+  const lw = Math.max(0, b.hw - Math.min(inset, b.hw * 0.4));
+  const ld = Math.max(0, b.hd - Math.min(inset, b.hd * 0.4));
+  const bx = Math.max(-lw, Math.min(lw, _bp.bx));
+  const bz = Math.max(-ld, Math.min(ld, _bp.bz));
+  if (bx === _bp.bx && bz === _bp.bz) { out.x = x; out.z = z; return false; }
+  out.x = b.x + bx * b.cos - bz * b.sin;
+  out.z = b.z + bx * b.sin + bz * b.cos;
+  return true;
+}
+
 /**
  * Somewhere near here that is not inside a building.
  *

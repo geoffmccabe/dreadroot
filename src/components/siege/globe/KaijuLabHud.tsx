@@ -127,7 +127,8 @@ export function KaijuLabHud() {
       {row('Patches', `${terrainDiag.patches} drawn / ${terrainDiag.wanted} wanted`)}
       {row('Deepest', `level ${terrainDiag.deepest}`)}
       {row('Crowd', crowdDiag.on
-        ? `${crowdDiag.spawned} ${crowdDiag.layout}${crowdDiag.modelOk ? '' : ' (NO MODEL)'}`
+        ? `${crowdDiag.spawned} ${crowdDiag.layout}${crowdDiag.onRoofs ? `, ${crowdDiag.onRoofs} on roofs` : ''}`
+          + `${crowdDiag.modelOk ? '' : ' (NO MODEL)'}`
         : 'off')}
       {row('Altitude', `${Math.round(terrainDiag.altitudeUnits)} u (near ${terrainDiag.near.toFixed(2)}, far ${Math.round(terrainDiag.far)})`)}
       {/* A dropped layer stops being simulated, not just drawn. If the arena layer goes, the fight

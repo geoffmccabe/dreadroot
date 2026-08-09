@@ -18,7 +18,7 @@ import { cityGroundMetres } from '../src/components/siege/globe/cityGround';
 import {
   ensureCityColliders, cityColliderDiag, worldToCity, cityToWorld,
   pushOutOfBuildings, resolveBuildings, steerAroundBuildings, raycastCity,
-  isInsideBuilding, findFreeSpot,
+  isInsideBuilding, findFreeSpot, buildingAt, clampToRoof,
 } from '../src/components/siege/globe/cityColliders';
 import { METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
 
@@ -237,6 +237,51 @@ ok(cityColliderDiag.boxes === buildings.length, 'one collider per building',
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   ok(ms < 400, '200 soldiers steering for a second costs under 400 ms of CPU',
      `${ms.toFixed(0)} ms for ${N} queries = ${(ms / 60).toFixed(2)} ms per frame`);
+}
+
+// --- 7. ROOFTOPS ----------------------------------------------------------------------------------
+// Geoff: "if they are inside a building then instead put them on top of the building. If they are on
+// a building they stay there and don't fall off the edge."
+{
+  const big = buildings.filter((b) => b.w > 20 && b.d > 20 && b.h > 30).slice(0, 300);
+  let found = 0, wrongRoof = 0;
+  for (const b of big) {
+    const box = buildingAt(b.x, b.z);
+    if (!box) continue;
+    found++;
+    // Where footprints overlap the taller roof must win: that is the one a man dropped there would
+    // actually land on, and the only answer that cannot put him inside something.
+    if (box.h < b.h - 0.01) wrongRoof++;
+  }
+  ok(found > 200, 'a spawn inside a building finds the building', `${found} of ${big.length}`);
+  ok(wrongRoof === 0, 'and where they overlap it picks the taller roof', `${wrongRoof} wrong`);
+
+  // WALK OFF THE EDGE, repeatedly, from the centre outward in every direction. He must never end up
+  // beyond the footprint, and must never be pinned to the middle of it either.
+  const out = { x: 0, z: 0 };
+  let escaped = 0, reachedEdge = 0;
+  for (const b of big.slice(0, 120)) {
+    const box = buildingAt(b.x, b.z);
+    if (!box) continue;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      let x = box.x, z = box.z;
+      for (let step = 0; step < 400; step++) {
+        x += Math.cos(a) * 1.4;
+        z += Math.sin(a) * 1.4;
+        clampToRoof(box, x, z, 1.5, out);
+        x = out.x; z = out.z;
+      }
+      // ON the roof means inside the FOOTPRINT, not within some radius of its centre: a rectangle's
+      // corner is further from the middle than its widest half-extent, so a distance test calls a
+      // man standing legitimately at the corner a man who has fallen off. Ask the city instead.
+      const still = buildingAt(x, z);
+      if (!still || still.h < box.h - 0.01) escaped++;
+      if (Math.hypot(x - box.x, z - box.z) > Math.min(box.hw, box.hd) * 0.5) reachedEdge++;
+    }
+  }
+  ok(escaped === 0, 'a soldier walking outward never leaves his roof', `${escaped} fell off`);
+  ok(reachedEdge > 0, 'and is not pinned to the middle of it either', `${reachedEdge} reached the parapet`);
 }
 
 console.log(`\n${failures === 0 ? 'CITY COLLIDER CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
