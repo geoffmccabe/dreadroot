@@ -111,7 +111,13 @@ const CLOUD_FRAG = /* glsl */`
     float thickness = smoothstep(0.0, 0.55, cover);
     vec3 lit = mix(uSkyCol, uSunCol, sunAmt);
     // Silver lining: the thinner the cloud the more sun comes through it.
-    vec3 col = mix(lit * 1.25, lit * 0.66, thickness);
+    //
+    // CAPPED AT 1.0, and that matters. The bloom pass only picks up pixels brighter than 0.9, so a
+    // cloud deck written at 1.25 puts the ENTIRE SKY over the threshold — every cloud blooms, the
+    // glow spreads into everything, and the frame goes white. From orbit, where the shell covers the
+    // whole planet, that is the whole screen. Bloom is for genuinely emissive things: fire, muzzle
+    // flashes, the sun. A lit cloud is a diffuse surface and belongs below the line.
+    vec3 col = min(mix(lit * 1.02, lit * 0.66, thickness), vec3(0.88));
 
     // Fade out at grazing angles. Looking along the shell you would otherwise see through
     // kilometres of a surface with no thickness, which reads as a hard painted edge.

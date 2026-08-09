@@ -10,8 +10,8 @@
 // across the whole screen (the old black-flash-while-moving bug); a fixed kernel keeps a
 // bad pixel local. All params are live from lookStore (Lightning Panel → Render section).
 import { useMemo } from 'react';
-import { EffectComposer, Bloom, BrightnessContrast, HueSaturation, Vignette, SSAO } from '@react-three/postprocessing';
-import { KernelSize, BlendFunction } from 'postprocessing';
+import { EffectComposer, Bloom, BrightnessContrast, HueSaturation, Vignette } from '@react-three/postprocessing';
+import { KernelSize } from 'postprocessing';
 import { isCinematicGrade } from './cinematicGrade';
 import { LOOK } from './lookConfig';
 import { useLook } from './lookStore';
@@ -42,9 +42,7 @@ export function LookComposer() {
   const g = LOOK.grade;
 
   return (
-    // enableNormalPass only when AO is actually in the chain: it is an extra full-scene render of
-    // the normals, and paying for it on every other map to use it on one would be careless.
-    <EffectComposer multisampling={0} enableNormalPass={cinematic}>
+    <EffectComposer multisampling={0}>
       {bloomEnabled ? (
         <Bloom
           kernelSize={KernelSize.MEDIUM}
@@ -54,20 +52,20 @@ export function LookComposer() {
           radius={bloomRadius}
         />
       ) : <></>}
-      {cinematic ? (
-        <SSAO
-          blendFunction={BlendFunction.MULTIPLY}
-          samples={LOOK.ao.samples}
-          rings={LOOK.ao.rings}
-          intensity={LOOK.ao.intensity}
-          radius={LOOK.ao.radius}
-          luminanceInfluence={LOOK.ao.luminanceInfluence}
-          worldDistanceThreshold={1}
-          worldDistanceFalloff={1}
-          worldProximityThreshold={1}
-          worldProximityFalloff={1}
-        />
-      ) : <></>}
+      {/*
+        SSAO IS GONE, and it cannot come back in this form.
+        Geoff: "everything flashes when I look around, everything is bright white."
+        Screen-space AO reads the DEPTH BUFFER, and this scene's depth buffer is unusable for it.
+        The globe camera sets its near plane from height above ground — as little as 3 cm — and its
+        far plane from the horizon distance, which from orbit is hundreds of thousands of units.
+        A depth range of ten million to one leaves almost no precision anywhere, so the AO pass
+        samples noise: hence flashing that changes as the camera turns, because near and far are
+        recomputed every frame as you look around.
+        It was also the likely cause of the stall on load — enableNormalPass renders the entire
+        scene a second time for its normals, and this scene is a streaming planet.
+        The cavity shading in terrainMaterial does the same job for free and in world space, where
+        the precision problem does not exist.
+      */}
       {/* Contrast and saturation BEFORE the vignette, so the vignette darkens the graded image
           rather than being stretched by the contrast curve applied after it. */}
       {cinematic ? (

@@ -193,14 +193,18 @@ export function GlobeLighting() {
   return (
     <>
       {/*
-        ONE KEY LIGHT, and it does nearly all the work. Intensity 3.2 rather than 1.1 because the
-        ambient it used to compete with is gone: with AgX tone mapping a strong key and a dark fill
-        is what produces contrast, and contrast is the thing that was missing.
+        ONE KEY LIGHT, and it does nearly all the work. Well above the 1.1 it replaces, because the
+        ambient it used to compete with is gone: with AgX tone mapping a strong key against a dark
+        fill is what produces contrast, and contrast is the thing that was missing.
+
+        2.4, down from the 3.2 first shipped. That was chosen against Lambert terrain, which ignores
+        the scene environment; MeshStandardMaterial does not, so the swap quietly added the whole
+        image-based ambient underneath it and the result blew out.
       */}
       <directionalLight
         ref={sun}
         color={SUN_COLOUR}
-        intensity={3.2}
+        intensity={2.4}
         castShadow
         shadow-mapSize-width={SHADOW_MAP_SIZE}
         shadow-mapSize-height={SHADOW_MAP_SIZE}

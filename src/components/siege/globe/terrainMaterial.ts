@@ -106,6 +106,12 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
     fog: true,
     roughness: 0.95,
     metalness: 0.0,
+    // ENVIRONMENT LIGHT, TURNED DOWN. MeshLambertMaterial largely ignored scene.environment;
+    // MeshStandardMaterial does not, so simply swapping the material silently added the full
+    // image-based ambient on top of the new sun — brightening everything and flattening exactly
+    // the contrast this work exists to create. 0.35 matches the intensity the look system was
+    // already using for its IBL rather than doubling it.
+    envMapIntensity: 0.35,
     // Flat shading OFF but a strong normal perturbation below: the geometry is smooth by necessity
     // (it is a heightfield sampled every few hundred metres) and all the surface detail has to be
     // faked in the shader.
@@ -212,6 +218,20 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           float d = gCoarse * 0.5 + gD * 0.32 + mix(0.5, gFine, gFineAmt) * 0.18;
           gDetail = d;
           diffuseColor.rgb *= 0.74 + 0.52 * d;
+
+          // CAVITY SHADING — ambient occlusion, done in WORLD space for nothing.
+          //
+          // Screen-space AO was tried and had to be removed: it reads the depth buffer, and this
+          // camera's near plane can be 3 cm while its far plane is hundreds of thousands of units,
+          // so there is no depth precision for it to work with and it returned flashing noise.
+          //
+          // But AO is only "how enclosed is this point", and for procedural relief that is already
+          // known: the noise field IS the height, so a value below its local average is a dip and a
+          // value above it is a ridge. Darkening the dips gives crevices and hollows exactly where
+          // they should be, with no second render pass and no precision problem — and unlike SSAO it
+          // is correct at any distance and does not swim when the camera moves.
+          float cavity = smoothstep(0.62, 0.30, d);
+          diffuseColor.rgb *= 1.0 - cavity * 0.34;
 
           // STRATA. Horizontal bands by ALTITUDE, on steep ground only.
           //
