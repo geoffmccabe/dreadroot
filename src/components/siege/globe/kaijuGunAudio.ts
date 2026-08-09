@@ -156,8 +156,9 @@ export function flushGunAudio(
       playKaijuSound(BURST_URLS[Math.floor(rand() * BURST_URLS.length) % BURST_URLS.length],
         s.pos, listenerPos, listenerDir, {
           volume: 0.34 + rand() * 0.12,
-          // +-10%, as asked. One knob, because in a browser pitch and speed are one knob.
-          rate: 0.90 + rand() * 0.20,
+          // +-15%. Pitch and speed together, which Geoff confirmed is fine — and in a browser it
+          // is the only option anyway, since resampling moves both or neither.
+          rate: 0.85 + rand() * 0.30,
           // ...and the tone tilt for the variety that rate cannot give: +-3 dB of brightness.
           tiltDb: (rand() * 2 - 1) * 3,
           // A rifle is a person-sized source: loud where you stand, gone quickly. 1.5 units is
