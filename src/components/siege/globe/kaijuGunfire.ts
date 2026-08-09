@@ -29,14 +29,15 @@
 // is bone capsules and not a mesh.
 
 import * as THREE from 'three';
-import { getAgents, ARENA_HEIGHT, type Agent } from './kaijuArena';
+import { getAgents, ARENA_HEIGHT, arenaClock, type Agent } from './kaijuArena';
 import {
   limbCapsules, torsoCapsule, shotHitsCapsule, closestOnSegment, bulletTorsoFrac, playerVisual,
   type Capsule,
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
-import { meshHit, hasHitMesh, beginMeshHitFrame, meshBudgetLeft } from './kaijuMeshHit';
+import { beginMeshHitFrame } from './kaijuMeshHit';
+import { meshRay } from './kaijuMeshSeparate';
 
 // The COSMETIC stream, never the simulation's. See the long note on fxRand: drawing scatter and
 // reload times from the shared seeded source silently changed who won the fight.
@@ -362,9 +363,17 @@ export function stepGunfire(dt: number): void {
         // THE REAL MESH, when there is one. Exact triangles in the pose being drawn, and the exact
         // surface normal of the face struck — which is what makes both the spark position and the
         // ricochet direction true rather than approximated. See kaijuMeshHit.
-        const useMesh = hasHitMesh(a.id) && meshBudgetLeft();
-        if (useMesh) {
-          const mt = meshHit(a.id, _prev, b.pos, _meshPt, _meshNrm);
+        // THE REAL TRIANGLES, through the posed search tree that separation already maintains.
+        //
+        // This used to go through three.js's own skinned raycast, which walks every triangle and
+        // re-skins it — about ninety thousand matrix multiplies per ray. That needed a budget of
+        // eight rays a frame, and WHEN THE BUDGET RAN OUT IT FELL BACK TO THE CAPSULE. Two hundred
+        // soldiers spend eight rays instantly, so nearly every round was stopped by a shape fatter
+        // than the creature and sparked in open air — a shell of sparks in the shape of a cylinder,
+        // which is exactly what Geoff was looking at. There is no budget now because there is no
+        // longer anything to budget: a ray through the tree costs microseconds.
+        const mt = meshRay(a.id, _prev, b.pos, arenaClock(), _meshPt, _meshNrm);
+        if (mt !== -1) {
           if (mt != null && mt < bestT) {
             bestT = mt;
             hitAny = true;
@@ -372,9 +381,8 @@ export function stepGunfire(dt: number): void {
             _faceNormal.copy(_meshNrm);
             _haveFaceNormal = true;
           }
-          // A registered mesh that reported no hit means the round genuinely MISSED. Falling through
-          // to the capsule here is what built the invisible wall: a capsule is an approximation and
-          // stops rounds the model never would.
+          // A mesh that reported no hit means the round genuinely MISSED. Falling through to the
+          // capsule here is what built the invisible wall in the first place.
           continue;
         }
 

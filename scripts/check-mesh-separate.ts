@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import { registerHitMesh, unregisterHitMesh } from '../src/components/siege/globe/kaijuMeshHit';
 import {
-  meshSeparation, hasSepMesh, clearMeshSeparation, meshSepDiag,
+  meshSeparation, hasSepMesh, clearMeshSeparation, meshSepDiag, meshRay,
 } from '../src/components/siege/globe/kaijuMeshSeparate';
 import { PLANET_RADIUS, METRES_PER_UNIT } from '../src/components/siege/globe/cubeSphere';
 
@@ -104,6 +104,44 @@ console.log('\n== Kaiju are kept apart by their meshes ==\n');
   unregisterHitMesh('b');
   ok(!hasSepMesh('b'), 'unregistering a model removes its mesh collider too');
   ok(meshSeparation('a', 'b', 20, axis) === -1, 'and the pair falls back to capsules');
+}
+
+// --- 5. BULLETS GO THROUGH THE MESH, NEVER A CAPSULE ----------------------------------------------
+// THE REGRESSION THIS EXISTS FOR. Bullets did test real triangles, but through three.js's own
+// skinned raycast, which walks every triangle — so it needed a budget of eight rays a frame, and
+// WHEN THE BUDGET RAN OUT IT FELL BACK TO A CAPSULE. Two hundred soldiers spend eight rays instantly,
+// so nearly every round stopped short on a shape fatter than the creature and sparked in open air.
+// Geoff: "There's still a big red cylinder collider around the kaijus blocking the bullets!" That is
+// what a shell of sparks in the shape of a cylinder looks like.
+{
+  clearMeshSeparation();
+  makeBody('shooter-target', 0);
+  const pt = new THREE.Vector3();
+  const nrm = new THREE.Vector3();
+
+  // Straight through the middle. The box is 1 unit wide, so the near face is at x = -0.5.
+  const from = new THREE.Vector3(-3, PLANET_RADIUS, 0);
+  const to = new THREE.Vector3(3, PLANET_RADIUS, 0);
+  const t = meshRay('shooter-target', from, to, 100, pt, nrm);
+  ok(t !== -1 && t != null, 'a round through the body hits the mesh');
+  ok(Math.abs(pt.x + 0.5) < 0.05, 'and lands on the SURFACE, not out in the air short of it',
+     `x = ${pt.x.toFixed(3)}, surface is at -0.500`);
+  ok(nrm.x < -0.5, 'with the face normal pointing back at the shooter',
+     `normal.x = ${nrm.x.toFixed(2)}`);
+
+  // A round that passes well clear must MISS — not be caught by any approximate shape.
+  const miss = meshRay('shooter-target',
+    new THREE.Vector3(-3, PLANET_RADIUS, 4), new THREE.Vector3(3, PLANET_RADIUS, 4), 101, pt, nrm);
+  ok(miss === null, 'a round passing 400 m to one side misses cleanly, with nothing to stop it');
+
+  // NO BUDGET. Two hundred rounds in one frame must all get a real answer; the moment any of them
+  // is answered by something other than the mesh, the cylinder is back.
+  let mesh = 0;
+  for (let i = 0; i < 200; i++) {
+    if (meshRay('shooter-target', from, to, 102, pt, nrm) !== -1) mesh++;
+  }
+  ok(mesh === 200, 'two hundred rounds in a single frame ALL go through the mesh',
+     `${mesh}/200 — any shortfall is the capsule coming back`);
 }
 
 console.log(`\n${failures === 0 ? 'MESH SEPARATION CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);

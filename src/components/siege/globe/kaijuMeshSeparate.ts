@@ -68,6 +68,18 @@ interface Posed {
 
 const posed = new Map<string, Posed>();
 
+/**
+ * The simulation tick at which a mesh was last re-posed, ANYWHERE.
+ *
+ * Re-posing is the expensive half — 2.6 ms per Kaiju, because every vertex has to be re-derived from
+ * the bones on the CPU. Four of them wanting it in the same frame is 10 ms, which is most of a frame
+ * budget spent on collision geometry. So exactly ONE Kaiju is re-posed per tick and the rest use the
+ * copy they already have. With four creatures that is a refresh every four frames each: about 15 Hz,
+ * over which an arm moves a metre. Nobody can see a metre on something 300 m tall, and the cost is
+ * capped at 2.6 ms however many Kaiju are fighting.
+ */
+let lastBakeTick = -1;
+
 /** Live counts, so "is it using the mesh or the cylinder?" is answered by looking, not assumed. */
 export const meshSepDiag = { pairsTested: 0, meshPairs: 0, capsulePairs: 0, bakes: 0, meshMs: 0 };
 
@@ -124,7 +136,11 @@ function ensurePosed(id: string, now: number): Posed | null {
     p = { mesh, geom, bvh: null as unknown as MeshBVH, stamp: -1e9, scale: 1 };
     posed.set(id, p);
   }
+  // Fresh enough, or somebody else already used this tick's one bake. Either way, use what we have:
+  // a slightly stale collision mesh is enormously better than a frame that drops.
   if (now - p.stamp < REFRESH_SECONDS) return p;
+  if (lastBakeTick === now && p.bvh) return p;
+  lastBakeTick = now;
   p.stamp = now;
 
   const attr = p.geom.attributes.position as THREE.BufferAttribute;
@@ -194,4 +210,70 @@ export function meshSeparation(idA: string, idB: string, now: number, axis: THRE
   _rot.extractRotation(A.mesh.matrixWorld);
   axis.applyMatrix4(_rot).normalize();
   return MARGIN - gap;
+}
+
+
+// --- BULLETS THROUGH THE SAME POSED TWIN ---------------------------------------------------------
+//
+// Geoff: "There's still a big red cylinder collider around the kaijus blocking the bullets!"
+//
+// There was, and this is where it came from. Bullets DID test real triangles — but through
+// three.js's own SkinnedMesh raycast, which has no spatial structure at all: it walks every triangle
+// and re-skins all three vertices for each one. A Fort Golem is 7,511 triangles, so a single ray is
+// about ninety thousand matrix multiplies. That forced a budget of EIGHT rays per frame, and when
+// the budget ran out the code fell back to the capsule — which is a fatter shape than the creature,
+// so every round past the eighth stopped short and sparked in open air. Two hundred soldiers firing
+// at once spend that budget instantly, so nearly every round drew its spark on the surface of an
+// invisible cylinder. A shell of orange sparks in the shape of a cylinder is precisely what he saw.
+//
+// The posed twin above already exists for separation and already has a search tree over it. Through
+// that tree a ray costs microseconds instead of milliseconds — a few hundred triangle tests instead
+// of seven thousand — so there is no budget, no fallback, and no cylinder.
+
+const _ray = new THREE.Ray();
+const _localInv = new THREE.Matrix4();
+const _rot2 = new THREE.Matrix4();
+const _nrmLocal = new THREE.Vector3();
+
+/**
+ * Where a shot first meets this Kaiju's actual triangles, in the pose being drawn.
+ *
+ * Returns the fraction along `from`->`to`, writing the world-space impact point and the world-space
+ * normal of the face struck. Null for a clean miss; -1 when there is no mesh and the caller must
+ * fall back to a capsule.
+ */
+export function meshRay(
+  id: string, from: THREE.Vector3, to: THREE.Vector3, now: number,
+  outPoint: THREE.Vector3, outNormal: THREE.Vector3,
+): number | null | -1 {
+  const p = ensurePosed(id, now);
+  if (!p) return -1;
+
+  _localInv.copy(p.mesh.matrixWorld).invert();
+  _ray.origin.copy(from).applyMatrix4(_localInv);
+  _ray.direction.copy(to).applyMatrix4(_localInv).sub(_ray.origin);
+  const len = _ray.direction.length();
+  if (len < 1e-12) return null;
+  _ray.direction.divideScalar(len);
+
+  // DoubleSide: a Kaiju's mesh is not guaranteed closed or consistently wound, and a round entering
+  // through a back-facing triangle is still a hit.
+  const hit = p.bvh.raycastFirst(_ray, THREE.DoubleSide, 0, len);
+  if (!hit) return null;
+
+  outPoint.copy(hit.point).applyMatrix4(p.mesh.matrixWorld);
+  if (hit.face) {
+    // Decide which way the normal faces in LOCAL space, where the ray already is, and only then
+    // rotate it out. Comparing them in world space means transforming the ray direction too, and
+    // doing that in place quietly corrupts the ray for anything after it.
+    _nrmLocal.copy(hit.face.normal);
+    // Face windings are not reliable on these imports, so point the normal back the way the round
+    // came. A normal facing into the creature sends the ricochet straight through it.
+    if (_nrmLocal.dot(_ray.direction) > 0) _nrmLocal.negate();
+    _rot2.extractRotation(p.mesh.matrixWorld);
+    outNormal.copy(_nrmLocal).applyMatrix4(_rot2).normalize();
+  } else {
+    outNormal.copy(outPoint).normalize();
+  }
+  return hit.distance / len;
 }
