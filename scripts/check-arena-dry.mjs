@@ -22,12 +22,21 @@ const N = +/MASK_N = (\d+)/.exec(SRC)[1];
 const bits = Buffer.from(/const PACKED = '([^']+)'/.exec(SRC)[1], 'base64');
 
 const LAT0 = 25.14, LON0 = 55.21, MLAT = 111320, MLON = MLAT * Math.cos(LAT0 * Math.PI / 180);
-const land = (lat, lon) => {
-  const cx = Math.max(0, Math.min(N - 1, Math.floor(((lon - LON0) * MLON + HALF) / CELL)));
-  const cy = Math.max(0, Math.min(N - 1, Math.floor((-(lat - LAT0) * MLAT + HALF) / CELL)));
-  const k = cy * N + cx;
-  return (bits[k >> 3] & (1 << (k & 7))) !== 0;
+const bit = (cx, cy) => {
+  const x = Math.max(0, Math.min(N - 1, cx)), y = Math.max(0, Math.min(N - 1, cy));
+  const k = y * N + x;
+  return (bits[k >> 3] & (1 << (k & 7))) !== 0 ? 1 : 0;
 };
+/** The same bilinear read and the same 0.85 threshold the game uses — see cityLandAt / isDry. */
+const frac = (lat, lon) => {
+  const fx = ((lon - LON0) * MLON + HALF) / CELL - 0.5;
+  const fy = (-(lat - LAT0) * MLAT + HALF) / CELL - 0.5;
+  const cx = Math.floor(fx), cy = Math.floor(fy);
+  const tx = fx - cx, ty = fy - cy;
+  const a = bit(cx, cy), b = bit(cx + 1, cy), c = bit(cx, cy + 1), d = bit(cx + 1, cy + 1);
+  return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+};
+const land = (lat, lon) => frac(lat, lon) > 0.85;
 
 // ARENA_HEIGHT 3 units x spreadBodies 6 x 100 m per unit.
 const R = 1800;
@@ -49,7 +58,7 @@ function findDry(lat, lon, ang0) {
 }
 
 const STOPS = [
-  ['Dubai Marina', 25.0805, 55.1403],
+  ['Dubai Marina', 25.0760, 55.1489],   // moved 1 km inland at bearing 120, per Geoff
   ['Palm Jumeirah', 25.1124, 55.1390],
   ['Downtown / Burj', 25.1880, 55.2650],
   ['Sheikh Zayed Rd', 25.2175, 55.2825],

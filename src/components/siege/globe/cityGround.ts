@@ -187,6 +187,34 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
   return base;
 }
 
+/**
+ * How much of this direction is dry land, 0 to 1 — or null if it is not inside any city.
+ *
+ * Geoff: "The Kaijus now are starting at Marina but they are in the water."
+ *
+ * The arena already tried to avoid this, and asked the wrong question. It sampled the terrain
+ * ELEVATION and called anything above 0.5 m dry — but Dubai's declared ground IS 0.5 m, and the
+ * procedural detail laid over it is signed, so half the land in the city came back at 0.49 and
+ * counted as sea. A test whose threshold is the exact value it is testing decides nothing.
+ *
+ * Worse, elevation is the wrong source even when the number works: it depends on which terrain
+ * tiles have loaded, and the arena is built the instant you press the key, before any of them have.
+ * The land mask is baked into the bundle, is there before anything is fetched, and is the actual
+ * authority on where the coast is. Ask it.
+ */
+export function cityLandAt(x: number, y: number, z: number): number | null {
+  for (let i = 0; i < SITES.length; i++) {
+    const s = SITES[i];
+    const dot = x * s.dx + y * s.dy + z * s.dz;
+    if (dot <= s.cosOuter) continue;
+    const ox = x - s.dx, oy = y - s.dy, oz = z - s.dz;
+    const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
+    const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
+    return cityLandFraction(em, -nm);
+  }
+  return null;
+}
+
 /** Ground elevation at a city's own centre, for placing the buildings themselves. */
 export function cityGroundMetres(name: string): number {
   return SITES.find((s) => s.name === name)?.groundM ?? 0;

@@ -87,7 +87,9 @@ export const ARENA_SITES: {
   //
   // Facing northeast, up the line of the Marina towers, so the skyline is in frame on arrival
   // rather than behind you.
-  { key: 'Digit3', name: 'Dubai Marina', lat: 25.0805, lon: 55.1403, facingDeg: 45 },
+  // Superseded by DUBAI_STOPS below (B3 cycles the districts); kept in step so the two files
+  // can never disagree about where 'Dubai Marina' is.
+  { key: 'Digit3', name: 'Dubai Marina', lat: 25.0760, lon: 55.1489, facingDeg: 300 },
 
   // Matterhorn lost its number key to Dubai. It is NOT listed here on Digit0, because Digit0 is
   // already taken by "reset size" earlier in the same switch and the site dispatch only covers 1-9 —
@@ -115,8 +117,15 @@ export const ARENA_SITES: {
  * cycles them. One press per district, in the order they run up the coast.
  */
 const DUBAI_STOPS: { name: string; lat: number; lon: number; facingDeg: number }[] = [
-  // Facing northeast up the line of the Marina towers, so the skyline is in frame on arrival.
-  { name: 'Dubai Marina', lat: 25.0805, lon: 55.1403, facingDeg: 45 },
+  // ONE KILOMETRE INLAND of the Marina's own coordinates, on Geoff's instruction: "have them start
+  // 1km from their current positions, but inland 1km from now."
+  //
+  // The bearing is 120 degrees rather than a guess at "inland", and it was measured: a script walked
+  // every compass direction at 1 km against the real land mask and scored each by whether the drop
+  // point AND all four spawn positions 1.8 km around it come out on land. 120 degrees is the only
+  // direction that scores full marks. Facing back northwest, so the Marina towers and the water
+  // beyond them are in frame on arrival rather than behind you.
+  { name: 'Dubai Marina', lat: 25.0760, lon: 55.1489, facingDeg: 300 },
   // The Palm's trunk, looking out along the fronds — the one place the islands read as islands.
   { name: 'Palm Jumeirah', lat: 25.1124, lon: 55.1390, facingDeg: 300 },
   // Standing off the Burj Khalifa, far enough back that all 522 m of it fits above a Kaiju's eye

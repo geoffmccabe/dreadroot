@@ -15,6 +15,7 @@ import {
 } from './kaijuBody';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+import { cityLandAt } from './cityGround';
 import {
   WEAPONS, fireWeapon, stepProjectiles, resolveMelee, clearProjectiles,
   type WeaponId, type HitTarget,
@@ -391,11 +392,20 @@ export function initArenaWith(
     return centre.clone().add(off.multiplyScalar(1 / PLANET_RADIUS)).normalize();
   };
   const isDry = (d3: THREE.Vector3): boolean => {
+    // INSIDE A CITY, ASK THE LAND MASK. Geoff: "they are in the water." The first version of this
+    // sampled the terrain elevation and called anything over 0.5 m dry — while Dubai's declared
+    // ground is exactly 0.5 m, so it was comparing a number against itself and the signed detail
+    // noise decided the answer. It is also the wrong source: elevation depends on which tiles have
+    // loaded, and the arena is built the instant the key is pressed, before any of them are.
+    const land = cityLandAt(d3.x, d3.y, d3.z);
+    // Nearly all land, not merely more-than-half: a cell on the waterline is a beach, and a 300 m
+    // creature standing on a beach cell is standing in the sea up to its knees.
+    if (land != null) return land > 0.85;
+    // Outside every city, elevation is all there is. Null means no data has arrived, and treating
+    // that as dry is deliberate — a missing tile is not evidence of ocean, and refusing every
+    // unknown place would drag the whole fight to wherever happened to load first.
     const m = sampleGlobeSurface(d3.x, d3.y, d3.z);
-    // Null means no elevation data has arrived for that spot. Treating it as dry is deliberate: a
-    // missing tile is not evidence of ocean, and refusing every unknown place would push the whole
-    // fight to wherever happened to be loaded first.
-    return m == null || m > 0.5;
+    return m == null || m > 1;
   };
   const findDry = (ang0: number): THREE.Vector3 => {
     const first = ringDir(ang0, R);
