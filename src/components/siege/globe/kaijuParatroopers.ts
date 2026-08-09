@@ -129,12 +129,25 @@ export const CHUTE_COLOURS: [number, number, number][] = [
   [0.02, 0.02, 0.02],   // black
 ];
 
-/** Canopy radius in metres — 8 m across, as asked. */
-export const CHUTE_RADIUS_M = 4;
-/** How much of the circle is drawn, centred directly overhead. */
-export const CHUTE_ARC_RAD = Math.PI / 4;
-/** Length of the canopy along its own axis. */
-export const CHUTE_LENGTH_M = 8;
+/**
+ * The canopy: 8 m across the rim, and 45 degrees of arc, as asked.
+ *
+ * Geoff: "a section of a flattened cylinder above the paratrooper, which will be 8m diameter around
+ * the paratrooper, but only the 45 degrees directly above the paratrooper will show." Then, on
+ * seeing it: "The parachutes are single color and flat. They should be arcs but with a width."
+ *
+ * The first reading took the 45 degrees as a slice of a CYLINDER, which gives a strip 3.1 m across
+ * and 8 m long — an arc in one direction and dead flat in the other, which is exactly what was
+ * reported. Read as a spherical CAP instead, the same two numbers describe a dome: curved both ways,
+ * 8 m across, and unmistakably a parachute.
+ *
+ * Rim 8 m at a 45-degree half-angle means a sphere of 5.66 m and a canopy 1.66 m deep.
+ */
+export const CHUTE_RIM_M = 8;
+export const CHUTE_HALF_ANGLE = Math.PI / 4;
+export const CHUTE_SPHERE_R = (CHUTE_RIM_M * 0.5) / Math.sin(CHUTE_HALF_ANGLE);
+/** How far above the jumper the canopy's rim hangs. Real risers are four to five metres. */
+export const CHUTE_LIFT_M = 4.5;
 
 /**
  * One canopy in the air, as the renderer needs it. Rebuilt each frame by the crowd.

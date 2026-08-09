@@ -508,8 +508,10 @@ function Crowd() {
         // figures pop out of existence. Inflating the sphere fixes that properly, rather than paying
         // for every figure whether or not it is on screen.
         m.frustumCulled = true;
-        if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
-        if (m.geometry.boundingSphere) m.geometry.boundingSphere.radius *= 2.2;
+        // The bounding sphere is OWNED BY localiseSkinning, below, and there is a second reason
+        // beyond tidiness: SkeletonUtils.clone SHARES one geometry across every figure, so inflating
+        // `m.geometry.boundingSphere.radius` here multiplied the same sphere two hundred and fifty
+        // times over — 2.2 to the power of 250, which is not a large number, it is Infinity.
       });
       // THE WHOLE REASON THE CROWD WORKS AT ALL. Without this every vertex of every soldier picks up
       // a third of a metre of noise from being six thousand kilometres out from the world origin —
@@ -640,7 +642,12 @@ function Crowd() {
       // A paratrooper runs NONE of the ground behaviour below: no wandering, no standoff, no
       // building avoidance. He has one job, which is to come down. Everything else about him — his
       // target, his rifle, his shouting — is the shared code further on and is untouched.
-      if (p.dropAt >= 0 && p.altM < 0 && clock < p.dropAt) { pending++; f.obj.visible = false; continue; }
+      // STILL IN THE AIRCRAFT. The condition used to also require `p.altM < 0`, which is never true
+      // for a man who has not jumped — he is created AT altitude. So the whole drop schedule did
+      // nothing: all fifty left at once the instant the crowd formed, and the counter read zero
+      // waiting forever. What is being asked here is only "has his time come", and nothing else.
+      if (p.dropAt >= 0 && clock < p.dropAt) { pending++; f.obj.visible = false; continue; }
+      if (p.dropAt >= 0) f.obj.visible = true;
       if (p.altM >= 0) {
         f.obj.visible = true;
 

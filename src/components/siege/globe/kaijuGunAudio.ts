@@ -259,29 +259,41 @@ export function flushGunAudio(
       // THE ZING, slowed and darkened. 0.55-0.7 drops it roughly an octave, and cutting everything
       // above about 3 kHz removes the bb-gun edge — that top end is the whole of what made it sound
       // small. It also comes out longer, which is correct: a big ricochet rings.
+      //
+      // HALF THE LEVEL, and a REFERENCE DISTANCE that finally means something. Geoff: "The ricochet
+      // sounds are much too loud, especially from so far away."
+      //
+      // Both halves of that had a cause and only one was the volume. Web Audio's inverse model plays
+      // everything closer than `refDistance` at FULL level and only begins falling off beyond it —
+      // so with the reference at 2 units, every ricochet within TWO HUNDRED METRES was at maximum,
+      // and the decay past that started from a level already too high. On a map where the creature
+      // being hit is 300 m tall, that is most of them.
+      //
+      // 0.8 units is 80 m, which is what a sharp impact really sounds like: loud where you stand,
+      // gone quickly. With the steeper rolloff and the halved level that is 2x quieter close in and
+      // 6x quieter across the battlefield, which is the shape Geoff described rather than a flat cut.
       playKaijuSound(RICOCHET_URL, r.pos, listenerPos, listenerDir, {
-        volume: 0.42 + rand() * 0.14,
+        volume: 0.21 + rand() * 0.07,
         rate: 0.55 + rand() * 0.15,
         cutHz: 2600 + rand() * 900,
         bassDb: 6,
         tiltDb: -4 + (rand() * 2 - 1) * 2,
-        // 2 units, not 5. Geoff: "I could hear the ricochets but they sound like they're coming
-        // from right on top of me and don't sound far away." At 5 the reference distance was 500 m
-        // — which is roughly where the Kaiju STANDS in the scale view, so every impact was playing
-        // at full reference level and of course sounded like it was in the room. At 2 units (200 m)
-        // with a steeper rolloff, an impact half a kilometre away arrives at about a fifth, and the
-        // air absorption and the reverb tail do the rest.
-        refUnits: 2,
-        rolloff: 1.5,
+        refUnits: 0.8,
+        rolloff: 1.8,
         maxUnits: MAX_AUDIBLE_UNITS,
         panning: 'equalpower',
       });
       // ...AND THE THUD UNDER IT. Same position, same delay, so they arrive together as one event.
+      //
+      // Its reference was 3 units — THREE HUNDRED METRES at full level, worse than the zing sitting
+      // on top of it, and it was never brought into line when the zing was last corrected. A low
+      // thump does carry further than a crack, so it keeps a longer reference and a gentler rolloff
+      // than the zing does; it does not get to keep one the size of a city block.
       playKaijuBuffer(impactThud(ctx), r.pos, listenerPos, listenerDir, {
-        volume: 0.55 + rand() * 0.2,
+        volume: 0.27 + rand() * 0.1,
         rate: 0.85 + rand() * 0.3,
-        refUnits: 3,
-        rolloff: 1.2,
+        refUnits: 1.2,
+        rolloff: 1.5,
         maxUnits: MAX_AUDIBLE_UNITS,
         panning: 'equalpower',
       });

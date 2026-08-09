@@ -187,5 +187,40 @@ let defaultErr = 0;
   ok(err < 0.005, 'and the figure is still exact afterwards', `${(err * 1000).toFixed(3)} mm`);
 }
 
+// --- 7. THE BOUNDING SPHERE STAYS LOCAL, WHICH IS WHAT FRUSTUM CULLING READS -------------------
+//
+// Localisation sets bindMatrixInverse to the identity. three.js has a SECOND path into the skeleton
+// that does not know that — SkinnedMesh.applyBoneTransform — and left alone it returns a WORLD-space
+// position. computeBoundingSphere is built on it, so the sphere lands six thousand kilometres from
+// the mesh and every figure fails the frustum test: an entire crowd invisible, still firing, still
+// audible, with no error anywhere. It hid until frustum culling was switched back on.
+//
+// This is the guard. The sphere has to describe a 1.8 m man near his own origin, wherever on the
+// planet he is standing.
+{
+  const { root, mesh } = buildFigure(HEIGHT);
+  root.position.set(0, PLANET_RADIUS, 0);
+  root.updateMatrixWorld(true);
+  localiseSkinning(root);
+  root.updateMatrixWorld(true);
+
+  const sphere = (mesh as THREE.SkinnedMesh).boundingSphere;
+  ok(sphere != null, 'a localised figure is given a bounding sphere');
+  if (sphere) {
+    const centreM = sphere.center.length() * METRES_PER_UNIT;
+    const radiusM = sphere.radius * METRES_PER_UNIT;
+    ok(centreM < 50, 'and its centre is on the man, not on the planet',
+       `${centreM.toFixed(2)} m from his own origin`);
+    ok(radiusM > 0.5 && radiusM < 50, 'and it is a person-sized sphere',
+       `radius ${radiusM.toFixed(2)} m`);
+  }
+
+  // ...and the transform it is built from returns LOCAL coordinates too, which is the actual fix.
+  const v = new THREE.Vector3();
+  (mesh as THREE.SkinnedMesh).getVertexPosition(1, v);
+  ok(v.length() * METRES_PER_UNIT < 50, 'a posed vertex reads back in local space, not world',
+     `${(v.length() * METRES_PER_UNIT).toFixed(2)} m from the origin`);
+}
+
 console.log(`\n${failures === 0 ? 'SKIN PRECISION CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
 process.exit(failures === 0 ? 0 : 1);

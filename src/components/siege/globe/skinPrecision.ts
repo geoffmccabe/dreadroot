@@ -81,6 +81,7 @@ export function localiseSkinning(root: THREE.Object3D): number {
 
     const worldInverse = new THREE.Matrix4();
     const scratch = new THREE.Matrix4();
+    const scratchV = new THREE.Vector3();
 
     // Replace this skeleton's update. Same contract as three.js's own — fill boneMatrices, flag the
     // texture — but every matrix is composed in 64-bit here and only the small result is uploaded.
@@ -104,6 +105,56 @@ export function localiseSkinning(root: THREE.Object3D): number {
       }
       if (this.boneTexture !== null) this.boneTexture.needsUpdate = true;
     };
+
+    // ---- AND THE OTHER HALF, WHICH COST A DAY -------------------------------------------------
+    //
+    // three.js has a SECOND path that reads the skeleton, and it does not go through skeleton.update
+    // at all: SkinnedMesh.applyBoneTransform composes `bone.matrixWorld * boneInverse` itself, then
+    // applies bindMatrixInverse — which localisation has just set to the identity. So it returns a
+    // WORLD-space position, six million metres out, instead of a local one.
+    //
+    // Nothing draws with that path, so it looks harmless. computeBoundingSphere uses it. The sphere
+    // therefore lands 6,371 km from the mesh, every soldier fails the frustum test, and two hundred
+    // and fifty men become invisible while still firing, still shouting and still audible — because
+    // the simulation never touches this. It stayed hidden until frustum culling was switched back
+    // on, at which point the entire crowd vanished with no error anywhere.
+    //
+    // So the same rebasing is applied here too, and the two paths can no longer disagree.
+    const boneMat = new THREE.Matrix4();
+    const basePos = new THREE.Vector3();
+    const accum = new THREE.Vector3();
+    const skinIndex = new THREE.Vector4();
+    const skinWeight = new THREE.Vector4();
+    mesh.applyBoneTransform = function localisedBoneTransform(index: number, target: THREE.Vector3) {
+      const geo = this.geometry;
+      skinIndex.fromBufferAttribute(geo.attributes.skinIndex as THREE.BufferAttribute, index);
+      skinWeight.fromBufferAttribute(geo.attributes.skinWeight as THREE.BufferAttribute, index);
+      basePos.copy(target);
+      worldInverse.copy(this.matrixWorld).invert();
+      accum.set(0, 0, 0);
+      for (let k = 0; k < 4; k++) {
+        const w = skinWeight.getComponent(k);
+        if (w === 0) continue;
+        const bi = skinIndex.getComponent(k);
+        boneMat.multiplyMatrices(worldInverse, this.skeleton.bones[bi].matrixWorld);
+        boneMat.multiply(this.skeleton.boneInverses[bi]);
+        boneMat.multiply(bind);
+        accum.addScaledVector(scratchV.copy(basePos).applyMatrix4(boneMat), w);
+      }
+      return target.copy(accum);
+    };
+
+    // ...and give it a bounding sphere it can trust, ONCE, rather than leaving three to work one out
+    // from a pose that changes every frame. The bind-pose sphere inflated by half covers every clip
+    // this model has; a per-frame recompute over fifteen thousand vertices, times two hundred and
+    // fifty men, is not affordable and is not needed.
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    const gs = mesh.geometry.boundingSphere;
+    if (gs) {
+      mesh.boundingSphere = new THREE.Sphere(gs.center.clone(), gs.radius * 1.5);
+      // Never recomputed: the value above is correct and the computation is the thing that was wrong.
+      mesh.computeBoundingSphere = function keepLocalisedSphere() { /* already set, and correct */ };
+    }
 
     patched++;
     skinPrecisionDiag.bones += skeleton.bones.length;

@@ -11,9 +11,10 @@
 // avoided by writing the twelve lines that place the vertices exactly where they belong. The curve
 // sits directly OVERHEAD by construction, which is the one thing that has to be true.
 //
-// WHAT IT LOOKS LIKE, honestly: 45 degrees of an 8 m circle is a strip 3.1 m across and 8 m long, so
-// this reads as a curved sheet rather than a dome. That is what was asked for. CHUTE_ARC_RAD is the
-// one number that widens it.
+// A DOME, NOT A STRIP. The first version read the "45 degrees" as a slice of a cylinder, which is an
+// arc across and a straight line along — flat from half the angles you see it from, and shaded with
+// one light value because every normal on it points the same way. The same two numbers read as a
+// spherical CAP give a canopy curved both ways, which is both what a parachute is and what shades.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
@@ -21,42 +22,55 @@ import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import {
   getCanopies, canopyCount, PARA_COUNT, CHUTE_COLOURS,
-  CHUTE_RADIUS_M, CHUTE_ARC_RAD, CHUTE_LENGTH_M,
+  CHUTE_RIM_M, CHUTE_HALF_ANGLE, CHUTE_SPHERE_R, CHUTE_LIFT_M,
 } from './kaijuParatroopers';
 
 /**
- * A curved sheet: an arc of `segments` running across, extruded along its own axis.
+ * A spherical cap: a dome, curved in BOTH directions, with its apex directly over the jumper.
  *
- * Local +Y is up, so the arc's apex sits directly over the origin — which is where the jumper is.
- * Local +Z runs along the canopy, which the renderer aligns with his direction of drive.
+ * The first version was a slice of a cylinder, which is curved across and dead straight along — and
+ * looked it. Geoff: "The parachutes are single color and flat. They should be arcs but with a
+ * width." A cap built from the same two numbers is 8 m across, 45 degrees of arc, and reads as a
+ * canopy from any angle.
+ *
+ * Normals are radial and point DOWN AND OUT from the sphere's centre, which is the face anybody
+ * underneath sees. That is also the fix for "single color": a flat sheet whose normals all point the
+ * same way takes one light value across the whole thing, while a dome's normals fan out and it
+ * shades from apex to rim on its own.
  */
-function canopyGeometry(segments = 14): THREE.BufferGeometry {
-  const r = CHUTE_RADIUS_M / METRES_PER_UNIT;
-  const halfLen = CHUTE_LENGTH_M * 0.5 / METRES_PER_UNIT;
+function canopyGeometry(rings = 6, segments = 20): THREE.BufferGeometry {
+  const R = CHUTE_SPHERE_R / METRES_PER_UNIT;
+  // The cap hangs so its RIM is at the riser height, with the apex above that.
+  const rimY = CHUTE_LIFT_M / METRES_PER_UNIT;
+  const centreY = rimY + R * Math.cos(CHUTE_HALF_ANGLE);
+
   const pos: number[] = [];
   const nrm: number[] = [];
   const idx: number[] = [];
-
-  for (let i = 0; i <= segments; i++) {
-    // Centred on straight up, so half the arc falls either side of the jumper's head.
-    const a = -CHUTE_ARC_RAD * 0.5 + (i / segments) * CHUTE_ARC_RAD;
-    const x = Math.sin(a) * r;
-    const y = Math.cos(a) * r;
-    // Normal points DOWN and outward — the underside is the face anyone below can see, and this is
-    // a single-sided sheet drawn double-sided, so the lighting wants the side facing the ground.
-    const nx = -Math.sin(a), ny = -Math.cos(a);
-    pos.push(x, y, -halfLen, x, y, halfLen);
-    nrm.push(nx, ny, 0, nx, ny, 0);
+  for (let r = 0; r <= rings; r++) {
+    // Polar angle from straight DOWN at the sphere's centre, out to the cap's half angle.
+    const phi = (r / rings) * CHUTE_HALF_ANGLE;
+    const sinP = Math.sin(phi), cosP = Math.cos(phi);
+    for (let s = 0; s <= segments; s++) {
+      const th = (s / segments) * Math.PI * 2;
+      const nx = sinP * Math.cos(th), ny = -cosP, nz = sinP * Math.sin(th);
+      pos.push(nx * R, centreY + ny * R, nz * R);
+      nrm.push(nx, ny, nz);
+    }
   }
-  for (let i = 0; i < segments; i++) {
-    const a0 = i * 2, a1 = a0 + 1, b0 = a0 + 2, b1 = a0 + 3;
-    idx.push(a0, b0, a1, a1, b0, b1);
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const a = r * (segments + 1) + s;
+      const b = a + segments + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   geo.setIndex(idx);
+  geo.computeBoundingSphere();
   return geo;
 }
 
