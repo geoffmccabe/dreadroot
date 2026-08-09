@@ -146,7 +146,10 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
 
         // Sampled once in the normal pass and reused in the colour pass. GLSL has no way to pass a
         // local between two injected chunks, so they are file-scope in the fragment shader.
+        vec3  gWp = vec3(0.0);
+        vec3  gWn = vec3(0.0, 1.0, 0.0);
         float gCliff = 0.0;
+        float gDetail = 0.5;
         float gD = 0.5;
         float gCoarse = 0.5;
         float gFine = 0.5;
@@ -161,55 +164,53 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
                + tFbm(vec3(p.x, p.y, 0.0)) * b.z;
         }
       `)
-      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      //
+      // THE ORDER OF THESE THREE IS NOT A STYLE CHOICE, and getting it wrong is what black-screened
+      // the planet. three.js runs its fragment chunks in a fixed sequence:
+      //
+      //     33  color_fragment          diffuseColor exists
+      //     37  roughnessmap_fragment   roughnessFactor is DECLARED HERE
+      //     40  normal_fragment_maps    `normal` exists
+      //
+      // The first version sampled the noise in normal_fragment_maps and used it in color_fragment —
+      // which runs SEVEN CHUNKS EARLIER, so the colour pass read values that had not been computed
+      // yet. And it assigned roughnessFactor from color_fragment, four chunks before that variable
+      // is declared, which is a compile error. With gl.debug.checkShaderErrors off (this project
+      // disables it: getProgramInfoLog was costing 1.6s of main-thread stalls per 48s) a failed
+      // shader throws nothing and draws nothing. Hence: no terrain, no error, nowhere to look.
+      //
+      // So: sample once at color_fragment, use the results in the two later chunks.
+      .replace('#include <color_fragment>', `#include <color_fragment>
         {
           // WORLD SCALE. Everything below is written in metres and converted here, so the numbers in
           // this file mean what they say whatever the unit scale is.
           float mpu = max(1e-6, uMPU);
           vec3 wp = vWorldPos * mpu;                 // world position in METRES
           vec3 wn = normalize(vWorldNrm);
+          gWp = wp;
+          gWn = wn;
           gCliff = 1.0 - clamp(dot(wn, normalize(vWorldPos)), 0.0, 1.0);
 
           // DETAIL FADES WITH DISTANCE, and this is not only about cost.
           //
           // Noise finer than a pixel does not add detail, it adds SHIMMER: the field is re-sampled
-          // at a different point every frame as the camera moves, so a distant slope crawls. That is
-          // what a mipmap chain does for a real texture, and a procedural material has to do it by
-          // hand. Fading the fine octave out past a few hundred metres kills the crawl and gives the
-          // cost back at exactly the distances where nobody could see the detail anyway.
+          // at a slightly different point every frame as the camera moves, so a distant slope
+          // crawls. A mipmap chain is what stops that happening to a real texture, and a procedural
+          // material has to do the same job by hand. Fading the fine octave out past a few hundred
+          // metres kills the crawl and gives the cost back where nobody could see the detail anyway.
           float viewM = length(vViewPos) * mpu;
-          float fine = 1.0 - smoothstep(220.0, 900.0, viewM);
+          gFineAmt = 1.0 - smoothstep(220.0, 900.0, viewM);
 
-          // ONE set of samples, used for BOTH the normal and the colour below. Computing them twice
-          // was the single biggest waste in the first version of this shader.
+          // ONE set of samples, used here AND by the two chunks below. Taking them twice was the
+          // single biggest waste in the first version of this shader.
           gD = triFbm(wp, wn, 1.0 / ${DETAIL_M_MID}.0);
           gCoarse = triFbm(wp, wn, 1.0 / ${DETAIL_M_COARSE}.0);
-          gFine = fine > 0.01 ? triFbm(wp, wn, 1.0 / ${DETAIL_M_FINE}.0) : 0.5;
-          gFineAmt = fine;
+          gFine = gFineAmt > 0.01 ? triFbm(wp, wn, 1.0 / ${DETAIL_M_FINE}.0) : 0.5;
 
-          // PERTURB THE NORMAL. Sample the field slightly off in two tangent directions and take the
-          // gradient: the slope of the fake relief, which is all a normal map ever is.
-          vec3 t1 = normalize(abs(wn.y) < 0.9 ? cross(wn, vec3(0.0, 1.0, 0.0)) : vec3(1.0, 0.0, 0.0));
-          vec3 t2 = cross(wn, t1);
-          float e = 1.2;                             // metres between samples
-          float h0 = gD;
-          float hx = triFbm(wp + t1 * e, wn, 1.0 / ${DETAIL_M_MID}.0);
-          float hy = triFbm(wp + t2 * e, wn, 1.0 / ${DETAIL_M_MID}.0);
-
-          // Strong relief on cliffs (fractured, loose rock), gentle on flats.
-          float strength = mix(0.9, 3.4, gCliff);
-          vec3 bump = normalize(wn - (t1 * (hx - h0) + t2 * (hy - h0)) * strength);
-          normal = normalize(mix(normal, bump, 0.8));
-        }
-      `)
-      .replace('#include <color_fragment>', `#include <color_fragment>
-        {
-          float mpu = max(1e-6, uMPU);
-
-          // DETAIL, three scales, from the samples the normal pass already took. Kept as a multiply
-          // around 1.0 so it darkens and lightens the vertex colour rather than replacing it — the
-          // biome tint stays exactly as authored.
+          // DETAIL, three scales. Kept as a multiply around 1.0 so it darkens and lightens the
+          // vertex colour rather than replacing it — the biome tint stays exactly as authored.
           float d = gCoarse * 0.5 + gD * 0.32 + mix(0.5, gFine, gFineAmt) * 0.18;
+          gDetail = d;
           diffuseColor.rgb *= 0.74 + 0.52 * d;
 
           // STRATA. Horizontal bands by ALTITUDE, on steep ground only.
@@ -220,17 +221,35 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           // they wrap around every buttress and side canyon exactly as the real ones do. A brown
           // ramp with noise on it never looks like the Grand Canyon; a striped one does at once.
           float alt = length(vWorldPos) * mpu;
-          float wob = gCoarse * 26.0;                // band edges wander, so it is geology not wallpaper
+          float wob = gCoarse * 26.0;                // edges wander, so it is geology not wallpaper
           float band = fract((alt + wob) / ${STRATA_M}.0);
           float layer = smoothstep(0.0, 0.35, band) * (1.0 - smoothstep(0.55, 0.95, band));
           vec3 warm = vec3(1.24, 0.84, 0.62);        // iron reds
           vec3 pale = vec3(0.94, 0.91, 0.84);        // pale sandstone
           diffuseColor.rgb *= mix(vec3(1.0), mix(pale, warm, layer), gCliff * 0.85);
+        }
+      `)
+      // ROUGHNESS, in the chunk that declares it. Cliffs are broken and matte, flats smoother, plus
+      // noise so no two patches of ground catch the sun identically — a single roughness value is a
+      // large part of why it read as plastic.
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(mix(0.78, 0.99, gCliff) - (gDetail - 0.5) * 0.22, 0.35, 1.0);
+      `)
+      // THE NORMAL, in the chunk where `normal` exists, from the samples already taken above.
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          // Sample the field slightly off in two tangent directions and take the gradient: the slope
+          // of the fake relief, which is all a normal map ever is.
+          vec3 t1 = normalize(abs(gWn.y) < 0.9 ? cross(gWn, vec3(0.0, 1.0, 0.0)) : vec3(1.0, 0.0, 0.0));
+          vec3 t2 = cross(gWn, t1);
+          float e = 1.2;                             // metres between samples
+          float hx = triFbm(gWp + t1 * e, gWn, 1.0 / ${DETAIL_M_MID}.0);
+          float hy = triFbm(gWp + t2 * e, gWn, 1.0 / ${DETAIL_M_MID}.0);
 
-          // ROUGHNESS. Cliffs are broken and matte, flats smoother, plus noise so that no two
-          // patches of ground catch the sun identically — a single roughness value is a large part
-          // of why it read as plastic.
-          roughnessFactor = clamp(mix(0.78, 0.99, gCliff) - (d - 0.5) * 0.22, 0.35, 1.0);
+          // Strong relief on cliffs (fractured, loose rock), gentle on flats.
+          float strength = mix(0.9, 3.4, gCliff);
+          vec3 bump = normalize(gWn - (t1 * (hx - gD) + t2 * (hy - gD)) * strength);
+          normal = normalize(mix(normal, bump, 0.8));
         }
       `);
   };

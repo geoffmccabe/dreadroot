@@ -2122,7 +2122,11 @@ export function Fortress() {
           // synchronously blocks the main thread until the GPU is done compiling.
           // Real-world trace 2026-May-19: ~1.6s/48s of main-thread stalls came
           // from getProgramInfoLog. Disabling shader-error checks skips it.
-          gl.debug.checkShaderErrors = false;
+          // ...but IN DEV, keep them on. A failed shader compiles to nothing and DRAWS nothing:
+          // no throw, no console entry, no clue. That cost a day when the terrain material's
+          // injections were written into the wrong chunk — the planet simply was not there. The
+          // stall this avoids is a production concern; in dev, silence is far more expensive.
+          gl.debug.checkShaderErrors = import.meta.env.DEV;
           // Seed tone mapping + exposure from the live look store (persisted, AgX by
           // default — replaces R3F's default ACES). LookSync keeps these in sync as the
           // Lightning Panel changes them. Set here (not the gl prop) so React re-renders
