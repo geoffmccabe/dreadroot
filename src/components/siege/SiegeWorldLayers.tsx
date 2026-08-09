@@ -15,6 +15,8 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeCamera } from './globe/GlobeCamera';
+import { GlobeLighting } from './globe/GlobeLighting';
+import { GlobeCloudsGate } from './globe/GlobeCloudsGate';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
@@ -114,7 +116,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // LIGHTING meaning gets its own flag. A flag whose name describes one thing while it controls nine
   // is a trap that will be stepped in again; naming the second one after what it actually does is
   // the cheapest possible guard.
-  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
+  // The globe is NOT given the blank-map fill any more — GlobeLighting supplies it instead, so
+  // there is exactly one thing lighting this map and the panel's Fill sliders actually control it.
+  // With the panel's master switch off, GlobeLighting emits the identical fill this used to add, so
+  // nothing changes until somebody asks for it.
+  const isBlank = kind === 'flat' || isHeightmap;
   /**
    * Does this map want the builder-map fill light?
    *
@@ -191,6 +197,10 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Mini Earth: altitude-tracking near/far planes + fog off. Without this the planet is
           entirely outside the 6,000-unit far plane and fogged out on top. */}
       {isGlobe && <GlobeCamera />}
+      {/* All the Mini Earth's light, driven entirely by the Lightning Panel (Ctrl+L). Master switch
+          off = exactly what this map rendered before any of it existed. */}
+      {isGlobe && <GlobeLighting />}
+      {isGlobe && <GlobeCloudsGate />}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {/* Kaiju: suspends while its model loads, so it needs its own Suspense boundary. Without
           one the suspension propagates up and can take neighbouring layers with it, and an error

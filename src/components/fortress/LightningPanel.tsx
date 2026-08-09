@@ -3,6 +3,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import type { LightningSettings, CycleState } from './FortressTypes';
 import { LookControls } from '@/features/look/LookControls';
+import { GlobeLookControls } from '@/features/look/GlobeLookControls';
 import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 
 interface LightningPanelProps {
@@ -215,6 +216,7 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
 
         {/* RENDER (LOOK) — tone mapping, bloom, IBL (lookStore) */}
         <LookControls />
+        <GlobeLookControls />
 
         {/* DIAGNOSTICS */}
         <div style={sectionStyle}>

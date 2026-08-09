@@ -29,6 +29,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sunDirection } from './GlobeLighting';
+import { globeLook } from '@/features/look/globeLookStore';
 
 /** Cloud base and the second deck, in metres. Real cumulus sits about here. */
 const DECK_LOW_M = 1900;
@@ -156,6 +157,9 @@ function Deck({ altitudeM, drift, opacity, coverage }: {
 
   useFrame((state) => {
     mat.uniforms.uTime.value = state.clock.elapsedTime;
+    // Live from the panel, so coverage and opacity can be dialled while looking at them.
+    mat.uniforms.uCoverage.value = coverage;
+    mat.uniforms.uOpacity.value = opacity;
     // Lit by the SAME sun as the ground, so the decks warm up and the shadow sides go blue in step
     // with everything below them.
     mat.uniforms.uSunDir.value.copy(sunDirection);
@@ -171,13 +175,13 @@ function Deck({ altitudeM, drift, opacity, coverage }: {
   );
 }
 
-export function GlobeClouds() {
+export function GlobeClouds({ coverage, opacity }: { coverage: number; opacity: number }) {
   return (
     <>
       {/* The lower deck is denser and slower; the upper is thin, faster and more broken, which is
           how a real sky is layered. */}
-      <Deck altitudeM={DECK_LOW_M} drift={0.0022} opacity={0.85} coverage={COVERAGE} />
-      <Deck altitudeM={DECK_HIGH_M} drift={0.0051} opacity={0.45} coverage={COVERAGE * 0.72} />
+      <Deck altitudeM={DECK_LOW_M} drift={0.0022} opacity={opacity} coverage={coverage} />
+      <Deck altitudeM={DECK_HIGH_M} drift={0.0051} opacity={opacity * 0.53} coverage={coverage * 0.72} />
     </>
   );
 }

@@ -23,6 +23,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+import { globeLook } from '@/features/look/globeLookStore';
 
 /** Extra margin past the horizon so the planet's limb and the far side of terrain stay in view. */
 const FAR_MARGIN = 1.6;
@@ -55,6 +56,7 @@ export function GlobeCamera() {
   const scene = useThree((s) => s.scene);
   const saved = useRef<{ near: number; far: number; fog: THREE.Scene['fog']; bg: THREE.Scene['background'] } | null>(null);
   const underwaterCol = useRef(new THREE.Color());
+  const hazeCol = useRef(new THREE.Color());
 
   useEffect(() => {
     saved.current = { near: camera.near, far: camera.far, fog: scene.fog, bg: scene.background };
@@ -94,7 +96,36 @@ export function GlobeCamera() {
       }
       scene.background = col;
     } else {
-      if (scene.fog) scene.fog = null;
+      // AERIAL HAZE, from the Lightning Panel. Off by default, in which case this behaves exactly as
+      // it always did (no fog above water).
+      //
+      // Distance haze is what makes a landscape read as vast: air is not transparent, so far ground
+      // loses contrast and takes the colour of the sky, and the eye reads that loss AS distance.
+      //
+      // IT MUST HAVE A CEILING. Applied at every altitude it fogs the whole planet — from orbit you
+      // are looking through thousands of kilometres of it, exponential fog saturates, and the entire
+      // frame including the starfield becomes the fog colour. That is a white screen, and it is the
+      // mistake the first version made.
+      const g = globeLook();
+      const altKm = Math.max(0, altitude * METRES_PER_UNIT) / 1000;
+      if (!g.enabled || !g.hazeOn || altKm > g.hazeCeilingKm) {
+        if (scene.fog) scene.fog = null;
+      } else {
+        // Halves every 2.5 km — roughly the real scale height for haze, since aerosols sit far lower
+        // than the air itself, which is why mountains poke out of it. Then eased to nothing at the
+        // ceiling so there is no visible step where it switches off.
+        const ceil = Math.max(1, g.hazeCeilingKm);
+        const thin = Math.exp(-altKm / 2.5) * (1 - Math.min(1, altKm / ceil) ** 2);
+        const visibility = (g.hazeVisibilityKm * 1000 / METRES_PER_UNIT) / Math.max(0.02, thin);
+        const col = hazeCol.current.setRGB(0.62, 0.72, 0.86);
+        const f = scene.fog as THREE.FogExp2 | null;
+        if (f && (f as THREE.FogExp2).isFogExp2) {
+          f.color.copy(col);
+          (f as THREE.FogExp2).density = 1 / visibility;
+        } else {
+          scene.fog = new THREE.FogExp2(col.getHex(), 1 / visibility);
+        }
+      }
       if (scene.background) scene.background = null;
     }
 

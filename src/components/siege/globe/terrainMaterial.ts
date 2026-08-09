@@ -42,6 +42,11 @@
 
 import * as THREE from 'three';
 
+/** A terrain material with its live panel uniforms hung off it, so the renderer can drive them. */
+export type TerrainMaterial = THREE.MeshStandardMaterial & {
+  globeUniforms: Record<string, { value: number }>;
+};
+
 /**
  * Metres per repeat of the coarsest detail octave.
  *
@@ -97,7 +102,7 @@ const NOISE_GLSL = /* glsl */`
  * that keeps three.js's own lighting, shadow receiving, fog and tone mapping — all of which are
  * things a hand-rolled shader would have to reimplement and would get subtly wrong.
  */
-export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMaterial {
+export function makeTerrainMaterial(metresPerUnit: number): TerrainMaterial {
   const mat = new THREE.MeshStandardMaterial({
     vertexColors: true,
     side: THREE.FrontSide,
@@ -118,8 +123,20 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
     flatShading: false,
   });
 
+  // LIVE UNIFORMS. Every strength below is a panel slider, so the look is tuned by dragging rather
+  // than by editing, rebuilding and deploying — which is how the first attempt at this burned a day.
+  const uniforms = {
+    uMPU: { value: metresPerUnit },
+    uDetail: { value: 0.5 },
+    uNormal: { value: 0.8 },
+    uStrata: { value: 0.85 },
+    uStrataM: { value: 55 },
+    uCavity: { value: 0.34 },
+  };
+  (mat as TerrainMaterial).globeUniforms = uniforms;
+
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uMPU = { value: metresPerUnit };
+    Object.assign(shader.uniforms, uniforms);
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
@@ -145,6 +162,11 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uMPU;
+        uniform float uDetail;
+        uniform float uNormal;
+        uniform float uStrata;
+        uniform float uStrataM;
+        uniform float uCavity;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
         varying vec3 vViewPos;
@@ -217,7 +239,7 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           // vertex colour rather than replacing it — the biome tint stays exactly as authored.
           float d = gCoarse * 0.5 + gD * 0.32 + mix(0.5, gFine, gFineAmt) * 0.18;
           gDetail = d;
-          diffuseColor.rgb *= 0.74 + 0.52 * d;
+          diffuseColor.rgb *= mix(1.0, 0.74 + 0.52 * d, uDetail);
 
           // CAVITY SHADING — ambient occlusion, done in WORLD space for nothing.
           //
@@ -231,7 +253,7 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           // they should be, with no second render pass and no precision problem — and unlike SSAO it
           // is correct at any distance and does not swim when the camera moves.
           float cavity = smoothstep(0.62, 0.30, d);
-          diffuseColor.rgb *= 1.0 - cavity * 0.34;
+          diffuseColor.rgb *= 1.0 - cavity * uCavity;
 
           // ALBEDO CANNOT EXCEED 1. Three multiplies stack here — detail up to 1.26, strata up to
           // 1.24, cavity down — so a bright vertex colour like snow could come out at 1.4. An albedo
@@ -248,11 +270,11 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           // ramp with noise on it never looks like the Grand Canyon; a striped one does at once.
           float alt = length(vWorldPos) * mpu;
           float wob = gCoarse * 26.0;                // edges wander, so it is geology not wallpaper
-          float band = fract((alt + wob) / ${STRATA_M}.0);
+          float band = fract((alt + wob) / max(1.0, uStrataM));
           float layer = smoothstep(0.0, 0.35, band) * (1.0 - smoothstep(0.55, 0.95, band));
           vec3 warm = vec3(1.24, 0.84, 0.62);        // iron reds
           vec3 pale = vec3(0.94, 0.91, 0.84);        // pale sandstone
-          diffuseColor.rgb *= mix(vec3(1.0), mix(pale, warm, layer), gCliff * 0.85);
+          diffuseColor.rgb *= mix(vec3(1.0), mix(pale, warm, layer), gCliff * uStrata);
         }
       `)
       // ROUGHNESS, in the chunk that declares it. Cliffs are broken and matte, flats smoother, plus
@@ -273,9 +295,9 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           float hy = triFbm(gWp + t2 * e, gWn, 1.0 / ${DETAIL_M_MID}.0);
 
           // Strong relief on cliffs (fractured, loose rock), gentle on flats.
-          float strength = mix(0.9, 3.4, gCliff);
+          float strength = mix(0.9, 3.4, gCliff) * max(0.0, uNormal);
           vec3 bump = normalize(gWn - (t1 * (hx - gD) + t2 * (hy - gD)) * strength);
-          normal = normalize(mix(normal, bump, 0.8));
+          normal = normalize(mix(normal, bump, clamp(uNormal, 0.0, 1.0)));
         }
       `);
   };
@@ -283,5 +305,5 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
   // Changing onBeforeCompile after a material has been used needs a new cache key, and this is
   // set once at creation, but three.js caches programs by it — so give it a stable, distinct one.
   mat.customProgramCacheKey = () => 'globe-terrain-v1';
-  return mat;
+  return mat as TerrainMaterial;
 }

@@ -29,6 +29,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
+import { globeLook } from '@/features/look/globeLookStore';
 import { CFG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
@@ -99,7 +100,14 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
   // I should have followed the working renderer instead of writing a fresh one.
   const model = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
-    c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    // SHADOWS, from the Lightning Panel. Off by default — this is why the Kaiju read as cartoons:
+    // every mesh had both flags disabled, so a 300 m creature stood in full sun with nothing beneath
+    // it. Receiving matters nearly as much as casting: it is what puts an arm's shadow across the
+    // chest and gives the body its own form.
+    const wantShadows = globeLook().enabled && globeLook().shadowsOn;
+    c.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) { o.castShadow = wantShadows; o.receiveShadow = wantShadows; }
+    });
     // Own copies of the materials, so tinting THIS Kaiju does not tint every Kaiju sharing the
     // model. Two of the four in the demo fight would otherwise flash together.
     prepareFlash(c);

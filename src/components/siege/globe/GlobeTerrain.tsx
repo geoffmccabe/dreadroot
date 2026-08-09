@@ -396,12 +396,57 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const readyFired = useRef(false);
   const warnedEmpty = useRef(false);
 
-  const material = useMemo(
+  const materials = useMemo(
     // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
     // nulls scene.fog each frame; this makes a stray frame harmless too.
-    () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: false }),
+    /**
+     * TWO MATERIALS, ONE LIVE SWITCH.
+     *
+     * The lit (PBR) ground is the biggest visual change available and the riskiest — it replaces the
+     * flattest material three.js has with an extended MeshStandardMaterial, which also responds to
+     * scene lighting the old one ignored. So it is switchable from the Lightning Panel rather than a
+     * decision baked in at build time, and BOTH are kept alive: flipping back is instant, and the
+     * meshes already on screen are re-pointed at the other one below rather than being rebuilt.
+     */
+    () => ({
+      flat: new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: true }),
+      lit: makeTerrainMaterial(METRES_PER_UNIT),
+    }),
     [],
   );
+
+  /**
+   * WHICH MATERIAL IS IN USE RIGHT NOW, and re-point everything already built.
+   *
+   * Patches are plain THREE.Mesh objects created over many frames as the planet streams in, so
+   * flipping the switch has to reach the ones that already exist — otherwise the ground would change
+   * only where you have not been yet, which is worse than not changing at all.
+   */
+  const look = useGlobeLook();
+  /** Read in the streaming loop, which runs outside React and must not close over a stale value. */
+  const shadowsWanted = useRef(false);
+  shadowsWanted.current = look.enabled && look.shadowsOn;
+  useEffect(() => {
+    for (const m of meshes.current.values()) {
+      m.receiveShadow = shadowsWanted.current;
+      m.castShadow = shadowsWanted.current;
+    }
+  }, [look.enabled, look.shadowsOn]);
+  const material = look.enabled && look.terrainPbr ? materials.lit : materials.flat;
+  useEffect(() => {
+    for (const m of meshes.current.values()) m.material = material;
+  }, [material]);
+
+  // The panel's sliders go straight into the shader's uniforms — no rebuild, no recompile.
+  useEffect(() => {
+    const u = materials.lit.globeUniforms;
+    u.uDetail.value = look.terrainDetail;
+    u.uNormal.value = look.terrainNormal;
+    u.uStrata.value = look.terrainStrata;
+    u.uStrataM.value = look.terrainStrataM;
+    u.uCavity.value = look.terrainCavity;
+  }, [materials, look.terrainDetail, look.terrainNormal, look.terrainStrata,
+      look.terrainStrataM, look.terrainCavity]);
 
   // Water. transparent + depthWrite:false is the whole trick: it blends over the seafloor and can
   // never fight it for depth, which is what made the first opaque ocean shell flicker across the
@@ -444,9 +489,10 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     // No patches on screen means no drawn ground to report; leaving stale entries would have the
     // sampler answering for a planet that is no longer mounted.
     clearPatchIndex();
-    material.dispose();
+    materials.flat.dispose();
+    materials.lit.dispose();
     waterMat.dispose();
-  }, [material, waterMat]);
+  }, [materials, waterMat]);
 
   useFrame(() => {
     if (!manifestReady || !groupRef.current) return;
@@ -603,6 +649,10 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const prev = meshes.current.get(rk);
         if (prev) { groupRef.current?.remove(prev); disposePatch(prev.geometry); }
         const mesh = new THREE.Mesh(rebuilt.geo, material);
+        // The ground takes the Kaiju's shadow and throws its own — without the second, a ridge in
+        // front of the sun still lights the valley behind it, which removes all sense of relief.
+        mesh.receiveShadow = shadowsWanted.current;
+        mesh.castShadow = shadowsWanted.current;
         mesh.frustumCulled = true;
         meshes.current.set(rk, mesh);
         groupRef.current?.add(mesh);
@@ -661,6 +711,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const built = buildPatchGeometry(n, mf.maxLevel);
         if (!built) return true;
         const mesh = new THREE.Mesh(built.geo, material);
+        mesh.receiveShadow = shadowsWanted.current;
+        mesh.castShadow = shadowsWanted.current;
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
         builtLevel.current.set(key, built.level);
