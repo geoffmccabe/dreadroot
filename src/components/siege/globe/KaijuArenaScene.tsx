@@ -27,6 +27,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
+import { getBurns, burnIntensity } from './kaijuBurn';
 import { fireSpriteSheet, fireMaterial } from './fireSprite';
 import { footOffset, footOffsetRaw } from './modelFeet';
 import { updateKaijuFootsteps, stopKaijuFootsteps, stopAllKaijuFootsteps, scream } from './kaijuAudio';
@@ -371,6 +372,10 @@ function Projectiles() {
   const smokeMat = useMemo(() => fireMaterial(sheet, true), [sheet]);
   useEffect(() => () => { sheet.dispose(); hotMat.dispose(); smokeMat.dispose(); }, [sheet, hotMat, smokeMat]);
 
+  /** Licks of flame per burning patch. A fire is several small flames, not one sprite. */
+  const FLAMES_PER_BURN = 5;
+  const _up2 = useMemo(() => new THREE.Vector3(), []);
+  const _off = useMemo(() => new THREE.Vector3(), []);
   const iPos = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(MAX * 3), 3), []);
   const iData = useMemo(() => new THREE.InstancedBufferAttribute(new Float32Array(MAX * 4), 4), []);
 
@@ -399,7 +404,7 @@ function Projectiles() {
   }, [iPos, iData]);
   useEffect(() => () => geom.dispose(), [geom]);
 
-  useFrame(() => {
+  useFrame((state) => {
     const list = getProjectiles();
     const n = Math.min(list.length, MAX);
     const pos = iPos.array as Float32Array;
@@ -414,7 +419,44 @@ function Projectiles() {
       dat[o4 + 2] = p.seed;
       dat[o4 + 3] = p.visual === 'blast' ? 1 : 0;
     }
-    geom.instanceCount = n;
+    // --- FIRE STILL BURNING ON A KAIJU -----------------------------------------------------------
+    //
+    // Appended into the SAME buffer as the projectiles rather than getting a mesh of its own, so
+    // burning creatures cost no extra draw call and automatically use the identical fire shader.
+    //
+    // Each patch is drawn as a handful of licks rather than one sprite: a fire is not a blob, and
+    // several small flames rising at different rates out of one spot is what makes it read as
+    // burning rather than as a decal. Their offsets come from the burn's own seed, so they stay
+    // put frame to frame instead of boiling.
+    let m = n;
+    const t = state.clock.elapsedTime;
+    for (const b of getBurns()) {
+      if (!b.live || m + FLAMES_PER_BURN > MAX) continue;
+      const heat = burnIntensity(b);
+      if (heat <= 0.01) continue;
+      _up2.copy(b.world).normalize();
+      for (let j = 0; j < FLAMES_PER_BURN; j++) {
+        // Each lick runs its own cycle, so they rise and die out of step.
+        const phase = ((t * 0.75 + b.seed + j * 0.41) % 1 + 1) % 1;
+        // A fixed scatter per lick, from the seed — not per frame, or the fire crawls around.
+        const a = (b.seed * 7.13 + j * 2.399);
+        const r = b.size * 0.55 * (0.35 + ((j * 0.37 + b.seed) % 1) * 0.65);
+        _off.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+        // Flatten the scatter onto the creature's surface, then let the lick rise off it.
+        _off.addScaledVector(_up2, -_off.dot(_up2));
+        const o3 = m * 3, o4 = m * 4;
+        pos[o3] = b.world.x + _off.x + _up2.x * phase * b.size * 1.6;
+        pos[o3 + 1] = b.world.y + _off.y + _up2.y * phase * b.size * 1.6;
+        pos[o3 + 2] = b.world.z + _off.z + _up2.z * phase * b.size * 1.6;
+        dat[o4] = phase;                                   // young at the base, smoke at the top
+        dat[o4 + 1] = b.size * (0.75 + 0.5 * (1 - phase)) * heat;
+        dat[o4 + 2] = b.seed + j;
+        dat[o4 + 3] = 0;
+        m++;
+      }
+    }
+
+    geom.instanceCount = m;
     iPos.needsUpdate = true;
     iData.needsUpdate = true;
   });

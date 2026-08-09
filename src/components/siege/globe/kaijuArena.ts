@@ -33,6 +33,7 @@ import {
 import { seedKaiju, rand } from './kaijuRandom';
 import { queueStrike, stepStrikeQueue } from './kaijuImpact';
 import { meshSeparation, meshSepDiag } from './kaijuMeshSeparate';
+import { stepBurns, clearBurns } from './kaijuBurn';
 
 /**
  * Broad-phase radius, as a fraction of height. Full arm reach plus a little.
@@ -325,6 +326,7 @@ export function initArenaWith(
   agents.length = 0;
   events.length = 0;
   clearProjectiles();
+  clearBurns();
   clock = 0;
   treeErrorReported = false;
   seedKaiju(seed);
@@ -756,6 +758,8 @@ export function stepArena(dt: number, playerControlled: boolean): void {
   clock += dt;
   // Age blows that are waiting for a renderer to pick them up. One owner, once a tick.
   stepStrikeQueue(dt);
+  // Fires burning ON the Kaiju: age them and move each to wherever its bone is now.
+  stepBurns(dt);
 
   // PROCESS AGENTS IN A SHUFFLED ORDER.
   //
@@ -1071,7 +1075,7 @@ export function stepArena(dt: number, playerControlled: boolean): void {
     if (len < 1e-6) return null;
     const m = sampleGlobeSurface(p.x / len, p.y / len, p.z / len);
     return m == null ? null : PLANET_RADIUS + m / METRES_PER_UNIT;
-  });
+  }, clock);
   if (hits.length) applyHits(hits);
 }
 

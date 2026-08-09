@@ -27,6 +27,22 @@
 import * as THREE from 'three';
 import { gravityUnits } from './kaijuBody';
 import { rand } from './kaijuRandom';
+import { meshRay } from './kaijuMeshSeparate';
+import { igniteMesh } from './kaijuBurn';
+
+/**
+ * Chance that a flame particle which connects sets that patch alight.
+ *
+ * A jet lands well over a thousand hits a second. Igniting on every one of them would fill the burn
+ * pool in a frame; this makes a sustained jet light a handful of growing fires rather than a
+ * thousand identical ones, and the merge in kaijuBurn takes care of the rest.
+ */
+const MESH_IGNITE_CHANCE = 0.02;
+
+/** Scratch for the swept mesh test. Declared here so no per-particle allocation happens. */
+const _prevPos = new THREE.Vector3();
+const _hitPt = new THREE.Vector3();
+const _hitNrm = new THREE.Vector3();
 
 export type WeaponId = 'flame' | 'gun' | 'grenade' | 'melee';
 
@@ -413,7 +429,10 @@ function terrainNormal(
   return out.lengthSq() > 1e-12 ? out.normalize() : out.copy(up);
 }
 
-export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt: (p: THREE.Vector3) => number | null): HitEvent[] {
+export function stepProjectiles(
+  dt: number, targets: HitTarget[], groundRadiusAt: (p: THREE.Vector3) => number | null,
+  now = 0,
+): HitEvent[] {
   const hits: HitEvent[] = [];
   const g = gravityUnits();
 
@@ -434,6 +453,10 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
         p.vel.multiplyScalar(Math.max(0, 1 - drag * dt));
       }
     }
+    // Where it was BEFORE this step. The mesh test is swept along that segment — a point test at
+    // the new position would miss a limb entirely, since a flame particle can cross several metres
+    // in a frame and a Kaiju's arm is not much thicker than that at this scale.
+    _prevPos.copy(p.pos);
     p.pos.addScaledVector(p.vel, dt);
     p.life -= dt;
 
@@ -473,15 +496,36 @@ export function stepProjectiles(dt: number, targets: HitTarget[], groundRadiusAt
       }
     }
 
-    // Direct hit. Skip the firer so nobody shoots themselves point blank.
+    // DIRECT HIT, AGAINST THE REAL MESH. Skip the firer so nobody shoots themselves point blank.
+    //
+    // This used to be a sphere: `distance to centre <= t.radius + size`, with t.radius the
+    // separation capsule. On a 300 m Kaiju that is a ball 136 m across the centre line, so a flame
+    // jet stopped and flared 130 m short of the creature's chest — the same invisible wall the
+    // rifle rounds had, in the one weapon that was never converted. Geoff found that one too.
+    //
+    // Now it is the swept segment this particle travelled this frame, against the actual triangles
+    // in the pose being drawn. The sphere survives ONLY as the fallback for a model that has not
+    // loaded, which is also the headless case.
     if (!detonate) {
       for (const t of targets) {
         if (!t.alive || t.id === p.ownerId) continue;
-        if (p.pos.distanceTo(t.centre) <= t.radius + p.size) {
-          if (p.blast <= 0) hits.push({ targetId: t.id, ownerId: p.ownerId, weapon: p.weapon, damage: p.damage });
-          detonate = true;
-          break;
+        const mt = meshRay(t.id, _prevPos, p.pos, now, _hitPt, _hitNrm);
+        let struck = false;
+        if (mt === -1) {
+          struck = p.pos.distanceTo(t.centre) <= t.radius + p.size;
+          if (struck) _hitPt.copy(p.pos);
+        } else if (mt != null) {
+          struck = true;
         }
+        if (!struck) continue;
+        if (p.blast <= 0) hits.push({ targetId: t.id, ownerId: p.ownerId, weapon: p.weapon, damage: p.damage });
+        // FIRE STICKS TO WHAT IT LANDS ON. Geoff: "the flame should burn for some time on the
+        // kaiju's mesh... the particular body part needs to burn, and if that kaiju is moving the
+        // fire needs to move with them." See kaijuBurn: the patch is nailed to the nearest bone, so
+        // a burning shoulder stays a burning shoulder through a walk, a swing and a death.
+        if (p.weapon === 'flame' && rand() < MESH_IGNITE_CHANCE) igniteMesh(t.id, _hitPt, p.size);
+        detonate = true;
+        break;
       }
     }
 

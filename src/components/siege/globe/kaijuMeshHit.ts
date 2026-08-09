@@ -150,6 +150,7 @@ function measureBoneRadii(sk: THREE.SkinnedMesh): Float32Array | null {
 
 export function unregisterHitMesh(id: string): void {
   registry.delete(id);
+  boneCache.delete(id);
   for (const fn of dropListeners) fn(id);
 }
 
@@ -164,6 +165,25 @@ const dropListeners = new Set<(id: string) => void>();
 export function onHitMeshDropped(fn: (id: string) => void): () => void {
   dropListeners.add(fn);
   return () => { dropListeners.delete(fn); };
+}
+
+/**
+ * Every bone of an agent's model, found once and remembered.
+ *
+ * Fire that sticks to a Kaiju has to be attached to a BONE, not to a point in the world — otherwise
+ * the creature walks out from under its own burns. Cached because a traverse per ignition, with a
+ * flamethrower landing hundreds of hits a second, is a traverse per hit.
+ */
+const boneCache = new Map<string, THREE.Object3D[]>();
+export function bonesOf(id: string): THREE.Object3D[] {
+  const cached = boneCache.get(id);
+  if (cached) return cached;
+  const root = registry.get(id)?.root;
+  if (!root) return [];
+  const out: THREE.Object3D[] = [];
+  root.traverse((o) => { if ((o as THREE.Bone).isBone) out.push(o); });
+  boneCache.set(id, out);
+  return out;
 }
 
 /** The registered meshes for an agent, so a second collider can share this one registry. */
