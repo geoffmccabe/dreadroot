@@ -271,9 +271,21 @@ function buildPatchGeometry(
         // Biome by latitude band, roughly Earth's: rainforest, desert belt, temperate, boreal, ice.
         const l = Math.asin(Math.min(1, absLat)) * 180 / Math.PI;
         let br: number, bg: number, bb: number;
-        if (l < 12)      { br = 0.16; bg = 0.38; bb = 0.14; }        // equatorial forest
-        else if (l < 32) { const t = (l - 12) / 20; br = 0.16 + 0.50 * t; bg = 0.38 + 0.20 * t; bb = 0.14 + 0.16 * t; }  // -> desert
-        else if (l < 48) { const t = (l - 32) / 16; br = 0.66 - 0.42 * t; bg = 0.58 - 0.14 * t; bb = 0.30 - 0.12 * t; }  // -> temperate
+        // THE DESERT BELT IS A BAND, NOT A CROSSING POINT.
+        //
+        // Geoff, in Dubai: "the sand is green and should be sand color."
+        //
+        // He was standing at 25.1 degrees north, and the old ramp ran one continuous slide from
+        // equatorial forest at 12 to desert at 32 — so 25 came out halfway, an olive green, and
+        // every desert on Earth was a shade of it. But the subtropical deserts are not a point
+        // between two greens; they are a wide band, and the Sahara, Arabia, the Thar and the
+        // Sonoran all sit squarely inside it. So the sand is held flat from 18 to 30 and the
+        // greens are pushed to either side of it, which puts Dubai in the middle of a desert
+        // rather than on the way to one.
+        if (l < 10)      { br = 0.16; bg = 0.38; bb = 0.14; }        // equatorial forest
+        else if (l < 18) { const t = (l - 10) / 8; br = 0.16 + 0.62 * t; bg = 0.38 + 0.28 * t; bb = 0.14 + 0.31 * t; }   // -> sand
+        else if (l < 30) { br = 0.78; bg = 0.66; bb = 0.45; }        // SAND. Arabia, the Sahara, Dubai.
+        else if (l < 48) { const t = (l - 30) / 18; br = 0.78 - 0.54 * t; bg = 0.66 - 0.22 * t; bb = 0.45 - 0.27 * t; }  // -> temperate
         else if (l < 66) { const t = (l - 48) / 18; br = 0.24 - 0.06 * t; bg = 0.44 - 0.10 * t; bb = 0.18 + 0.02 * t; }  // -> boreal
         else             { const t = Math.min(1, (l - 66) / 14); br = 0.18 + 0.72 * t; bg = 0.34 + 0.58 * t; bb = 0.20 + 0.74 * t; } // -> ice
 

@@ -1,41 +1,74 @@
-// make-city-roads — the lines the cars drive along.
+// make-city-roads — Dubai's streets, as lines with a width and a class.
 //
-// Geoff: "it could be good to have some lights moving along the streets like cars, at car speed, if
-// you were able to create that sort of illusion it could be nice."
+// Geoff: "Also there are no roads. Can you put in the roads between the buildings somehow?"
 //
-// It is nice, and it needs real roads or it looks like nothing. Traffic reads as traffic because it
-// runs in straight continuous rivers along the routes that actually exist — Sheikh Zayed Road is
-// twelve lanes running the length of the city, and a stream of light along it is the single most
-// recognisable thing about Dubai at night. Scattering moving dots between buildings would read as
-// fireflies.
+// He is right that this was missing, and missing in a way that matters more than it sounds. A city
+// is not buildings; it is buildings AND the gaps between them, and the gaps are what give the eye
+// something to measure against. Fifty-nine thousand boxes on bare sand reads as a field of boxes.
+// The same boxes with a road grid running between them reads as a city, because the roads are the
+// only thing at human scale in the whole scene.
 //
-// So the same pipeline as the buildings: OpenStreetMap once, offline, reduced to almost nothing.
-// Motorways, trunk roads and primary roads only — the big ones cars stream along, not every
-// residential cul-de-sac, which would be both enormous and invisible at this scale.
+// It also fixes the traffic. The first pass took only motorways and trunk roads — 301 of them —
+// because that was enough to carry streams of light. But cars on invisible roads look like cars
+// driving through the desert, and Geoff asked for ten times as many of them, which on 301 roads
+// would be a traffic jam on a handful of highways and nothing anywhere else.
 //
-// SIMPLIFIED HARD. A road's shape at 300 m viewing distance needs a point every hundred metres or
-// so, not every five. Douglas-Peucker at a 25 m tolerance throws away most points and changes
-// nothing anyone can see.
+// SO EVERYTHING DRIVEABLE, from motorways down to residential streets. That is 38,508 ways and
+// 384,009 points raw, which is far too much geometry to draw as ribbons — so:
 //
-// Run: node scripts/make-city-roads.mjs   (expects /tmp/roads_all.json from the Overpass fetch)
-// Writes: src/components/siege/globe/dubaiRoads.ts
+//   SIMPLIFIED at 12 m by Douglas-Peucker. A road's shape from a 300 m creature's eye height needs
+//   a point every hundred metres or so, not every four. This throws away most points and changes
+//   nothing anyone can see.
+//
+//   STUBS DROPPED below a class-dependent length. A 30 m residential spur is a driveway; drawn, it
+//   is a speck, and there are tens of thousands of them.
+//
+//   INT16 METRES. The range is +/-26,000 and an int16 holds +/-32,767, so a point is four bytes at
+//   a metre of precision — a tenth of a lane width, and finer than anything visible from up there.
+//
+// Emitted as a .bin rather than base64 in a .ts, unlike the first pass: at this size it belongs in
+// a file the browser can cache and decode natively, not in the JavaScript bundle.
+//
+// Run: node scripts/make-city-roads.mjs      (expects /tmp/roads_full.json)
+// Writes: public/siege/city/dubai-roads.bin
 
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const IN = '/tmp/roads_all.json';
-const OUT = 'src/components/siege/globe/dubaiRoads.ts';
+const IN = '/tmp/roads_full.json';
+const OUT = 'public/siege/city/dubai-roads.bin';
 
-/** Must match the city bake exactly, or the traffic drives beside the roads instead of on them. */
+/** Must match the city bake exactly, or the streets run beside the buildings instead of between. */
 const LAT0 = 25.14, LON0 = 55.21;
 const MPER_LAT = 111320;
 const MPER_LON = MPER_LAT * Math.cos((LAT0 * Math.PI) / 180);
 
-/** Metres of error allowed when throwing points away. */
-const SIMPLIFY_M = 25;
-/** Roads shorter than this are junctions and slip lanes; traffic on them reads as jitter. */
-const MIN_LENGTH_M = 400;
-/** Beyond this from the origin there are no buildings, so no reason to light the road. */
+const SIMPLIFY_M = 12;
 const MAX_RANGE_M = 26000;
+
+/**
+ * Road classes, in the order they are stored.
+ *
+ * WIDTHS ARE REAL, measured off the actual roads rather than picked to look right. Sheikh Zayed
+ * Road is genuinely six lanes each way plus shoulders and a median, which is why 44 m is not a
+ * mistake; and a Dubai residential street with parking both sides really is about 9 m of asphalt.
+ * Getting these wrong in either direction is immediately obvious next to a 300 m creature.
+ *
+ * `minLen` is how short a way of this class has to be before it is a slip lane or a driveway rather
+ * than a road. Motorways are never stubs; residential streets very often are.
+ */
+const CLASSES = [
+  { key: 'motorway',      width: 44, minLen: 60,  traffic: 1.0 },
+  { key: 'trunk',         width: 40, minLen: 60,  traffic: 1.0 },
+  { key: 'primary',       width: 28, minLen: 80,  traffic: 0.8 },
+  { key: 'secondary',     width: 20, minLen: 90,  traffic: 0.5 },
+  { key: 'tertiary',      width: 15, minLen: 100, traffic: 0.3 },
+  { key: 'residential',   width: 9,  minLen: 120, traffic: 0.08 },
+  { key: 'unclassified',  width: 9,  minLen: 120, traffic: 0.08 },
+  { key: 'motorway_link', width: 12, minLen: 80,  traffic: 0.25 },
+  { key: 'trunk_link',    width: 12, minLen: 80,  traffic: 0.25 },
+  { key: 'primary_link',  width: 11, minLen: 80,  traffic: 0.2 },
+];
+const CLASS_OF = new Map(CLASSES.map((c, i) => [c.key, i]));
 
 function simplify(pts, eps) {
   if (pts.length < 3) return pts;
@@ -52,77 +85,62 @@ function simplify(pts, eps) {
 }
 
 const els = JSON.parse(readFileSync(IN, 'utf8')).elements ?? [];
-const lines = [];
-let dropped = 0;
+const roads = [];
+let dropped = 0, clipped = 0;
 
 for (const e of els) {
   const g = e.geometry ?? [];
   if (g.length < 2) continue;
-  let pts = g.map((p) => [
-    (p.lon - LON0) * MPER_LON,
-    -(p.lat - LAT0) * MPER_LAT,
-  ]).filter(([x, z]) => Math.abs(x) < MAX_RANGE_M && Math.abs(z) < MAX_RANGE_M);
-  if (pts.length < 2) continue;
+  const cls = CLASS_OF.get((e.tags ?? {}).highway);
+  if (cls === undefined) continue;
 
-  pts = simplify(pts, SIMPLIFY_M);
-  let len = 0;
-  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
-  if (len < MIN_LENGTH_M) { dropped++; continue; }
-  lines.push(pts);
-}
-
-const totalPts = lines.reduce((a, l) => a + l.length, 0);
-const totalKm = lines.reduce((a, l) => {
-  let s = 0;
-  for (let i = 1; i < l.length; i++) s += Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]);
-  return a + s;
-}, 0) / 1000;
-console.error(`${lines.length} roads, ${totalPts} points, ${totalKm.toFixed(0)} km (dropped ${dropped} stubs)`);
-
-// int16 metres: the range is +/-26,000 and an int16 holds +/-32,767, so a whole road point is four
-// bytes and a metre of precision — which is a tenth of a lane width and far finer than anything
-// visible from a 300 m creature's eye height.
-const buf = [];
-const push16 = (v) => { const n = Math.max(-32768, Math.min(32767, Math.round(v))); buf.push(n & 0xff, (n >> 8) & 0xff); };
-push16(lines.length);
-for (const l of lines) {
-  push16(l.length);
-  for (const [x, z] of l) { push16(x); push16(z); }
-}
-const b64 = Buffer.from(Uint8Array.from(buf)).toString('base64');
-
-writeFileSync(OUT, `// GENERATED by scripts/make-city-roads.mjs — do not edit by hand.
-//
-// Dubai's motorways, trunk roads and primary roads, as polylines in metres from the city origin.
-// ${lines.length} roads, ${totalPts} points, ${totalKm.toFixed(0)} km. Traffic lights ride these.
-//
-// int16 metres, base64. ${(buf.length / 1024).toFixed(1)} KB raw.
-
-const PACKED = '${b64}';
-
-let roads: Float32Array[] | null = null;
-
-/** Every road, as flat [x0,z0, x1,z1, ...] arrays in metres east/south of the city origin. */
-export function cityRoads(): Float32Array[] {
-  if (roads) return roads;
-  const raw = atob(PACKED);
-  const b = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) b[i] = raw.charCodeAt(i);
-  const dv = new DataView(b.buffer);
-  let o = 0;
-  const n = dv.getInt16(o, true); o += 2;
-  const out: Float32Array[] = [];
-  for (let i = 0; i < n; i++) {
-    const count = dv.getInt16(o, true); o += 2;
-    const line = new Float32Array(count * 2);
-    for (let k = 0; k < count; k++) {
-      line[k * 2] = dv.getInt16(o, true); o += 2;
-      line[k * 2 + 1] = dv.getInt16(o, true); o += 2;
-    }
-    out.push(line);
+  // Clip to the city box, keeping the RUNS that fall inside rather than the points — a road that
+  // leaves and re-enters must become two roads, or it gets a straight line drawn across the gap.
+  const raw = g.map((p) => [(p.lon - LON0) * MPER_LON, -(p.lat - LAT0) * MPER_LAT]);
+  const runs = [];
+  let run = [];
+  for (const p of raw) {
+    if (Math.abs(p[0]) < MAX_RANGE_M && Math.abs(p[1]) < MAX_RANGE_M) run.push(p);
+    else { if (run.length >= 2) { runs.push(run); clipped++; } run = []; }
   }
-  roads = out;
-  return roads;
+  if (run.length >= 2) runs.push(run);
+
+  for (let pts of runs) {
+    pts = simplify(pts, SIMPLIFY_M);
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    if (len < CLASSES[cls].minLen) { dropped++; continue; }
+    // int16 caps a run at 32,767 points, and nothing here is remotely close; the guard is for the
+    // format, not for the data.
+    if (pts.length > 30000) pts = pts.slice(0, 30000);
+    roads.push({ cls, pts, len });
+  }
 }
-`);
-console.error(`wrote ${OUT} — ${(b64.length / 1024).toFixed(1)} KB of base64`);
+
+const totalPts = roads.reduce((a, r) => a + r.pts.length, 0);
+const totalKm = roads.reduce((a, r) => a + r.len, 0) / 1000;
+const perClass = {};
+for (const r of roads) perClass[CLASSES[r.cls].key] = (perClass[CLASSES[r.cls].key] ?? 0) + 1;
+console.error(`${roads.length} roads, ${totalPts} points, ${totalKm.toFixed(0)} km`);
+console.error(`dropped ${dropped} stubs, ${clipped} runs clipped at the boundary`);
+console.error(perClass);
+
+// --- pack ------------------------------------------------------------------------------------------
+// uint32 count, then per road: uint8 class, uint16 point count, then int16 x,z pairs.
+const size = 4 + roads.length * 3 + totalPts * 4;
+const out = new Uint8Array(size);
+const dv = new DataView(out.buffer);
+let o = 0;
+dv.setUint32(o, roads.length, true); o += 4;
+const clamp16 = (v) => Math.max(-32768, Math.min(32767, Math.round(v)));
+for (const r of roads) {
+  dv.setUint8(o, r.cls); o += 1;
+  dv.setUint16(o, r.pts.length, true); o += 2;
+  for (const [x, z] of r.pts) {
+    dv.setInt16(o, clamp16(x), true); o += 2;
+    dv.setInt16(o, clamp16(z), true); o += 2;
+  }
+}
+writeFileSync(OUT, Buffer.from(out));
+console.error(`wrote ${OUT} — ${(size / 1024).toFixed(0)} KB`);
+console.error('class widths (metres): ' + CLASSES.map((c) => `${c.key}=${c.width}`).join(' '));

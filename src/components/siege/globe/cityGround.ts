@@ -29,7 +29,7 @@
 // 460 metres from where it was drawn. One function, called from all three.
 
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
-import { isCityLand } from './dubaiLandMask';
+import { cityLandFraction } from './dubaiLandMask';
 
 interface CitySite {
   name: string;
@@ -134,7 +134,12 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
     const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
     // The bake stores +z as SOUTH, so the mask is indexed by -north.
-    const land = isCityLand(em, -nm);
+    //
+    // A FRACTION, NOT A YES/NO. Geoff: "it's very pixellated coastline, like made of 50 m squares
+    // or something." A one-bit answer per cell can only ever produce a staircase, and the ground
+    // faithfully drew it. The mask now interpolates between its four surrounding cells, so the
+    // shoreline arrives as a ramp one cell wide and the terrain renders a beach instead of a kerb.
+    const landFrac = cityLandFraction(em, -nm);
 
     // SEA STAYS SEA. Geoff: "The palm is supposed to be a set of islands in the water but everything
     // is inland." It was: the override was a flat disc fifteen kilometres across, which filled in
@@ -151,14 +156,21 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     //
     // So land holds. There is a step where the override ends, 26 km out and well beyond every
     // district, and a step in empty desert nobody walks to is a far better trade than drowning it.
-    if (land) return s.groundM;
+    if (landFrac >= 1) return s.groundM;
 
-    // SEA still blends, because there the base is not wrong — the Gulf really does deepen.
-    if (dot >= s.cosInner) return SHALLOW_SEA_M;
-    const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
-    const t = smooth((distM - s.innerM) / (s.outerM - s.innerM));
-    if (base == null) return SHALLOW_SEA_M;
-    return SHALLOW_SEA_M + (base - SHALLOW_SEA_M) * t;
+    // WHAT THE SEA IS HERE. Shallow close in, blending out to the real depth at the outer radius —
+    // because out there the base is not wrong, the Gulf really does deepen.
+    let seaM = SHALLOW_SEA_M;
+    if (dot < s.cosInner && base != null) {
+      const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
+      const t = smooth((distM - s.innerM) / (s.outerM - s.innerM));
+      seaM = SHALLOW_SEA_M + (base - SHALLOW_SEA_M) * t;
+    }
+    if (landFrac <= 0) return seaM;
+
+    // THE BEACH. One cell of the mask, forty metres, to climb from the water to the ground —
+    // smoothstepped so it leaves the sea and meets the land with no crease at either end.
+    return seaM + (s.groundM - seaM) * smooth(landFrac);
   }
   return base;
 }

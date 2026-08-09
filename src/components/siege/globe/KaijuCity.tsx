@@ -21,6 +21,7 @@ import { METRES_PER_UNIT } from './cubeSphere';
 import { loadCity, getCity, cityDistanceUnits, cityDiag, type City } from './cityData';
 import { applyCityWindows } from './cityWindows';
 import { KaijuCityLights } from './KaijuCityLights';
+import { KaijuCityRoads } from './KaijuCityRoads';
 
 /**
  * Beyond this the city is not drawn at all.
@@ -168,7 +169,11 @@ function CityMesh({ city }: { city: City }) {
         args={[geometry, material, count]}
         frustumCulled={false}
       />
-      {/* Traffic on the real roads, and the red lamps on the roofs over 180 m. */}
+      {/* The street network. Inside the same group as the buildings, so it inherits the tangent
+          frame and the float precision that comes with it — a road placed in world coordinates at
+          63,710 units from the origin would shimmer against the buildings it runs between. */}
+      {near && <KaijuCityRoads />}
+      {/* Traffic on those roads, and the red lamps on the roofs over 180 m. */}
       {near && <KaijuCityLights city={city} />}
     </group>
   );

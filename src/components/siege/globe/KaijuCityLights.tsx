@@ -19,17 +19,25 @@
 // they are rare by construction — a few dozen buildings out of 59,202 are that tall — and each one
 // has its own period and phase so they never pulse together. That is what a real skyline does.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
-import { cityRoads } from './dubaiRoads';
+import { loadRoads, getRoads, ROAD_TRAFFIC, type Road } from './cityRoads';
 import type { City } from './cityData';
 
-/** How many vehicles across the whole 386 km of road. */
-const CARS = 900;
-/** 90 km/h. Real motorway speed; anything faster reads as a twitch at this scale. */
-const CAR_SPEED_MS = 25;
+/**
+ * How many vehicles across the whole 5,921 km of road.
+ *
+ * Geoff: "The lights you did of the cars are good but we should have 10x more of them."
+ *
+ * Ten times, exactly as asked. It is affordable because a car costs a handful of arithmetic and
+ * three floats a frame — no object, no allocation, no draw call of its own; all nine thousand are
+ * points in one buffer. The earlier 900 were spread over 386 km of motorway only, which is why
+ * they read as sparse: the same count over the full network would have been a rumour.
+ */
+const CARS = 9000;
+/* Speeds are per road class now — see CLASS_SPEED below. */
 /** Headlight/taillight size in metres. Small — a car is 2 m wide and 20 km of city is in frame. */
 const CAR_SIZE_M = 6;
 /** Only roofs above this get an aircraft warning lamp. */
@@ -46,6 +54,15 @@ interface Car {
   dir: 1 | -1;
   seg: number;
 }
+
+/**
+ * Speed by road class, in metres per second.
+ *
+ * A motorway at 90 km/h and a residential street at 25 km/h, which is what separates the streams on
+ * Sheikh Zayed Road from the drifting specks in the side streets. One speed for everything is the
+ * quickest way to make a road network look like a screensaver.
+ */
+const CLASS_SPEED = [25, 25, 18, 14, 11, 7, 7, 12, 12, 11];
 
 export function KaijuCityLights({ city }: { city: City }) {
   const cars = useRef<THREE.Points>(null);
@@ -69,43 +86,50 @@ export function KaijuCityLights({ city }: { city: City }) {
   }, []);
   useEffect(() => () => dot.dispose(), [dot]);
 
-  /** Distribute vehicles over the road network BY LENGTH, so long highways carry more traffic. */
+  const [roads, setRoads] = useState<Road[] | null>(getRoads());
+  useEffect(() => { void loadRoads().then(setRoads); }, []);
+
+  /**
+   * Distribute vehicles over the network by LENGTH x CLASS.
+   *
+   * Length alone would be wrong now that residential streets are in the data: they make up most of
+   * the 5,921 km, so a purely length-weighted draw would put the bulk of the traffic in cul-de-sacs
+   * and leave the motorways looking abandoned. Weighting by class as well puts the streams where
+   * the streams actually are.
+   *
+   * The cumulative table is built once and binary-searched, rather than the old linear walk — at
+   * 15,571 roads and 9,000 cars that walk would have been 70 million comparisons on load.
+   */
   const traffic = useMemo(() => {
-    const roads = cityRoads();
-    if (!roads.length) return [] as Car[];
-    const cums: Float32Array[] = [];
-    const totals: number[] = [];
+    if (!roads || !roads.length) return [] as Car[];
+    const weight = new Float64Array(roads.length);
     let grand = 0;
-    for (const r of roads) {
-      const c = new Float32Array(r.length / 2);
-      let s = 0;
-      for (let i = 1; i < r.length / 2; i++) {
-        s += Math.hypot(r[i * 2] - r[(i - 1) * 2], r[i * 2 + 1] - r[(i - 1) * 2 + 1]);
-        c[i] = s;
-      }
-      cums.push(c);
-      totals.push(s);
-      grand += s;
+    for (let i = 0; i < roads.length; i++) {
+      grand += roads[i].length * (ROAD_TRAFFIC[roads[i].cls] ?? 0.1);
+      weight[i] = grand;
     }
+    if (grand <= 0) return [] as Car[];
+
     const out: Car[] = [];
     for (let i = 0; i < CARS; i++) {
-      // Pick a road weighted by its length — a 20 km motorway should get twenty times the cars of
-      // a 1 km link, which is what makes the big roads look like the big roads.
-      let pick = Math.random() * grand;
-      let ri = 0;
-      while (ri < totals.length - 1 && pick > totals[ri]) { pick -= totals[ri]; ri++; }
-      const len = totals[ri];
-      if (len < 1) continue;
+      const pick = Math.random() * grand;
+      let lo = 0, hi = roads.length - 1;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (weight[mid] < pick) lo = mid + 1; else hi = mid; }
+      const r = roads[lo];
+      if (r.length < 1) continue;
+      const base = CLASS_SPEED[r.cls] ?? 12;
       out.push({
-        road: roads[ri], cum: cums[ri],
-        dist: Math.random() * len,
-        speed: CAR_SPEED_MS * (0.8 + Math.random() * 0.45),
+        road: r.pts, cum: r.cum,
+        dist: Math.random() * r.length,
+        // Spread of about a third, so a stream has cars closing on each other and pulling apart
+        // instead of moving as one rigid comb — which is what makes it look like traffic.
+        speed: base * (0.78 + Math.random() * 0.5),
         dir: Math.random() < 0.5 ? 1 : -1,
         seg: 0,
       });
     }
     return out;
-  }, []);
+  }, [roads]);
 
   /** Every roof tall enough for a warning lamp, with its own blink period and phase. */
   const beaconData = useMemo(() => {
