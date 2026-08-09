@@ -213,7 +213,17 @@ function load(): GlobeLookState {
     const raw = typeof localStorage !== 'undefined' && localStorage.getItem(KEY);
     // Spread the defaults UNDER the saved values: a stored blob from an older build is missing any
     // key added since, and without this those come back undefined and land in a shader as NaN.
-    if (raw) return { ...GLOBE_LOOK_DEFAULTS, ...JSON.parse(raw) };
+    //
+    // `enabled` IS DELIBERATELY NOT RESTORED. Geoff: "Now the Kaijus startup with the kaiju and the
+    // planet and the space, is all ruined... and I didn't ask you to fuck that up."
+    //
+    // He is right, and this is the structural answer rather than another guess at a value. Every
+    // TUNING value persists, so a look survives a reload and can be shared — but the master switch
+    // starts DOWN every session. That makes one thing true and keeps it true: loading the game gives
+    // you the game exactly as it has always been, whatever was left switched on last time, whatever
+    // a preset once wrote, whatever I get wrong next. Nothing in this feature can reach a fresh
+    // start-up any more.
+    if (raw) return { ...GLOBE_LOOK_DEFAULTS, ...JSON.parse(raw), enabled: false };
   } catch { /* corrupt or blocked storage is not worth failing over */ }
   return { ...GLOBE_LOOK_DEFAULTS };
 }
@@ -362,10 +372,17 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
   },
 ];
 
+/**
+ * Apply a preset's VALUES. Never switches the master on by itself.
+ *
+ * It used to, which is how pressing B3 for Dubai silently turned the whole system on and then kept
+ * it on for every session afterwards. Setting sliders is a different act from taking over the
+ * lighting, and only one of those is something to do without being asked.
+ */
 export function applyGlobePreset(key: string): void {
   const p = GLOBE_LOOK_PRESETS.find((x) => x.key === key);
   if (!p) return;
-  state = { ...state, ...p.values, enabled: true };
+  state = { ...state, ...p.values };
   persist();
   listeners.forEach((l) => l());
 }
@@ -404,7 +421,7 @@ export function globeLookFromJson(text: string): boolean {
       }
     }
     if (Object.keys(next).length === 0) return false;
-    state = { ...state, ...next, enabled: true };
+    state = { ...state, ...next };
     persist();
     listeners.forEach((l) => l());
     return true;

@@ -195,6 +195,38 @@ export function GlobeLighting() {
    * unmounting simply stops writing — at which point LookSync's own value is authoritative again.
    */
 
+  /**
+   * THE NIGHT SKY. Guarded on the master switch like everything else here.
+   *
+   * SiegeWorldScene paints a light blue background and mounts a drei <Sky> configured for midday.
+   * Neither is LIT — they are bright in themselves — so no amount of dimming lights touches them,
+   * which is why the scene could not be made to go dark. The dome is HIDDEN rather than unmounted,
+   * because it belongs to a component shared with every other map, and put back on the way out.
+   *
+   * This was silently lost in an earlier edit, which left the panel's Sky toggle doing nothing at
+   * all — a control that lies is worse than no control.
+   */
+  useEffect(() => {
+    if (!on || look.skyMode !== 'night') return;
+    const hadBg = scene.background;
+    const hidden: THREE.Object3D[] = [];
+    scene.traverse((o) => {
+      // drei's Sky is a large mesh with a shader material and no name. Identifying it by its
+      // uniforms is the reliable way — matching on class would also catch the starfield and the
+      // cloud shells, and hiding the starfield at night is the opposite of the intent.
+      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+      if (m && m.uniforms && 'sunPosition' in m.uniforms && 'rayleigh' in m.uniforms && o.visible) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    });
+    scene.background = new THREE.Color(0x05070d);
+    return () => {
+      for (const o of hidden) o.visible = true;
+      scene.background = hadBg;
+    };
+  }, [scene, on, look.skyMode]);
+
   useFrame(() => {
     const g = globeLook();
 

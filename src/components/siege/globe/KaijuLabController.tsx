@@ -41,7 +41,7 @@ import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrow
 import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
-import { applyGlobePreset } from '@/features/look/globeLookStore';
+import { applyGlobePreset, globeLook } from '@/features/look/globeLookStore';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
@@ -344,14 +344,14 @@ export function KaijuLabController() {
             dubaiStop = (dubaiStop + 1) % DUBAI_STOPS.length;
             const s = DUBAI_STOPS[dubaiStop];
             startArenaHere(camera, s.lat, s.lon, `${s.name}  (B3 again for the next district)`, s.facingDeg);
-            // DUBAI ARRIVES AT NIGHT. Geoff: "it's supposed to be a night scene but it's very
-            // bright so the window lights don't make sense... default to this for B3 Dubai."
+            // DUBAI SETS THE NIGHT SLIDERS, BUT ONLY IF THE LIGHTING PANEL IS ALREADY ON.
             //
-            // A city is the one place on this planet with its own light, and every one of those
-            // 59,202 buildings has lit windows that mean nothing at midday. Applied on ARRIVAL only,
-            // so it is a starting point rather than a lock — every slider stays free afterwards, and
-            // the other sites keep whatever was set.
-            applyGlobePreset('night');
+            // A city is the one place on this planet with light of its own, and 59,202 buildings'
+            // worth of lit windows mean nothing at midday — so night is the right look here. But
+            // this used to switch the whole system ON as a side effect of a travel key, which then
+            // persisted, which is how a jump to Dubai ended up changing what the game looked like at
+            // start-up. Arriving somewhere is not permission to take over the lighting.
+            if (globeLook().enabled) applyGlobePreset('night');
           } else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
           break;
         }
