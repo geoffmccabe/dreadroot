@@ -134,6 +134,70 @@ const failed = new Map<string, number>();           // key -> retry-after timest
  * real and worth fixing, but it was a second-order effect of this.
  */
 const missing = new Set<string>();
+
+/**
+ * A MISSING TILE MEANS ITS WHOLE SUBTREE IS MISSING, and asking anyway is most of the console spam.
+ *
+ * Geoff: "loading kaiju mode is still filling console with junk spam errors. Hundreds of these."
+ *
+ * The pyramid is built by subdividing coverage that exists, so a tile can never have a child the
+ * server does not also lack. The manifest says as much: `globalMaxLevel: 4` — levels 0 to 4 exist
+ * everywhere, and anything deeper only inside 225 detail regions. Outside those, every request from
+ * level 5 down is a 404 the client could have known about from the first one.
+ *
+ * A trace measured 1,653 failed requests in 38 seconds, all DISTINCT — so the existing "never ask
+ * twice" rule was already working perfectly. It just had no way to know that one refusal answers
+ * for a thousand descendants. Walking up to the root is at most ten cheap lookups.
+ *
+ * The 404s are logged by the BROWSER, not by this code, so they cannot be silenced by catching
+ * anything. The only way to remove them is to not make the request.
+ */
+function ancestorMissing(face: number, level: number, x: number, y: number): boolean {
+  for (let up = 1; up <= level; up++) {
+    if (missing.has(tileKey(face, level - up, x >> up, y >> up))) return true;
+  }
+  return false;
+}
+
+/**
+ * Remember which tiles do not exist, ACROSS SESSIONS.
+ *
+ * Discovering coverage by probing is a fixed cost, but paying it on every single reload is not —
+ * and Geoff reloads constantly while testing, which is exactly when the console needs to be
+ * readable. Keyed by the tile epoch so publishing new terrain invalidates the whole record rather
+ * than leaving the client convinced that fresh tiles are absent.
+ */
+const MISSING_STORE_KEY = `earth.missing.v${TILE_EPOCH}`;
+let missingDirty = false;
+
+function loadMissing(): void {
+  try {
+    const raw = localStorage.getItem(MISSING_STORE_KEY);
+    if (!raw) return;
+    for (const k of raw.split('|')) if (k) missing.add(k);
+  } catch { /* private mode, quota, disabled — the probing path still works */ }
+}
+
+function saveMissing(): void {
+  if (!missingDirty) return;
+  missingDirty = false;
+  try {
+    localStorage.setItem(MISSING_STORE_KEY, [...missing].join('|'));
+  } catch { /* over quota: the in-memory set still does its job for this session */ }
+}
+
+function noteMissing(key: string): void {
+  missing.add(key);
+  missingDirty = true;
+}
+
+if (typeof localStorage !== 'undefined') {
+  loadMissing();
+  // Flushed on a timer rather than per tile: a burst of discovery would otherwise serialise the
+  // whole set hundreds of times in one second.
+  setInterval(saveMissing, 4000);
+  if (typeof window !== 'undefined') window.addEventListener('pagehide', saveMissing);
+}
 /**
  * ONE shared resolved promise for "there is no such tile".
  *
@@ -184,11 +248,17 @@ export function __putTileForTest(key: string, data: Int16Array): void { touch(ke
 export function __isMissingForTest(key: string): boolean { return missing.has(key); }
 /** FOR TESTS ONLY: record a server response for a tile without going near the network. */
 export function __noteStatusForTest(key: string, status: number): void {
-  if (status === 404 || status === 410) { missing.add(key); return; }
+  if (status === 404 || status === 410) { noteMissing(key); return; }
   const n = (attempts.get(key) ?? 0) + 1;
   attempts.set(key, n);
   failed.set(key, Date.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (n - 1)));
 }
+/** FOR TESTS ONLY: would a fetch be issued for this tile, INCLUDING the ancestor rule? */
+export function __wouldRequestTileForTest(face: number, level: number, x: number, y: number): boolean {
+  if (ancestorMissing(face, level, x, y)) return false;
+  return __wouldRequestForTest(tileKey(face, level, x, y));
+}
+
 /** FOR TESTS ONLY: would a fetch actually be issued for this tile right now? */
 export function __wouldRequestForTest(key: string): boolean {
   // A cached tile is served from memory and touches the network not at all — the first version of
@@ -230,6 +300,9 @@ export function requestTile(
 
   // A tile the server has said is not there is not there. Asking again is the storm.
   if (missing.has(key)) return NO_TILE;
+  // ...and neither is anything below a tile that is not there. One 404 answers for its whole
+  // subtree, which is the difference between a hundred failed requests and sixteen hundred.
+  if (ancestorMissing(face, level, x, y)) { noteMissing(key); return NO_TILE; }
   // Back off on a tile that failed for a reason that might pass, so a flaky network does not spam
   // once per frame per node.
   const retryAt = failed.get(key);
@@ -242,7 +315,7 @@ export function requestTile(
         // 404/410 mean "there is no such tile", which for levels 5-10 outside a detail region is
         // simply the truth. Record it once and never ask again.
         if (r.status === 404 || r.status === 410) {
-          missing.add(key);
+          noteMissing(key);
           return null;
         }
         throw new Error(`${r.status}`);
@@ -313,6 +386,9 @@ export function clearEarthTiles(): void {
   cache.clear();
   evictions = 0;
   missing.clear();
+  // The remembered 404s go too. Leaving them on disk while clearing memory would mean a reload
+  // silently resurrected the very knowledge this call exists to throw away.
+  try { localStorage.removeItem(MISSING_STORE_KEY); } catch { /* nothing to clear */ }
   attempts.clear();
   failed.clear();
 }
