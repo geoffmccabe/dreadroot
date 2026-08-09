@@ -15,7 +15,6 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeCamera } from './globe/GlobeCamera';
-import { GlobeLighting } from './globe/GlobeLighting';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
@@ -119,7 +118,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   /**
    * Does this map want the builder-map fill light?
    *
-   * Every blank map except the globe. The Mini Earth owns its own lighting (GlobeLighting): one sun
+   * Blank maps get a bright flat fill so object textures read clearly.
    * with a real elevation, shadows, and sky bounce instead of fill. Stacking the builder fill on top
    * of that is over 1.0 of directionless light, and directionless light cannot make a bright side
    * and a dark side — which is the literal cause of "everything looks soft and washed out".
@@ -192,27 +191,6 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Mini Earth: altitude-tracking near/far planes + fog off. Without this the planet is
           entirely outside the 6,000-unit far plane and fogged out on top. */}
       {isGlobe && <GlobeCamera />}
-      {/* One sun, real shadows, and no flat fill. See GlobeLighting for what was wrong. */}
-      {isGlobe && <GlobeLighting />}
-      {/*
-        CLOUDS ARE OFF, and the reason is the depth buffer rather than the clouds.
-
-        Geoff: "Everything is nearly pure white now... but grey on the edges." Grey edges is the
-        vignette working on an image that is already white, so the scene itself was being painted
-        over — and the cloud decks are the only thing added that covers the whole screen.
-
-        GlobeCamera sets the near plane from height above ground (as little as 0.03) and the far
-        plane from the horizon (2,000 at minimum, hundreds of thousands from orbit). A depth buffer
-        spanning that range has effectively no precision past a few hundred units, so nothing at
-        planetary distance can be depth-sorted reliably — and a transparent shell 63,000 units from
-        the planet centre is exactly that. It wins the depth test against terrain it is behind, and
-        paints over the world.
-
-        This is not fixable by tuning the clouds. It needs a logarithmic depth buffer, which is a
-        renderer-wide change affecting every map, or a separate sky pass that composites by altitude
-        rather than by depth. Both are real jobs. The shader itself is finished and correct — see
-        GlobeClouds — so this is one line to switch back on once the depth question is settled.
-      */}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {/* Kaiju: suspends while its model loads, so it needs its own Suspense boundary. Without
           one the suspension propagates up and can take neighbouring layers with it, and an error

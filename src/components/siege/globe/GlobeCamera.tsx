@@ -55,7 +55,6 @@ export function GlobeCamera() {
   const scene = useThree((s) => s.scene);
   const saved = useRef<{ near: number; far: number; fog: THREE.Scene['fog']; bg: THREE.Scene['background'] } | null>(null);
   const underwaterCol = useRef(new THREE.Color());
-  const hazeCol = useRef(new THREE.Color());
 
   useEffect(() => {
     saved.current = { near: camera.near, far: camera.far, fog: scene.fog, bg: scene.background };
@@ -95,37 +94,7 @@ export function GlobeCamera() {
       }
       scene.background = col;
     } else {
-      // AERIAL PERSPECTIVE — AND ONLY NEAR THE GROUND.
-      //
-      // Geoff: "the stars background has turned white and there's no terrain."
-      //
-      // The white sky was this. Haze was applied at EVERY altitude with a visibility that topped out
-      // around 900 km, and from orbit you are looking through six thousand kilometres of it — so
-      // exponential fog saturates completely and the whole frame, planet and starfield alike, becomes
-      // the fog colour. A pale blue screen. The starfield is the giveaway: fog reaches anything with
-      // fog enabled on its material, and nothing was fogged here before because fog was simply off.
-      //
-      // Haze is an ATMOSPHERE effect, so it belongs where the atmosphere is. It fades out entirely by
-      // 12 km, above which there is no meaningful air in the way and the planet should be crisp.
-      const altKm = Math.max(0, altitude * METRES_PER_UNIT) / 1000;
-      if (altKm > 12) {
-        if (scene.fog) scene.fog = null;
-      } else {
-        // Halves every 2.5 km, roughly the real scale height for haze — aerosols sit far lower than
-        // the air itself, which is why mountains poke out of it. Then eased to nothing at 12 km so
-        // there is no visible step where it switches off.
-        const thin = Math.exp(-altKm / 2.5) * (1 - Math.min(1, altKm / 12) ** 2);
-        // Visibility in units. 55 km on a clear day at sea level, opening out as the air thins.
-        const visibility = 550 / Math.max(0.02, thin);
-        const col = hazeCol.current.setRGB(0.62, 0.72, 0.86);
-        const f = scene.fog as THREE.FogExp2 | null;
-        if (f && (f as THREE.FogExp2).isFogExp2) {
-          f.color.copy(col);
-          (f as THREE.FogExp2).density = 1 / visibility;
-        } else {
-          scene.fog = new THREE.FogExp2(col.getHex(), 1 / visibility);
-        }
-      }
+      if (scene.fog) scene.fog = null;
       if (scene.background) scene.background = null;
     }
 

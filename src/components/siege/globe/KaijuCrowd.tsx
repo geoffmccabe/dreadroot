@@ -304,14 +304,8 @@ function Crowd() {
       obj.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh) return;
-        // NO SHADOWS OFF THE SOLDIERS, on purpose. Geoff: "turn on shadows for kaiju but not
-        // soldiers." Right twice over: at 1.8 m against a 3 km shadow map a man's shadow is about
-        // one texel, so it would be a smear rather than a silhouette — and two hundred extra shadow
-        // casters is the single most expensive thing that could be added to this scene, for
-        // something nobody can resolve. They do RECEIVE, so the Kaiju's shadow sweeps across the
-        // crowd as it moves, which is the shot that actually matters.
         m.castShadow = false;
-        m.receiveShadow = true;
+        m.receiveShadow = false;
         // FRUSTUM CULLING BACK ON, with a bounding sphere it can trust.
         //
         // It was off, so all two hundred figures were skinned and drawn every frame even when they

@@ -21,7 +21,21 @@
  */
 
 import * as THREE from 'three';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+
+/**
+ * The material is currently PARKED (see src/components/siege/globe/parked/). This check stays in the
+ * suite rather than being deleted, because the moment the material is un-parked it is the thing that
+ * stops the same day happening twice — and a check that gets deleted while a feature is shelved is a
+ * check nobody remembers to bring back with it.
+ */
+const MATERIAL = 'src/components/siege/globe/terrainMaterial.ts';
+const PARKED = 'src/components/siege/globe/parked/terrainMaterial.ts.txt';
+if (!existsSync(MATERIAL)) {
+  console.log(`\n  SKIP  terrain material is parked${existsSync(PARKED) ? ` (${PARKED})` : ''}`);
+  console.log('        Un-park it and this check runs again automatically.\n');
+  process.exit(0);
+}
 
 let bad = 0;
 const ok = (cond, label, detail = '') => {
@@ -32,7 +46,7 @@ const ok = (cond, label, detail = '') => {
 console.log('\n== Terrain shader injections ==\n');
 
 const std = THREE.ShaderLib.standard;
-const src = readFileSync('src/components/siege/globe/terrainMaterial.ts', 'utf8');
+const src = readFileSync(MATERIAL, 'utf8');
 
 /** Every marker the material actually replaces, read from the source rather than duplicated here. */
 const used = [...src.matchAll(/\.replace\('#include <(\w+)>'/g)].map((m) => m[1]);

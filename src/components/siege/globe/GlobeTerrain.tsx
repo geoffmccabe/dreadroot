@@ -27,12 +27,10 @@ import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import {
   PLANET_RADIUS, METRES_PER_UNIT, faceUvToDirection, tileArcUnits, tileUvRange,
 } from './cubeSphere';
-import { makeTerrainMaterial } from './terrainMaterial';
 import {
   loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
 import { detailMetres } from './globeDetail';
-import { cityBaseMetres } from './cityGround';
 import { sampleGlobeElevation } from './globeGround';
 // PATCH, DATA_LAG, dataFor and the node-key helpers live in globePatchIndex so that the ground
 // sampler and this mesh builder cannot drift apart. They used to be defined here and re-derived
@@ -221,10 +219,7 @@ function buildPatchGeometry(
       const isSkirt = isSkirtRow || i === 0 || i === side - 1;
 
       faceUvToDirection(n.face, u0 + ii * du, v0 + jj * dv, dir);
-      // Through cityBaseMetres, the same call the ground sampler and the patch index make, so the
-      // land a city stands on is drawn where the Kaiju walks on it.
-      const baseM = cityBaseMetres(dir[0], dir[1], dir[2],
-        sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride)) ?? 0;
+      const baseM = sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
       // Procedural amplification: the measured data is one sample per 2.44 km, which is a flat
       // plane at creature scale. This adds the detail no global dataset can supply, band-limited
       // to what this patch can represent. Same function the ground sampler uses, so the Kaiju
@@ -395,7 +390,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const material = useMemo(
     // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
     // nulls scene.fog each frame; this makes a stray frame harmless too.
-    () => makeTerrainMaterial(METRES_PER_UNIT),
+    () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: false }),
     [],
   );
 
@@ -599,10 +594,6 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const prev = meshes.current.get(rk);
         if (prev) { groupRef.current?.remove(prev); disposePatch(prev.geometry); }
         const mesh = new THREE.Mesh(rebuilt.geo, material);
-        // The ground takes the Kaiju's shadow, and throws its own: without the second, a ridge in
-        // front of the sun lights the valley behind it, which is what removes all sense of relief.
-        mesh.receiveShadow = true;
-        mesh.castShadow = true;
         mesh.frustumCulled = true;
         meshes.current.set(rk, mesh);
         groupRef.current?.add(mesh);
@@ -661,8 +652,6 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const built = buildPatchGeometry(n, mf.maxLevel);
         if (!built) return true;
         const mesh = new THREE.Mesh(built.geo, material);
-        mesh.receiveShadow = true;
-        mesh.castShadow = true;
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
         builtLevel.current.set(key, built.level);
