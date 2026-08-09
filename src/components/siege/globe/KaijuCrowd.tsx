@@ -61,6 +61,23 @@ export const CROWD_SIZE = 200;
  * about one Kaiju-height away, which is where the comparison actually lands.
  */
 const SPREAD_M = 350;
+/**
+ * Beyond this, a figure is detached from the scene graph entirely. In game units.
+ *
+ * THIS CONSTANT DID NOT EXIST. It was used twice, a hundred lines below, and never declared — so
+ * every frame the crowd's loop threw `ReferenceError: CULL_UNITS is not defined` out of the
+ * animation callback, which kills react-three-fiber's ENTIRE loop. Not just the crowd: the camera
+ * stopped, the Kaiju stopped, the terrain stopped. Geoff: "I can't move and the camera doesn't
+ * move... much of the terrain seems to not be rendering. But I can hear the footsteps."
+ *
+ * The footsteps are the tell — audio is scheduled ahead of time and keeps playing after the frame
+ * loop dies, so the fight was still running while nothing at all was being drawn or moved.
+ *
+ * 2 km, chosen conservatively because the value it replaces is unknown: the crowd spawns within
+ * 350 m and the scale shot puts the camera 500 m back, so nothing that should be visible is ever
+ * culled, and figures still detach once you fly away from them.
+ */
+const CULL_UNITS = 2000 / METRES_PER_UNIT;
 /** Running speed, metres per second. A frightened human, not an athlete. */
 const RUN_MS = 5.5;   // a running human, not an athlete
 /**

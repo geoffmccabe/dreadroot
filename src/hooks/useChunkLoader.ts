@@ -755,9 +755,15 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         const chunkBlocks = chunkGroups.get(chunkKey) || [];
 
-        // If we hit the safety limit and this chunk got zero blocks,
-        // it may have been truncated — queue for individual retry instead
-        // of storing as a loaded empty chunk
+        // `hitSafetyLimit` was referenced here and never declared — the limit it referred to was
+        // removed, this test was not. Reading an undeclared name throws ReferenceError, which in the
+        // middle of the chunk loop means the rest of the chunks that pass simply never load.
+        //
+        // false, not deleted: the branch exists to retry chunks that may have been TRUNCATED by a
+        // limit. With no limit imposed, nothing is ever truncated, so the honest value is "we did
+        // not hit it" and an empty chunk is genuinely empty. Deleting the branch would say the same
+        // thing but lose the record of what it was for.
+        const hitSafetyLimit = false;
         if (hitSafetyLimit && chunkBlocks.length === 0) {
           failedChunksRef.current.set(chunkKey, { x: chunkX, z: chunkZ, attempts: 0 });
           continue;

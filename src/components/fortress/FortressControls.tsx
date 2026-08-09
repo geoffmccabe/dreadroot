@@ -891,7 +891,10 @@ export function FirstPersonControls({
         } else if (anyArmedHandGrenade() || grenadeReadyRef.current) {
           onThrowGrenade?.();
           grenadeReadyRef.current = false;
-          onGrenadeReadyChange?.(false);
+          // `onGrenadeReadyChange?.(false)` was here and there is no such prop — it was left behind
+          // by a refactor. The `?.` does NOT save it: optional call guards a null VALUE, not an
+          // undeclared BINDING, so evaluating the name throws ReferenceError and kills whatever was
+          // running. The ref above already carries the state this was announcing.
         }
         break;
       case 'KeyX':

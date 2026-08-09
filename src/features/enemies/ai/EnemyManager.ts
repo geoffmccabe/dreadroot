@@ -489,7 +489,10 @@ class EnemyManagerClass {
       // When flocking is added, compute lazily only for behaviors that need it.
       
       const behaviors = reg.adapter.getBehaviors(reg.enemy);
-      let result: BehaviorResult;
+      // No type annotation: `BehaviorResult` is not a name that exists. It is erased at compile
+      // time so it never threw, but it kept the undeclared-name check permanently red, and a check
+      // with a known failure in it is a check nobody reads.
+      let result;
       let newBehaviorId: string | null;
 
       if (BT_ENABLED_TYPES.has(ctx.entityType)) {
