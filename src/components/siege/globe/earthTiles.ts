@@ -115,7 +115,37 @@ const PIN_LEVEL = 6;
 const cache = new Map<string, Int16Array>();        // Map preserves insertion order = LRU
 const inFlight = new Map<string, Promise<Int16Array | null>>();
 const failed = new Map<string, number>();           // key -> retry-after timestamp
+/**
+ * Tiles the server has told us do not exist. NEVER retried.
+ *
+ * THIS IS THE WHOLE BUG, and it is much worse than a slow cache.
+ *
+ * The manifest says it plainly: `globalMaxLevel: 4`, and levels 5-10 exist only over 225 detail
+ * regions. So a 404 on a deep tile outside those regions is not a failure at all — it is the CORRECT
+ * answer, permanently, and it will be the correct answer every time it is asked.
+ *
+ * It was being treated as a transient error and retried every ten seconds, forever. With roughly
+ * eleven hundred such tiles wanted at a site that is a HUNDRED AND TEN REQUESTS A SECOND, and
+ * because the host answers a miss with its HTML error page, each one drags down 27 KB. Three
+ * megabytes a second of pure waste, parsed and thrown away, for as long as the tab is open.
+ *
+ * That is the request storm in Geoff's trace (8,836 requests), the twentyfold scavenger GC, the
+ * animation frame climbing from 32 ms to 102 ms, and the freeze. The tile cache being undersized was
+ * real and worth fixing, but it was a second-order effect of this.
+ */
+const missing = new Set<string>();
+/**
+ * ONE shared resolved promise for "there is no such tile".
+ *
+ * `requestTile` is called from the LOD walk for every patch, every frame — hundreds of times a
+ * second — and a fresh `Promise.resolve(null)` each time is hundreds of throwaway objects a second
+ * for the collector to sweep, on the exact path that is supposed to be the cheap early-out.
+ */
+const NO_TILE: Promise<Int16Array | null> = Promise.resolve(null);
+/** Retry only what might actually come back: network drops and server errors. */
 const RETRY_MS = 10_000;
+const RETRY_MAX_MS = 300_000;
+const attempts = new Map<string, number>();
 
 /** Evictions since load. Thrash is invisible without it, which is how this went unnoticed. */
 let evictions = 0;
@@ -150,6 +180,22 @@ function touch(key: string, data: Int16Array): void {
  */
 export function __putTileForTest(key: string, data: Int16Array): void { touch(key, data); }
 
+/** FOR TESTS ONLY: has this tile been written off as non-existent? */
+export function __isMissingForTest(key: string): boolean { return missing.has(key); }
+/** FOR TESTS ONLY: record a server response for a tile without going near the network. */
+export function __noteStatusForTest(key: string, status: number): void {
+  if (status === 404 || status === 410) { missing.add(key); return; }
+  const n = (attempts.get(key) ?? 0) + 1;
+  attempts.set(key, n);
+  failed.set(key, Date.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (n - 1)));
+}
+/** FOR TESTS ONLY: would a fetch be issued for this tile right now? */
+export function __wouldRequestForTest(key: string): boolean {
+  if (missing.has(key)) return false;
+  const at = failed.get(key);
+  return at === undefined || Date.now() >= at;
+}
+
 /**
  * Decoded tile if it is already in memory, else null (and a fetch is started).
  * Never throws, never blocks.
@@ -179,15 +225,25 @@ export function requestTile(
   const existing = inFlight.get(key);
   if (existing) return existing;
 
-  // Back off on a tile that already failed, so a missing level does not spam the network
+  // A tile the server has said is not there is not there. Asking again is the storm.
+  if (missing.has(key)) return NO_TILE;
+  // Back off on a tile that failed for a reason that might pass, so a flaky network does not spam
   // once per frame per node.
   const retryAt = failed.get(key);
-  if (retryAt !== undefined && Date.now() < retryAt) return Promise.resolve(null);
+  if (retryAt !== undefined && Date.now() < retryAt) return NO_TILE;
 
   const url = `${BASE}/h/${FACE_NAMES[face]}/${level}/${x}_${y}.bin?v=${TILE_EPOCH}`;
   const p = fetch(url)
     .then(async (r) => {
-      if (!r.ok) throw new Error(`${r.status}`);
+      if (!r.ok) {
+        // 404/410 mean "there is no such tile", which for levels 5-10 outside a detail region is
+        // simply the truth. Record it once and never ask again.
+        if (r.status === 404 || r.status === 410) {
+          missing.add(key);
+          return null;
+        }
+        throw new Error(`${r.status}`);
+      }
       const buf = await r.arrayBuffer();
       if (buf.byteLength !== BYTES) {
         throw new Error(`expected ${BYTES} bytes, got ${buf.byteLength}`);
@@ -197,10 +253,16 @@ export function requestTile(
       const data = new Int16Array(buf);
       touch(key, data);
       failed.delete(key);
+      attempts.delete(key);
       return data;
     })
     .catch((e) => {
-      failed.set(key, Date.now() + RETRY_MS);
+      // Exponential backoff on the errors that might actually clear, capped at five minutes. A flat
+      // ten seconds means a site with a genuinely flaky connection re-runs the same storm forever,
+      // just more slowly.
+      const n = (attempts.get(key) ?? 0) + 1;
+      attempts.set(key, n);
+      failed.set(key, Date.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (n - 1)));
       // `import.meta.env` is injected by Vite and is undefined outside it, so reaching straight
       // into it threw here whenever a tile 404'd under the headless terrain checks — turning a
       // handled miss into a crash, in the one code path whose whole job is handling misses.
@@ -235,11 +297,11 @@ export function sampleTileBilinear(tile: Int16Array, fx: number, fy: number): nu
 
 /** Diagnostics for the debug overlay. */
 export function earthTileStats(): {
-  cached: number; inFlight: number; failed: number; evicted: number; cap: number;
+  cached: number; inFlight: number; failed: number; evicted: number; cap: number; missing: number;
 } {
   return {
     cached: cache.size, inFlight: inFlight.size, failed: failed.size,
-    evicted: evictions, cap: MAX_CACHED,
+    evicted: evictions, cap: MAX_CACHED, missing: missing.size,
   };
 }
 
@@ -247,5 +309,7 @@ export function earthTileStats(): {
 export function clearEarthTiles(): void {
   cache.clear();
   evictions = 0;
+  missing.clear();
+  attempts.clear();
   failed.clear();
 }

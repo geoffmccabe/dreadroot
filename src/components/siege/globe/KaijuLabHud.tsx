@@ -131,6 +131,9 @@ export function KaijuLabHud() {
           symptom from outside is that everything gets slower and holes appear in the ground. */}
       {row('Tiles', `${tiles.cached}/${tiles.cap} cached, ${tiles.inFlight} loading`)}
       {tiles.evicted > 0 && row('Tile evictions', `${tiles.evicted}`)}
+      {/* Levels 5-10 exist only over 225 detail regions, so a high "absent" count is NORMAL — what
+          matters is that each one is discovered once and never asked for again. */}
+      {tiles.missing > 0 && row('Tiles absent', `${tiles.missing} (not retried)`)}
       {/* Terrain diagnostics — these three lines identify WHY the planet is missing, if it is:
           patches 0 + wanted 0 = the LOD tree chose nothing; patches 0 + wanted > 0 = it wants them
           but they will not build; patches > 0 = the geometry is there and it is a camera problem. */}
