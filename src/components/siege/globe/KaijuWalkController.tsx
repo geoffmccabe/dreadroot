@@ -509,7 +509,25 @@ export function KaijuWalkController() {
 
     // FLY MODE FLIES THE CAMERA. Same dials, same code path as the detached camera; the only
     // difference is that nothing is being followed.
-    if (!walkActive) { flyCamera(Math.min(rawDt, 0.05)); return; }
+    // NOT IN FLY MODE. This file's own header states the rule and I broke it: "Two movers fighting
+    // over one camera is the failure mode to avoid, so exactly one is authoritative at a time."
+    //
+    // FortressControls stands down only while WALK mode is active. So making this drive the camera
+    // in FLY mode put two movers on it every single frame, each overwriting the other. Geoff: "when
+    // I move the camera around, it flashes crazily... and the earth model behind the kaiju and
+    // everything else is flashing" — and the camera appears frozen because the two cancel out.
+    //
+    // A performance trace settled it: 100 frames a second, 1.1 ms of JavaScript per frame. Nothing
+    // was slow. It was two writers.
+    //
+    // The detached camera below is a different case and is safe: C only works inside walk mode, so
+    // FortressControls has already stood down and flyCamera really is the only mover.
+    //
+    // WHY THIS WAS ADDED, AND WHY THAT REASON WAS WRONG. I thought WASD was "wired to nothing" in
+    // fly mode. FortressControls does read WASD; it simply moves poorly on a sphere. The actual
+    // cause of "I can't move" turned out to be that Geoff had been killed. Fixing a misdiagnosis
+    // with a second camera owner cost far more than the thing it was meant to fix.
+    if (!walkActive) return;
     if (pendingEnter) { pendingEnter = false; haveCam.current = false; haveFwd.current = false; resetWalkZoom(); }
     const dt = Math.min(rawDt, 0.05);
     const k = keys.current;
