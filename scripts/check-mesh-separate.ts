@@ -184,5 +184,35 @@ console.log('\n== Kaiju are kept apart by their meshes ==\n');
      `${Date.now() - before} ms for 20 calls`);
 }
 
+// --- 7. ONE PUSH PER MEASUREMENT ------------------------------------------------------------------
+// THE REGRESSION THIS EXISTS FOR. A separation depth is a CORRECTION — "you are 3 m too close, move
+// 3 m" — not a force to be applied continuously. The arena reads it three times a frame across the
+// relaxation passes, and the cache holds an answer for fifteen frames, so returning the same depth
+// on every read applied ONE measured overlap about forty-five times. Geoff: "The Red Demon Kaiju is
+// skating and sliding around... he seems to bounce back and forth."
+{
+  clearMeshSeparation();
+  const axis = new THREE.Vector3();
+  makeBody('push-a', 0);
+  makeBody('push-b', 1.02);          // inside the margin
+
+  const first = meshSeparation('push-a', 'push-b', 300, axis);
+  ok(first > 0, 'the first read of a fresh measurement asks for a push', `${first.toFixed(4)}`);
+
+  // Every read after it, in the same frame and in the frames before the next query, must ask for
+  // NOTHING. The bodies have not been re-measured, so there is no new correction to make.
+  let extra = 0;
+  for (let i = 0; i < 3; i++) extra += meshSeparation('push-a', 'push-b', 300, axis);   // same tick
+  for (let f = 1; f < 6; f++) {
+    for (let i = 0; i < 3; i++) extra += meshSeparation('push-a', 'push-b', 300 + f / 60, axis);
+  }
+  ok(extra === 0, 'and every re-read of it asks for nothing at all',
+     `${extra.toFixed(4)} of extra push over 18 further reads — anything above zero is the skating`);
+
+  // ...but once it is genuinely re-measured, it asks again.
+  const later = meshSeparation('push-a', 'push-b', 300 + 0.5, axis);
+  ok(later > 0, 'a fresh measurement later does ask again', `${later.toFixed(4)}`);
+}
+
 console.log(`\n${failures === 0 ? 'MESH SEPARATION CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
 process.exit(failures === 0 ? 0 : 1);

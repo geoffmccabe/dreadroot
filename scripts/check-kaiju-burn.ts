@@ -44,6 +44,8 @@ function buildRig(id: string) {
 }
 
 const DT = 1 / 60;
+/** A Kaiju's height in game units — 300 m. Fires are sized against THIS, not against the spark. */
+const BODY = 3;
 console.log('\n== Fire burns on the body part it landed on ==\n');
 
 // --- 1. IT LIGHTS, AND IT GOES OUT ----------------------------------------------------------------
@@ -52,7 +54,7 @@ console.log('\n== Fire burns on the body part it landed on ==\n');
   const rig = buildRig('k');
   const at = new THREE.Vector3().setFromMatrixPosition(rig.hand.matrixWorld);
 
-  ok(igniteMesh('k', at, 0.2), 'a flame that connects sets the creature alight');
+  ok(igniteMesh('k', at, BODY), 'a flame that connects sets the creature alight');
   stepBurns(DT);
   const b = getBurns().find((x) => x.live)!;
   ok(b != null, 'and there is a fire burning');
@@ -72,7 +74,7 @@ console.log('\n== Fire burns on the body part it landed on ==\n');
   clearBurns();
   const rig = buildRig('k2');
   const handAt = new THREE.Vector3().setFromMatrixPosition(rig.hand.matrixWorld);
-  igniteMesh('k2', handAt, 0.2);
+  igniteMesh('k2', handAt, BODY);
   stepBurns(DT);
   const b = getBurns().find((x) => x.live)!;
   const before = b.world.clone();
@@ -105,7 +107,7 @@ console.log('\n== Fire burns on the body part it landed on ==\n');
   clearBurns();
   const rig = buildRig('k3');
   const hipAt = new THREE.Vector3().setFromMatrixPosition(rig.hips.matrixWorld);
-  igniteMesh('k3', hipAt, 0.2);
+  igniteMesh('k3', hipAt, BODY);
   stepBurns(DT);
   const b = getBurns().find((x) => x.live)!;
   // Move ONLY the arm. A fire lit on the hips must not care.
@@ -125,18 +127,24 @@ console.log('\n== Fire burns on the body part it landed on ==\n');
   clearBurns();
   const rig = buildRig('k4');
   const at = new THREE.Vector3().setFromMatrixPosition(rig.hips.matrixWorld);
-  for (let i = 0; i < 500; i++) igniteMesh('k4', at, 0.2);
+  for (let i = 0; i < 500; i++) igniteMesh('k4', at, BODY);
   stepBurns(DT);
   const lit = getBurns().filter((x) => x.live).length;
   ok(lit <= 3, 'five hundred hits on one spot make ONE fire, not five hundred', `${lit} alight`);
   ok(burnDiag.merged > 400, 'because they feed the existing one', `${burnDiag.merged} merged`);
   const b = getBurns().find((x) => x.live)!;
-  ok(b.size > 0.2 * 1.8, 'and being fed makes it bigger', `size ${b.size.toFixed(2)}`);
+  // A FIRE SIZED AGAINST THE CREATURE, not against the flame particle that lit it. That was the
+  // whole reason none was visible: a flame particle is 0.05 units — five metres — so a burn on a
+  // 300 m Kaiju was a candle. A fresh patch is now about 25 m and a fed one about 90.
+  ok(b.size > BODY * 0.085 * 1.5, 'and being fed makes it bigger',
+     `${(b.size * 100).toFixed(0)} m across, from a ${(BODY * 0.085 * 100).toFixed(0)} m start`);
+  ok(b.size <= BODY * 0.3 + 1e-6, '...but a fed fire is capped rather than swallowing the creature',
+     `${(b.size * 100).toFixed(0)} m on a ${(BODY * 100).toFixed(0)} m body`);
 
   // ...and hits spread over the body DO make separate fires.
   clearBurns();
-  igniteMesh('k4', at, 0.2);
-  igniteMesh('k4', new THREE.Vector3().setFromMatrixPosition(rig.hand.matrixWorld), 0.2);
+  igniteMesh('k4', at, BODY);
+  igniteMesh('k4', new THREE.Vector3().setFromMatrixPosition(rig.hand.matrixWorld), BODY);
   stepBurns(DT);
   ok(getBurns().filter((x) => x.live).length === 2,
      'but two hits on different limbs are two fires');
@@ -145,12 +153,12 @@ console.log('\n== Fire burns on the body part it landed on ==\n');
 // --- 5. NO MODEL, NO FIRE --------------------------------------------------------------------------
 {
   clearBurns();
-  ok(!igniteMesh('ghost', new THREE.Vector3(0, PLANET_RADIUS, 0), 0.2),
+  ok(!igniteMesh('ghost', new THREE.Vector3(0, PLANET_RADIUS, 0), BODY),
      'a Kaiju with no rig cannot be set alight — better than fire that cannot follow it');
   unregisterHitMesh('k4');
   clearBurns();
   const rig = buildRig('k5');
-  igniteMesh('k5', new THREE.Vector3().setFromMatrixPosition(rig.hips.matrixWorld), 0.2);
+  igniteMesh('k5', new THREE.Vector3().setFromMatrixPosition(rig.hips.matrixWorld), BODY);
   stepBurns(DT);
   ok(getBurns().some((x) => x.live), 'a lit fire exists');
   unregisterHitMesh('k5');

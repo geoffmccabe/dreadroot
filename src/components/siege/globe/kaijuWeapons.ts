@@ -26,6 +26,7 @@
 
 import * as THREE from 'three';
 import { gravityUnits } from './kaijuBody';
+import { raycastCity } from './cityColliders';
 import { rand } from './kaijuRandom';
 import { meshRay } from './kaijuMeshSeparate';
 import { igniteMesh } from './kaijuBurn';
@@ -210,8 +211,28 @@ const FIRE_LIFE_MIN = 10;
 const FIRE_LIFE_MAX = 15;
 /** Chance that one contacting flame particle starts a new patch. Low: contacts are constant. */
 const IGNITE_CHANCE = 0.06;
-/** Seconds between puffs from one patch. */
-const FIRE_EMIT_INTERVAL = 0.10;
+/**
+ * Seconds between puffs from one patch.
+ *
+ * 1.6, up from 0.10, and it is not a look change — it is arithmetic forced by the two below.
+ *
+ * Geoff: "make the flames burn 2x as tall as they burn now, and much slower... maybe 10% of the
+ * current speed." A tenth the speed over twice the distance means each puff lives TWENTY times as
+ * long. Emitting at the old rate would put twenty times as many alive at once — about twenty-three
+ * thousand particles against a renderer cap of three — so the jet would vanish behind the embers and
+ * the cap would silently eat both. The interval scales with the lifetime so the number of flames
+ * visible on a burning patch stays where it was; only their pace changes.
+ */
+const FIRE_EMIT_INTERVAL = 1.6;
+/**
+ * How fast a resting fire licks, against how fast it used to. Geoff asked for a tenth.
+ *
+ * A flamethrower JET is still fast — that is the weapon, and it should be violent. This is only the
+ * fire left burning behind it, which was rushing upward like a gas ring and should be lazy.
+ */
+const FIRE_SPEED_MUL = 0.1;
+/** ...and twice as tall, which at a tenth the speed means twenty times the lifetime. */
+const FIRE_LIFE_MUL = 22;
 
 /** Light a patch of ground, or refresh one that is already burning nearby. */
 function igniteGround(pos: THREE.Vector3, up: THREE.Vector3, size: number): void {
@@ -255,13 +276,14 @@ function stepGroundFires(dt: number): void {
       _dir.copy(f.up).multiplyScalar(0.9 + rand() * 0.6);
       _sideA.set(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1).normalize();
       _dir.addScaledVector(_sideA, 0.25).normalize();
+      const life = (0.9 + rand() * 0.7) * FIRE_LIFE_MUL;
       projectiles.push({
         pos: f.pos.clone().addScaledVector(_sideA, (rand() - 0.5) * 0.8),
-        vel: _dir.clone().multiplyScalar(spec.speed * (0.06 + rand() * 0.06)),
+        vel: _dir.clone().multiplyScalar(spec.speed * (0.06 + rand() * 0.06) * FIRE_SPEED_MUL),
         ownerId: 'ground-fire',
         weapon: 'flame',
-        life: 0.9 + rand() * 0.7,
-        maxLife: 1.6,
+        life,
+        maxLife: life,
         // NO DAMAGE. Burning terrain is scenery for now; making it hurt would change the balance
         // of every fight without anyone asking for that. The direct jet still ignites Kaiju.
         damage: 0,
@@ -391,6 +413,9 @@ const FLAME_AIR_DRAG = 0.55;
 const SLOPE_EPS = 0.4;
 
 const _n = new THREE.Vector3();
+const _cityHit = new THREE.Vector3();
+const _cityNrm = new THREE.Vector3();
+const _fireUp = new THREE.Vector3();
 const _t1 = new THREE.Vector3();
 const _t2 = new THREE.Vector3();
 const _probe = new THREE.Vector3();
@@ -450,6 +475,16 @@ export function stepProjectiles(
       // BUOYANCY. Flame is hot gas, so it accelerates UPWARD, and that is what carries it up a
       // slope and over a ridge rather than letting it pile against the foot of the hill.
       if (p.weapon === 'flame' || p.visual === 'blast') {
+        // BUOYANCY IS LEFT ALONE, and measuring is the only reason I know that.
+        //
+        // My first attempt cut it to a tenth for resting fires, reasoning that buoyancy is what
+        // decides how fast a flame climbs. It is — but drag balances it at about 7 m/s, and the old
+        // fire was reaching 118 m in a second and a quarter, which is 94 m/s average. Almost all of
+        // that height was the LAUNCH burst, not the climb. Cutting buoyancy as well made the flames
+        // SHORTER, 49 m against 118, which is the opposite of what was asked for.
+        //
+        // So the launch velocity carries the tenth, and buoyancy's own 7 m/s terminal becomes the
+        // pace — which is already a fourteenth of what it was, and lazy in exactly the way wanted.
         p.vel.addScaledVector(_up, g * FLAME_BUOYANCY * dt);
         const drag = p.grounded ? FLAME_GROUND_DRAG : FLAME_AIR_DRAG;
         p.vel.multiplyScalar(Math.max(0, 1 - drag * dt));
@@ -475,6 +510,39 @@ export function stepProjectiles(
     // wrong and, since a grenade lands ON the ground, instantly fatal to the whole effect. It cut
     // the visible explosion from 420 particles to 149, which check-kaiju-arena caught.
     const flows = p.weapon === 'flame' || p.visual === 'blast';
+
+    // BUILDINGS ARE SOLID TO FIRE, AND FIRE STICKS TO THEM.
+    //
+    // Geoff: "when any kind of flame happens in the game, then buildings should have colliders and
+    // the flame should stick to them and burn like it does on the kaijus that are hit by it."
+    //
+    // The colliders already exist — cityColliders indexes every building as the same rotated box the
+    // renderer draws, and raycastCity returns the exact face and its normal. So this is not new
+    // geometry, it is the flame finally asking.
+    //
+    // Swept along the segment the particle just crossed, not tested at its new position: a flame
+    // particle covers several metres in a frame and a tower wall is a plane, so a point test would
+    // put half the jet inside the building.
+    if (flows && !p.grounded) {
+      const t = raycastCity(_prevPos, p.pos, _cityHit, _cityNrm);
+      if (t != null) {
+        // Sit it just proud of the face, kill the velocity going INTO the wall, keep what runs
+        // along it — the same rule the terrain uses, which is what makes a jet wash UP a face
+        // instead of stopping dead against it.
+        p.pos.copy(_cityHit).addScaledVector(_cityNrm, p.size * 0.35);
+        const into = p.vel.dot(_cityNrm);
+        if (into < 0) p.vel.addScaledVector(_cityNrm, -into * 1.05);
+        p.grounded = true;
+        if (rand() < IGNITE_CHANCE) {
+          // The fire's UP is the planet's, not the wall's. A wall normal would fire the flames out
+          // sideways like a blowtorch bolted to the brickwork; fire on a vertical surface still
+          // rises, it just hugs the face on the way. The position is on the wall, the buoyancy is up.
+          _fireUp.copy(p.pos).normalize();
+          igniteGround(p.pos, _fireUp, p.size);
+        }
+      }
+    }
+
     const gr = groundRadiusAt(p.pos);
     if (gr != null && p.pos.length() <= gr + (flows ? p.size * 0.4 : 0)) {
       if (!flows) {

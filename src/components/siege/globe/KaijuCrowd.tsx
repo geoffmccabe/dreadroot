@@ -157,6 +157,15 @@ interface Person {
    * move, so overriding it would replace a good animation with a worse one.
    */
   shootFor: number;
+  /**
+   * Which way this soldier committed to going round the building in front of him, -1 or 1.
+   *
+   * Committing matters: recomputing the side every frame makes a man shudder against a wall as the
+   * two choices trade places. Zero means nothing is in the way.
+   */
+  side: number;
+  /** Frames spent stuck inside geometry, so a soldier wedged in a wall can be teleported clear. */
+  stuck: number;
 }
 
 let crowdOn = false;
