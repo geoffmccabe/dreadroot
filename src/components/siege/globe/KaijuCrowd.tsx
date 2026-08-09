@@ -344,7 +344,7 @@ function Crowd() {
         shoot.play();
         shoot.setEffectiveWeight(0);
       }
-      out.push({ obj, mixer, action, idle, shoot });
+      out.push({ obj, mixer, action, idle, shoot, attached: true });
     }
     crowdDiag.modelOk = out.length > 0 && clip != null;
     crowdDiag.scale = scale;
@@ -361,12 +361,12 @@ function Crowd() {
   useEffect(() => {
     const g = group.current;
     if (!g) return;
-    for (const f of figures) g.add(f.obj);
+    for (const f of figures) { g.add(f.obj); f.attached = true; }
     crowdDiag.on = true;
     crowdDiag.spawned = people.length;
     crowdDiag.layout = spawnHint ? 'corridor' : 'ring';
     return () => {
-      for (const f of figures) { f.mixer.stopAllAction(); g.remove(f.obj); }
+      for (const f of figures) { f.mixer.stopAllAction(); g.remove(f.obj); f.attached = false; }
       crowdDiag.on = false;
       crowdDiag.spawned = 0;
     };
@@ -452,9 +452,21 @@ function Crowd() {
       //
       // The position is from LAST frame, which is correct: a person moves five metres a second and
       // the threshold is fifteen hundred.
+      // OUT OF THE SCENE GRAPH ENTIRELY, not merely invisible.
+      //
+      // `visible = false` stops a figure being DRAWN and nothing else: three.js still walks it and
+      // every one of its bones in updateMatrixWorld, every frame, because that traversal does not
+      // look at visibility. Two hundred figures is over twelve thousand objects whose matrices were
+      // being composed and multiplied sixty times a second whether or not anyone could see them, and
+      // that traversal is most of what a crowd of skinned characters actually costs.
+      //
+      // Detaching is the only thing that skips it. Re-attached the moment it comes back in range.
       const tooFar = f.obj.position.distanceToSquared(camera.position) > CULL_UNITS * CULL_UNITS;
-      if (tooFar) { if (f.obj.visible) f.obj.visible = false; continue; }
-      if (!f.obj.visible) f.obj.visible = true;
+      if (tooFar) {
+        if (f.attached) { group.current.remove(f.obj); f.attached = false; }
+        continue;
+      }
+      if (!f.attached) { group.current.add(f.obj); f.attached = true; }
 
       // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m

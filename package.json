@@ -36,6 +36,7 @@
     "check:terrain-detail": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-terrain-detail.ts",
     "check:tile-cache": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-tile-cache.ts",
     "check:meshhit-prefilter": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-meshhit-prefilter.ts",
+    "bench:arena-gc": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-arena-gc.ts",
     "bench:gunfire": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-gunfire.ts",
     "check:ballistics": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ballistics.ts",
     "check:kaiju-shouts": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-shouts.ts",

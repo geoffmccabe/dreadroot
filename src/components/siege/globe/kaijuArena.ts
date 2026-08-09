@@ -84,6 +84,8 @@ export interface Agent {
   timeSinceHit: number;
   /** Seconds spent in the current action; the brain's commitment window uses this. */
   timeInAction: number;
+  /** Seconds until this Kaiju next reconsiders. See THINK_SECONDS. */
+  thinkIn: number;
   damageDealt: number;
   damageTaken: number;
   /** Counted so the tracker can distinguish "never fired" from "fired and missed". */
@@ -206,6 +208,7 @@ const _fwd = new THREE.Vector3();
 const _kb = new THREE.Vector3();
 const _hitAt = new THREE.Vector3();
 const _axis = new THREE.Vector3();
+const _me = new THREE.Vector3();
 
 /**
  * How long a melee swing takes, and when in it the blow lands.
@@ -274,6 +277,14 @@ const KNOCK_MAX = 0.35;
  * A creature can bring its shoulders and arms round faster than it can walk its whole mass round,
  * so the aim gets 3x the locomotion rate. It is still visibly a turn, not a turret.
  */
+/**
+ * How often a Kaiju reconsiders what it is doing. Six times a second.
+ *
+ * See the note at the call site: this was every frame, which bought nothing and cost ten thousand
+ * objects a second in garbage.
+ */
+const THINK_SECONDS = 1 / 6;
+
 const AIM_TURN_MUL = 3;
 const turnRatePlayer = () => turnRate(ARENA_HEIGHT) * AIM_TURN_MUL;
 /**
@@ -348,6 +359,8 @@ export function initArenaWith(
       action: null, scores: [], perception: null,
       // A small random opening delay, so two identical Kaiju do not fire in lockstep forever.
       cooldown: rand() * 0.3, timeSinceHit: 99, timeInAction: 0, damageDealt: 0, damageTaken: 0,
+      // Staggered, so four Kaiju never think on the same frame and put the whole cost back in one.
+      thinkIn: (i / Math.max(1, builds.length)) * THINK_SECONDS,
       shotsFired: 0, hitsLanded: 0, killedBy: null,
       tree: null, board: null, treeAction: null, lastTreeState: '-',
       strafeSign: i % 2 === 0 ? 1 : -1, wanderTurn: 0,
@@ -395,7 +408,7 @@ function perceive(a: Agent): Perception {
   let best: Agent | null = null;
   let bestD = Infinity;
   let threats = 0;
-  const me = centreOf(a, new THREE.Vector3());
+  const me = centreOf(a, _me);
   for (const o of agents) {
     if (o === a || !o.alive) continue;
     const d = me.distanceTo(centreOf(o, _tmp)) / ARENA_HEIGHT;
@@ -612,16 +625,31 @@ function makeBoard(a: Agent) {
   };
 }
 
+/**
+ * The projectile system's view of who can be hit.
+ *
+ * POOLED. This used to `.map` a fresh object with a fresh Vector3 for every agent, and it is called
+ * from the projectile step every frame and again from every melee swing. Small on its own, but it is
+ * on the hottest path in the fight and the whole problem here is death by a thousand allocations.
+ */
+const _targets: HitTarget[] = [];
 function hitTargets(): HitTarget[] {
-  return agents.map((a) => ({
-    id: a.id,
-    centre: centreOf(a, new THREE.Vector3()),
+  while (_targets.length < agents.length) {
+    _targets.push({ id: '', centre: new THREE.Vector3(), radius: 0, alive: false });
+  }
+  _targets.length = agents.length;
+  for (let i = 0; i < agents.length; i++) {
+    const a = agents[i];
+    const t = _targets[i];
+    t.id = a.id;
+    centreOf(a, t.centre);
     // THE SAME radius the collider uses. This was a hardcoded 0.42 — a third independent copy of
     // "how wide is a Kaiju", alongside the torso capsule and the melee reach. Two of the three
     // were wrong, and nothing would have told us, because each was individually plausible.
-    radius: ARENA_HEIGHT * torsoRadiusFrac,
-    alive: a.alive,
-  }));
+    t.radius = ARENA_HEIGHT * torsoRadiusFrac;
+    t.alive = a.alive;
+  }
+  return _targets;
 }
 
 /**
@@ -793,8 +821,28 @@ export function stepArena(dt: number, playerControlled: boolean): void {
 
     // The player's Kaiju is driven by the walk controller; it still perceives so the tracker can
     // show what the AI WOULD have decided, which is a useful way to sanity-check the curves.
-    a.perception = perceive(a);
-    a.scores = scoreActions(a.perception);
+    // THE BRAIN DOES NOT NEED TO RUN AT SIXTY HERTZ, and running it there was expensive.
+    //
+    // perceive() plus scoreActions() rebuilds every action, every consideration behind it and a
+    // sorted list, from scratch — roughly forty objects per Kaiju per frame. At four Kaiju that is
+    // ten thousand short-lived objects a second thrown at the collector, and Geoff's trace shows
+    // twenty seconds of young-generation GC against four of the old, which is the signature of
+    // exactly this kind of churn.
+    //
+    // Nothing is gained by it. A creature reconsidering its entire plan sixty times a second is not
+    // more responsive, it is just noisier — utility AI in shipped games runs at a few hertz. Six is
+    // well inside the reaction time of something 300 m tall, and the BEHAVIOUR TREE still steps
+    // every single frame, so movement and aiming stay perfectly smooth. Only the decision refreshes
+    // more slowly.
+    //
+    // Staggered by index so four Kaiju never think on the same frame, which would put the whole cost
+    // back into one frame in six instead of spreading it.
+    a.thinkIn -= dt;
+    if (a.thinkIn <= 0 || !a.perception) {
+      a.thinkIn = THINK_SECONDS;
+      a.perception = perceive(a);
+      a.scores = scoreActions(a.perception);
+    }
     a.timeInAction += dt;
     const picked = chooseAction(a.scores, a.action, a.timeInAction);
     if (picked.action !== a.action) {
