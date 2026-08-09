@@ -17,32 +17,42 @@ interface LightningPanelProps {
 
 // Readable light surface + very-dark-blue text (the old hud-text white vanished against the bright
 // SWW scene). Position comes from useDraggablePanel (movable); body collapses (expandable).
+/**
+ * THE SHELL, on the shared debug-panel look rather than its own.
+ *
+ * Geoff: "The style/css of the lighting panel is very old and was never fixed to update to our new
+ * styling. Can you fix that now to match what we have in the kaiju section."
+ *
+ * It was a light panel — near-white glass, navy text, Inter — from before the debug surfaces were
+ * unified. Everything else diagnostic in this game is dark glass with monospace body text, driven by
+ * the --pt-debug-* tokens so the CSS editor restyles every panel at once. This one was the last
+ * holdout, which is why it looked pasted in from another application.
+ *
+ * The surface now comes from the `.debug-panel` class, so it is not merely a copy of the Kaiju
+ * panel's colours — it is the SAME source, and any future change to the tokens moves this with it.
+ * Only layout stays here, which is the division that class already documents.
+ */
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
   zIndex: 30,
-  width: '200px',
-  maxHeight: '90vh',
-  borderRadius: '6px',
-  border: '1px solid rgba(10,26,58,0.25)',
-  background: 'rgba(236,240,248,0.96)',
-  backdropFilter: 'blur(8px)',
-  color: '#0a1a3a',
-  fontFamily: 'Inter, sans-serif',
-  fontSize: '10px',
+  width: '218px',
+  maxHeight: '86vh',
   display: 'flex',
   flexDirection: 'column',
-  overflow: 'hidden',
-  boxShadow: '0 6px 24px rgba(0,0,0,0.35)',
+  fontSize: 'var(--pt-debug-body-size)',
+  pointerEvents: 'auto',
 };
 
 const headerStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  borderBottom: '1px solid rgba(10,26,58,0.18)',
+  padding: '6px 8px',
+  borderBottom: '1px solid var(--pt-debug-border)',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
   flexShrink: 0,
   userSelect: 'none',
+  cursor: 'move',
+  fontWeight: 700,
 };
 
 const bodyStyle: React.CSSProperties = {
@@ -78,16 +88,23 @@ const labelStyle: React.CSSProperties = {
 
 const valueStyle: React.CSSProperties = {
   fontSize: '9px',
-  fontFamily: 'monospace',
+  fontFamily: 'var(--pt-debug-body-family)',
   opacity: 0.75,
 };
 
+/**
+ * Buttons match the Look and Kaiju sections exactly, token for token.
+ *
+ * They were navy-on-near-white, which on a dark surface would have been invisible. The HUD tokens
+ * are the same ones the sections below this file already use, so a button in the panel header and a
+ * button in the Mini Earth section are now the same object rather than two that resemble each other.
+ */
 const btnStyle: React.CSSProperties = {
   padding: '2px 6px',
   fontSize: '9px',
   borderRadius: '3px',
-  border: '1px solid rgba(10,26,58,0.3)',
-  background: 'rgba(10,26,58,0.06)',
+  border: '1px solid hsla(var(--hud-border-h) / 0.6)',
+  background: 'hsla(var(--hud-bg-h) / 0.3)',
   color: 'inherit',
   cursor: 'pointer',
   flex: 1,
@@ -116,13 +133,17 @@ export function LightningPanel({ open, onClose, settings, onSettingsChange, cycl
   const currentLighting = settings.lightingOverride !== null ? settings.lightingOverride : cycleState.lightingPercentage;
 
   // Movable (drag the header) + collapsible (caret in the header), per the panel rules.
-  const { pos, handleProps } = useDraggablePanel({ left: typeof window !== 'undefined' ? window.innerWidth - 216 : 1000, top: 80 });
+  /**
+   * Opens on the LEFT, as asked. The Kaiju panels dock right — this and those are read together
+   * while tuning a look, and two stacks on the same edge means one covers the other.
+   */
+  const { pos, handleProps } = useDraggablePanel({ left: 16, top: 80 });
   const [collapsed, setCollapsed] = useState(false);
 
   if (!open) return null;
 
   return (
-    <div style={{ ...panelStyle, left: pos.left, top: pos.top }}>
+    <div className="debug-panel" style={{ ...panelStyle, left: pos.left, top: pos.top }}>
       {/* Header — drag handle (move) + collapse caret (expand/collapse) + close */}
       <div style={headerStyle} {...handleProps}>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700 }}>
