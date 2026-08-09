@@ -21,6 +21,7 @@
 
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
+import { cityGroundMetres } from './cityGround';
 
 /** One building. Metres and radians, exactly as baked. */
 export interface Building {
@@ -116,7 +117,10 @@ export function loadCity(url = '/siege/city/dubai.bin'): Promise<City | null> {
       // sea level to about 15 m across all four districts, which at 100 m to the unit is a seventh
       // of a unit — far less than the thickness of a building's ground floor. Sampling per building
       // would be forty thousand terrain lookups for a difference nobody can see.
-      const frame = cityFrame(lat, lon, 0);
+      // The city's own declared ground, NOT a terrain sample — the terrain at Dubai is 87 m of
+      // sea water and cityGround is what overrides it. Taking it from the same constant means the
+      // buildings and the ground they stand on can never drift apart.
+      const frame = cityFrame(lat, lon, cityGroundMetres('Dubai'));
       city = { lat, lon, buildings, ...frame };
       cityDiag.state = 'ready';
       cityDiag.count = count;

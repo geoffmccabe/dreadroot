@@ -32,6 +32,7 @@ import {
 } from './cubeSphere';
 import { getTile, sampleTileBilinear, hasTile, requestTile } from './earthTiles';
 import { detailMetres } from './globeDetail';
+import { cityBaseMetres } from './cityGround';
 
 /** Vertices per patch side. 65 = 64 quads = 8,192 triangles. */
 export const PATCH = 65;
@@ -128,7 +129,11 @@ export function renderedElevation(x: number, y: number, z: number): number | nul
     const ii = ((u - u0) / (u1 - u0)) * (PATCH - 1);
     const jj = ((v - v0) / (v1 - v0)) * (PATCH - 1);
 
-    const baseM = sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
+    // THROUGH cityBaseMetres, exactly as the mesh builder does. These two reproduce each other's
+    // arithmetic by hand, and the last time they disagreed the ground was 460 m from where it was
+    // drawn — so any adjustment to elevation has to be applied in both or in neither.
+    const baseM = cityBaseMetres(x, y, z,
+      sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride)) ?? NaN;
     if (!Number.isFinite(baseM)) continue;
     patchIndexDiag.exact++;
     return baseM + detailMetres(x, y, z, PLANET_RADIUS, baseM, patchSpacingUnits(depth));

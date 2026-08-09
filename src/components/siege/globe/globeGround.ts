@@ -16,6 +16,7 @@ import {
 import { getManifest, getTile, sampleTileBilinear } from './earthTiles';
 import * as THREE from 'three';
 import { detailMetres } from './globeDetail';
+import { cityBaseMetres } from './cityGround';
 import { renderedElevation, patchIndexDiag } from './globePatchIndex';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 
@@ -48,9 +49,12 @@ export function sampleGlobeElevation(x: number, y: number, z: number): number | 
     const [v0, v1] = tileUvRange(ty, level);
     const fx = ((u - u0) / (u1 - u0)) * (TILE - 1);
     const fy = ((v - v0) / (v1 - v0)) * (TILE - 1);
-    return sampleTileBilinear(tile, fx, fy);
+    // A CITY OVERRIDES THE BATHYMETRY. See cityGround: Dubai has no detail tiles at all and the
+    // coarse data puts it 87 m under water, so without this the Kaiju spawns on the seabed.
+    return cityBaseMetres(x, y, z, sampleTileBilinear(tile, fx, fy));
   }
-  return null;
+  // Even with no tile loaded, a city still knows it is on land.
+  return cityBaseMetres(x, y, z, null);
 }
 
 /**
