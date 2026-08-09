@@ -182,13 +182,28 @@ export function GlobeLookControls() {
             min={0} max={1} step={0.02} disabled={!g.terrainPbr}
             onChange={(v) => set('terrainCavity', v)}
           />
+          <SliderRow
+            label="Environment" value={g.terrainEnv} display={g.terrainEnv.toFixed(2)}
+            min={0} max={1} step={0.01} disabled={!g.terrainPbr}
+            onChange={(v) => set('terrainEnv', v)}
+          />
+          <SliderRow
+            label="Brightness" value={g.terrainBrightness} display={`${g.terrainBrightness.toFixed(2)}x`}
+            min={0.1} max={1.5} step={0.01} disabled={!g.terrainPbr}
+            onChange={(v) => set('terrainBrightness', v)}
+          />
+          <div style={noteStyle}>
+            If PBR blows out to white, Environment is the first thing to try — the scene's ambient
+            light is a bright white box that the old material ignored completely and this one does
+            not. It starts at 0 for that reason. Brightness is the blunt instrument after it.
+          </div>
 
           {/* --- HAZE -------------------------------------------------------------------------- */}
           <div style={groupTitleStyle}>Aerial haze</div>
           <ToggleRow label="Haze on" value={g.hazeOn} onChange={(v) => set('hazeOn', v)} />
           <SliderRow
             label="Visibility" value={g.hazeVisibilityKm} display={`${g.hazeVisibilityKm.toFixed(0)} km`}
-            min={5} max={300} step={5} disabled={!g.hazeOn}
+            min={20} max={600} step={10} disabled={!g.hazeOn}
             onChange={(v) => set('hazeVisibilityKm', v)}
           />
           <SliderRow
@@ -197,8 +212,9 @@ export function GlobeLookControls() {
             onChange={(v) => set('hazeCeilingKm', v)}
           />
           <div style={noteStyle}>
-            Distance haze is what makes a landscape feel vast. Above the ceiling there is none — set
-            that too high and the whole planet fogs white from orbit.
+            Distance haze is what makes a landscape feel vast. Lower Visibility = thicker haze; if
+            it reads as a white wall, raise it. Above the Ceiling there is none at all — set that too
+            high and the whole planet fogs white from orbit, which is exactly what it did.
           </div>
 
           {/* --- GRADE ------------------------------------------------------------------------- */}

@@ -450,8 +450,11 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     u.uStrata.value = look.terrainStrata;
     u.uStrataM.value = look.terrainStrataM;
     u.uCavity.value = look.terrainCavity;
+    u.uBright.value = look.terrainBrightness;
+    // envMapIntensity is a material property rather than one of our uniforms, so it is set directly.
+    materials.lit.envMapIntensity = look.terrainEnv;
   }, [materials, look.terrainDetail, look.terrainNormal, look.terrainStrata,
-      look.terrainStrataM, look.terrainCavity]);
+      look.terrainStrataM, look.terrainCavity, look.terrainEnv, look.terrainBrightness]);
 
   // Water. transparent + depthWrite:false is the whole trick: it blends over the seafloor and can
   // never fight it for depth, which is what made the first opaque ocean shell flicker across the

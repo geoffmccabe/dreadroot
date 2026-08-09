@@ -116,7 +116,10 @@ export function makeTerrainMaterial(metresPerUnit: number): TerrainMaterial {
     // image-based ambient on top of the new sun — brightening everything and flattening exactly
     // the contrast this work exists to create. 0.35 matches the intensity the look system was
     // already using for its IBL rather than doubling it.
-    envMapIntensity: 0.35,
+    // ZERO by default. See terrainEnv in globeLookStore: the scene environment is a brightly lit
+    // white box, Lambert ignored it and Standard does not, so this is the single biggest difference
+    // between the two materials and the most likely reason the swap blows the screen out.
+    envMapIntensity: 0,
     // Flat shading OFF but a strong normal perturbation below: the geometry is smooth by necessity
     // (it is a heightfield sampled every few hundred metres) and all the surface detail has to be
     // faked in the shader.
@@ -132,6 +135,7 @@ export function makeTerrainMaterial(metresPerUnit: number): TerrainMaterial {
     uStrata: { value: 0.85 },
     uStrataM: { value: 55 },
     uCavity: { value: 0.34 },
+    uBright: { value: 1 },
   };
   (mat as TerrainMaterial).globeUniforms = uniforms;
 
@@ -167,6 +171,7 @@ export function makeTerrainMaterial(metresPerUnit: number): TerrainMaterial {
         uniform float uStrata;
         uniform float uStrataM;
         uniform float uCavity;
+        uniform float uBright;
         varying vec3 vWorldPos;
         varying vec3 vWorldNrm;
         varying vec3 vViewPos;
@@ -259,6 +264,9 @@ export function makeTerrainMaterial(metresPerUnit: number): TerrainMaterial {
           // 1.24, cavity down — so a bright vertex colour like snow could come out at 1.4. An albedo
           // over 1 is a surface reflecting more light than falls on it: unphysical, and under a
           // strong key light it clips to white and takes all the detail with it.
+          diffuseColor.rgb *= uBright;
+          // ALBEDO CANNOT EXCEED 1. A surface reflecting more light than falls on it is unphysical,
+          // and under a strong key it clips to white and takes every bit of detail with it.
           diffuseColor.rgb = min(diffuseColor.rgb, vec3(1.0));
 
           // STRATA. Horizontal bands by ALTITUDE, on steep ground only.

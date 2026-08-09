@@ -89,6 +89,22 @@ export interface GlobeLookState {
   terrainStrataM: number;
   /** Cavity darkening — ambient occlusion, in world space, from the noise field itself. */
   terrainCavity: number;
+  /**
+   * How much of the scene's environment map lights the ground.
+   *
+   * THE PRIME SUSPECT FOR "PBR MAKES EVERYTHING WHITE", and the one thing MeshStandardMaterial does
+   * that MeshLambertMaterial never did. EnvironmentIBL puts a pre-filtered RoomEnvironment — a
+   * brightly lit white box — into scene.environment. Lambert ignores environment maps entirely, so
+   * it has always been free; Standard does not, so swapping the material silently adds a large flat
+   * white ambient across the entire ground with nothing on the panel to explain it.
+   *
+   * Defaults to 0, so turning PBR on changes the SURFACE and nothing else. Raise it if the ground
+   * looks too dark in shadow — that is what it is for — but it is the first thing to check if the
+   * screen goes white.
+   */
+  terrainEnv: number;
+  /** Straight brightness multiplier on the ground's albedo. The blunt instrument, deliberately. */
+  terrainBrightness: number;
 
   // --- CLOUDS -------------------------------------------------------------------------------------
   /**
@@ -136,8 +152,8 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   shadowSoft: true,
 
   hazeOn: true,
-  hazeVisibilityKm: 55,
-  hazeCeilingKm: 12,
+  hazeVisibilityKm: 160,
+  hazeCeilingKm: 8,
 
   gradeOn: true,
   exposure: 0.92,
@@ -151,6 +167,8 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   terrainStrata: 0.85,
   terrainStrataM: 55,
   terrainCavity: 0.34,
+  terrainEnv: 0,
+  terrainBrightness: 1,
 
   cloudsOn: false,
   cloudCoverage: 0.42,

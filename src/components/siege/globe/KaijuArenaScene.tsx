@@ -17,7 +17,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { globeLook } from '@/features/look/globeLookStore';
+import { useGlobeLook } from '@/features/look/globeLookStore';
 import { CFG, MONSTER_CATALOG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
 import { walkSpeed, runSpeed, type KaijuBody } from './kaijuBody';
@@ -69,6 +69,8 @@ function animRate(b: KaijuBody, h: number, naturalMetres: number, running: boole
 
 
 function AgentAvatar({ agent }: { agent: Agent }) {
+  // `look` is already taken in this component (a camera-direction scratch), hence the longer name.
+  const globeLookState = useGlobeLook();
   const camera = useThree((s) => s.camera);
   const look = useRef(new THREE.Vector3());
   const cfg = CFG[agent.monsterType as keyof typeof CFG];
@@ -89,14 +91,31 @@ function AgentAvatar({ agent }: { agent: Agent }) {
     // every mesh had both flags disabled, so a 300 m creature stood in full sun with nothing beneath
     // it. Receiving matters nearly as much as casting: it is what puts an arm's shadow across the
     // chest and gives the body its own form.
-    const wantShadows = globeLook().enabled && globeLook().shadowsOn;
-    c.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) { o.castShadow = wantShadows; o.receiveShadow = wantShadows; }
-    });
+    // Flags are owned by the effect below, which reacts to the panel. Setting them here would only
+    // capture whatever the switch happened to say at load time, which is what was broken.
     prepareFlash(c);
     return c;
   }, [scene]);
   useEffect(() => () => releaseFlash(model), [model]);
+
+  /**
+   * SHADOW FLAGS, REACTIVELY.
+   *
+   * Geoff: "Shadows doesn't work at all... I see no shadows with any settings."
+   *
+   * They were set inside the clone's useMemo, which runs ONCE when the model loads. So the flags
+   * were whatever the panel said at that instant — and since the panel defaults to off, and the
+   * model loads long before anyone opens it, they were always false. Toggling the switch changed a
+   * value nothing ever read again.
+   */
+  const wantShadows = globeLookState.enabled && globeLookState.shadowsOn;
+  useEffect(() => {
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = wantShadows; m.receiveShadow = wantShadows; }
+    });
+  }, [model, wantShadows]);
+
 
   // STRIP ROOT MOTION FROM THE DEATH CLIP before the mixer ever sees it. Left in, it drags the
   // corpse hundreds of metres and then clamps there — the "floating in the air" Geoff reported.

@@ -29,7 +29,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { globeLook } from '@/features/look/globeLookStore';
+import { useGlobeLook } from '@/features/look/globeLookStore';
 import { CFG } from '../siegeMonsterCatalog';
 import { APP_VERSION } from '@/version';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
@@ -87,6 +87,7 @@ export function GlobeKaiju({ state }: { state: KaijuLabState }) {
 
 
 function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLabState; modelHeight: number }) {
+  const look = useGlobeLook();
   const camera = useThree((s) => s.camera);
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF(`${url}?v=${APP_VERSION}`);
@@ -104,16 +105,33 @@ function KaijuAvatar({ url, state, modelHeight }: { url: string; state: KaijuLab
     // every mesh had both flags disabled, so a 300 m creature stood in full sun with nothing beneath
     // it. Receiving matters nearly as much as casting: it is what puts an arm's shadow across the
     // chest and gives the body its own form.
-    const wantShadows = globeLook().enabled && globeLook().shadowsOn;
-    c.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) { o.castShadow = wantShadows; o.receiveShadow = wantShadows; }
-    });
+    // Flags are owned by the effect below, which reacts to the panel. Setting them here would only
+    // capture whatever the switch happened to say at load time, which is what was broken.
     // Own copies of the materials, so tinting THIS Kaiju does not tint every Kaiju sharing the
     // model. Two of the four in the demo fight would otherwise flash together.
     prepareFlash(c);
     return c;
   }, [scene]);
   useEffect(() => () => releaseFlash(model), [model]);
+
+  /**
+   * SHADOW FLAGS, REACTIVELY.
+   *
+   * Geoff: "Shadows doesn't work at all... I see no shadows with any settings."
+   *
+   * They were set inside the clone's useMemo, which runs ONCE when the model loads. So the flags
+   * were whatever the panel said at that instant — and since the panel defaults to off, and the
+   * model loads long before anyone opens it, they were always false. Toggling the switch changed a
+   * value nothing ever read again.
+   */
+  const wantShadows = look.enabled && look.shadowsOn;
+  useEffect(() => {
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = wantShadows; m.receiveShadow = wantShadows; }
+    });
+  }, [model, wantShadows]);
+
 
   // STRIP ROOT MOTION FROM THE DEATH CLIP before the mixer ever sees it. Left in, it drags the
   // corpse hundreds of metres and then clamps there. Same treatment the AI Kaiju already get.

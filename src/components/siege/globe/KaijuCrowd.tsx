@@ -26,7 +26,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
-import { globeLook } from '@/features/look/globeLookStore';
+import { useGlobeLook } from '@/features/look/globeLookStore';
 import { APP_VERSION } from '@/version';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
@@ -342,7 +342,7 @@ function Crowd() {
         // something nobody can resolve. They do RECEIVE, so the Kaiju's shadow sweeps over the
         // crowd as it moves, which is the shot that actually matters.
         m.castShadow = false;
-        m.receiveShadow = globeLook().enabled && globeLook().shadowsOn;
+        m.receiveShadow = false;   // owned by the effect below, which reacts to the panel
         // FRUSTUM CULLING BACK ON, with a bounding sphere it can trust.
         //
         // It was off, so all two hundred figures were skinned and drawn every frame even when they
@@ -410,6 +410,19 @@ function Crowd() {
   }, [figures, people]);
 
   const camera = useThree((st) => st.camera);
+  /**
+   * The Kaiju's shadow sweeping over the crowd is the shot that makes the scale land, so the
+   * soldiers RECEIVE — they just never cast. Reactive, because the flags used to be set when each
+   * figure was cloned and the panel is opened long after that.
+   */
+  const look = useGlobeLook();
+  const receive = look.enabled && look.shadowsOn;
+  useEffect(() => {
+    for (const f of figures) {
+      f.obj.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.receiveShadow = receive; });
+    }
+  }, [figures, receive]);
+
   const _up = useMemo(() => new THREE.Vector3(), []);
   const _side = useMemo(() => new THREE.Vector3(), []);
   const _axis = useMemo(() => new THREE.Vector3(), []);

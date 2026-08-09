@@ -70,6 +70,7 @@ function bearingTangent(dir: THREE.Vector3, degrees: number, out: THREE.Vector3)
 export function GlobeLighting() {
   const look = useGlobeLook();
   const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
   const setDpr = useThree((s) => s.setDpr);
   const sun = useRef<THREE.DirectionalLight>(null);
   const target = useMemo(() => new THREE.Object3D(), []);
@@ -96,12 +97,32 @@ export function GlobeLighting() {
     gl.shadowMap.enabled = true;
     gl.shadowMap.type = look.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     gl.shadowMap.needsUpdate = true;
+    // EVERY MATERIAL MUST BE RECOMPILED, and this is the other half of "shadows don't work".
+    //
+    // Whether a material samples the shadow map is baked into its SHADER at compile time, from the
+    // renderer's settings when that shader was first built. Flipping gl.shadowMap.enabled afterwards
+    // changes nothing for anything already on screen: the terrain, the Kaiju and the crowd carry on
+    // running the shader they were compiled with, which has no shadow code in it at all.
+    // `needsUpdate` forces the rebuild. It is a visible hitch, which is why it is done once on the
+    // switch rather than every frame.
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (!m) return;
+      if (Array.isArray(m)) m.forEach((x) => { x.needsUpdate = true; });
+      else m.needsUpdate = true;
+    });
     return () => {
       gl.shadowMap.enabled = hadEnabled;
       gl.shadowMap.type = hadType;
       gl.shadowMap.needsUpdate = true;
+      scene.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (!m) return;
+        if (Array.isArray(m)) m.forEach((x) => { x.needsUpdate = true; });
+        else m.needsUpdate = true;
+      });
     };
-  }, [gl, on, look.shadowsOn, look.shadowSoft]);
+  }, [gl, scene, on, look.shadowsOn, look.shadowSoft]);
 
   /** Render resolution. See the note on `dpr` in the store for why this is the sharpness lever. */
   useEffect(() => {
