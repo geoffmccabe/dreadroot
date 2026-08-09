@@ -55,11 +55,17 @@ const EARTH_R_M = PLANET_RADIUS * METRES_PER_UNIT;
  * Depth of the sea immediately around a city, in metres.
  *
  * Not the raw tile value, which over Dubai is -87 m everywhere: dropping straight from the city's
- * +6 m to that would put a 93 m cliff along the entire shoreline. Coastal water really is shallow,
- * and at -12 m the step at the beach is small and sits under the water surface where nothing can
- * see it. It blends out to the real depth at the city's outer radius.
+ * ground to that would put a cliff along the entire shoreline. It blends out to the real depth at
+ * the city's outer radius instead.
+ *
+ * DEEPENED FROM -12, and the reason is the water, not the seabed. Geoff: "the beaches are too broad."
+ * Part of that was invented land, fixed in the mask — but part of it was that the sea here did not
+ * look like sea. The ocean's transparency ramps with depth, reaching nearly opaque at 120 m, so a
+ * 12 m shelf renders at nine per cent opacity: a thin blue wash over a sand-coloured seabed, which
+ * the eye reads as more beach. At 30 m it is about a quarter opaque, which is water you can still
+ * see the bottom through — right for the Gulf, and unmistakably water.
  */
-const SHALLOW_SEA_M = -12;
+const SHALLOW_SEA_M = -30;
 
 function makeSite(name: string, lat: number, lon: number, groundM: number,
                   innerM: number, outerM: number): CitySite {
@@ -83,16 +89,22 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
 }
 
 /**
- * Dubai. 2 m above sea level.
+ * Dubai. Half a metre above sea level.
  *
- * Geoff: "The sea level is too low and looks like it would be more accurate if it came up perhaps
- * 3-5 m of sea rise elevation."
+ * Geoff, twice: "the sea level is too low... perhaps 3-5 m of sea rise", then "the land level is
+ * too high and needs to be brought down another 2 m so that the beaches are smaller and less broad."
  *
- * Lowering the LAND by four metres rather than raising the water, because the water is the planet's
- * own sea surface at elevation zero and moving that moves every coast on Earth. Four metres of
- * freeboard is also closer to the truth than the six it replaces: the Marina's promenade and the
- * Palm's fronds sit only two or three metres above the Gulf, which is exactly why the place floods
- * when it rains.
+ * Lowering the LAND rather than raising the water, because the water is the planet's own sea surface
+ * at elevation zero and moving that moves every coast on Earth. Six metres became two, and two now
+ * becomes a half.
+ *
+ * NOT ZERO, which is what "another 2 m" literally asks for, and the missing half metre is the one
+ * decision here worth defending. The ocean is a mesh at exactly the planet's radius; ground at
+ * exactly zero is the same surface, and two coplanar meshes do not decide which is in front — they
+ * fight, per pixel, and the whole city would strobe between sand and water as the camera moved. Half
+ * a metre is below anything visible at this scale and above that failure. It also holds the
+ * procedural terrain noise off: that fades out below 120 m and is under 20 cm here, so the ground
+ * inside the city is genuinely flat rather than gently lumpy.
  *
  * The inner radius covers the whole import — the furthest building is 13.1 km from the origin — and
  * the blend runs out to 26 km so the transition happens over open desert and water rather than
@@ -103,7 +115,7 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
  * built patches showing the seabed while everything around them moved.
  */
 const SITES: CitySite[] = [
-  makeSite('Dubai', 25.14, 55.21, 2, 15000, 26000),
+  makeSite('Dubai', 25.14, 55.21, 0.5, 15000, 26000),
 ];
 
 /** Smootherstep — zero derivative at both ends, so the coastline has no visible crease. */

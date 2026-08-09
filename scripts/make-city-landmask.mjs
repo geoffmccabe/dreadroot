@@ -54,6 +54,25 @@ const OUT = 'src/components/siege/globe/dubaiLandMask.ts';
 const CELL = 40;
 /** Half-width of the grid, in metres. Must cover the blend radius in cityGround. */
 const HALF = 26000;
+/**
+ * The coastline is rasterised on a grid this many times finer, then averaged down.
+ *
+ * Geoff: "Some essential parts of the land that should be islands are now connected with the land,
+ * when they shouldn't be."
+ *
+ * THE BARRIER WAS THE BRIDGE. Coastline ways are lines, and a line drawn one cell wide leaks: the
+ * flood fill slips diagonally through a rasterised staircase and swallows the whole desert. The
+ * previous fix was to draw it three cells thick — which at 40 m cells is EIGHTY METRES of invented
+ * land on the seaward side of every shore. On an open coast that is a broad fake beach. Between two
+ * of the Palm's fronds, which are about 150 m apart, it is 80 m of land from each side closing a
+ * 150 m channel to 70 m, and where they converge near the trunk it seals them together completely.
+ * Same for the crescent breakwater against the frond tips.
+ *
+ * Drawing at 10 m instead makes the same three-cell-thick seal only 20 m wide, which is under a
+ * lane of road. The flood still cannot leak, and nothing gets bridged that is not genuinely joined.
+ */
+const SUB = 4;
+const SUB_CELL = CELL / SUB;
 
 // The bake's origin, and the same projection it used. These must match cityData exactly or the mask
 // is offset from the buildings it was made from.
@@ -62,15 +81,16 @@ const MPER_LAT = 111320;
 const MPER_LON = MPER_LAT * Math.cos((LAT0 * Math.PI) / 180);
 
 const N = Math.ceil((HALF * 2) / CELL);
-const idx = (cx, cy) => cy * N + cx;
-const toCellX = (m) => Math.floor((m + HALF) / CELL);
+const FN = N * SUB;
+const idx = (cx, cy) => cy * FN + cx;
+const toCellX = (m) => Math.floor((m + HALF) / SUB_CELL);
 const project = (p) => [(p.lon - LON0) * MPER_LON, -(p.lat - LAT0) * MPER_LAT];
 
-console.error(`grid ${N}x${N} at ${CELL} m (+/-${HALF / 1000} km)`);
+console.error(`output ${N}x${N} at ${CELL} m, rasterised at ${FN}x${FN} / ${SUB_CELL} m (+/-${HALF / 1000} km)`);
 
 // --- 1. draw the coastline as a barrier ----------------------------------------------------------
 const BARRIER = 1, SEA = 2;
-const grid = new Uint8Array(N * N);
+const grid = new Uint8Array(FN * FN);
 
 /** Bresenham, thickened. A one-cell line leaks: two adjacent ways rarely share an exact endpoint. */
 function stroke(x0, y0, x1, y1) {
@@ -83,7 +103,7 @@ function stroke(x0, y0, x1, y1) {
     for (let oy = -1; oy <= 1; oy++) {
       for (let ox = -1; ox <= 1; ox++) {
         const px = cx + ox, py = cy + oy;
-        if (px >= 0 && py >= 0 && px < N && py < N) grid[idx(px, py)] = BARRIER;
+        if (px >= 0 && py >= 0 && px < FN && py < FN) grid[idx(px, py)] = BARRIER;
       }
     }
     if (cx === ex && cy === ey) break;
@@ -118,25 +138,25 @@ console.error(`stroked ${coastWays} coastline ways, held ${waterAreas.length} wa
 //
 // The northwest corner of the grid is 26 km west and 26 km north of the city origin, which puts it
 // roughly 25 km offshore. There is nothing there but the Persian Gulf.
-const queue = new Int32Array(N * N);
+const queue = new Int32Array(FN * FN);
 let qh = 0, qt = 0;
 const seed = idx(1, 1);
 if (grid[seed] !== BARRIER) { grid[seed] = SEA; queue[qt++] = seed; }
 while (qh < qt) {
   const k = queue[qh++];
-  const cx = k % N, cy = (k / N) | 0;
+  const cx = k % FN, cy = (k / FN) | 0;
   // Four-connected, deliberately. Eight-connected leaks diagonally through a barrier drawn as a
   // staircase, and a staircase is exactly what a rasterised diagonal coastline is.
   if (cx > 0 && grid[k - 1] === 0) { grid[k - 1] = SEA; queue[qt++] = k - 1; }
-  if (cx < N - 1 && grid[k + 1] === 0) { grid[k + 1] = SEA; queue[qt++] = k + 1; }
-  if (cy > 0 && grid[k - N] === 0) { grid[k - N] = SEA; queue[qt++] = k - N; }
-  if (cy < N - 1 && grid[k + N] === 0) { grid[k + N] = SEA; queue[qt++] = k + N; }
+  if (cx < FN - 1 && grid[k + 1] === 0) { grid[k + 1] = SEA; queue[qt++] = k + 1; }
+  if (cy > 0 && grid[k - FN] === 0) { grid[k - FN] = SEA; queue[qt++] = k - FN; }
+  if (cy < FN - 1 && grid[k + FN] === 0) { grid[k + FN] = SEA; queue[qt++] = k + FN; }
 }
 console.error(`flood reached ${qt} cells (${((qt / grid.length) * 100).toFixed(1)}%)`);
 
 // --- 3. land is everything the sea could not reach -------------------------------------------------
-const land = new Uint8Array(N * N);
-for (let k = 0; k < grid.length; k++) land[k] = grid[k] === SEA ? 0 : 1;
+const fine = new Uint8Array(FN * FN);
+for (let k = 0; k < grid.length; k++) fine[k] = grid[k] === SEA ? 0 : 1;
 
 // --- 4. punch out the inland water bodies ----------------------------------------------------------
 //
@@ -148,9 +168,9 @@ for (const poly of waterAreas) {
   if (poly.length < 3) continue;
   let minY = Infinity, maxY = -Infinity;
   for (const [, y] of poly) { if (y < minY) minY = y; if (y > maxY) maxY = y; }
-  const c0 = Math.max(0, toCellX(minY)), c1 = Math.min(N - 1, toCellX(maxY));
+  const c0 = Math.max(0, toCellX(minY)), c1 = Math.min(FN - 1, toCellX(maxY));
   for (let cy = c0; cy <= c1; cy++) {
-    const y = (cy + 0.5) * CELL - HALF;
+    const y = (cy + 0.5) * SUB_CELL - HALF;
     const xs = [];
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
       const [xi, yi] = poly[i], [xj, yj] = poly[j];
@@ -158,8 +178,8 @@ for (const poly of waterAreas) {
     }
     xs.sort((a, b) => a - b);
     for (let s = 0; s + 1 < xs.length; s += 2) {
-      const a = Math.max(0, toCellX(xs[s])), b = Math.min(N - 1, toCellX(xs[s + 1]));
-      for (let cx = a; cx <= b; cx++) { if (land[idx(cx, cy)]) { land[idx(cx, cy)] = 0; waterCells++; } }
+      const a = Math.max(0, toCellX(xs[s])), b = Math.min(FN - 1, toCellX(xs[s + 1]));
+      for (let cx = a; cx <= b; cx++) { if (fine[idx(cx, cy)]) { fine[idx(cx, cy)] = 0; waterCells++; } }
     }
   }
 }
@@ -177,18 +197,38 @@ const f = new Float32Array(buf.buffer, buf.byteOffset + 24, count * 6);
 let reclaimed = 0;
 for (let i = 0; i < count; i++) {
   const x = f[i * 6], z = f[i * 6 + 1];
-  const r = Math.max(f[i * 6 + 2], f[i * 6 + 3]) / 2 + CELL;
+  // NO DILATION. The old version grew every footprint by a whole 40 m cell "because a building
+  // implies the road around it" — but a villa on one of the Palm's fronds is 20 m from the water,
+  // so a 40 m skirt walks straight across the channel and joins it to the next frond. The coastline
+  // is accurate enough now to say where the ground ends; the buildings only need to correct it
+  // where a tower genuinely stands on ground the shoreline data has not caught up with.
+  const r = Math.max(f[i * 6 + 2], f[i * 6 + 3]) / 2;
   const c0x = toCellX(x - r), c1x = toCellX(x + r);
   const c0y = toCellX(z - r), c1y = toCellX(z + r);
   for (let cy = c0y; cy <= c1y; cy++) {
     for (let cx = c0x; cx <= c1x; cx++) {
-      if (cx < 0 || cy < 0 || cx >= N || cy >= N) continue;
-      if (!land[idx(cx, cy)]) reclaimed++;
-      land[idx(cx, cy)] = 1;
+      if (cx < 0 || cy < 0 || cx >= FN || cy >= FN) continue;
+      if (!fine[idx(cx, cy)]) reclaimed++;
+      fine[idx(cx, cy)] = 1;
     }
   }
 }
-console.error(`buildings reclaimed ${reclaimed} cells the coastline called sea`);
+console.error(`buildings reclaimed ${reclaimed} fine cells the coastline called sea`);
+
+// --- 6. average the fine grid down to the output grid ------------------------------------------------
+//
+// A cell is land if at least half of its sixteen subcells are. Majority rather than "any", because
+// "any" would grow every island by up to 40 m again and undo the whole point of rasterising fine.
+const land = new Uint8Array(N * N);
+for (let cy = 0; cy < N; cy++) {
+  for (let cx = 0; cx < N; cx++) {
+    let sum = 0;
+    for (let sy = 0; sy < SUB; sy++) {
+      for (let sx = 0; sx < SUB; sx++) sum += fine[idx(cx * SUB + sx, cy * SUB + sy)];
+    }
+    land[cy * N + cx] = sum * 2 >= SUB * SUB ? 1 : 0;
+  }
+}
 
 const landCells = land.reduce((a, b) => a + b, 0);
 console.error(`land ${landCells} cells (${((landCells / land.length) * 100).toFixed(1)}%)`);
@@ -201,7 +241,7 @@ console.error(`land ${landCells} cells (${((landCells / land.length) * 100).toFi
     let s = '';
     for (let c = 0; c < COLS; c++) {
       const cx = Math.floor((c / COLS) * N), cy = Math.floor((r / ROWS) * N);
-      s += land[idx(cx, cy)] ? '#' : '.';
+      s += land[cy * N + cx] ? '#' : '.';
     }
     lines.push(s);
   }

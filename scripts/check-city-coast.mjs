@@ -76,15 +76,18 @@ expect('NW corner of the grid', 25.35, 54.97, false);
 console.log('\n== the beach is a slope, not a step ==');
 // Walk northwest out of the Marina into the Gulf. A binary mask steps 1 -> 0 with nothing between;
 // a partial value anywhere along the walk means the interpolation is doing its job.
-const [mx, mz] = at(25.078, 55.130);
+// Start from the Marina towers, which the assertions above have already proved are land, rather
+// than from a hand-picked point near the waterline — the waterline is the thing under test, so
+// starting on it makes the test depend on the answer.
+const [mx, mz] = at(25.0805, 55.1403);
 const row = [];
 let partial = false;
-for (let d = 0; d <= 400; d += 40) {
+for (let d = 0; d <= 1600; d += 80) {
   const f = landFraction(mx - d * 0.7, mz - d * 0.7);
   if (f > 0.02 && f < 0.98) partial = true;
-  row.push(`${String(d).padStart(3)}m:${f.toFixed(2)}`);
+  if (d % 160 === 0) row.push(`${String(d).padStart(4)}m:${f.toFixed(2)}`);
 }
-console.log('  ' + row.join('  '));
+console.log('  ' + row.join(' '));
 if (!partial) fails++;
 console.log(`  ${partial ? 'PASS' : 'FAIL'}  a partial value exists between land and sea`);
 
