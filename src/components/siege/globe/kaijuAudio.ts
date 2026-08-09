@@ -107,6 +107,7 @@ export async function playKaijuSound(
   opts: {
     volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
     rolloff?: number; panning?: PanningModelType; reverb?: boolean; tiltDb?: number;
+    bassDb?: number; cutHz?: number;
   } = {},
 ): Promise<void> {
   const buffer = await loadAudioBuffer(url);
@@ -183,6 +184,7 @@ export function playKaijuBuffer(
   opts: {
     volume?: number; rate?: number; refUnits?: number; maxUnits?: number;
     rolloff?: number; panning?: PanningModelType; reverb?: boolean; tiltDb?: number;
+    bassDb?: number; cutHz?: number;
   } = {},
 ): void {
   const ctx = getAudioContext();
@@ -227,6 +229,26 @@ export function playKaijuBuffer(
     tilt.gain.value = opts.tiltDb;
   }
 
+  // WEIGHT. A low shelf, for sounds that need to come from something big.
+  //
+  // Boosting the bottom is only half of it — the other half is `cutHz` below, which takes the top
+  // off. A small, hard sound is small because of what is UP THERE, not because of what is missing
+  // underneath, so adding bass to a bright sample makes it a bright sample with bass. Both ends have
+  // to move for the size to change.
+  let bass: BiquadFilterNode | null = null;
+  if (opts.bassDb) {
+    bass = ctx.createBiquadFilter();
+    bass.type = 'lowshelf';
+    bass.frequency.value = 260;
+    bass.gain.value = opts.bassDb;
+  }
+  let cut: BiquadFilterNode | null = null;
+  if (opts.cutHz) {
+    cut = ctx.createBiquadFilter();
+    cut.type = 'lowpass';
+    cut.frequency.value = opts.cutHz;
+  }
+
   const panner = ctx.createPanner();
   // EQUALPOWER, not HRTF, when asked for. HRTF convolves every sound against a head model — lovely
   // for a handful of sources and ruinous at nine a second, which is the rate the rifles fire at.
@@ -251,8 +273,10 @@ export function playKaijuBuffer(
     l.setOrientation(listenerDir.x, listenerDir.y, listenerDir.z, 0, 1, 0);
   }
 
-  src.connect(lp);
-  if (tilt) { lp.connect(tilt); tilt.connect(gain); } else { lp.connect(gain); }
+  // Chain whatever is present, in order, without assuming any of it is.
+  let node: AudioNode = src;
+  for (const n of [lp, tilt, bass, cut]) { if (n) { node.connect(n); node = n; } }
+  node.connect(gain);
   gain.connect(panner); panner.connect(bus(ctx));
 
   // THE DISTANCE TAIL. Nothing at point-blank, most of the sound by a couple of kilometres — which
@@ -286,7 +310,7 @@ export function playKaijuBuffer(
   // able to matter.
   src.onended = () => {
     try {
-      src.disconnect(); lp.disconnect(); tilt?.disconnect();
+      src.disconnect(); lp.disconnect(); tilt?.disconnect(); bass?.disconnect(); cut?.disconnect();
       gain.disconnect(); panner.disconnect(); send?.disconnect();
     } catch { /* already torn down */ }
   };

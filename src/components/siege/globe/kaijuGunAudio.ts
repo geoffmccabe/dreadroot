@@ -25,13 +25,54 @@
 // battlefield feel large.
 
 import * as THREE from 'three';
-import { playKaijuSound } from './kaijuAudio';
+import { playKaijuSound, playKaijuBuffer } from './kaijuAudio';
 import { getAudioContext } from '@/lib/spatialAudio';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { fxRand as rand } from './kaijuRandom';
 
-/** Already in this project, and exactly right. */
 const RICOCHET_URL = '/ricochet_sound.mp3';
+
+/**
+ * THE IMPACT THUD — the layer that makes a ricochet sound like it hit something enormous.
+ *
+ * Geoff: "the ricochet sounds too tinny, like the sound of a tiny bullet or bb-gun... Would it help
+ * to make it happen faster, like 50% faster but also much deeper sound?"
+ *
+ * Faster and deeper are OPPOSITE directions for a sample: speeding it up resamples it HIGHER, which
+ * is the tinniness. So the sample goes the other way — slower, deeper, with the top end cut off. But
+ * that alone gives a dull thin sound rather than a big one, because size is not something you can
+ * filter INTO a recording that never had it.
+ *
+ * So it is layered. This is the sweetener sound designers put under an impact: a short sine that
+ * falls fast in pitch, with a very hard attack. The fall is what reads as mass — a small thing rings
+ * at one pitch, a big thing booms and drops. It also puts the SNAP back that slowing the sample took
+ * away, which is what Geoff was reaching for with "faster".
+ *
+ * Generated, once, and pitched per hit. Two sources instead of one, six times a second.
+ */
+let thudBuffer: AudioBuffer | null = null;
+function impactThud(ctx: AudioContext): AudioBuffer {
+  if (thudBuffer) return thudBuffer;
+  const sr = ctx.sampleRate;
+  const len = Math.floor(sr * 0.45);
+  const buf = ctx.createBuffer(1, len, sr);
+  const d = buf.getChannelData(0);
+  let phase = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    // 190 Hz falling to 42. The sweep, not the pitch, is what makes it read as heavy.
+    const f = 42 + 148 * Math.exp(-t / 0.055);
+    phase += (2 * Math.PI * f) / sr;
+    // Two decays: a fast one for the strike, a slow one for the body ringing after it.
+    const env = Math.exp(-t / 0.075) * 0.75 + Math.exp(-t / 0.22) * 0.35;
+    // A tiny scrape of noise on the very front, so the attack has teeth rather than being a pure
+    // tone appearing out of nowhere.
+    const scrape = t < 0.012 ? (Math.random() * 2 - 1) * (1 - t / 0.012) * 0.5 : 0;
+    d[i] = Math.max(-1, Math.min(1, Math.sin(phase) * env + scrape));
+  }
+  thudBuffer = buf;
+  return buf;
+}
 
 /**
  * Bursts we are willing to actually voice, per second.
@@ -185,10 +226,15 @@ export function flushGunAudio(
     for (const r of ricochets) {
       if (ricTokens < 1 || r.dist > MAX_AUDIBLE_UNITS) break;
       ricTokens -= 1;
+      // THE ZING, slowed and darkened. 0.55-0.7 drops it roughly an octave, and cutting everything
+      // above about 3 kHz removes the bb-gun edge — that top end is the whole of what made it sound
+      // small. It also comes out longer, which is correct: a big ricochet rings.
       playKaijuSound(RICOCHET_URL, r.pos, listenerPos, listenerDir, {
-        volume: 0.5 + rand() * 0.18,
-        rate: 0.85 + rand() * 0.4,
-        tiltDb: (rand() * 2 - 1) * 3,
+        volume: 0.42 + rand() * 0.14,
+        rate: 0.55 + rand() * 0.15,
+        cutHz: 2600 + rand() * 900,
+        bassDb: 6,
+        tiltDb: -4 + (rand() * 2 - 1) * 2,
         // 2 units, not 5. Geoff: "I could hear the ricochets but they sound like they're coming
         // from right on top of me and don't sound far away." At 5 the reference distance was 500 m
         // — which is roughly where the Kaiju STANDS in the scale view, so every impact was playing
@@ -197,6 +243,15 @@ export function flushGunAudio(
         // air absorption and the reverb tail do the rest.
         refUnits: 2,
         rolloff: 1.5,
+        maxUnits: MAX_AUDIBLE_UNITS,
+        panning: 'equalpower',
+      });
+      // ...AND THE THUD UNDER IT. Same position, same delay, so they arrive together as one event.
+      playKaijuBuffer(impactThud(ctx), r.pos, listenerPos, listenerDir, {
+        volume: 0.55 + rand() * 0.2,
+        rate: 0.85 + rand() * 0.3,
+        refUnits: 3,
+        rolloff: 1.2,
         maxUnits: MAX_AUDIBLE_UNITS,
         panning: 'equalpower',
       });
