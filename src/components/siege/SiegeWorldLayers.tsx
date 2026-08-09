@@ -97,17 +97,35 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // place-bound content), but it is otherwise a FULL siege map: weapons, jumping, panels,
   // crypto, coins, challenges and @-spawn all mount exactly as on every other siege map.
   const isGlobe = kind === 'globe';
-  // THE GLOBE IS NO LONGER "BLANK".
+  // ONE FLAG WAS DOING TWO JOBS, AND SPLITTING THEM IS THE WHOLE FIX.
   //
-  // That flag adds a bright flat fill so object textures read clearly on builder maps — ambient 0.7
-  // plus a hemisphere, ON TOP of the shared world's own ambient 0.35 and hemisphere 0.6. Stacked up
-  // that is over 1.0 of directionless light, and directionless light cannot make a bright side and
-  // a dark side. It is the literal cause of "everything looks soft and washed out": the contrast
-  // was being deleted before any material or tone-mapping decision got a say.
+  // `isBlank` was flipped off for the globe in order to remove a bright flat fill light — which was
+  // right, that fill is exactly why the Mini Earth read washed out. But this flag does not only mean
+  // "add fill light". It gates NINE things, and the one that matters most is the load-completion
+  // condition below: `terrainReady && (objectsReady || isBlank)`.
   //
-  // The Mini Earth owns its own light now (GlobeLighting): one sun with a real elevation relative to
-  // where you stand, shadows, and sky bounce instead of fill.
-  const isBlank = kind === 'flat' || isHeightmap;
+  // With it off, the Mini Earth stopped being allowed to finish loading until SWW's scenery loader
+  // had finished — so the globe sat forever on "Loading World... Loading 1673 object types",
+  // dutifully trying to place the Bleakrock lobby's trees and rocks on a planet. It also switched on
+  // Bleakrock's own lighting, the portal effect, the item grid and the region spawners.
+  //
+  // Geoff: "It's stuck on 'Loading World... Loading 1673 object types'... It's not loading and
+  // basically just very broken."
+  //
+  // So the CONTENT meaning stays as it was — the globe is blank, it has no SWW scenery — and the
+  // LIGHTING meaning gets its own flag. A flag whose name describes one thing while it controls nine
+  // is a trap that will be stepped in again; naming the second one after what it actually does is
+  // the cheapest possible guard.
+  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
+  /**
+   * Does this map want the builder-map fill light?
+   *
+   * Every blank map except the globe. The Mini Earth owns its own lighting (GlobeLighting): one sun
+   * with a real elevation, shadows, and sky bounce instead of fill. Stacking the builder fill on top
+   * of that is over 1.0 of directionless light, and directionless light cannot make a bright side
+   * and a dark side — which is the literal cause of "everything looks soft and washed out".
+   */
+  const wantsFillLight = isBlank && !isGlobe;
   // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
   // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
   const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
@@ -142,7 +160,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Builder/blank maps (Starblink, City Demo) drop the SWW horror fog, so faces away
           from the sun go near-black with only the base ambient. Add bright fill light so
           all object textures read clearly (esp. the tall city buildings). */}
-      {isBlank && (
+      {wantsFillLight && (
         <>
           <ambientLight intensity={world.fill?.ambient ?? 0.7} />
           <hemisphereLight args={['#ffffff', '#b9c4d0', world.fill?.hemi ?? 0.6]} />
