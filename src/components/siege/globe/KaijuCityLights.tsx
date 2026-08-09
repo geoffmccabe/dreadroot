@@ -20,7 +20,7 @@
 // has its own period and phase so they never pulse together. That is what a real skyline does.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { loadRoads, getRoads, ROAD_TRAFFIC, type Road } from './cityRoads';
@@ -171,6 +171,7 @@ export function KaijuCityLights({ city }: { city: City }) {
     col: new Float32Array(Math.max(1, traffic.length) * 2 * 3),
   }), [traffic.length]);
   /** The camera in the city's own space, so "coming towards you" can be decided at all. */
+  const camera = useThree((st) => st.camera);
   const camLocal = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, rawDt) => {
