@@ -1,0 +1,986 @@
+[
+ {
+  "name": "برج خليفة",
+  "h": 522,
+  "x": 6447,
+  "z": -6381
+ },
+ {
+  "name": "Ciel Tower",
+  "h": 366,
+  "x": -6579,
+  "z": 5847
+ },
+ {
+  "name": "City Tower 1",
+  "h": 363,
+  "x": 6978,
+  "z": -8781
+ },
+ {
+  "name": "Elite Residence",
+  "h": 360,
+  "x": -6258,
+  "z": 5620
+ },
+ {
+  "name": "Princess Tower",
+  "h": 357,
+  "x": -6372,
+  "z": 5717
+ },
+ {
+  "name": "Il Primo",
+  "h": 356,
+  "x": 6249,
+  "z": -6266
+ },
+ {
+  "name": "فندق جيفورا",
+  "h": 356,
+  "x": 6767,
+  "z": -8056
+ },
+ {
+  "name": "Jumeirah Emirates Office Tower",
+  "h": 355,
+  "x": 7420,
+  "z": -8633
+ },
+ {
+  "name": "Al Habtoor Tower",
+  "h": 345,
+  "x": 4349,
+  "z": -4695
+ },
+ {
+  "name": "DAMAC Heights",
+  "h": 335,
+  "x": -6494,
+  "z": 5857
+ },
+ {
+  "name": "The A-Tower",
+  "h": 334,
+  "x": 6380,
+  "z": -7808
+ },
+ {
+  "name": "JW Marriott Marquis Hotel Tower 1",
+  "h": 330,
+  "x": 4810,
+  "z": -5052
+ },
+ {
+  "name": "JW Marriott Marquis Hotel Tower 2",
+  "h": 330,
+  "x": 4872,
+  "z": -5127
+ },
+ {
+  "name": "Al Yaqoub Tower",
+  "h": 330,
+  "x": 7032,
+  "z": -8505
+ },
+ {
+  "name": "Index Tower",
+  "h": 326,
+  "x": 6824,
+  "z": -7510
+ },
+ {
+  "name": "Mr. C Residences Downtown",
+  "h": 323,
+  "x": 5737,
+  "z": -6780
+ },
+ {
+  "name": "برج العرب جميرا",
+  "h": 321,
+  "x": -2482,
+  "z": -160
+ },
+ {
+  "name": "Blue Tower (HHHR Tower)",
+  "h": 317,
+  "x": 7123,
+  "z": -9052
+ },
+ {
+  "name": "Rose Rayhaan by Rotana",
+  "h": 315,
+  "x": 6711,
+  "z": -7978
+ },
+ {
+  "name": "Ocean Heights",
+  "h": 310,
+  "x": -6170,
+  "z": 5492
+ },
+ {
+  "name": "Emirates Office Tower",
+  "h": 309,
+  "x": 7287,
+  "z": -8633
+ },
+ {
+  "name": "Cayan Tower",
+  "h": 306,
+  "x": -6533,
+  "z": 5917
+ },
+ {
+  "name": "Emirates Crown",
+  "h": 296,
+  "x": -6399,
+  "z": 5760
+ },
+ {
+  "name": "The Tower Plaza Hotel",
+  "h": 295,
+  "x": 6904,
+  "z": -8654
+ },
+ {
+  "name": "Opera Grand",
+  "h": 288,
+  "x": 6178,
+  "z": -5974
+ },
+ {
+  "name": "Millenium Tower",
+  "h": 285,
+  "x": 5631,
+  "z": -6105
+ },
+ {
+  "name": "ICD Brookfield Place",
+  "h": 279,
+  "x": 7094,
+  "z": -7994
+ },
+ {
+  "name": "Safa Two",
+  "h": 278,
+  "x": 4252,
+  "z": -4609
+ },
+ {
+  "name": "21st Century Tower",
+  "h": 269,
+  "x": 6663,
+  "z": -7898
+ },
+ {
+  "name": "Grande Signature Residences",
+  "h": 267,
+  "x": 6212,
+  "z": -6101
+ },
+ {
+  "name": "The Address - Sky View Tower 1",
+  "h": 264,
+  "x": 6075,
+  "z": -6814
+ },
+ {
+  "name": "Tower 1",
+  "h": 262,
+  "x": 6122,
+  "z": -6122
+ },
+ {
+  "name": "Address Residences Dubai Opera Tower 1",
+  "h": 260,
+  "x": 6233,
+  "z": -6341
+ },
+ {
+  "name": "Paramount Hotel Midtown",
+  "h": 258,
+  "x": 5579,
+  "z": -5941
+ },
+ {
+  "name": "Dubai Marriott Harbour Hotel & Suites",
+  "h": 256,
+  "x": -6450,
+  "z": 5797
+ },
+ {
+  "name": "Marina Gate 2",
+  "h": 256,
+  "x": -6352,
+  "z": 5932
+ },
+ {
+  "name": "Burj Vista Tower 1",
+  "h": 255,
+  "x": 6182,
+  "z": -6547
+ },
+ {
+  "name": "Manazel Al Safa Tower",
+  "h": 248,
+  "x": 5414,
+  "z": -5993
+ },
+ {
+  "name": "Arenco",
+  "h": 243,
+  "x": -5178,
+  "z": 5406
+ },
+ {
+  "name": "The Tower",
+  "h": 242,
+  "x": 7057,
+  "z": -8545
+ },
+ {
+  "name": "The Address - Sky View Tower 2",
+  "h": 236,
+  "x": 6151,
+  "z": -6870
+ },
+ {
+  "name": "Burj Daman",
+  "h": 235,
+  "x": 7261,
+  "z": -7901
+ },
+ {
+  "name": "Ascott Park Place",
+  "h": 234,
+  "x": 7370,
+  "z": -9406
+ },
+ {
+  "name": "The Palm Tower",
+  "h": 232,
+  "x": -7057,
+  "z": 2909
+ },
+ {
+  "name": "Rolex Tower",
+  "h": 231,
+  "x": 6589,
+  "z": -7775
+ },
+ {
+  "name": "Address Residences Dubai Opera Tower 2",
+  "h": 230,
+  "x": 6206,
+  "z": -6410
+ },
+ {
+  "name": "Tiara United Tower 2",
+  "h": 225,
+  "x": 5047,
+  "z": -5443
+ },
+ {
+  "name": "Tiara United Tower 1",
+  "h": 225,
+  "x": 4987,
+  "z": -5412
+ },
+ {
+  "name": "Marina Gate 3",
+  "h": 224,
+  "x": -6370,
+  "z": 5867
+ },
+ {
+  "name": "Sadaf 4",
+  "h": 221,
+  "x": -7337,
+  "z": 6620
+ },
+ {
+  "name": "ريزيدنس ان",
+  "h": 221,
+  "x": 6566,
+  "z": -7735
+ },
+ {
+  "name": "Carlton Downtown Hotel",
+  "h": 221,
+  "x": 6543,
+  "z": -7696
+ },
+ {
+  "name": "Central Park Office Tower",
+  "h": 219,
+  "x": 6555,
+  "z": -7263
+ },
+ {
+  "name": "Central Park Residential Tower",
+  "h": 216,
+  "x": 6565,
+  "z": -7393
+ },
+ {
+  "name": "Le Reve Tower",
+  "h": 214,
+  "x": -6304,
+  "z": 5661
+ },
+ {
+  "name": "One by Binghatti",
+  "h": 214,
+  "x": 5414,
+  "z": -4867
+ },
+ {
+  "name": "Desert Safari Tours - Buggy Ride Dubai",
+  "h": 213,
+  "x": -7506,
+  "z": 6995
+ },
+ {
+  "name": "Executive Tower M",
+  "h": 210,
+  "x": 5375,
+  "z": -5503
+ },
+ {
+  "name": "The Maze Tower",
+  "h": 210,
+  "x": 6988,
+  "z": -8428
+ },
+ {
+  "name": "Latifa Tower",
+  "h": 210,
+  "x": 7155,
+  "z": -9092
+ },
+ {
+  "name": "Marina Heights",
+  "h": 208,
+  "x": -6206,
+  "z": 5875
+ },
+ {
+  "name": "Marina Arcade Tower",
+  "h": 208,
+  "x": -6105,
+  "z": 5748
+ },
+ {
+  "name": "Skyblade",
+  "h": 208,
+  "x": 6299,
+  "z": -5516
+ },
+ {
+  "name": "Marina Crown",
+  "h": 207,
+  "x": -6217,
+  "z": 5574
+ },
+ {
+  "name": "فندق تماني المارينا",
+  "h": 207,
+  "x": -6141,
+  "z": 5454
+ },
+ {
+  "name": "Marina Gate 1",
+  "h": 206,
+  "x": -6284,
+  "z": 5938
+ },
+ {
+  "name": "Aspin Tower",
+  "h": 205,
+  "x": 6306,
+  "z": -7686
+ },
+ {
+  "name": "Volta",
+  "h": 202,
+  "x": 5759,
+  "z": -6409
+ },
+ {
+  "name": "MBK Tower",
+  "h": 200,
+  "x": 5265,
+  "z": -5829
+ },
+ {
+  "name": "BLVD Heights Tower 1",
+  "h": 200,
+  "x": 6010,
+  "z": -5914
+ },
+ {
+  "name": "Shangri La",
+  "h": 200,
+  "x": 6244,
+  "z": -7583
+ },
+ {
+  "name": "Chelsea Tower",
+  "h": 198,
+  "x": 6486,
+  "z": -7977
+ },
+ {
+  "name": "Bahar 5",
+  "h": 197,
+  "x": -7466,
+  "z": 6810
+ },
+ {
+  "name": "Safa One",
+  "h": 195,
+  "x": 3892,
+  "z": -4697
+ },
+ {
+  "name": "Atlantis The Royal",
+  "h": 193,
+  "x": -8286,
+  "z": 195
+ },
+ {
+  "name": "Jumeirah Bay 2",
+  "h": 192,
+  "x": -5755,
+  "z": 6708
+ },
+ {
+  "name": "العنوان - دبي مول",
+  "h": 192,
+  "x": 6810,
+  "z": -6641
+ },
+ {
+  "name": "Mable Arch Tower",
+  "h": 191,
+  "x": 5553,
+  "z": -4427
+ },
+ {
+  "name": "Mable Arch Tower",
+  "h": 191,
+  "x": 5543,
+  "z": -4433
+ },
+ {
+  "name": "Dubai Jewel Tower",
+  "h": 190,
+  "x": -3859,
+  "z": 4201
+ },
+ {
+  "name": "Executive Tower B",
+  "h": 190,
+  "x": 5692,
+  "z": -5875
+ },
+ {
+  "name": "Sadaf 8",
+  "h": 189,
+  "x": -7150,
+  "z": 6583
+ },
+ {
+  "name": "Murjan 1",
+  "h": 189,
+  "x": -7098,
+  "z": 6526
+ },
+ {
+  "name": "Rimal 1",
+  "h": 189,
+  "x": -7565,
+  "z": 7057
+ },
+ {
+  "name": "Sadaf 6 & 7",
+  "h": 189,
+  "x": -7236,
+  "z": 6537
+ },
+ {
+  "name": "Sidra Tower",
+  "h": 187,
+  "x": -3162,
+  "z": 3579
+ },
+ {
+  "name": "Al Fattan Currency House",
+  "h": 187,
+  "x": 7168,
+  "z": -8078
+ },
+ {
+  "name": "Executive Tower K",
+  "h": 186,
+  "x": 5452,
+  "z": -5486
+ },
+ {
+  "name": "Mesk Tower",
+  "h": 185,
+  "x": -6128,
+  "z": 6186
+ },
+ {
+  "name": "29 Boulevard Tower 1",
+  "h": 185,
+  "x": 6265,
+  "z": -5800
+ },
+ {
+  "name": "29 Boulevard Tower 2",
+  "h": 185,
+  "x": 6331,
+  "z": -5763
+ },
+ {
+  "name": "Capricorn Tower",
+  "h": 184,
+  "x": 7002,
+  "z": -8469
+ },
+ {
+  "name": "Marina Terrace",
+  "h": 183,
+  "x": -6572,
+  "z": 6173
+ },
+ {
+  "name": "Boraq Tower",
+  "h": 183,
+  "x": 5739,
+  "z": -4526
+ },
+ {
+  "name": "Tiffany Tower",
+  "h": 182,
+  "x": -6083,
+  "z": 6984
+ },
+ {
+  "name": "Executive Tower H",
+  "h": 182,
+  "x": 5564,
+  "z": -5573
+ },
+ {
+  "name": "Executive Tower L",
+  "h": 182,
+  "x": 5452,
+  "z": -5428
+ },
+ {
+  "name": "Mazaya BB-1",
+  "h": 180,
+  "x": -6544,
+  "z": 7982
+ },
+ {
+  "name": "Mazaya BB-2",
+  "h": 180,
+  "x": -6465,
+  "z": 7895
+ },
+ {
+  "name": "Bay Central",
+  "h": 180,
+  "x": -7244,
+  "z": 6844
+ },
+ {
+  "name": "Al Sahab 2",
+  "h": 180,
+  "x": -7487,
+  "z": 7137
+ },
+ {
+  "name": "Peninsula Four",
+  "h": 180,
+  "x": 5851,
+  "z": -4956
+ },
+ {
+  "name": "Peninsula Four",
+  "h": 180,
+  "x": 5787,
+  "z": -4908
+ },
+ {
+  "name": "Peninsula Three",
+  "h": 180,
+  "x": 5928,
+  "z": -5044
+ },
+ {
+  "name": "Al Seef Tower 2",
+  "h": 179,
+  "x": -5887,
+  "z": 6710
+ },
+ {
+  "name": "Skyrise",
+  "h": 179,
+  "x": 6370,
+  "z": -4657
+ },
+ {
+  "name": "media one",
+  "h": 175,
+  "x": -5789,
+  "z": 5586
+ },
+ {
+  "name": "Dusit Princess Residence",
+  "h": 174,
+  "x": -6600,
+  "z": 6349
+ },
+ {
+  "name": "Escape Tower",
+  "h": 172,
+  "x": 5236,
+  "z": -5779
+ },
+ {
+  "name": "JAM Tower",
+  "h": 171,
+  "x": 5773,
+  "z": -6458
+ },
+ {
+  "name": "Tower 2",
+  "h": 171,
+  "x": 6111,
+  "z": -6059
+ },
+ {
+  "name": "Pier 8",
+  "h": 170,
+  "x": -7067,
+  "z": 6652
+ },
+ {
+  "name": "Executive Tower G",
+  "h": 170,
+  "x": 5610,
+  "z": -5615
+ },
+ {
+  "name": "Executive Tower J",
+  "h": 170,
+  "x": 5511,
+  "z": -5531
+ },
+ {
+  "name": "Burj Residences 7",
+  "h": 170,
+  "x": 6538,
+  "z": -5783
+ },
+ {
+  "name": "Marina Quay West",
+  "h": 168,
+  "x": -7418,
+  "z": 7076
+ },
+ {
+  "name": "Jumeirah Bay X3",
+  "h": 168,
+  "x": -5714,
+  "z": 6656
+ },
+ {
+  "name": "Jumeirah Bay 1",
+  "h": 168,
+  "x": -5820,
+  "z": 6647
+ },
+ {
+  "name": "Boulevard Plaza Tower 1",
+  "h": 168,
+  "x": 6558,
+  "z": -6689
+ },
+ {
+  "name": "Armada Tower 1",
+  "h": 167,
+  "x": -6499,
+  "z": 7250
+ },
+ {
+  "name": "shatha tower",
+  "h": 167,
+  "x": -5742,
+  "z": 5622
+ },
+ {
+  "name": "Four Points by Sheraton",
+  "h": 166,
+  "x": 6652,
+  "z": -8247
+ },
+ {
+  "name": "Liberty House",
+  "h": 166,
+  "x": 6754,
+  "z": -7701
+ },
+ {
+  "name": "Nobles Tower",
+  "h": 165,
+  "x": 8084,
+  "z": -4956
+ },
+ {
+  "name": "Murjan 6",
+  "h": 164,
+  "x": -7015,
+  "z": 6451
+ },
+ {
+  "name": "Murjan 5",
+  "h": 164,
+  "x": -6994,
+  "z": 6407
+ },
+ {
+  "name": "Rimal 3",
+  "h": 164,
+  "x": -7650,
+  "z": 7042
+ },
+ {
+  "name": "Marina Residences",
+  "h": 164,
+  "x": -6996,
+  "z": 6621
+ },
+ {
+  "name": "MAG 214",
+  "h": 164,
+  "x": -6286,
+  "z": 6996
+ },
+ {
+  "name": "Green Lakes 2",
+  "h": 164,
+  "x": -6175,
+  "z": 6870
+ },
+ {
+  "name": "Falcon Tower",
+  "h": 163,
+  "x": 5366,
+  "z": -5957
+ },
+ {
+  "name": "Delta Hotels by Marriot Jumeirah Beach",
+  "h": 161,
+  "x": -7469,
+  "z": 6940
+ },
+ {
+  "name": "Rimal 5",
+  "h": 160,
+  "x": -7763,
+  "z": 7129
+ },
+ {
+  "name": "The Paloma",
+  "h": 160,
+  "x": -7616,
+  "z": 7208
+ },
+ {
+  "name": "V3 Tower",
+  "h": 160,
+  "x": -5854,
+  "z": 6875
+ },
+ {
+  "name": "Al Seef Tower 3",
+  "h": 160,
+  "x": -5972,
+  "z": 6714
+ },
+ {
+  "name": "Swiss Tower",
+  "h": 160,
+  "x": -5746,
+  "z": 6919
+ },
+ {
+  "name": "Emiratron",
+  "h": 160,
+  "x": 4891,
+  "z": -5356
+ },
+ {
+  "name": "Burj Residences 5",
+  "h": 160,
+  "x": 6447,
+  "z": -5813
+ },
+ {
+  "name": "Sky Gardens",
+  "h": 160,
+  "x": 7339,
+  "z": -7983
+ },
+ {
+  "name": "Goldcrest Views 1",
+  "h": 159,
+  "x": -5938,
+  "z": 6883
+ },
+ {
+  "name": "Time Place",
+  "h": 158,
+  "x": -6621,
+  "z": 6621
+ },
+ {
+  "name": "Al Attar Business Tower",
+  "h": 158,
+  "x": 6865,
+  "z": -8229
+ },
+ {
+  "name": "Rimal 2",
+  "h": 156,
+  "x": -7642,
+  "z": 6982
+ },
+ {
+  "name": "Sadaf 1 & 2",
+  "h": 156,
+  "x": -7247,
+  "z": 6640
+ },
+ {
+  "name": "The Summit",
+  "h": 156,
+  "x": -5854,
+  "z": 5763
+ },
+ {
+  "name": "Bay Central West",
+  "h": 155,
+  "x": -7317,
+  "z": 6857
+ },
+ {
+  "name": "Intercontinental Tower",
+  "h": 155,
+  "x": -7249,
+  "z": 6779
+ },
+ {
+  "name": "Al Shaiba Towers",
+  "h": 155,
+  "x": -3937,
+  "z": 4758
+ },
+ {
+  "name": "Saeed Tower - II",
+  "h": 155,
+  "x": 6673,
+  "z": -8285
+ },
+ {
+  "name": "Hilton Dubai The Walk",
+  "h": 154,
+  "x": -7558,
+  "z": 6890
+ },
+ {
+  "name": "Silverene Tower A",
+  "h": 153,
+  "x": -7274,
+  "z": 7218
+ },
+ {
+  "name": "Dusit Thani Dubai",
+  "h": 153,
+  "x": 6345,
+  "z": -7371
+ },
+ {
+  "name": "Sadaf 5",
+  "h": 152,
+  "x": -7309,
+  "z": 6581
+ },
+ {
+  "name": "Two Seasons Hotel & Apartments",
+  "h": 152,
+  "x": -3802,
+  "z": 4128
+ },
+ {
+  "name": "Dubai Gate 1",
+  "h": 151,
+  "x": -6432,
+  "z": 7088
+ },
+ {
+  "name": "Armada Tower 2",
+  "h": 150,
+  "x": -6579,
+  "z": 7259
+ },
+ {
+  "name": "Armada Tower 3",
+  "h": 150,
+  "x": -6518,
+  "z": 7185
+ },
+ {
+  "name": "Saba Tower 2",
+  "h": 150,
+  "x": -6452,
+  "z": 7017
+ },
+ {
+  "name": "Saba Tower 3",
+  "h": 150,
+  "x": -6516,
+  "z": 7088
+ },
+ {
+  "name": "Burj Residences 8",
+  "h": 150,
+  "x": 6496,
+  "z": -5729
+ },
+ {
+  "name": "Park Lane Tower",
+  "h": 150,
+  "x": 5221,
+  "z": -5060
+ },
+ {
+  "name": "Prime Tower",
+  "h": 150,
+  "x": 6210,
+  "z": -5364
+ },
+ {
+  "name": "BLVD Heights Tower 2",
+  "h": 150,
+  "x": 6057,
+  "z": -5838
+ }
+]

@@ -35,6 +35,7 @@ import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuGunfireFx } from './KaijuGunfireFx';
 import { KaijuShoutsFx } from './KaijuShoutsFx';
 import { KaijuColliderDebug, toggleColliderDebug } from './KaijuColliderDebug';
+import { KaijuCity } from './KaijuCity';
 import { GlobeErrorBoundary } from './GlobeErrorBoundary';
 import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrowd';
 import { roar } from './kaijuAudio';
@@ -372,6 +373,11 @@ export function KaijuLabController() {
       </GlobeErrorBoundary>
       <GlobeErrorBoundary label="kaiju-colliders">
         <KaijuColliderDebug />
+      </GlobeErrorBoundary>
+      {/* Dubai. Its own boundary: a missing or malformed city file must leave a Kaiju map, not a
+          white screen — and the loader already returns null rather than throwing for that reason. */}
+      <GlobeErrorBoundary label="kaiju-city">
+        <KaijuCity />
       </GlobeErrorBoundary>
     </>
   );

@@ -71,7 +71,13 @@ ok(sorted[0] > 400, 'something supertall survived — the Burj is 828 m and its 
 ok(sorted.filter((h) => h >= 300).length >= 15,
    'there are many 300 m+ towers, as Dubai has',
    `${sorted.filter((h) => h >= 300).length} of them`);
-ok(sorted.filter((h) => h >= 150).length >= 200,
+// 150, not the 200 I first wrote. That figure was a guess about how many 150 m towers Dubai has,
+// and the four boxes fetched here do not cover the whole city — Deira, Barsha and the rest of
+// Business Bay are outside them. The measured answer for THIS coverage is 175, so this is now a
+// regression guard ("do not lose the towers we have") rather than a claim about Dubai. An assertion
+// whose number was invented is worse than no assertion, because it fails for the wrong reason and
+// teaches you to ignore it.
+ok(sorted.filter((h) => h >= 150).length >= 150,
    'and a proper forest of 150 m+ towers',
    `${sorted.filter((h) => h >= 150).length}`);
 

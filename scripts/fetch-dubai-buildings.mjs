@@ -248,11 +248,38 @@ async function main() {
       for (let w = area.w; w < area.e; w += TILE_DEG) {
         const n = Math.min(s + TILE_DEG, area.n);
         const e = Math.min(w + TILE_DEG, area.e);
-        const tileKey = `${s.toFixed(4)}_${w.toFixed(4)}`;
+        // THE CACHE KEY MUST DESCRIBE THE WHOLE BOX, NOT JUST ITS CORNER.
+        //
+        // This was `${s}_${w}` and it lost the Burj Khalifa. Adjacent districts overlap, and a tile
+        // at the edge of one gets CLAMPED to that district's boundary — so Sheikh Zayed Road fetched
+        // a 500 m strip at (25.180, 55.275) and cached it under that corner, and Downtown then
+        // reused the strip for its own tile at the same corner, which is twenty times larger and
+        // contains the tallest building in the world.
+        //
+        // Nothing about that looked wrong: the log said "cached", the file had thousands of
+        // buildings in it, and the only symptom was a Dubai with no Burj in it.
+        const tileKey = `${s.toFixed(4)}_${w.toFixed(4)}_${n.toFixed(4)}_${e.toFixed(4)}`;
         const cacheFile = `${CACHE_DIR}/${tileKey}.json`;
-        let tileRows;
+        let tileRows = null;
+        // AN EMPTY CACHED TILE IS NEVER TRUSTED.
+        //
+        // Twice now a tile has been recorded as "no buildings here" when the truth was 871 buildings
+        // including three 330 m towers — once from a failed request that looked like an empty
+        // answer, and once because a migration carried that poison forward. Both times the log said
+        // "cached", the file was valid JSON, and the only symptom was a Dubai missing a district.
+        //
+        // In a city, an empty tile is almost always a lie. Re-fetching them costs a few minutes on
+        // the handful that really are open sea, and buys the guarantee that a hole in the city
+        // cannot survive a re-run. Non-empty caches are still trusted, so a good run is not thrown
+        // away to get this.
         if (existsSync(cacheFile)) {
           tileRows = JSON.parse(readFileSync(cacheFile, 'utf8'));
+          if (tileRows.length === 0) {
+            note(`  ${s.toFixed(3)},${w.toFixed(3)}  cached EMPTY — distrusted, refetching\n`);
+            tileRows = null;
+          }
+        }
+        if (tileRows) {
           for (const r of tileRows) {
             if (seen.has(r.k)) continue;
             seen.add(r.k);
