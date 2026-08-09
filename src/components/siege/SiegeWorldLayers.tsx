@@ -16,7 +16,6 @@ import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeCamera } from './globe/GlobeCamera';
 import { GlobeLighting } from './globe/GlobeLighting';
-import { GlobeClouds } from './globe/GlobeClouds';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
@@ -195,12 +194,25 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {isGlobe && <GlobeCamera />}
       {/* One sun, real shadows, and no flat fill. See GlobeLighting for what was wrong. */}
       {isGlobe && <GlobeLighting />}
-      {/* Two cloud decks at real altitudes — fly up through them and you come out on top. */}
-      {isGlobe && (
-        <GlobeErrorBoundary label="globe-clouds">
-          <GlobeClouds />
-        </GlobeErrorBoundary>
-      )}
+      {/*
+        CLOUDS ARE OFF, and the reason is the depth buffer rather than the clouds.
+
+        Geoff: "Everything is nearly pure white now... but grey on the edges." Grey edges is the
+        vignette working on an image that is already white, so the scene itself was being painted
+        over — and the cloud decks are the only thing added that covers the whole screen.
+
+        GlobeCamera sets the near plane from height above ground (as little as 0.03) and the far
+        plane from the horizon (2,000 at minimum, hundreds of thousands from orbit). A depth buffer
+        spanning that range has effectively no precision past a few hundred units, so nothing at
+        planetary distance can be depth-sorted reliably — and a transparent shell 63,000 units from
+        the planet centre is exactly that. It wins the depth test against terrain it is behind, and
+        paints over the world.
+
+        This is not fixable by tuning the clouds. It needs a logarithmic depth buffer, which is a
+        renderer-wide change affecting every map, or a separate sky pass that composites by altitude
+        rather than by depth. Both are real jobs. The shader itself is finished and correct — see
+        GlobeClouds — so this is one line to switch back on once the depth question is settled.
+      */}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {/* Kaiju: suspends while its model loads, so it needs its own Suspense boundary. Without
           one the suspension propagates up and can take neighbouring layers with it, and an error

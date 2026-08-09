@@ -233,6 +233,12 @@ export function makeTerrainMaterial(metresPerUnit: number): THREE.MeshStandardMa
           float cavity = smoothstep(0.62, 0.30, d);
           diffuseColor.rgb *= 1.0 - cavity * 0.34;
 
+          // ALBEDO CANNOT EXCEED 1. Three multiplies stack here — detail up to 1.26, strata up to
+          // 1.24, cavity down — so a bright vertex colour like snow could come out at 1.4. An albedo
+          // over 1 is a surface reflecting more light than falls on it: unphysical, and under a
+          // strong key light it clips to white and takes all the detail with it.
+          diffuseColor.rgb = min(diffuseColor.rgb, vec3(1.0));
+
           // STRATA. Horizontal bands by ALTITUDE, on steep ground only.
           //
           // This is the single detail that makes a canyon read as a canyon. Sedimentary rock is laid
