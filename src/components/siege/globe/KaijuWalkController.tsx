@@ -455,7 +455,11 @@ export function KaijuWalkController() {
     const h = getKaijuLab().height;
     const fwd = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0);
     const right = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
-    const rise = (k.has('Space') ? 1 : 0) - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
+    // Q AND SPACE BOTH CLIMB. Geoff: "I'm unable to use Q to move the camera up. Z works to go
+    // down but Q should go up." Z was already the descend key, so Q was simply never bound to
+    // anything — the pair only makes sense together and only one half of it existed.
+    const rise = (k.has('KeyQ') || k.has('Space') ? 1 : 0)
+      - (k.has('KeyZ') || k.has('ControlLeft') ? 1 : 0);
     const running = k.has('ShiftLeft') || k.has('ShiftRight');
 
     if (!haveCam.current) { camPos.current.copy(camera.position); haveCam.current = true; }

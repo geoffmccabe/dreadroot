@@ -186,7 +186,8 @@ export function KaijuLabHud() {
         , . fly to landmark · K LAND (starts walking) · G toggle · V view<br />
         WASD move (flies the camera out of walk mode) · Shift run<br />
         Space jump / swim up · Z swim down<br />
-        <b>TAB</b> watch next Kaiju · <b>C</b> free camera · <b>MIDDLE-drag</b> pan (click = centre)<br />
+        <b>TAB</b> watch next Kaiju · <b>C</b> free camera (<b>Q</b>/<b>Z</b> up/down)<br />
+        <b>MIDDLE-drag</b> pan (click = centre)<br />
         <b>ALT+right-drag</b> look without turning · <b>O</b> show colliders
       </div>
     </div>
