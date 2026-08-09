@@ -83,7 +83,16 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
 }
 
 /**
- * Dubai. 6 m above sea level, which is about right for the Marina and Downtown.
+ * Dubai. 2 m above sea level.
+ *
+ * Geoff: "The sea level is too low and looks like it would be more accurate if it came up perhaps
+ * 3-5 m of sea rise elevation."
+ *
+ * Lowering the LAND by four metres rather than raising the water, because the water is the planet's
+ * own sea surface at elevation zero and moving that moves every coast on Earth. Four metres of
+ * freeboard is also closer to the truth than the six it replaces: the Marina's promenade and the
+ * Palm's fronds sit only two or three metres above the Gulf, which is exactly why the place floods
+ * when it rains.
  *
  * The inner radius covers the whole import — the furthest building is 13.1 km from the origin — and
  * the blend runs out to 26 km so the transition happens over open desert and water rather than
@@ -94,7 +103,7 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
  * built patches showing the seabed while everything around them moved.
  */
 const SITES: CitySite[] = [
-  makeSite('Dubai', 25.14, 55.21, 6, 15000, 26000),
+  makeSite('Dubai', 25.14, 55.21, 2, 15000, 26000),
 ];
 
 /** Smootherstep — zero derivative at both ends, so the coastline has no visible crease. */

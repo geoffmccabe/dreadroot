@@ -19,6 +19,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { loadCity, getCity, cityDistanceUnits, cityDiag, type City } from './cityData';
+import { applyCityWindows } from './cityWindows';
+import { KaijuCityLights } from './KaijuCityLights';
 
 /**
  * Beyond this the city is not drawn at all.
@@ -57,15 +59,23 @@ function CityMesh({ city }: { city: City }) {
   }, []);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
-  const material = useMemo(() => new THREE.MeshLambertMaterial({
-    // Grey, and deliberately so for phase 1: a flat colour makes a wrong SHAPE obvious, where a
-    // convincing facade would hide it. Windows arrive in phase 2, once the silhouette is trusted.
-    color: 0x9aa3ad,
-    // NOT `vertexColors`. An InstancedMesh's per-instance colours come from `instanceColor`, which
-    // three enables on its own the moment setColorAt is called. `vertexColors` is a different
-    // feature that expects a `color` attribute ON THE GEOMETRY — which a BoxGeometry does not have,
-    // so the shader would read a missing attribute as zero and draw the entire city black.
-  }), []);
+  /** Shared clock for the window shader. A uniform object, so it survives shader recompiles. */
+  const timeRef = useRef({ value: 0 });
+
+  const material = useMemo(() => {
+    const m = new THREE.MeshLambertMaterial({
+      color: 0x9aa3ad,
+      // NOT `vertexColors`. An InstancedMesh's per-instance colours come from `instanceColor`, which
+      // three enables on its own the moment setColorAt is called. `vertexColors` is a different
+      // feature that expects a `color` attribute ON THE GEOMETRY — which a BoxGeometry does not have,
+      // so the shader would read a missing attribute as zero and draw the entire city black.
+    });
+    // PHASE 2: the facades. A window grid computed from each building's real size, so a 522 m tower
+    // gets 130 storeys and a villa gets two, and every window is the same size in metres across the
+    // whole city. No texture is loaded — see cityWindows.ts for why a tiled one cannot work here.
+    applyCityWindows(m, timeRef.current);
+    return m;
+  }, []);
   useEffect(() => () => material.dispose(), [material]);
 
   useEffect(() => {
@@ -75,8 +85,17 @@ function CityMesh({ city }: { city: City }) {
     const colour = new THREE.Color();
     const U = 1 / METRES_PER_UNIT;
 
+    // The window shader needs each building's REAL SIZE IN METRES, which the instance matrix has
+    // but a fragment shader cannot recover from it (the matrix arrives as a transform, and undoing
+    // an arbitrary rotation to get the scale back out costs more than sending three floats). A seed
+    // rides along so two identical towers do not get identical window patterns.
+    const sizes = new Float32Array(count * 3);
+    const seeds = new Float32Array(count);
+
     for (let i = 0; i < count; i++) {
       const b = city.buildings[i];
+      sizes[i * 3] = b.w; sizes[i * 3 + 1] = b.h; sizes[i * 3 + 2] = b.d;
+      seeds[i] = ((i * 2654435761) % 1024) / 1024;
       dummy.position.set(b.x * U, 0, b.z * U);
       // NEGATIVE rot. The bake stores the angle in a (east, south) plane, and a rotation about the
       // local +Y axis carries +X toward -Z — the opposite way round. Getting this wrong mirrors
@@ -97,6 +116,8 @@ function CityMesh({ city }: { city: City }) {
     }
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
+    m.geometry.setAttribute('iSize', new THREE.InstancedBufferAttribute(sizes, 3));
+    m.geometry.setAttribute('iSeed', new THREE.InstancedBufferAttribute(seeds, 1));
     // Computed from the instances rather than the unit cube, or the whole city would vanish the
     // moment the group's own origin left the frustum.
     m.computeBoundingSphere();
@@ -121,11 +142,18 @@ function CityMesh({ city }: { city: City }) {
   // The city is scenery. It is never worth freezing the game for, so it fails once, says so, and
   // stops trying.
   const broken = useRef(false);
-  useFrame(() => {
+  const [near, setNear] = useState(false);
+  useFrame((_, dt) => {
     const g = group.current;
     if (!g || broken.current) return;
     try {
-      g.visible = cityDistanceUnits(camera.position) < DRAW_WITHIN_UNITS;
+      timeRef.current.value += dt;
+      const visible = cityDistanceUnits(camera.position) < DRAW_WITHIN_UNITS;
+      g.visible = visible;
+      // The moving lights only mount when you are close enough for them to be lights rather than a
+      // sub-pixel shimmer — 900 points updated on the CPU is not free, and from orbit it is nine
+      // hundred points of nothing.
+      if (visible !== near) setNear(visible);
     } catch (err) {
       broken.current = true;
       g.visible = false;
@@ -140,6 +168,8 @@ function CityMesh({ city }: { city: City }) {
         args={[geometry, material, count]}
         frustumCulled={false}
       />
+      {/* Traffic on the real roads, and the red lamps on the roofs over 180 m. */}
+      {near && <KaijuCityLights city={city} />}
     </group>
   );
 }

@@ -86,6 +86,7 @@ export const ARENA_SITES: {
   // Facing northeast, up the line of the Marina towers, so the skyline is in frame on arrival
   // rather than behind you.
   { key: 'Digit3', name: 'Dubai Marina', lat: 25.0805, lon: 55.1403, facingDeg: 45 },
+
   // Matterhorn lost its number key to Dubai. It is NOT listed here on Digit0, because Digit0 is
   // already taken by "reset size" earlier in the same switch and the site dispatch only covers 1-9 —
   // so an entry here would be a site that silently never fires. It remains reachable through the
@@ -97,6 +98,32 @@ export const ARENA_SITES: {
   { key: 'Digit8', name: 'Zhangjiajie',     lat: 29.3158, lon: 110.4344 },
   { key: 'Digit9', name: 'Aoraki / Mt Cook', lat: -43.5950, lon: 170.1418 },
 ];
+
+/**
+ * B3 IS A TOUR, NOT A PLACE. Press it again to move to the next district.
+ *
+ * Geoff: "I don't see the Burj Khalifa and downtown area where it should be."
+ *
+ * It was there — the bake puts the tower within 43 m of its real coordinates — but B3 landed in the
+ * Marina, and Downtown is EIGHTEEN AND A HALF KILOMETRES from the Marina. That is a grey box a
+ * degree and a half wide on the horizon, which is not "seeing the Burj Khalifa", and no amount of
+ * walking makes it a reasonable way to reach it.
+ *
+ * Since all four districts are loaded at once and the whole point was to have all four, the key
+ * cycles them. One press per district, in the order they run up the coast.
+ */
+const DUBAI_STOPS: { name: string; lat: number; lon: number; facingDeg: number }[] = [
+  // Facing northeast up the line of the Marina towers, so the skyline is in frame on arrival.
+  { name: 'Dubai Marina', lat: 25.0805, lon: 55.1403, facingDeg: 45 },
+  // The Palm's trunk, looking out along the fronds — the one place the islands read as islands.
+  { name: 'Palm Jumeirah', lat: 25.1124, lon: 55.1390, facingDeg: 300 },
+  // Standing off the Burj Khalifa, far enough back that all 522 m of it fits above a Kaiju's eye
+  // line, and facing it. Closer and you are inside the podium looking at a wall.
+  { name: 'Downtown / Burj Khalifa', lat: 25.1880, lon: 55.2650, facingDeg: 40 },
+  // Sheikh Zayed Road, looking down the canyon of towers that lines it.
+  { name: 'Sheikh Zayed Road', lat: 25.2175, lon: 55.2825, facingDeg: 225 },
+];
+let dubaiStop = -1;
 
 /**
  * THE SCALE SHOT — camera at human eye height with the crowd between you and the Kaiju.
@@ -311,7 +338,12 @@ export function KaijuLabController() {
           if (!site) break;
           // 2 is the Grand Canyon SCALE SHOT, per Geoff. The others are ordinary battles.
           if (e.code === 'Digit2') startScaleView(camera, site.lat, site.lon, site.name, site.facingDeg);
-          else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
+          // 3 tours Dubai's four districts, one per press — see DUBAI_STOPS.
+          else if (e.code === 'Digit3') {
+            dubaiStop = (dubaiStop + 1) % DUBAI_STOPS.length;
+            const s = DUBAI_STOPS[dubaiStop];
+            startArenaHere(camera, s.lat, s.lon, `${s.name}  (B3 again for the next district)`, s.facingDeg);
+          } else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
           break;
         }
         // O — OUTLINE THE COLLIDERS. See KaijuColliderDebug: four wrong diagnoses in a row about

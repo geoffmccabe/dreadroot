@@ -120,7 +120,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // there is exactly one thing lighting this map and the panel's Fill sliders actually control it.
   // With the panel's master switch off, GlobeLighting emits the identical fill this used to add, so
   // nothing changes until somebody asks for it.
-  const isBlank = kind === 'flat' || isHeightmap;
+  // THE GLOBE IS BLANK, AND IT HAS TO STAY IN THIS LINE. It was dropped from here once already and
+  // came straight back as Geoff's "there's now a center panel that says 'Loading 1673 object types'
+  // and it's not disappearing" — because without it, WorldObjectsLayer mounts on the Mini Earth and
+  // starts placing the Bleakrock lobby's trees and rocks on a planet that has none. The lighting
+  // meaning that motivated removing it lives in `wantsFillLight` below; do not merge them again.
+  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
   /**
    * Does this map want the builder-map fill light?
    *
