@@ -627,8 +627,21 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
     });
     for (const n of pending) {
       const key = idKey(n);
-      const d = dataFor(n, mf.maxLevel);
-      if (!hasTile(n.face, d.level, d.tx, d.ty)) { void requestTile(n.face, d.level, d.tx, d.ty); continue; }
+      // THE GATE HAS TO ASK FOR WHAT THE BUILDER ACTUALLY NEEDS.
+      //
+      // Geoff, at Dubai: "there's nothing at all. Just a big square hole in the terrain."
+      //
+      // This used to demand the IDEAL tile — dataFor(n, maxLevel) — and `continue` without it.
+      // buildPatchGeometry does not need the ideal tile: it calls resolveLevel and builds from
+      // whatever is resident, deliberately, so that ground outside a landmark region still has a
+      // surface. The gate and the builder disagreed, and the gate won.
+      //
+      // Outside the 225 detail regions the ideal level is 5 or deeper and DOES NOT EXIST, so the
+      // gate refused forever and the patch was never built at all. Not flat ground — no ground.
+      // A square hole, exactly where the tree had subdivided far enough to want data that is not
+      // there. The split logic had been fixed to fall back; this had not, so they disagreed about
+      // what "ready" meant and the hole was the difference between them.
+      if (resolveLevel(n, mf.maxLevel) < 0) continue;
 
       building.current.add(key);
       enqueueJob(`earth:${key}`, () => {

@@ -102,5 +102,33 @@ for (let l = 1; l <= GLOBAL_MAX; l++) {
   ok(lv === 10, 'and inside a landmark region it goes all the way to the finest data', `level ${lv}`);
 }
 
+// --- THE HOLE ------------------------------------------------------------------------------------
+//
+// A patch is only built if the terrain loop agrees it CAN be. That gate used to ask for the IDEAL
+// tile, while the builder itself asks resolveLevel and is happy with whatever is resident. Outside a
+// landmark the ideal level does not exist, so the gate refused forever and the patch was never built
+// at all — not flat ground, NO ground. A square hole.
+//
+// The property that matters is that anything the builder can build from, the gate lets through. Both
+// now ask resolveLevel, so the test is that resolveLevel says yes for a deep patch in a region with
+// only the global levels.
+{
+  clearEarthTiles();
+  const deep: NodeId = { face: 1, depth: 12, x: 999, y: 1777 };
+  __putTileForTest(tileKey(deep.face, 0, 0, 0), tiny);
+  for (let frame = 0; frame < 30; frame++) {
+    resolveLevel(deep, 10);
+    for (let l = 0; l <= 10; l++) {
+      const shift = deep.depth - l;
+      const k = tileKey(deep.face, l, deep.x >> shift, deep.y >> shift);
+      if (!__wouldRequestForTest(k)) continue;
+      if (l <= GLOBAL_MAX) __putTileForTest(k, tiny); else __noteStatusForTest(k, 404);
+    }
+  }
+  ok(resolveLevel(deep, 10) >= 0,
+     'a deep patch outside a landmark can still be BUILT — this is the square hole',
+     `resolveLevel says ${resolveLevel(deep, 10)}`);
+}
+
 console.log(`\n${failures === 0 ? 'TERRAIN DETAIL CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
 process.exit(failures === 0 ? 0 : 1);
