@@ -15,6 +15,8 @@ import {
   subscribeArena, arenaVersion, type Agent,
 } from './kaijuArena';
 import { WEAPONS } from './kaijuWeapons';
+import { KaijuMiniMap } from './KaijuMiniMap';
+import { panelLeft, panelStyle, kaijuColour, TRACKER_TOP } from './kaijuPanelLayout';
 
 /** Plain words for each action, so the panel reads like a sentence rather than an enum. */
 const ACTION_WORDS: Record<string, string> = {
@@ -111,23 +113,21 @@ function AgentBlock({ a }: { a: Agent }) {
   );
 }
 
-/**
- * Starting x for a panel docked to the RIGHT edge.
- *
- * The Kaiju panels used to open on the left, where they formed a second column on top of the
- * game's own HUD and covered the view. They are still draggable; this only changes where they
- * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
- */
-function rightEdge(width: number, margin = 16): number {
-  if (typeof window === 'undefined') return margin;
-  return Math.max(margin, window.innerWidth - width - margin);
-}
-
 export function KaijuTrackerPanel() {
-  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(340), top: 430 });
+  const { pos, handleProps } = useDraggablePanel({ left: panelLeft(), top: TRACKER_TOP });
   const [, tick] = useState(0);
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(true);
+  /**
+   * WHICH KAIJU'S STATS TO SHOW. Geoff: "make it half the size vertically and tabs to select the
+   * Kaiju's stats to show."
+   *
+   * Four full read-outs stacked was most of the panel's height, and three quarters of it was about
+   * creatures you were not watching. Held as an ID rather than an index so restarting the fight —
+   * which rebuilds the agent array — cannot leave the tab pointing at a different creature than the
+   * one it names.
+   */
+  const [tab, setTab] = useState<string | null>(null);
 
   // Appear the instant a battle starts, then repaint a few times a second. The simulation runs at
   // frame rate; re-rendering this panel that often would cost more than the fight does.
@@ -140,6 +140,9 @@ export function KaijuTrackerPanel() {
   if (!arenaStarted()) return null;
   const agents = getAgents();
   const events = getEvents();
+  // Defaults to YOU, which is the one you want nine times out of ten, and falls back to the first
+  // if the selected Kaiju is gone (a restart, or a different roster).
+  const selected = agents.find((a) => a.id === tab) ?? agents.find((a) => a.isPlayer) ?? agents[0];
 
   const copy = () => {
     const text = arenaReport();
@@ -159,14 +162,10 @@ export function KaijuTrackerPanel() {
 
   return (
     <div
-      style={{
-        position: 'fixed', left: pos.left, top: pos.top, width: 340,
-        maxHeight: '75vh', overflowY: 'auto',
-        color: 'var(--pt-debug-body-color)', font: 'var(--pt-debug-body-size) var(--pt-debug-body-family)',
-        background: 'var(--pt-debug-bg)', border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
-        borderRadius: 'var(--pt-debug-radius)', padding: '8px 10px', pointerEvents: 'auto',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.5)', zIndex: 41,
-      }}
+      // HALF the vertical size, as asked: 75vh became 37vh. That is affordable only because the
+      // tabs above show one Kaiju instead of four — halving the box without halving the contents
+      // would just have made it a scrollbar.
+      style={panelStyle(pos.left, pos.top, 41, '37vh')}
     >
       <div {...handleProps} style={{ ...handleProps.style, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <strong>Kaiju tracker · {arenaClock().toFixed(0)}s</strong>
@@ -179,9 +178,39 @@ export function KaijuTrackerPanel() {
 
       {open && (
         <>
-          {agents.map((a) => <AgentBlock key={a.id} a={a} />)}
+          {/* Three kilometres by two, looking down, centred on you. */}
+          <KaijuMiniMap agents={agents} selectedId={selected?.id ?? null} />
+
+          {/* One tab per Kaiju, coloured to match its dot on the map above — which is the only
+              thing that makes the dots readable without a legend. */}
+          <div style={{ display: 'flex', gap: 3, marginBottom: 6, flexWrap: 'wrap' }}>
+            {agents.map((a, i) => {
+              const on = a.id === selected?.id;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => setTab(a.id)}
+                  style={{
+                    flex: 1, minWidth: 62, cursor: 'pointer', font: 'inherit',
+                    fontSize: '0.86em', padding: '2px 4px', borderRadius: 4,
+                    color: 'inherit', opacity: a.alive ? 1 : 0.45,
+                    background: on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.05)',
+                    // The colour lives in the BOTTOM border rather than the text, so a dead Kaiju
+                    // greying out does not also lose the thing that identifies it.
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    borderBottom: `2px solid ${kaijuColour(i)}`,
+                  }}
+                >
+                  {a.name}{a.isPlayer ? '*' : ''}
+                </button>
+              );
+            })}
+          </div>
+
+          {selected && <AgentBlock a={selected} />}
+
           <div style={{ opacity: 0.85, marginBottom: 3 }}>What has happened</div>
-          <div style={{ opacity: 0.72, fontSize: '0.9em', maxHeight: 130, overflowY: 'auto' }}>
+          <div style={{ opacity: 0.72, fontSize: '0.9em', maxHeight: 90, overflowY: 'auto' }}>
             {events.slice(-14).reverse().map((e, i) => (
               <div key={`${e.t}-${i}`}>{e.t.toFixed(1)}s · {e.text}</div>
             ))}

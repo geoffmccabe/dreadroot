@@ -8,6 +8,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
+import { panelLeft, panelStyle, LAB_TOP, LAB_MAX_H } from './kaijuPanelLayout';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { earthTileStats } from './earthTiles';
 import { terrainDiag } from './GlobeTerrain';
@@ -35,23 +36,11 @@ function fmtReal(units: number): string {
   return metres >= 1000 ? `${(metres / 1000).toFixed(2)} km` : `${Math.round(metres)} m`;
 }
 
-/**
- * Starting x for a panel docked to the RIGHT edge.
- *
- * The Kaiju panels used to open on the left, where they formed a second column on top of the
- * game's own HUD and covered the view. They are still draggable; this only changes where they
- * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
- */
-function rightEdge(width: number, margin = 16): number {
-  if (typeof window === 'undefined') return margin;
-  return Math.max(margin, window.innerWidth - width - margin);
-}
-
 export function KaijuLabHud() {
   const s = useSyncExternalStore(subscribeKaijuLab, getKaijuLab, getKaijuLab);
   const walking = useSyncExternalStore(subscribeKaijuWalk, isKaijuWalkActive, isKaijuWalkActive);
   const lm = useSyncExternalStore(subscribeLandmark, currentLandmark, currentLandmark);
-  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(268), top: 90 });
+  const { pos, handleProps } = useDraggablePanel({ left: panelLeft(), top: LAB_TOP });
   // Repaint a few times a second: the terrain diagnostics below are live values, and this panel
   // otherwise only redraws when the lab state changes — which would show them permanently stale,
   // i.e. exactly as useless as not having them.
@@ -70,13 +59,11 @@ export function KaijuLabHud() {
 
   return (
     <div
-      style={{
-        position: 'fixed', left: pos.left, top: pos.top, width: 268,
-        color: 'var(--pt-debug-body-color)', font: 'var(--pt-debug-body-size) var(--pt-debug-body-family)',
-        background: 'var(--pt-debug-bg)', border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
-        borderRadius: 'var(--pt-debug-radius)', padding: '8px 10px', pointerEvents: 'auto',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.5)', zIndex: 40,
-      }}
+      // A QUARTER OF THE HEIGHT, as asked, and scrolling rather than truncated. Nothing has been
+      // deleted: this panel is the only place several diagnostics exist, and the last time one was
+      // removed for tidiness a bug went unnoticed for weeks because the number that would have shown
+      // it was gone. Same width as the tracker, so the three form one column.
+      style={panelStyle(pos.left, pos.top, 40, LAB_MAX_H)}
     >
       <div {...handleProps} style={{ cursor: 'move', fontWeight: 700, marginBottom: 6 }}>
         MINI EARTH - KAIJU LAB

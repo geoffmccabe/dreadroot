@@ -14,6 +14,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
+import { panelLeft, panelStyle, TALK_TOP, TALK_MAX_H } from './kaijuPanelLayout';
 import {
   commandKaiju, playerOrderState, arenaStarted, subscribeArena, arenaVersion, getAgents,
 } from './kaijuArena';
@@ -57,20 +58,8 @@ const LANGS: [string, string][] = [
 /** Things worth trying, shown when the box is empty. */
 const SUGGESTIONS = ['attack it', 'back off', 'take cover', 'hold', 'follow me', 'do what you want'];
 
-/**
- * Starting x for a panel docked to the RIGHT edge.
- *
- * The Kaiju panels used to open on the left, where they formed a second column on top of the
- * game's own HUD and covered the view. They are still draggable; this only changes where they
- * start. Falls back to a sane left position if there is no window (SSR) or the screen is narrow.
- */
-function rightEdge(width: number, margin = 16): number {
-  if (typeof window === 'undefined') return margin;
-  return Math.max(margin, window.innerWidth - width - margin);
-}
-
 export function KaijuCommandPanel() {
-  const { pos, handleProps } = useDraggablePanel({ left: rightEdge(320), top: 90 });
+  const { pos, handleProps } = useDraggablePanel({ left: panelLeft(), top: TALK_TOP });
   useSyncExternalStore(subscribeArena, arenaVersion, arenaVersion);
   const [text, setText] = useState('');
   const [lang, setLang] = useState('en-US');
@@ -139,16 +128,11 @@ export function KaijuCommandPanel() {
 
   return (
     <div
-      style={{
-        position: 'fixed', left: pos.left, top: pos.top, width: 320,
-        color: 'var(--pt-debug-body-color)', font: 'var(--pt-debug-body-size) var(--pt-debug-body-family)',
-        background: 'var(--pt-debug-bg)', border: 'var(--pt-debug-border-w) solid var(--pt-debug-border)',
-        borderRadius: 'var(--pt-debug-radius)', padding: '8px 10px', pointerEvents: 'auto',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.5)', zIndex: 42,
-      }}
+      // Top of the column, same width as the other two. See kaijuPanelLayout.
+      style={panelStyle(pos.left, pos.top, 42, TALK_MAX_H)}
     >
       <div {...handleProps} style={{ ...handleProps.style, marginBottom: 6 }}>
-        <strong>Tell your Kaiju</strong>
+        <strong>Talk to Kaiju</strong>
         {me && <span style={{ opacity: 0.6 }}> · obedience {me.build.obedience}</span>}
       </div>
 
