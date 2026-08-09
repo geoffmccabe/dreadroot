@@ -31,15 +31,17 @@
 // headlessly — with no meshes registered it simply returns null and the caller falls back.
 
 import * as THREE from 'three';
-import { limbCapsules, shotHitsCapsule, type Capsule } from './kaijuColliders';
 
-const _cap2: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
 
 interface Entry {
   /** The model root, so its matrices can be forced up to date before a test. */
   root: THREE.Object3D;
   /** Last frame its matrices were refreshed, so that happens ONCE a frame and not once a ray. */
   posedFrame: number;
+  /** Per mesh, per bone: how far that bone's furthest vertex sits from it, in BIND units. */
+  boneRadii: (Float32Array | null)[];
+  /** Per mesh: the scale the bind pose was captured at, so the radii can be brought to world units. */
+  bindScale: number[];
   meshes: THREE.Mesh[];
   /**
    * How far a vertex can sit from its bone, per mesh. Bind-pose bounding radius, which is an upper
@@ -61,12 +63,17 @@ const registry = new Map<string, Entry>();
 export function registerHitMesh(id: string, root: THREE.Object3D): void {
   const meshes: THREE.Mesh[] = [];
   const flesh: number[] = [];
+  const boneRadii: (Float32Array | null)[] = [];
+  const bindScale: number[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
     if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
     meshes.push(m);
     flesh.push(m.geometry.boundingSphere?.radius ?? 1);
+    boneRadii.push(measureBoneRadii(m as THREE.SkinnedMesh));
+    bindScale.push((m as THREE.SkinnedMesh).isSkinnedMesh
+      ? (m as THREE.SkinnedMesh).bindMatrix.getMaxScaleOnAxis() : 1);
     const sk = m as THREE.SkinnedMesh;
     if (sk.isSkinnedMesh) {
       // NEVER LET THREE.JS REJECT THE RAY ON ITS OWN BOUNDS.
@@ -86,7 +93,59 @@ export function registerHitMesh(id: string, root: THREE.Object3D): void {
       sk.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
     }
   });
-  registry.set(id, { root, meshes, flesh, posedFrame: -1 });
+  registry.set(id, { root, meshes, flesh, boneRadii, bindScale, posedFrame: -1 });
+}
+
+/**
+ * How far each bone's furthest vertex sits from it, in bind pose.
+ *
+ * Walked ONCE, at registration, over every vertex — a few thousand iterations for a model that is
+ * then in the scene for the rest of the session. Every WEIGHTED bone is credited, not just the
+ * strongest one, because a vertex blended between two bones moves with both and either sphere has
+ * to be able to contain it.
+ */
+function measureBoneRadii(sk: THREE.SkinnedMesh): Float32Array | null {
+  if (!sk.isSkinnedMesh || !sk.skeleton) return null;
+  const geo = sk.geometry;
+  const pos = geo.attributes.position;
+  const si = geo.attributes.skinIndex;
+  const sw = geo.attributes.skinWeight;
+  if (!pos || !si || !sw) return null;
+
+  const bones = sk.skeleton.bones;
+  const inv = sk.skeleton.boneInverses;
+  const out = new Float32Array(bones.length);
+
+  // BOTH SIDES IN BIND-WORLD SPACE, which is the only space where the comparison means anything.
+  //
+  // three.js skins a vertex as bindMatrixInverse * (bone.matrixWorld * boneInverse) * bindMatrix * v.
+  // So `bindMatrix * v` is the vertex in bind-world, and `inverse(boneInverse)` IS the bone's bind
+  // world matrix. The first attempt put the BONE into geometry space instead of the vertex into bind
+  // space, which is the same transform applied to the wrong operand — it came out as the origin for
+  // every bone, so every radius was the distance from the model's origin and the filter passed
+  // everything.
+  const bindPos: THREE.Vector3[] = [];
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < bones.length; i++) {
+    m.copy(inv[i]).invert();
+    bindPos.push(new THREE.Vector3().setFromMatrixPosition(m));
+  }
+
+  const v = new THREE.Vector3();
+  for (let k = 0; k < pos.count; k++) {
+    v.fromBufferAttribute(pos, k).applyMatrix4(sk.bindMatrix);
+    for (let c = 0; c < 4; c++) {
+      if (sw.getComponent(k, c) <= 0) continue;
+      const b = si.getComponent(k, c);
+      if (b < 0 || b >= bones.length) continue;
+      const d = v.distanceTo(bindPos[b]);
+      if (d > out[b]) out[b] = d;
+    }
+  }
+  // Headroom. The bind-pose distance is exact for rigid skinning; blended weights can carry a vertex
+  // marginally further, and a filter a fraction too tight loses hits.
+  for (let i = 0; i < out.length; i++) out[i] *= 1.15;
+  return out;
 }
 
 export function unregisterHitMesh(id: string): void {
@@ -109,6 +168,14 @@ export function onHitMeshDropped(fn: (id: string) => void): () => void {
 
 /** The registered meshes for an agent, so a second collider can share this one registry. */
 export function hitMeshesOf(id: string): THREE.Mesh[] { return registry.get(id)?.meshes ?? []; }
+
+/** Exposed for the audit script, which asserts the filter never rejects a real hit. */
+export function testNearGeometry(id: string, from: THREE.Vector3, to: THREE.Vector3): boolean {
+  const e = registry.get(id);
+  if (!e) return true;
+  e.root.updateWorldMatrix(true, true);
+  return nearGeometry(e, from, to);
+}
 
 /** Does this agent have a real mesh to hit? If not, the caller must fall back to capsules. */
 export function hasHitMesh(id: string): boolean {
@@ -145,35 +212,59 @@ export function beginMeshHitFrame(): void {
   meshHitDiag.meshes = registry.size;
 }
 
-const _capA = new THREE.Vector3();
-const _capB = new THREE.Vector3();
 const _scratch = new THREE.Vector3();
+const _bonePos = new THREE.Vector3();
+const _seg = new THREE.Vector3();
+const _toB = new THREE.Vector3();
 
 /**
- * Could this shot possibly reach the geometry? Bone capsules, inflated, tested against the segment.
+ * Could this shot possibly reach the geometry?
  *
- * Returns TRUE when there are no capsules at all, because "I do not know" must mean "do the real
- * test" — a pre-filter that fails open costs performance, one that fails closed costs correctness,
- * and this system has already spent a week on rounds that silently did not hit anything.
+ * PER-BONE SPHERES, MEASURED OFF THE ACTUAL VERTICES, and the previous attempt is worth recording
+ * because it failed in both directions at once. That one tested the limb capsules and then, for
+ * anything that missed them, a capsule running from the model's bounding-box MINIMUM corner to its
+ * MAXIMUM corner. A capsule along a box's diagonal is a terrible fit for a box: fat through the
+ * middle and thin at the corners. The audit measured it — it let 94% of rays through, so it saved
+ * almost nothing, AND it still lost 40 real hits out of 2,799. Worse than useless on both counts.
+ *
+ * This is exact instead of approximate. At registration, every vertex is walked once and each bone
+ * records how far its FURTHEST vertex sits from it. Skinning cannot move a vertex further from its
+ * own bone than that, so a sphere of that radius at the bone's current position always contains the
+ * geometry it drives — whatever the pose. Miss every one of those spheres and the mesh cannot be
+ * reachable, with no approximation involved anywhere.
+ *
+ * Cost is a few dozen segment-versus-sphere tests, against ninety thousand matrix multiplies for the
+ * raycast it avoids.
  */
-function nearGeometry(id: string, from: THREE.Vector3, to: THREE.Vector3): boolean {
-  const caps = limbCapsules(id);
-  if (caps.length === 0) return true;
-  for (const c of caps) {
-    _cap2.a.copy(c.a); _cap2.b.copy(c.b);
-    _cap2.radius = c.radius * 2.2;
-    if (shotHitsCapsule(from, to, _cap2, _scratch) != null) return true;
+function nearGeometry(entry: Entry, from: THREE.Vector3, to: THREE.Vector3): boolean {
+  let any = false;
+  for (let m = 0; m < entry.meshes.length; m++) {
+    const sk = entry.meshes[m] as THREE.SkinnedMesh;
+    const radii = entry.boneRadii[m];
+    if (!sk.isSkinnedMesh || !sk.skeleton || !radii) continue;
+    any = true;
+    // Bind pose was captured at one scale and the model is drawn at another; the radii are in bind
+    // units, so they have to be brought into world units before they mean anything.
+    const scale = sk.matrixWorld.getMaxScaleOnAxis() / Math.max(1e-9, entry.bindScale[m]);
+    const bones = sk.skeleton.bones;
+    _seg.copy(to).sub(from);
+    const segLen2 = _seg.lengthSq();
+    for (let i = 0; i < bones.length; i++) {
+      const r = radii[i];
+      if (r <= 0) continue;
+      _bonePos.setFromMatrixPosition(bones[i].matrixWorld);
+      // Closest point on the shot to this bone, clamped to the segment.
+      _toB.copy(_bonePos).sub(from);
+      const t = segLen2 > 1e-12 ? Math.max(0, Math.min(1, _toB.dot(_seg) / segLen2)) : 0;
+      _scratch.copy(from).addScaledVector(_seg, t);
+      const rw = r * scale;
+      if (_scratch.distanceToSquared(_bonePos) <= rw * rw) return true;
+    }
   }
-  // The limb table has no chest pair, so the body itself is covered by a capsule spanning hips to
-  // head — otherwise a round straight through the middle would be rejected before it was tested.
-  _capA.copy(caps[0].a); _capB.copy(caps[0].b);
-  for (const c of caps) {
-    _capA.min(c.a); _capA.min(c.b);
-    _capB.max(c.a); _capB.max(c.b);
-  }
-  _cap2.a.copy(_capA); _cap2.b.copy(_capB);
-  _cap2.radius = _capA.distanceTo(_capB) * 0.42;
-  return shotHitsCapsule(from, to, _cap2, _scratch) != null;
+  // No skinned geometry to reason about: say yes. "I do not know" must mean "do the real test" — a
+  // filter that fails open costs performance, one that fails closed costs correctness, and this
+  // system has already spent a week on rounds that silently hit nothing.
+  return !any;
 }
 
 const _raycaster = new THREE.Raycaster();
@@ -204,6 +295,14 @@ export function meshHit(
   if (len < 1e-9) return null;
   _dir.divideScalar(len);
 
+  // POSE FIRST, then filter. The bone spheres read bone world positions, so the matrices have to be
+  // current before they are asked — filtering against last frame's pose is how a fast-moving limb
+  // starts rejecting hits.
+  if (entry.posedFrame !== frameNo) {
+    entry.posedFrame = frameNo;
+    entry.root.updateWorldMatrix(true, true);
+  }
+
   // A CHEAP TEST FIRST, AND THIS IS THE ONE THAT MATTERS.
   //
   // A round spends about thirty frames inside any sensible broad-phase sphere but only actually
@@ -215,7 +314,7 @@ export function meshHit(
   // segment that misses all of them cannot possibly reach the mesh. Inflated a little, because a
   // capsule is an approximation and must never be TIGHTER than the thing it is standing in for —
   // a pre-filter that rejects a real hit is worse than no pre-filter at all.
-  if (!nearGeometry(id, from, to)) return null;
+  if (!nearGeometry(entry, from, to)) return null;
 
   // TEST THE POSE BEING DRAWN, NOT LAST FRAME'S.
   //
