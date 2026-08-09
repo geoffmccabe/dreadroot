@@ -34,8 +34,18 @@ const _WORLD_X = new THREE.Vector3(1, 0, 0);
  * still answers rather than returning null. Null only if nothing at all is loaded there.
  */
 export function sampleGlobeElevation(x: number, y: number, z: number): number | null {
+  // A CITY KNOWS IT IS ON LAND BEFORE ANY TERRAIN DATA EXISTS, and this has to come FIRST.
+  //
+  // The manifest guard below returns null when the tile index has not arrived yet — which is
+  // precisely the moment B3 runs: the number key places the Kaiju immediately, long before the
+  // planet has streamed anything. With the override further down, arrival fell through to
+  // placeBodyOnSurface's "no ground known" fallback and dropped the Kaiju at 1 m above SEA LEVEL,
+  // on a map where the drawn seabed is 87 m below it. Declaring the city's ground does not depend
+  // on a download.
+  const cityM = cityBaseMetres(x, y, z, null);
+
   const mf = getManifest();
-  if (!mf) return null;
+  if (!mf) return cityM;
 
   const { face, u, v } = directionToFaceUv(x, y, z);
 
@@ -53,8 +63,8 @@ export function sampleGlobeElevation(x: number, y: number, z: number): number | 
     // coarse data puts it 87 m under water, so without this the Kaiju spawns on the seabed.
     return cityBaseMetres(x, y, z, sampleTileBilinear(tile, fx, fy));
   }
-  // Even with no tile loaded, a city still knows it is on land.
-  return cityBaseMetres(x, y, z, null);
+  // No tile at any level — but if this is a city, we still know.
+  return cityM;
 }
 
 /**

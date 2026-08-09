@@ -111,10 +111,26 @@ function CityMesh({ city }: { city: City }) {
   }, [city]);
 
   // Drawn only when you are near enough for it to be a city rather than a smudge.
+  //
+  // WRAPPED, AND THE REASON MATTERS. An error boundary catches a throw during RENDER; it cannot
+  // catch one inside a frame callback. A frame callback that throws takes react-three-fiber's loop
+  // with it — so every OTHER callback stops too, including the one that drives the camera and the
+  // one that moves the Kaiju. The symptom is "I can't move and the camera doesn't move either",
+  // which points at the controls and never at the decorative layer that actually did it.
+  //
+  // The city is scenery. It is never worth freezing the game for, so it fails once, says so, and
+  // stops trying.
+  const broken = useRef(false);
   useFrame(() => {
     const g = group.current;
-    if (!g) return;
-    g.visible = cityDistanceUnits(camera.position) < DRAW_WITHIN_UNITS;
+    if (!g || broken.current) return;
+    try {
+      g.visible = cityDistanceUnits(camera.position) < DRAW_WITHIN_UNITS;
+    } catch (err) {
+      broken.current = true;
+      g.visible = false;
+      console.error('[city] hidden after a frame error', err);
+    }
   });
 
   return (

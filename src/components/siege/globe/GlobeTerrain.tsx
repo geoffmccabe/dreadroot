@@ -31,6 +31,7 @@ import {
   loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
 import { detailMetres } from './globeDetail';
+import { cityBaseMetres } from './cityGround';
 import { sampleGlobeElevation } from './globeGround';
 // PATCH, DATA_LAG, dataFor and the node-key helpers live in globePatchIndex so that the ground
 // sampler and this mesh builder cannot drift apart. They used to be defined here and re-derived
@@ -219,7 +220,15 @@ function buildPatchGeometry(
       const isSkirt = isSkirtRow || i === 0 || i === side - 1;
 
       faceUvToDirection(n.face, u0 + ii * du, v0 + jj * dv, dir);
-      const baseM = sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride);
+      // THROUGH cityBaseMetres — the same call the ground sampler and the patch index make.
+      //
+      // RE-APPLIED after a revert took it out with an unrelated change, and the symptom is worth
+      // recording: the sampler and the patch index still said Dubai was at +6 m while the MESH went
+      // back to drawing it at -87 m. Ninety-three metres between where the ground is drawn and where
+      // the Kaiju stands on it. This is the third time these three have had to be kept in step, and
+      // every time they drift the failure looks like something else entirely.
+      const baseM = cityBaseMetres(dir[0], dir[1], dir[2],
+        sampleTileBilinear(tile, d.ox + ii * d.stride, d.oy + jj * d.stride)) ?? 0;
       // Procedural amplification: the measured data is one sample per 2.44 km, which is a flat
       // plane at creature scale. This adds the detail no global dataset can supply, band-limited
       // to what this patch can represent. Same function the ground sampler uses, so the Kaiju
