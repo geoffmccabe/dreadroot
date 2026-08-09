@@ -72,9 +72,15 @@ export function applyCityWindows(material: THREE.Material, timeRef: { value: num
         // The box is a unit cube translated so its base is at y=0, so local position maps straight
         // to a fraction of the building. Multiply by the real size to get metres.
         vec3 n = abs(vLocalNormal);
-        // ROOFS HAVE NO WINDOWS. Without this the grid wraps over the top of every tower and the
-        // city reads as a circuit board from above — which is the angle a flying Kaiju sees most.
-        if (n.y < 0.5) {
+        // ROOFS HAVE NO WINDOWS — but this is a MASK, not an "if", and that distinction is load
+        // bearing. fwidth compares a value against its neighbours in a 2x2 block of pixels, so it is
+        // only defined when all four take the same path through the shader. Wrapping the code below
+        // in a branch on the face normal means the pixels along every roof edge disagree about
+        // whether to run it, and the derivative there is formally undefined — in practice a bright
+        // or black fringe along the top of every building. Computing it for all pixels and throwing
+        // away the roof ones at the end costs a few instructions and is always correct.
+        float wall = 1.0 - step(0.5, n.y);
+        {
           // Which way is "across" this face: x for the north/south faces, z for east/west.
           float acrossM = n.z > n.x ? vSize.x : vSize.z;
           float alongU  = n.z > n.x ? (vLocalPos.x + 0.5) : (vLocalPos.z + 0.5);
@@ -85,9 +91,41 @@ export function applyCityWindows(material: THREE.Material, timeRef: { value: num
           vec2 id = floor(cell);
           vec2 f = fract(cell);
 
-          // The window itself: a margin of wall around each pane, so there is structure between
-          // them rather than one continuous band of glass.
-          float win = step(0.18, f.x) * step(f.x, 0.82) * step(0.22, f.y) * step(f.y, 0.80);
+          // ANTI-ALIASING, and this is the whole reason the next twenty lines are not four.
+          //
+          // Geoff: "the texture is flickering like crazy as I move around... detailed textures at a
+          // distance flicker and scintillate in a very bad way."
+          //
+          // That is aliasing, and a procedural pattern gets the worst possible case of it. An image
+          // texture has MIPMAPS — the GPU keeps pre-averaged smaller copies and picks one to match
+          // how big the texture is on screen, so a distant wall samples a blur instead of stabbing
+          // at one pixel of the full-resolution image. A pattern computed in the shader has no
+          // smaller copies to fall back on, so every pixel keeps asking "am I inside a window?" of a
+          // four-metre grid that by then is a third of a pixel wide. Sub-pixel camera movement flips
+          // the answer, and it flips independently for every pixel. That is the scintillation.
+          //
+          // fwidth gives the answer mipmaps would: how much of the pattern falls inside THIS pixel.
+          // Two things then follow from it.
+          // CLAMPED, because a 2x2 pixel block straddling a building's vertical corner spans two
+          // faces whose cell values are unrelated, and the derivative there comes out enormous.
+          // Left alone that single pixel line would read as fully-averaged wall down every corner of
+          // every tower. Capping at four cells keeps the corner in range without affecting anything
+          // that is genuinely far away, where the interesting values are well under one.
+          vec2 w = min(fwidth(cell), vec2(4.0)) + 1e-5;
+
+          // ONE — soften the window edges by exactly a pixel, so an edge crossing a pixel is a grey
+          // pixel rather than a coin toss between wall and glass.
+          float win =
+              smoothstep(0.18 - w.x, 0.18 + w.x, f.x) * (1.0 - smoothstep(0.82 - w.x, 0.82 + w.x, f.x))
+            * smoothstep(0.22 - w.y, 0.22 + w.y, f.y) * (1.0 - smoothstep(0.80 - w.y, 0.80 + w.y, f.y));
+
+          // TWO — and this is the part that actually kills it. Once a whole window is near a pixel,
+          // no amount of edge softening helps, because the LIT/UNLIT choice is random per window and
+          // random per-pixel noise is the worst thing you can put on screen. So past that point stop
+          // resolving individual windows at all and fade to their average, which is what a mipmap
+          // would have handed back anyway. The wall keeps its overall brightness; it just stops
+          // pretending to resolve detail it cannot.
+          float detail = 1.0 - smoothstep(0.30, 0.85, max(w.x, w.y));
 
           float h = hash21(id + vSeed * 71.7);
           // A little over half the windows are lit, which is what an occupied tower looks like.
@@ -101,11 +139,24 @@ export function applyCityWindows(material: THREE.Material, timeRef: { value: num
             lit = step(0.5, fract(uTime / period + h * 17.0));
           }
 
+          // FADE TO THE AVERAGE, not to nothing. These two constants are the mean of the things they
+          // replace: 0.64 x 0.58 of each cell is glass, and 56% of the windows are lit. Blending
+          // toward them means a tower seen from ten kilometres has the same overall brightness as one
+          // seen from ten metres — it simply stops resolving which windows. Fading to zero instead
+          // would make the whole city visibly darken as you backed away from it.
+          const float MEAN_WIN = 0.371;
+          const float MEAN_LIT = 0.56;
+          float winF = mix(MEAN_WIN, win, detail);
+          float litF = mix(MEAN_LIT, lit, detail);
+
           // Warm inside, and slightly different per window — offices are cooler, homes warmer.
-          vec3 glow = mix(vec3(1.0, 0.82, 0.52), vec3(0.78, 0.86, 1.0), hash21(id + 9.1));
-          gl_FragColor.rgb += glow * win * lit * 0.85;
+          // The tint is averaged out at distance too, or it would scintillate in colour instead.
+          vec3 glow = mix(vec3(1.0, 0.82, 0.52), vec3(0.78, 0.86, 1.0),
+                          mix(0.5, hash21(id + 9.1), detail));
+          // wall is where the roof pixels get discarded — see the note on it above.
+          gl_FragColor.rgb += glow * winF * litF * 0.85 * wall;
           // Unlit glass is darker than the wall, which is what makes the grid visible by day too.
-          gl_FragColor.rgb *= 1.0 - win * (1.0 - lit) * 0.45;
+          gl_FragColor.rgb *= 1.0 - winF * (1.0 - litF) * 0.45 * wall;
         }
       }`,
     );
