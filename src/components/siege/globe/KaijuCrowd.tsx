@@ -23,7 +23,7 @@
 // flee and some absolutely do not.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { APP_VERSION } from '@/version';
@@ -303,7 +303,19 @@ function Crowd() {
       const obj = SkeletonUtils.clone(source) as THREE.Group;
       obj.traverse((o) => {
         const m = o as THREE.Mesh;
-        if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; m.frustumCulled = false; }
+        if (!m.isMesh) return;
+        m.castShadow = false;
+        m.receiveShadow = false;
+        // FRUSTUM CULLING BACK ON, with a bounding sphere it can trust.
+        //
+        // It was off, so all two hundred figures were skinned and drawn every frame even when they
+        // were behind the camera. It will have been turned off because a SkinnedMesh's bounding
+        // sphere comes from the BIND pose and can be wrong once the model is posed — which makes
+        // figures pop out of existence. Inflating the sphere fixes that properly, rather than paying
+        // for every figure whether or not it is on screen.
+        m.frustumCulled = true;
+        if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+        if (m.geometry.boundingSphere) m.geometry.boundingSphere.radius *= 2.2;
       });
       // THE WHOLE REASON THE CROWD WORKS AT ALL. Without this every vertex of every soldier picks up
       // a third of a metre of noise from being six thousand kilometres out from the world origin —
@@ -360,6 +372,7 @@ function Crowd() {
     };
   }, [figures, people]);
 
+  const camera = useThree((st) => st.camera);
   const _up = useMemo(() => new THREE.Vector3(), []);
   const _side = useMemo(() => new THREE.Vector3(), []);
   const _axis = useMemo(() => new THREE.Vector3(), []);
@@ -429,6 +442,19 @@ function Crowd() {
         p.fwd.applyAxisAngle(_axis, ang);
         p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir)).normalize();
       }
+
+      // DISTANCE CULL, and it is the biggest single saving available here.
+      //
+      // A 1.8 m figure a kilometre and a half away is under a pixel. Skinning it and handing it to
+      // the GPU is pure cost — and hiding it also stops three.js walking its sixty-odd bones, which
+      // is most of the win: two hundred figures is over twelve thousand objects whose matrices are
+      // otherwise recomputed every single frame whether or not anyone can see them.
+      //
+      // The position is from LAST frame, which is correct: a person moves five metres a second and
+      // the threshold is fifteen hundred.
+      const tooFar = f.obj.position.distanceToSquared(camera.position) > CULL_UNITS * CULL_UNITS;
+      if (tooFar) { if (f.obj.visible) f.obj.visible = false; continue; }
+      if (!f.obj.visible) f.obj.visible = true;
 
       // STAGGERED SKINNING. Each figure's mixer advances every third frame with three frames'
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m

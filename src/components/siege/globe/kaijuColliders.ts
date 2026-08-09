@@ -88,15 +88,30 @@ const _b = new THREE.Vector3();
 export function updateRigCapsules(id: string, heightUnits: number): void {
   const rig = rigs.get(id);
   if (!rig) return;
-  rig.capsules.length = 0;
-  for (const p of rig.pairs) {
-    p.from.getWorldPosition(_a);
-    p.to.getWorldPosition(_b);
-    rig.capsules.push({
-      a: _a.clone(), b: _b.clone(),
-      radius: heightUnits * p.radiusFrac,
-      part: p.part,
-    });
+  // WRITE INTO THE CAPSULES THAT ALREADY EXIST.
+  //
+  // This used to empty the list and push a fresh object with two `.clone()`d vectors every time.
+  // Five limbs on five creatures, sixty times a second, is nine thousand objects a second thrown
+  // away — from a function whose entire job is to be called every frame. Geoff's trace shows
+  // twenty seconds of young-generation GC against under four of the old generation, which is the
+  // signature of exactly this: churn, not a leak.
+  //
+  // The list only ever holds one entry per rigged limb, and that count never changes after
+  // registration, so it can simply be filled in place.
+  if (rig.capsules.length !== rig.pairs.length) {
+    rig.capsules.length = 0;
+    for (const p of rig.pairs) {
+      rig.capsules.push({
+        a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: p.part,
+      });
+    }
+  }
+  for (let i = 0; i < rig.pairs.length; i++) {
+    const p = rig.pairs[i];
+    const c = rig.capsules[i];
+    p.from.getWorldPosition(c.a);
+    p.to.getWorldPosition(c.b);
+    c.radius = heightUnits * p.radiusFrac;
   }
 }
 
