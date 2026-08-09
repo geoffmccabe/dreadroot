@@ -27,6 +27,7 @@ import { toRenderX, toRenderY, toRenderZ } from '@/lib/renderSpace';
 import {
   PLANET_RADIUS, METRES_PER_UNIT, faceUvToDirection, tileArcUnits, tileUvRange,
 } from './cubeSphere';
+import { makeTerrainMaterial } from './terrainMaterial';
 import {
   loadManifest, getManifest, getTile, hasTile, requestTile, sampleTileBilinear, clearEarthTiles,
 } from './earthTiles';
@@ -390,7 +391,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   const material = useMemo(
     // fog:false — the sky system's exponential fog is opaque at planetary distances. GlobeCamera
     // nulls scene.fog each frame; this makes a stray frame harmless too.
-    () => new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.FrontSide, fog: false }),
+    () => makeTerrainMaterial(METRES_PER_UNIT),
     [],
   );
 
@@ -594,6 +595,10 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const prev = meshes.current.get(rk);
         if (prev) { groupRef.current?.remove(prev); disposePatch(prev.geometry); }
         const mesh = new THREE.Mesh(rebuilt.geo, material);
+        // The ground takes the Kaiju's shadow, and throws its own: without the second, a ridge in
+        // front of the sun lights the valley behind it, which is what removes all sense of relief.
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
         mesh.frustumCulled = true;
         meshes.current.set(rk, mesh);
         groupRef.current?.add(mesh);
@@ -652,6 +657,8 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         const built = buildPatchGeometry(n, mf.maxLevel);
         if (!built) return true;
         const mesh = new THREE.Mesh(built.geo, material);
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
         builtLevel.current.set(key, built.level);

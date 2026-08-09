@@ -55,6 +55,7 @@ export function GlobeCamera() {
   const scene = useThree((s) => s.scene);
   const saved = useRef<{ near: number; far: number; fog: THREE.Scene['fog']; bg: THREE.Scene['background'] } | null>(null);
   const underwaterCol = useRef(new THREE.Color());
+  const hazeCol = useRef(new THREE.Color());
 
   useEffect(() => {
     saved.current = { near: camera.near, far: camera.far, fog: scene.fog, bg: scene.background };
@@ -94,7 +95,34 @@ export function GlobeCamera() {
       }
       scene.background = col;
     } else {
-      if (scene.fog) scene.fog = null;
+      // AERIAL PERSPECTIVE. Geoff: "recommend a cinematic haze effect... not too thick."
+      //
+      // This used to switch fog OFF above water, and that is most of why the planet reads flat. Air
+      // is not transparent: distant ground loses contrast and takes on the colour of the sky, and
+      // the eye reads that loss as DISTANCE. Remove it and a ridge fifty kilometres away arrives at
+      // exactly the same contrast as the rock at your feet, so the brain puts them at the same
+      // depth. It is the single cheapest thing that makes a landscape feel vast.
+      //
+      // DENSITY FALLS WITH ALTITUDE, which is the part that makes it behave like real air rather
+      // than like a grey filter. Down in the canyon there is a kilometre of atmosphere between you
+      // and the far wall and it goes properly hazy; from orbit there is almost none in the way and
+      // the planet stays crisp. Anything that fogged uniformly would put haze between the camera
+      // and the Earth from space, which looks like a dirty lens.
+      const altKm = Math.max(0, altitude * METRES_PER_UNIT) / 1000;
+      // Halves every 2.5 km, roughly the real atmospheric scale height for haze (aerosols sit much
+      // lower than the air itself, which is why mountains poke out of it).
+      const thin = Math.exp(-altKm / 2.5);
+      // Visibility in units. 55 km at sea level is a clear day; the floor keeps distant terrain
+      // from vanishing entirely when the haze is at its thickest.
+      const visibility = 550 / Math.max(0.06, thin);
+      const col = hazeCol.current.setRGB(0.62, 0.72, 0.86);
+      const f = scene.fog as THREE.FogExp2 | null;
+      if (f && (f as THREE.FogExp2).isFogExp2) {
+        f.color.copy(col);
+        (f as THREE.FogExp2).density = 1 / visibility;
+      } else {
+        scene.fog = new THREE.FogExp2(col.getHex(), 1 / visibility);
+      }
       if (scene.background) scene.background = null;
     }
 

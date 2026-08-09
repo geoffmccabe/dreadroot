@@ -85,7 +85,11 @@ function AgentAvatar({ agent }: { agent: Agent }) {
   // leaves each SkinnedMesh bound to the original skeleton and renders nothing at all.
   const model = useMemo(() => {
     const c = SkeletonUtils.clone(scene) as THREE.Group;
-    c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    // SHADOWS ON, and this is why they looked like cartoons. Every Kaiju explicitly disabled both
+    // flags, so a 300 m creature stood in full sun with nothing beneath it. Casting is the whole
+    // effect; RECEIVING matters nearly as much, because it is what puts an arm's shadow across the
+    // chest and gives the body its own form.
+    c.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     prepareFlash(c);
     return c;
   }, [scene]);

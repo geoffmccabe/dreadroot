@@ -15,6 +15,8 @@ import { FlatGroundLayer } from './FlatGroundLayer';
 import { HeightmapTerrain } from './terrain/HeightmapTerrain';
 import { GlobeTerrain } from './globe/GlobeTerrain';
 import { GlobeCamera } from './globe/GlobeCamera';
+import { GlobeLighting } from './globe/GlobeLighting';
+import { GlobeClouds } from './globe/GlobeClouds';
 import { GlobeStarfield } from './globe/GlobeStarfield';
 import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
@@ -95,7 +97,17 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // place-bound content), but it is otherwise a FULL siege map: weapons, jumping, panels,
   // crypto, coins, challenges and @-spawn all mount exactly as on every other siege map.
   const isGlobe = kind === 'globe';
-  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
+  // THE GLOBE IS NO LONGER "BLANK".
+  //
+  // That flag adds a bright flat fill so object textures read clearly on builder maps — ambient 0.7
+  // plus a hemisphere, ON TOP of the shared world's own ambient 0.35 and hemisphere 0.6. Stacked up
+  // that is over 1.0 of directionless light, and directionless light cannot make a bright side and
+  // a dark side. It is the literal cause of "everything looks soft and washed out": the contrast
+  // was being deleted before any material or tone-mapping decision got a say.
+  //
+  // The Mini Earth owns its own light now (GlobeLighting): one sun with a real elevation relative to
+  // where you stand, shadows, and sky bounce instead of fill.
+  const isBlank = kind === 'flat' || isHeightmap;
   // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
   // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
   const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
@@ -163,6 +175,14 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* Mini Earth: altitude-tracking near/far planes + fog off. Without this the planet is
           entirely outside the 6,000-unit far plane and fogged out on top. */}
       {isGlobe && <GlobeCamera />}
+      {/* One sun, real shadows, and no flat fill. See GlobeLighting for what was wrong. */}
+      {isGlobe && <GlobeLighting />}
+      {/* Two cloud decks at real altitudes — fly up through them and you come out on top. */}
+      {isGlobe && (
+        <GlobeErrorBoundary label="globe-clouds">
+          <GlobeClouds />
+        </GlobeErrorBoundary>
+      )}
       {isGlobe && <Suspense fallback={null}><GlobeStarfield /></Suspense>}
       {/* Kaiju: suspends while its model loads, so it needs its own Suspense boundary. Without
           one the suspension propagates up and can take neighbouring layers with it, and an error
