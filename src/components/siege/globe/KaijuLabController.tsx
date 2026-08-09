@@ -75,7 +75,20 @@ export const ARENA_SITES: {
   //
   // The deepest ground lies NORTHEAST, so that is the way to look.
   { key: 'Digit2', name: 'Grand Canyon (Mather Point)', lat: 36.0616, lon: -112.1076, facingDeg: 45 },
-  { key: 'Digit3', name: 'Matterhorn',      lat: 45.9766, lon: 7.6585 },
+  // B3 — DUBAI. Geoff: "make it B3 to jump to it."
+  //
+  // Dubai Marina, which is the densest cluster of tall towers anywhere on Earth and therefore the
+  // best place to fight AMONG buildings rather than beside them. Downtown has the Burj Khalifa and
+  // is a short walk northeast along Sheikh Zayed Road; the whole 20 km strip is loaded, so walking
+  // between districts works.
+  //
+  // Facing northeast, up the line of the Marina towers, so the skyline is in frame on arrival
+  // rather than behind you.
+  { key: 'Digit3', name: 'Dubai Marina', lat: 25.0805, lon: 55.1403, facingDeg: 45 },
+  // Matterhorn lost its number key to Dubai. It is NOT listed here on Digit0, because Digit0 is
+  // already taken by "reset size" earlier in the same switch and the site dispatch only covers 1-9 —
+  // so an entry here would be a site that silently never fires. It remains reachable through the
+  // landmark list on , and . , which is where it is verified to be.
   { key: 'Digit4', name: 'Yosemite',        lat: 37.7459, lon: -119.5332 },
   { key: 'Digit5', name: 'Torres del Paine', lat: -50.9423, lon: -73.4068 },
   { key: 'Digit6', name: 'Fish River Canyon', lat: -27.5833, lon: 17.6167 },

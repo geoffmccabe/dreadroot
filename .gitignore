@@ -45,3 +45,4 @@ public/Synty Animation Packs/
 *.blend1
 *.unitypackage
 public/*.psd
+.city-cache/
