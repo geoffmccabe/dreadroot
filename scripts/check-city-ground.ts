@@ -42,25 +42,40 @@ ok(at(25.14, 54.6, -87) === -87, 'far out to sea the real data is untouched, wes
 ok(at(24.5, 55.21, -20) === -20, 'and to the south');
 ok(at(36.0616, -112.1076, 1805) === 1805, 'the Grand Canyon is not affected at all');
 
-// The blend has to be a slope, not a cliff: a 6 m step over one metre would be a wall the Kaiju
-// walks into, and a wall you cannot see is worse than a hole.
+// THE COASTLINE, which now exists. The earlier version of this check asserted the whole thing was
+// a gentle slope — correct when the override was one flat disc, and wrong now: a coast is a STEP.
+// What matters instead is how big that step is, and that the sea deepens smoothly beyond it.
 {
-  let worst = 0, prev = at(25.14, 55.21, -87)!;
-  // Walk due west from the centre, out through the blend band, in 200 m steps.
-  for (let m = 200; m < 40000; m += 200) {
-    const lon = 55.21 - (m / (111320 * Math.cos(25.14 * Math.PI / 180)));
-    const h = at(25.14, lon, -87)!;
+  // Land is +6, coastal sea is -12, so the drop at the water's edge is 18 m — small enough to sit
+  // under the water surface where nothing can see it. The failure this guards against is the drop
+  // going back to the raw -87, which would put a 93 m cliff along the entire shore.
+  const land = at(25.1972, 55.2744, -87)!;      // Downtown
+  const sea = at(25.150, 55.050, -87)!;         // open Gulf, north-west
+  ok(land - sea < 25, 'the step at the water\'s edge is small enough to hide under the sea surface',
+     `${(land - sea).toFixed(0)} m drop`);
+  ok(sea < 0 && sea > -30, 'coastal water is shallow, not an abyss', `${sea.toFixed(0)} m`);
+}
+
+// THE LAND MAP ITSELF. Geoff: "The palm is supposed to be a set of islands in the water but
+// everything is inland." These four points are the whole shape of the answer.
+{
+  ok(at(25.1120, 55.1390, -87)! > 0, 'the Palm is land');
+  ok(at(25.0805, 55.1403, -87)! > 0, 'the Marina is land');
+  ok(at(25.150, 55.050, -87)! < 0, 'the Gulf offshore is WATER, not filled in');
+  ok(at(24.950, 55.250, -87)! > 0, 'the desert inland is land, not drowned by the blend');
+}
+
+// And the sea must deepen smoothly out to the real data rather than stepping.
+{
+  let worst = 0, prev = at(25.150, 55.050, -87)!;
+  for (let m = 200; m < 30000; m += 200) {
+    const lon = 55.050 - (m / (111320 * Math.cos(25.15 * Math.PI / 180)));
+    const h = at(25.150, lon, -87)!;
     worst = Math.max(worst, Math.abs(h - prev));
     prev = h;
   }
-  // AS A GRADIENT, which is the thing that actually matters and the thing a number can be
-  // defended for. My first attempt asserted "under 3 m per 200 m step", which is not a property of
-  // anything — it is a unit chosen by how the loop happened to be written, and it failed at 3.17 m
-  // for a slope of 1.6%, which is a gentle beach. 5% is about a wheelchair ramp and nothing a 300 m
-  // creature would notice; anything past that would start to read as terrain rather than coastline.
-  const grade = worst / 200;
-  ok(grade < 0.05, 'the coastline is a slope, not a cliff',
-     `steepest ${(grade * 100).toFixed(1)}% grade`);
+  ok(worst / 200 < 0.05, 'the sea floor deepens as a slope, not a cliff',
+     `steepest ${((worst / 200) * 100).toFixed(1)}% grade`);
 }
 
 console.log(`\n${failures === 0 ? 'CITY GROUND CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);

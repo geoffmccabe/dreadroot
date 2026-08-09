@@ -29,11 +29,15 @@
 // 460 metres from where it was drawn. One function, called from all three.
 
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
+import { isCityLand } from './dubaiLandMask';
 
 interface CitySite {
   name: string;
   /** Unit direction from the planet centre. */
   dx: number; dy: number; dz: number;
+  /** East and north unit vectors at the site, for turning a direction into local metres. */
+  ex: number; ey: number; ez: number;
+  nx: number; ny: number; nz: number;
   /** What the ground is, in metres above sea level, inside the city. */
   groundM: number;
   /** Full city ground within this radius, in metres. */
@@ -47,12 +51,32 @@ interface CitySite {
 
 const EARTH_R_M = PLANET_RADIUS * METRES_PER_UNIT;
 
+/**
+ * Depth of the sea immediately around a city, in metres.
+ *
+ * Not the raw tile value, which over Dubai is -87 m everywhere: dropping straight from the city's
+ * +6 m to that would put a 93 m cliff along the entire shoreline. Coastal water really is shallow,
+ * and at -12 m the step at the beach is small and sits under the water surface where nothing can
+ * see it. It blends out to the real depth at the city's outer radius.
+ */
+const SHALLOW_SEA_M = -12;
+
 function makeSite(name: string, lat: number, lon: number, groundM: number,
                   innerM: number, outerM: number): CitySite {
   const d = new Float64Array(3);
   latLonToDirection(lat, lon, d);
+  // East = worldY x up, north = up x east — the same frame the bake used, so a building's stored
+  // offset and this projection describe the same point. Written out rather than via Vector3 because
+  // this runs once per site and the cross products are three lines each.
+  let ex = d[2], ey = 0, ez = -d[0];
+  let el = Math.hypot(ex, ey, ez);
+  if (el < 1e-9) { ex = 1; ey = 0; ez = 0; el = 1; }   // directly over a pole
+  ex /= el; ey /= el; ez /= el;
+  const nx = d[1] * ez - d[2] * ey;
+  const ny = d[2] * ex - d[0] * ez;
+  const nz = d[0] * ey - d[1] * ex;
   return {
-    name, dx: d[0], dy: d[1], dz: d[2], groundM, innerM, outerM,
+    name, dx: d[0], dy: d[1], dz: d[2], ex, ey, ez, nx, ny, nz, groundM, innerM, outerM,
     cosInner: Math.cos(innerM / EARTH_R_M),
     cosOuter: Math.cos(outerM / EARTH_R_M),
   };
@@ -93,12 +117,39 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     const s = SITES[i];
     const dot = x * s.dx + y * s.dy + z * s.dz;
     if (dot <= s.cosOuter) continue;          // outside this city entirely
-    if (dot >= s.cosInner) return s.groundM;  // squarely inside it
+
+    // WHERE IS THIS, IN THE CITY'S OWN METRES? The offset from the site direction, projected onto
+    // east and north. Over 26 km the chord and the arc differ by under a metre, so the small-angle
+    // form is exact enough and costs two dot products instead of a pair of trig calls.
+    const ox = x - s.dx, oy = y - s.dy, oz = z - s.dz;
+    const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
+    const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
+    // The bake stores +z as SOUTH, so the mask is indexed by -north.
+    const land = isCityLand(em, -nm);
+
+    // SEA STAYS SEA. Geoff: "The palm is supposed to be a set of islands in the water but everything
+    // is inland." It was: the override was a flat disc fifteen kilometres across, which filled in
+    // the Gulf, the Marina's waterways and every channel between the Palm's fronds. Only LAND is
+    // raised now, and the land map comes from the city's own 59,202 footprints plus a stated
+    // coastline — see scripts/make-city-landmask.mjs.
+    // LAND IS NOT BLENDED TOWARD THE BASE, and that is deliberate rather than lazy.
+    //
+    // The blend exists so the city's ground meets the real terrain without a step. But the "real
+    // terrain" here is -87 m EVERYWHERE within reach, including under the city itself — it is a
+    // nine-kilometre average of gulf and desert, and it is the very error this file exists to
+    // correct. Blending land into it just sinks the desert instead of the city: a probe 21 km south
+    // came out at -56 m, which is dry sand under sixty metres of water.
+    //
+    // So land holds. There is a step where the override ends, 26 km out and well beyond every
+    // district, and a step in empty desert nobody walks to is a far better trade than drowning it.
+    if (land) return s.groundM;
+
+    // SEA still blends, because there the base is not wrong — the Gulf really does deepen.
+    if (dot >= s.cosInner) return SHALLOW_SEA_M;
     const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
     const t = smooth((distM - s.innerM) / (s.outerM - s.innerM));
-    // No tile yet: hold the city's ground rather than inventing a slope down to nothing.
-    if (base == null) return s.groundM;
-    return s.groundM + (base - s.groundM) * t;
+    if (base == null) return SHALLOW_SEA_M;
+    return SHALLOW_SEA_M + (base - SHALLOW_SEA_M) * t;
   }
   return base;
 }
