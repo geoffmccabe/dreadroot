@@ -22,6 +22,8 @@ import { loadCity, getCity, cityDistanceUnits, cityDiag, type City } from './cit
 import { applyCityWindows } from './cityWindows';
 import { KaijuCityLights } from './KaijuCityLights';
 import { KaijuCityRoads } from './KaijuCityRoads';
+import { KaijuCityWater } from './KaijuCityWater';
+import { KaijuCityDetail } from './KaijuCityDetail';
 
 /**
  * Beyond this the city is not drawn at all.
@@ -173,6 +175,13 @@ function CityMesh({ city }: { city: City }) {
           frame and the float precision that comes with it — a road placed in world coordinates at
           63,710 units from the origin would shimmer against the buildings it runs between. */}
       {near && <KaijuCityRoads />}
+      {/* The Marina's channels, the Burj Lake, the Creek — drawn as their own surface because the
+          terrain mesh cannot resolve a 120 m canal and the planet's ocean is nearly clear at that
+          depth. */}
+      {near && <KaijuCityWater />}
+      {/* The 1,214 buildings OSM describes in 3D — spires, domes, setbacks, and all 828 m of the
+          Burj Khalifa. Their boxes have been removed from the bake above, so nothing overlaps. */}
+      {near && <KaijuCityDetail />}
       {/* Traffic on those roads, and the red lamps on the roofs over 180 m. */}
       {near && <KaijuCityLights city={city} />}
     </group>

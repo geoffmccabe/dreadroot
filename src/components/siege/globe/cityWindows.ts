@@ -163,3 +163,86 @@ export function applyCityWindows(material: THREE.Material, timeRef: { value: num
   };
   material.needsUpdate = true;
 }
+
+/**
+ * The same facade, for the buildings that are real polygons rather than boxes.
+ *
+ * A box can work out where it is on its own wall from its local position, because every box is the
+ * same unit cube. An extruded polygon cannot: it has no canonical local space, its walls are all
+ * different lengths, and a part that starts 200 m up needs its windows to line up with the floors of
+ * the tower below it. So the bake supplies the two numbers directly — how far along the wall this
+ * vertex is, and how high above SEA LEVEL, not above the part's own base. The second is what keeps
+ * the Burj Khalifa's 38 stacked sections sharing one continuous grid of floors instead of each
+ * starting a new one at its own base.
+ *
+ * A negative aWallU means "this is a roof" and gets no windows.
+ */
+export function applyDetailWindows(material: THREE.Material, timeRef: { value: number }): void {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = timeRef;
+
+    shader.vertexShader = `
+      attribute float aWallU;
+      attribute float aWallY;
+      attribute float aSeed;
+      varying float vWallU;
+      varying float vWallY;
+      varying float vSeed2;
+    ` + shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       vWallU = aWallU;
+       vWallY = aWallY;
+       vSeed2 = aSeed;`,
+    );
+
+    shader.fragmentShader = `
+      uniform float uTime;
+      varying float vWallU;
+      varying float vWallY;
+      varying float vSeed2;
+
+      float hash21d(vec2 p) {
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+      }
+    ` + shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `#include <dithering_fragment>
+      {
+        // Roofs carry a negative U from the bake. A MASK rather than a branch, for the same reason
+        // as the box version: fwidth below is only defined when every pixel of a 2x2 block takes the
+        // same path, and roof edges are exactly where they would not.
+        float wall = 1.0 - step(vWallU, -0.5);
+        vec2 cell = vec2(vWallU / ${BAY_M.toFixed(1)}, vWallY / ${STOREY_M.toFixed(1)});
+        vec2 id = floor(cell);
+        vec2 f = fract(cell);
+        vec2 w = min(fwidth(cell), vec2(4.0)) + 1e-5;
+
+        float win =
+            smoothstep(0.18 - w.x, 0.18 + w.x, f.x) * (1.0 - smoothstep(0.82 - w.x, 0.82 + w.x, f.x))
+          * smoothstep(0.22 - w.y, 0.22 + w.y, f.y) * (1.0 - smoothstep(0.80 - w.y, 0.80 + w.y, f.y));
+        float detail = 1.0 - smoothstep(0.30, 0.85, max(w.x, w.y));
+
+        float h = hash21d(id + vSeed2 * 71.7);
+        float lit = step(0.44, h);
+        if (h > 0.975) {
+          float period = 6.0 + hash21d(id * 3.1 + vSeed2) * 20.0;
+          lit = step(0.5, fract(uTime / period + h * 17.0));
+        }
+
+        const float MEAN_WIN = 0.371;
+        const float MEAN_LIT = 0.56;
+        float winF = mix(MEAN_WIN, win, detail);
+        float litF = mix(MEAN_LIT, lit, detail);
+
+        vec3 glow = mix(vec3(1.0, 0.82, 0.52), vec3(0.78, 0.86, 1.0),
+                        mix(0.5, hash21d(id + 9.1), detail));
+        gl_FragColor.rgb += glow * winF * litF * 0.85 * wall;
+        gl_FragColor.rgb *= 1.0 - winF * (1.0 - litF) * 0.45 * wall;
+      }`,
+    );
+  };
+  material.needsUpdate = true;
+}
