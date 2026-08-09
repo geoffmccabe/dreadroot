@@ -31,10 +31,15 @@
 // headlessly — with no meshes registered it simply returns null and the caller falls back.
 
 import * as THREE from 'three';
+import { limbCapsules, shotHitsCapsule, type Capsule } from './kaijuColliders';
+
+const _cap2: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
 
 interface Entry {
   /** The model root, so its matrices can be forced up to date before a test. */
   root: THREE.Object3D;
+  /** Last frame its matrices were refreshed, so that happens ONCE a frame and not once a ray. */
+  posedFrame: number;
   meshes: THREE.Mesh[];
   /**
    * How far a vertex can sit from its bone, per mesh. Bind-pose bounding radius, which is an upper
@@ -81,7 +86,7 @@ export function registerHitMesh(id: string, root: THREE.Object3D): void {
       sk.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e9);
     }
   });
-  registry.set(id, { root, meshes, flesh });
+  registry.set(id, { root, meshes, flesh, posedFrame: -1 });
 }
 
 export function unregisterHitMesh(id: string): void {
@@ -116,19 +121,59 @@ export const meshHitDiag = { meshes: 0, testsThisFrame: 0, budgetHits: 0, tests:
 /**
  * Rays allowed per frame.
  *
- * A single test is cheap; a hundred at once would not be. Nothing near this is ever needed — about
- * thirty-six rounds a second are fired in total and only the ones actually crossing a creature get
- * this far — so the cap exists purely so that no future change can make this the frame budget.
- * Anything over it falls back to the capsule for that frame rather than being dropped.
+ * EIGHT, and it was 48, and that was most of why the game ground to five frames a second.
+ *
+ * "A single test is cheap" was wrong, and I wrote it without doing the arithmetic. three.js has no
+ * spatial structure for a skinned mesh, so a raycast walks EVERY TRIANGLE, and for each one it
+ * re-skins all three vertices — four matrix multiplies each. A Fort Golem is 7,511 triangles, so one
+ * ray is about ninety thousand matrix multiplies. At 48 rays a frame that is four million, in
+ * JavaScript, sixty times a second. The trace shows the animation frame averaging 68 ms, which is
+ * exactly what that costs.
+ *
+ * The real fix is the capsule pre-filter below, which cuts the number of rays that are worth firing
+ * from roughly eighteen a frame to under one. This cap is then just a ceiling nothing should reach.
  */
-const TESTS_PER_FRAME = 48;
+const TESTS_PER_FRAME = 8;
 
 /** Has this frame's ray budget been spent? The caller falls back to capsules rather than skipping. */
 export function meshBudgetLeft(): boolean { return meshHitDiag.testsThisFrame < TESTS_PER_FRAME; }
 
+let frameNo = 0;
 export function beginMeshHitFrame(): void {
+  frameNo++;
   meshHitDiag.testsThisFrame = 0;
   meshHitDiag.meshes = registry.size;
+}
+
+const _capA = new THREE.Vector3();
+const _capB = new THREE.Vector3();
+const _scratch = new THREE.Vector3();
+
+/**
+ * Could this shot possibly reach the geometry? Bone capsules, inflated, tested against the segment.
+ *
+ * Returns TRUE when there are no capsules at all, because "I do not know" must mean "do the real
+ * test" — a pre-filter that fails open costs performance, one that fails closed costs correctness,
+ * and this system has already spent a week on rounds that silently did not hit anything.
+ */
+function nearGeometry(id: string, from: THREE.Vector3, to: THREE.Vector3): boolean {
+  const caps = limbCapsules(id);
+  if (caps.length === 0) return true;
+  for (const c of caps) {
+    _cap2.a.copy(c.a); _cap2.b.copy(c.b);
+    _cap2.radius = c.radius * 2.2;
+    if (shotHitsCapsule(from, to, _cap2, _scratch) != null) return true;
+  }
+  // The limb table has no chest pair, so the body itself is covered by a capsule spanning hips to
+  // head — otherwise a round straight through the middle would be rejected before it was tested.
+  _capA.copy(caps[0].a); _capB.copy(caps[0].b);
+  for (const c of caps) {
+    _capA.min(c.a); _capA.min(c.b);
+    _capB.max(c.a); _capB.max(c.b);
+  }
+  _cap2.a.copy(_capA); _cap2.b.copy(_capB);
+  _cap2.radius = _capA.distanceTo(_capB) * 0.42;
+  return shotHitsCapsule(from, to, _cap2, _scratch) != null;
 }
 
 const _raycaster = new THREE.Raycaster();
@@ -159,6 +204,19 @@ export function meshHit(
   if (len < 1e-9) return null;
   _dir.divideScalar(len);
 
+  // A CHEAP TEST FIRST, AND THIS IS THE ONE THAT MATTERS.
+  //
+  // A round spends about thirty frames inside any sensible broad-phase sphere but only actually
+  // crosses the creature in ONE of them — so without this, every round in the neighbourhood paid for
+  // a full ninety-thousand-multiply mesh walk, every frame, for half a second. That is where the
+  // frame rate went.
+  //
+  // The bone capsules are already computed for free by the renderer and hug the real limbs, so a
+  // segment that misses all of them cannot possibly reach the mesh. Inflated a little, because a
+  // capsule is an approximation and must never be TIGHTER than the thing it is standing in for —
+  // a pre-filter that rejects a real hit is worse than no pre-filter at all.
+  if (!nearGeometry(id, from, to)) return null;
+
   // TEST THE POSE BEING DRAWN, NOT LAST FRAME'S.
   //
   // three.js only refreshes world matrices during the render, which happens AFTER every frame
@@ -171,7 +229,12 @@ export function meshHit(
   // group the renderer just moved, whose own matrixWorld is exactly as stale. So the model was
   // faithfully updated against a stale ancestor and stayed a frame behind. Walking up first is the
   // whole difference and it is one word.
-  entry.root.updateWorldMatrix(true, true);
+  // ...ONCE A FRAME, not once a ray. Forcing a full recursive matrix update of every bone and mesh
+  // in the model for each individual bullet was doing the same work up to eight times over.
+  if (entry.posedFrame !== frameNo) {
+    entry.posedFrame = frameNo;
+    entry.root.updateWorldMatrix(true, true);
+  }
 
   _raycaster.set(from, _dir);
   _raycaster.near = 0;

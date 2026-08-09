@@ -300,6 +300,9 @@ export function stepGunfire(dt: number): void {
   beginMeshHitFrame();
   let live = 0;
   const agents = getAgents();
+  // One ground reference for the whole frame, from whoever is standing on it.
+  let groundRef = 0;
+  for (const a of agents) { if (a.alive) { groundRef = a.body.radius; break; } }
 
   for (const b of bullets) {
     if (!b.live) continue;
@@ -442,7 +445,12 @@ export function stepGunfire(dt: number): void {
     // sixty times a second is real work for an effect nobody is grading frame by frame. Rounds are
     // spread across three frames by index, so the cost is a third and the worst error is a puff of
     // dirt landing two frames late.
-    if ((groundTick + b.flicker) % 3 < 1) {
+    // ...and only for rounds that are plausibly NEAR the ground. Three hundred rounds are in the air
+    // during sustained fire and most of them are hundreds of metres up in the middle of their arc,
+    // where the terrain cannot possibly matter. The reference is a living Kaiju's own radius, with a
+    // generous margin, so it is still correct over ground as broken as the Grand Canyon.
+    const lowEnough = groundRef > 0 && b.pos.length() < groundRef + ARENA_HEIGHT * 2.6;
+    if (lowEnough && (groundTick + b.flicker) % 6 < 1) {
       const len = b.pos.length();
       if (len > 1e-6) {
         const gm = sampleGlobeSurface(b.pos.x / len, b.pos.y / len, b.pos.z / len);

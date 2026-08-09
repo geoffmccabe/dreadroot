@@ -154,8 +154,10 @@ export function KaijuLabHud() {
           weeks before anyone noticed. */}
       {row('Gunfire', `${gunfireDiag.fired} fired, ${gunfireDiag.hits} hit, ${gunfireDiag.live} live`)}
       {row('Gun audio', `${gunAudioDiag.played} heard / ${gunAudioDiag.offered} fired`)}
+      {/* The rays-per-FRAME figure is the one that matters: each is a full walk of every triangle
+          in a skinned model, so 48 of them is a five-frames-a-second game and 1 is free. */}
       {row('Bullet collider', meshHitDiag.meshes > 0
-        ? `MESH x${meshHitDiag.meshes} — ${meshHitDiag.hits}/${meshHitDiag.tests} rays hit`
+        ? `MESH x${meshHitDiag.meshes} — ${meshHitDiag.testsThisFrame} rays/frame`
         : 'capsules (no model loaded)')}
       {/* Diagnostic: turns "I can't see it" into something measurable. */}
       {/* THE INPUT CHAIN. Four links; whichever one is wrong is where the break is. */}
