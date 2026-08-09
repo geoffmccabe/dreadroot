@@ -30,7 +30,7 @@
 import {
   TILE, PLANET_RADIUS, directionToFaceUv, tileArcUnits, tileUvRange, uvToTileIndex,
 } from './cubeSphere';
-import { getTile, sampleTileBilinear } from './earthTiles';
+import { getTile, sampleTileBilinear, hasTile, requestTile } from './earthTiles';
 import { detailMetres } from './globeDetail';
 
 /** Vertices per patch side. 65 = 64 quads = 8,192 triangles. */
@@ -134,4 +134,52 @@ export function renderedElevation(x: number, y: number, z: number): number | nul
     return baseM + detailMetres(x, y, z, PLANET_RADIUS, baseM, patchSpacingUnits(depth));
   }
   return null;
+}
+
+/**
+ * The deepest RESIDENT tile covering this node, walking up until one is found.
+ *
+ * Levels 5-10 exist only inside the 225 landmark regions, so outside them level 5 simply 404s.
+ * Refusing to subdivide when the ideal tile is missing capped the whole rest of the planet at
+ * depth 6, i.e. one vertex every 2.44 km, which is why everywhere except a landmark rendered
+ * perfectly flat. Procedural detail needs NO tiles, so the mesh must be free to subdivide past
+ * the data and let a coarser tile supply the base shape at a finer stride.
+ */
+export function resolveLevel(n: NodeId, maxLevel: number): number {
+  const ideal = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
+  // NOTE `level >= 0`, and -1 when nothing is resident.
+  //
+  // The first version stopped at level > 0 and then returned 0 unconditionally, so it claimed a
+  // tile was available even when level 0 had not loaded. childrenReady believed it, split anyway,
+  // and the children had no data to build from: whole patches simply vanished, leaving square
+  // holes in the planet.
+  for (let level = ideal; level >= 0; level--) {
+    const shift = n.depth - level;
+    if (hasTile(n.face, level, n.x >> shift, n.y >> shift)) {
+      // CLIMB ONE STEP AT A TIME, NOT STRAIGHT TO THE IDEAL. This is why the planet was flat.
+      //
+      // Geoff, twice: "there's no terrain... not even a terrain texture below me."
+      //
+      // This used to nudge the IDEAL tile only. Outside a landmark region the ideal level is 5 or
+      // deeper, which does not exist and never will — so the request was for a tile that always
+      // 404s, and levels 1 to 4, WHICH DO EXIST EVERYWHERE AND ARE THE ENTIRE SHAPE OF THE PLANET,
+      // were never asked for at all. The walk found level 0 (the only level anything ever requested
+      // explicitly), built from it, and stopped. One vertex every few hundred kilometres. A smooth
+      // ball.
+      //
+      // Asking for the next level DOWN instead means the detail climbs 0 -> 1 -> 2 -> 3 -> 4 on
+      // successive frames and stops naturally wherever the data runs out, with one probe per level
+      // rather than an infinite retry of something absent.
+      if (level < ideal) {
+        const want = level + 1;
+        const s2 = n.depth - want;
+        void requestTile(n.face, want, n.x >> s2, n.y >> s2);
+      }
+      return level;
+    }
+  }
+  // Nothing covers this node yet. Ask for the coarsest tile and report failure so the parent
+  // keeps rendering instead of splitting into holes.
+  void requestTile(n.face, 0, 0, 0);
+  return -1;
 }

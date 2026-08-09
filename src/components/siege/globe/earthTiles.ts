@@ -189,8 +189,11 @@ export function __noteStatusForTest(key: string, status: number): void {
   attempts.set(key, n);
   failed.set(key, Date.now() + Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (n - 1)));
 }
-/** FOR TESTS ONLY: would a fetch be issued for this tile right now? */
+/** FOR TESTS ONLY: would a fetch actually be issued for this tile right now? */
 export function __wouldRequestForTest(key: string): boolean {
+  // A cached tile is served from memory and touches the network not at all — the first version of
+  // this helper forgot that and reported five phantom fetches a frame for tiles already resident.
+  if (cache.has(key)) return false;
   if (missing.has(key)) return false;
   const at = failed.get(key);
   return at === undefined || Date.now() >= at;

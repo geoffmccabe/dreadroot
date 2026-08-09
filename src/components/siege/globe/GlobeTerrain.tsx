@@ -37,7 +37,7 @@ import { sampleGlobeElevation } from './globeGround';
 // there, which is precisely how the surface you stand on ended up being a different height from
 // the surface you see.
 import {
-  PATCH, DATA_LAG, MAX_RENDER_DEPTH, patchSpacingUnits, dataFor, idKey, parseKey,
+  PATCH, DATA_LAG, MAX_RENDER_DEPTH, patchSpacingUnits, dataFor, idKey, parseKey, resolveLevel,
   notePatchBuilt, notePatchRemoved, clearPatchIndex, type NodeId,
 } from './globePatchIndex';
 
@@ -165,40 +165,6 @@ function dropSkirt(pos: Float32Array, side: number, drop: number): void {
 function disposePatch(geo: THREE.BufferGeometry): void {
   geo.setIndex(null);
   geo.dispose();
-}
-
-/**
- * The deepest RESIDENT tile covering this node, walking up until one is found.
- *
- * Levels 5-10 exist only inside the 225 landmark regions, so outside them level 5 simply 404s.
- * Refusing to subdivide when the ideal tile is missing capped the whole rest of the planet at
- * depth 6, i.e. one vertex every 2.44 km, which is why everywhere except a landmark rendered
- * perfectly flat. Procedural detail needs NO tiles, so the mesh must be free to subdivide past
- * the data and let a coarser tile supply the base shape at a finer stride.
- */
-function resolveLevel(n: NodeId, maxLevel: number): number {
-  const ideal = Math.max(0, Math.min(n.depth - DATA_LAG, maxLevel));
-  // NOTE `level >= 0`, and -1 when nothing is resident.
-  //
-  // The first version stopped at level > 0 and then returned 0 unconditionally, so it claimed a
-  // tile was available even when level 0 had not loaded. childrenReady believed it, split anyway,
-  // and the children had no data to build from: whole patches simply vanished, leaving square
-  // holes in the planet.
-  for (let level = ideal; level >= 0; level--) {
-    const shift = n.depth - level;
-    if (hasTile(n.face, level, n.x >> shift, n.y >> shift)) {
-      // Nudge the ideal tile into the cache so detail sharpens once it arrives.
-      if (level < ideal) {
-        const s2 = n.depth - ideal;
-        void requestTile(n.face, ideal, n.x >> s2, n.y >> s2);
-      }
-      return level;
-    }
-  }
-  // Nothing covers this node yet. Ask for the coarsest tile and report failure so the parent
-  // keeps rendering instead of splitting into holes.
-  void requestTile(n.face, 0, 0, 0);
-  return -1;
 }
 
 /** Centre direction of a node, written into `out`. */
