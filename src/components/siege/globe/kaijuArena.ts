@@ -338,10 +338,56 @@ export function initArenaWith(
   const north = new THREE.Vector3().crossVectors(centre, east).normalize();
 
   const R = ARENA_HEIGHT * spreadBodies;
+
+  /**
+   * Turn a place on the spawn ring into a direction, and DO NOT PUT ANYONE IN THE SEA.
+   *
+   * Geoff: "one of the kaiju seems to be missing from B3... the one that throws bombs that make the
+   * fire needs to be there."
+   *
+   * It was never missing. The ring puts each Kaiju at a fixed compass point 1.8 km out, and at three
+   * of Dubai's four districts the point due WEST is open water — which is where the grenade thrower
+   * happens to sit. Spawned below sea level it is submerged, so it swims instead of walking and is
+   * invisible under the surface, which reads exactly like an absent creature.
+   *
+   * A fixed ring is fine on a mountain and wrong on a coast, and Dubai is not the only coast on this
+   * planet. So the ring is a STARTING GUESS: walk round it, and inward, until the ground is above
+   * water. Rotation is tried before shrinking because keeping the fighters spread out matters more
+   * than keeping them at an exact distance.
+   */
+  const ringDir = (ang: number, radius: number): THREE.Vector3 => {
+    const off = east.clone().multiplyScalar(Math.cos(ang) * radius)
+      .addScaledVector(north, Math.sin(ang) * radius);
+    return centre.clone().add(off.multiplyScalar(1 / PLANET_RADIUS)).normalize();
+  };
+  const isDry = (d3: THREE.Vector3): boolean => {
+    const m = sampleGlobeSurface(d3.x, d3.y, d3.z);
+    // Null means no elevation data has arrived for that spot. Treating it as dry is deliberate: a
+    // missing tile is not evidence of ocean, and refusing every unknown place would push the whole
+    // fight to wherever happened to be loaded first.
+    return m == null || m > 0.5;
+  };
+  const findDry = (ang0: number): THREE.Vector3 => {
+    const first = ringDir(ang0, R);
+    if (isDry(first)) return first;
+    for (let shrink = 0; shrink < 4; shrink++) {
+      const radius = R * (1 - shrink * 0.22);
+      // Alternating either way from the original bearing, so a Kaiju nudged off the water ends up
+      // as close to where it was meant to be as the coastline allows.
+      for (let step = 1; step <= 12; step++) {
+        for (const sign of [1, -1]) {
+          const d3 = ringDir(ang0 + sign * step * (Math.PI / 12), radius);
+          if (isDry(d3)) return d3;
+        }
+      }
+    }
+    // Nowhere dry within reach — an island or mid-ocean. The original is as good as anything.
+    return first;
+  };
+
   builds.forEach((build, i) => {
     const ang = (i / builds.length) * Math.PI * 2;
-    const off = east.clone().multiplyScalar(Math.cos(ang) * R).addScaledVector(north, Math.sin(ang) * R);
-    const dir = centre.clone().add(off.multiplyScalar(1 / PLANET_RADIUS)).normalize();
+    const dir = findDry(ang);
     // The player's agent REUSES the shared player body rather than getting its own. That is what
     // makes the walk controller, the third-person camera and the existing HUD drive agent 0 with
     // no extra plumbing, and it means the arena reads exactly the body the player is moving.

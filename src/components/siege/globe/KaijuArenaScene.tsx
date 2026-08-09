@@ -27,6 +27,7 @@ import {
   ARENA_HEIGHT, swingSeconds, type Agent,
 } from './kaijuArena';
 import { getProjectiles } from './kaijuWeapons';
+import { KaijuBombs } from './KaijuBombs';
 import { getBurns, burnIntensity } from './kaijuBurn';
 import { fireSpriteSheet, fireMaterial } from './fireSprite';
 import { footOffset, footOffsetRaw } from './modelFeet';
@@ -406,18 +407,24 @@ function Projectiles() {
 
   useFrame((state) => {
     const list = getProjectiles();
-    const n = Math.min(list.length, MAX);
     const pos = iPos.array as Float32Array;
     const dat = iData.array as Float32Array;
-    for (let i = 0; i < n; i++) {
-      const p = list[i];
-      const o3 = i * 3, o4 = i * 4;
+    // A WRITE CURSOR, not the loop index, because in-flight grenades are skipped here — they are
+    // drawn as solid tumbling spheres by KaijuBombs instead of as glowing blobs. Indexing by `i`
+    // after a skip would leave a stale particle sitting at that slot for the rest of the fight.
+    let n = 0;
+    for (const p of list) {
+      if (n >= MAX) break;
+      // 'grenade' is the bomb in the air; the debris it throws on impact is 'blast' and still fire.
+      if (p.visual === 'grenade') continue;
+      const o3 = n * 3, o4 = n * 4;
       pos[o3] = p.pos.x; pos[o3 + 1] = p.pos.y; pos[o3 + 2] = p.pos.z;
       // age 0 (just fired) to 1 (about to die).
       dat[o4] = 1 - Math.max(0, Math.min(1, p.life / Math.max(1e-4, p.maxLife)));
       dat[o4 + 1] = p.size;
       dat[o4 + 2] = p.seed;
       dat[o4 + 3] = p.visual === 'blast' ? 1 : 0;
+      n++;
     }
     // --- FIRE STILL BURNING ON A KAIJU -----------------------------------------------------------
     //
@@ -528,6 +535,8 @@ export function KaijuArenaScene({ playerControlled }: { playerControlled: boolea
     <>
       {agents.filter((a) => !a.isPlayer).map((a) => <AgentAvatar key={a.id} agent={a} />)}
       <Projectiles />
+      {/* In-flight grenades, as hardware rather than fireballs. */}
+      <KaijuBombs />
     </>
   );
 }
