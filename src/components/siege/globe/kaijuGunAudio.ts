@@ -87,6 +87,14 @@ function impactThud(ctx: AudioContext): AudioBuffer {
 const SHOTS_PER_SEC = 2;
 /** Ricochets are rarer and more interesting, so they get their own smaller budget. */
 const RICOCHETS_PER_SEC = 6;
+/**
+ * Rounds striking concrete, per second.
+ *
+ * Higher than the ricochet budget because in a city most rounds hit a building rather than the
+ * Kaiju, and a firefight in Dubai with nothing hitting the buildings sounds like it is happening
+ * somewhere else. Still well under the shot rate: this is texture, not events.
+ */
+const WALL_HITS_PER_SEC = 5;
 /** Past this, a rifle crack is inaudible against everything else and is not worth a voice. */
 const MAX_AUDIBLE_UNITS = 22;   // 2.2 km
 
@@ -107,12 +115,16 @@ function makePool(n: number): Pending[] {
 }
 const shotPool = makePool(64);
 const ricPool = makePool(32);
+const wallPool = makePool(48);
 let shotCount = 0;
 let ricCount = 0;
+let wallCount = 0;
 const shots: Pending[] = [];
 const ricochets: Pending[] = [];
+const wallHits: Pending[] = [];
 let shotTokens = SHOTS_PER_SEC;
 let ricTokens = RICOCHETS_PER_SEC;
+let wallTokens = WALL_HITS_PER_SEC;
 
 /** Live counters, so "why can I not hear it" is answerable by looking. */
 export const gunAudioDiag = { offered: 0, played: 0, dropped: 0 };
@@ -138,6 +150,19 @@ export function noteRicochet(pos: THREE.Vector3): void {
   ricPool[ricCount].pos.copy(pos);
   ricochets[ricCount] = ricPool[ricCount];
   ricCount++;
+}
+
+/**
+ * A round hit a building. Same deal.
+ *
+ * Geoff: "the sound they make should be like the bullet being shot, but lower pitch and 25% the
+ * volume as the original shot fired." So it is literally the same recording — see the flush.
+ */
+export function noteWallHit(pos: THREE.Vector3): void {
+  if (wallCount >= wallPool.length) return;
+  wallPool[wallCount].pos.copy(pos);
+  wallHits[wallCount] = wallPool[wallCount];
+  wallCount++;
 }
 
 /**
@@ -177,9 +202,14 @@ export function flushGunAudio(
 ): void {
   shotTokens = Math.min(SHOTS_PER_SEC, shotTokens + SHOTS_PER_SEC * dt);
   ricTokens = Math.min(RICOCHETS_PER_SEC, ricTokens + RICOCHETS_PER_SEC * dt);
+  wallTokens = Math.min(WALL_HITS_PER_SEC, wallTokens + WALL_HITS_PER_SEC * dt);
 
   const ctx = getAudioContext();
-  if (!ctx) { shots.length = 0; ricochets.length = 0; shotCount = 0; ricCount = 0; return; }
+  if (!ctx) {
+    shots.length = 0; ricochets.length = 0; wallHits.length = 0;
+    shotCount = 0; ricCount = 0; wallCount = 0;
+    return;
+  }
 
   // --- rifle fire ------------------------------------------------------------------------------
   if (shotCount) {

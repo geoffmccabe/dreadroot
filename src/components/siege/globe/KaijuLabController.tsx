@@ -344,6 +344,11 @@ export function KaijuLabController() {
             dubaiStop = (dubaiStop + 1) % DUBAI_STOPS.length;
             const s = DUBAI_STOPS[dubaiStop];
             startArenaHere(camera, s.lat, s.lon, `${s.name}  (B3 again for the next district)`, s.facingDeg);
+            // AN ARMY IN THE STREETS. Geoff: "add to b3 the 200 soldiers and make them follow my
+            // kaiju around." The other sites are wilderness and get none; a city is the one place
+            // an army makes sense, and it is also the only place with buildings for them to flow
+            // around. They pick and chase their own Kaiju exactly as they do at the Grand Canyon.
+            setCrowd(true);
             // DUBAI SETS THE NIGHT SLIDERS, BUT ONLY IF THE LIGHTING PANEL IS ALREADY ON.
             //
             // A city is the one place on this planet with light of its own, and 59,202 buildings'

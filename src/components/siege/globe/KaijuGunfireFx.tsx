@@ -29,7 +29,7 @@ import { METRES_PER_UNIT } from './cubeSphere';
 import {
   getBullets, getSparks, stepGunfire, MUZZLE_LIFE, SPARK_LIFE,
 } from './kaijuGunfire';
-import { flushGunAudio, noteRicochet } from './kaijuGunAudio';
+import { flushGunAudio, noteRicochet, noteWallHit } from './kaijuGunAudio';
 
 /** Same ceilings as the pools, so a full pool can always be drawn. */
 const MAX_TRAILS = 1024;
@@ -77,6 +77,8 @@ const SPARK_M = 9;
 const SPARK_LIFT_M = 4;
 /** A round into the dirt. Smaller than a strike on the monster, because it matters less. */
 const DIRT_M = 5;
+/** A round into concrete. Between the two: a visible chip, not an explosion. */
+const WALL_M = 6;
 
 /**
  * A star, painted into a canvas: hot white core, yellow bloom, and spikes of alternating length.
@@ -238,7 +240,12 @@ export function KaijuGunfireFx() {
       // hidden inside the creature that stopped the bullet is a flash nobody ever sees.
       _v.copy(sp.pos).addScaledVector(sp.nrm, SPARK_LIFT_M / METRES_PER_UNIT);
       buf.sparkPos[o] = _v.x; buf.sparkPos[o + 1] = _v.y; buf.sparkPos[o + 2] = _v.z;
-      if (sp.kind === 'dirt') {
+      if (sp.kind === 'wall') {
+        // Concrete. A pale grey-white flash rather than a spark: masonry throws dust and chips, not
+        // molten metal, and colouring it like a hit on the Kaiju would make every wall in the city
+        // look worth shooting at.
+        buf.sparkCol[o] = f * 0.85; buf.sparkCol[o + 1] = f * 0.82; buf.sparkCol[o + 2] = f * 0.74;
+      } else if (sp.kind === 'dirt') {
         // Dirt is a dull tan puff, not a spark. A round into the ground has nothing hard to strike
         // and throws no metal, so drawing it as white fire would make the terrain look like it was
         // the interesting thing to be shooting at.
@@ -249,7 +256,7 @@ export function KaijuGunfireFx() {
       }
       // Per-point size, so a dirt puff can be smaller than a strike on the hide without needing a
       // second draw call of its own.
-      buf.sparkSize[nS] = (sp.kind === 'dirt' ? DIRT_M : SPARK_M) / METRES_PER_UNIT;
+      buf.sparkSize[nS] = (sp.kind === 'dirt' ? DIRT_M : sp.kind === 'wall' ? WALL_M : SPARK_M) / METRES_PER_UNIT;
       nS++;
     }
 

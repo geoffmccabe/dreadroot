@@ -86,6 +86,39 @@ export function cityFrame(lat: number, lon: number, groundMetres: number): {
 }
 
 /**
+ * Read the baked format. Split out from the fetch so it can be exercised without a network — the
+ * collider checks run against the REAL Dubai file, and a parser that only runs in a browser is a
+ * parser nothing can test.
+ */
+export function parseCity(buf: ArrayBuffer): { lat: number; lon: number; buildings: Building[] } {
+  const dv = new DataView(buf);
+  const lat = dv.getFloat64(0);
+  const lon = dv.getFloat64(8);
+  const count = dv.getUint32(16);
+  if (buf.byteLength !== 24 + count * 24) {
+    throw new Error(`size mismatch: ${buf.byteLength} vs ${24 + count * 24}`);
+  }
+  const f = new Float32Array(buf, 24, count * 6);
+  const buildings: Building[] = new Array(count);
+  for (let i = 0; i < count; i++) {
+    const o = i * 6;
+    buildings[i] = { x: f[o], z: f[o + 1], w: f[o + 2], d: f[o + 3], rot: f[o + 4], h: f[o + 5] };
+  }
+  return { lat, lon, buildings };
+}
+
+/**
+ * Install a city that was built rather than fetched. Same path the loader takes, so nothing
+ * downstream can tell the difference — which is the point.
+ */
+export function adoptCity(next: City): City {
+  city = next;
+  cityDiag.state = 'ready';
+  cityDiag.count = next.buildings.length;
+  return next;
+}
+
+/**
  * Fetch and parse the city once.
  *
  * Deliberately returns null rather than throwing when the file is missing: a Kaiju map with no city
@@ -99,20 +132,8 @@ export function loadCity(url = '/siege/city/dubai.bin'): Promise<City | null> {
   loading = fetch(url)
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const buf = await res.arrayBuffer();
-      const dv = new DataView(buf);
-      const lat = dv.getFloat64(0);
-      const lon = dv.getFloat64(8);
-      const count = dv.getUint32(16);
-      if (buf.byteLength !== 24 + count * 24) {
-        throw new Error(`size mismatch: ${buf.byteLength} vs ${24 + count * 24}`);
-      }
-      const f = new Float32Array(buf, 24, count * 6);
-      const buildings: Building[] = new Array(count);
-      for (let i = 0; i < count; i++) {
-        const o = i * 6;
-        buildings[i] = { x: f[o], z: f[o + 1], w: f[o + 2], d: f[o + 3], rot: f[o + 4], h: f[o + 5] };
-      }
+      const { lat, lon, buildings } = parseCity(await res.arrayBuffer());
+      const count = buildings.length;
       // Ground height is sampled ONCE for the whole city, at its origin. Dubai's terrain runs from
       // sea level to about 15 m across all four districts, which at 100 m to the unit is a seventh
       // of a unit — far less than the thickness of a building's ground floor. Sampling per building

@@ -36,6 +36,7 @@ import {
 } from './kaijuColliders';
 import { METRES_PER_UNIT, PLANET_RADIUS } from './cubeSphere';
 import { sampleGlobeSurface } from './globeGround';
+import { ensureCityColliders, raycastCity } from './cityColliders';
 import { beginMeshHitFrame } from './kaijuMeshHit';
 import { meshRay } from './kaijuMeshSeparate';
 
@@ -163,7 +164,18 @@ export interface Spark {
    * a dull, smaller puff. Drawing both the same makes a battlefield where the ground and the monster
    * look equally worth shooting at.
    */
-  kind: 'hide' | 'dirt';
+  kind: 'hide' | 'dirt' | 'wall';
+  /**
+   * Set on creation, cleared by whoever reacts to it. The renderer uses it to fire the impact sound
+   * exactly once per hit.
+   *
+   * THE SOUND CANNOT BE PLAYED FROM HERE. This module is the simulation and is verified headless;
+   * the audio reaches the browser's AudioContext and, through it, the app's environment config. One
+   * import of it turned every gunfire check into a crash about a missing Supabase URL. The split is
+   * the same one the rest of this folder keeps: the simulation decides WHAT happened, the renderer
+   * decides what that sounds like.
+   */
+  fresh: boolean;
   age: number;
   live: boolean;
 }
@@ -185,7 +197,7 @@ const sparks: Spark[] = [];
 for (let i = 0; i < MAX_SPARKS; i++) {
   sparks.push({
     pos: new THREE.Vector3(), nrm: new THREE.Vector3(0, 1, 0),
-    kind: 'hide', age: 0, live: false,
+    kind: 'hide', fresh: false, age: 0, live: false,
   });
 }
 
@@ -216,6 +228,8 @@ const _axisPt = new THREE.Vector3();
 const _centre = new THREE.Vector3();
 const _weights: number[] = [];
 const _norm2 = new THREE.Vector3();
+const _wallP = new THREE.Vector3();
+const _wallN = new THREE.Vector3();
 const _bestCap: Capsule = { a: new THREE.Vector3(), b: new THREE.Vector3(), radius: 0, part: 'torso' };
 const _meshPt = new THREE.Vector3();
 const _meshNrm = new THREE.Vector3();
@@ -255,6 +269,7 @@ function addSpark(at: THREE.Vector3, normal: THREE.Vector3 | null, kind: Spark['
   s.pos.copy(at);
   if (normal) s.nrm.copy(normal); else s.nrm.copy(at).normalize();
   s.kind = kind;
+  s.fresh = true;
   s.age = 0;
   s.live = true;
 }
@@ -298,6 +313,8 @@ let groundTick = 0;
 
 export function stepGunfire(dt: number): void {
   groundTick++;
+  // Built once when the city loads; false everywhere there is no city, which is everywhere but one.
+  const cityReady = ensureCityColliders();
   beginMeshHitFrame();
   let live = 0;
   const agents = getAgents();
@@ -447,6 +464,28 @@ export function stepGunfire(dt: number): void {
     // and would never meet the terrain on the way in — which is true of the ones that HIT. The ones
     // that miss carry on over its shoulder and land somewhere, and those are the rounds that make a
     // battlefield look like a battlefield.
+    // --- CONCRETE ---------------------------------------------------------------------------
+    //
+    // Geoff: "their bullets hit the buildings... When bullets hit buildings, they can just make an
+    // impact star-shape."
+    //
+    // Tested every frame rather than staggered, and after the Kaiju rather than before: a round
+    // passing a tower and striking the creature behind it has hit the CREATURE, and a stagger here
+    // would let rounds slip through a wall on the frames it was skipped. The city test is a grid
+    // lookup and a handful of slab tests, which is cheap enough to simply always do.
+    //
+    // No ricochet off a building. A round that hits concrete head-on buries itself; the ones that
+    // spray back off armour are the ones worth animating, and every wall in Dubai throwing sparks
+    // in all directions would bury the Kaiju's own hits in noise.
+    if (cityReady) {
+      const t = raycastCity(_prev, b.pos, _wallP, _wallN);
+      if (t != null) {
+        addSpark(_wallP, _wallN, 'wall');
+        b.live = false;
+        continue;
+      }
+    }
+
     //
     // STAGGERED, one round in three per frame. A terrain sample walks the patch index to find which
     // piece of ground was actually drawn under a direction, and doing that for two hundred rounds

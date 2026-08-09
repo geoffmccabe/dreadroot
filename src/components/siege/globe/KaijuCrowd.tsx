@@ -46,6 +46,10 @@ import {
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
+import {
+  ensureCityColliders, worldToCity, cityToWorld, steerAroundBuildings,
+  resolveBuildings, findFreeSpot, isInsideBuilding,
+} from './cityColliders';
 import { noteGunshot } from './kaijuGunAudio';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
@@ -210,6 +214,8 @@ export function KaijuCrowd() {
  */
 function makePeople(): Person[] {
   const out: Person[] = [];
+  // Whether there is a city to avoid. Checked once for the whole spawn rather than per person.
+  const inCity = ensureCityColliders();
 
   if (spawnHint) {
     const { from, to } = spawnHint;
@@ -231,6 +237,8 @@ function makePeople(): Person[] {
         fireIn: nextShotDelay(),
         retargetIn: nextRetargetDelay(),
         shootFor: 0,
+        side: 0,
+        stuck: 0,
       });
     }
     return out;
@@ -258,8 +266,34 @@ function makePeople(): Person[] {
       fireIn: nextShotDelay(),
       retargetIn: nextRetargetDelay(),
       shootFor: 0,
+      side: 0,
+      stuck: 0,
     });
   }
+  // NOBODY STARTS INSIDE A BUILDING.
+  //
+  // The ring and the corridor are laid out around the Kaiju with no idea the city is there, so in
+  // Dubai a good third of them land in a tower. Pushing out does not solve it — the footprints abut,
+  // so out of one wall is into the next — which is what findFreeSpot's spiral search is for. Done
+  // once, here, rather than left to the per-frame rescue: two hundred men teleporting out of walls
+  // over the first few seconds is a worse first impression than a moment's work at spawn.
+  if (inCity) {
+    const p = new THREE.Vector3();
+    const fix = { x: 0, z: 0 };
+    let moved = 0;
+    for (const person of out) {
+      p.copy(person.dir).multiplyScalar(playerBody.radius);
+      if (!worldToCity(p, p)) break;
+      if (!isInsideBuilding(p.x, 1, p.z, PERSON_RADIUS_M)) continue;
+      if (!findFreeSpot(p.x, p.z, PERSON_RADIUS_M, fix)) continue;
+      p.set(fix.x, p.y, fix.z);
+      cityToWorld(p, p);
+      person.dir.copy(p).normalize();
+      moved++;
+    }
+    if (moved) console.log(`[crowd] moved ${moved} soldiers out of buildings at spawn`);
+  }
+
   return out;
 }
 
@@ -428,6 +462,11 @@ function Crowd() {
   const _axis = useMemo(() => new THREE.Vector3(), []);
   const _toKaiju = useMemo(() => new THREE.Vector3(), []);
   const _basis = useMemo(() => new THREE.Matrix4(), []);
+  // Scratch for the city frame. Allocated once: this runs two hundred times a frame.
+  const _cityPos = useMemo(() => new THREE.Vector3(), []);
+  const _cityAhead = useMemo(() => new THREE.Vector3(), []);
+  const _steer = useMemo(() => ({ x: 0, z: 0, side: 0 }), []);
+  const _fix = useMemo(() => ({ x: 0, z: 0 }), []);
   const _muzzle = useMemo(() => new THREE.Vector3(), []);
   const _aim = useMemo(() => new THREE.Vector3(), []);
   const frame = useRef(0);
@@ -437,6 +476,13 @@ function Crowd() {
     const dt = Math.min(rawDt, 0.05);
     frame.current++;
     const STAGGER = 3;
+    // One check for the whole crowd, not one per soldier.
+    const cityReady = ensureCityColliders();
+    // ONE radius for the whole crowd's city maths. The city is flat and level in its own frame, so
+    // the exact altitude a given soldier stands at moves his position in that frame by centimetres —
+    // far less than his own width, and not worth a terrain sample per person per frame just to get
+    // a number that is only used to work out which building he is next to.
+    const groundRadius = playerBody.radius;
     // Look the roster up ONCE per frame, not once per person: getAgents returns the live array and
     // two hundred linear searches a frame for the same four entries is two hundred too many.
     const fighting = arenaStarted();
@@ -485,12 +531,65 @@ function Crowd() {
       }
 
       if (p.running) {
+        // AVOID THE BUILDINGS BEFORE MOVING, not after.
+        //
+        // The steering happens in the city's own flat frame — metres from the city origin, where the
+        // ground is level and the maths is two-dimensional — and the result is folded back into the
+        // heading before the sphere step uses it. Doing it the other way round, as a correction
+        // applied after the move, is what makes a crowd visibly stutter against walls.
+        if (cityReady) {
+          _cityPos.copy(p.dir).multiplyScalar(groundRadius);
+          if (worldToCity(_cityPos, _cityPos)) {
+            // The heading, expressed in the same flat frame: two points a metre apart along it.
+            _cityAhead.copy(p.dir).multiplyScalar(groundRadius).addScaledVector(p.fwd, 0.01);
+            if (worldToCity(_cityAhead, _cityAhead)) {
+              const hx = _cityAhead.x - _cityPos.x, hz = _cityAhead.z - _cityPos.z;
+              const hl = Math.hypot(hx, hz);
+              if (hl > 1e-6) {
+                _steer.side = p.side;
+                const deflected = steerAroundBuildings(
+                  _cityPos.x, _cityPos.z, hx / hl, hz / hl, PERSON_RADIUS_M, LOOKAHEAD_M, _steer,
+                );
+                p.side = deflected ? _steer.side : 0;
+                if (deflected) {
+                  // Back to a world heading: step a metre along the new flat direction and take the
+                  // difference. Cheaper and safer than rotating the quaternion by hand, and it
+                  // cannot get the frame's handedness wrong.
+                  _cityAhead.set(_cityPos.x + _steer.x, _cityPos.y, _cityPos.z + _steer.z);
+                  cityToWorld(_cityAhead, _cityAhead);
+                  cityToWorld(_cityPos, _cityPos);
+                  p.fwd.copy(_cityAhead).sub(_cityPos);
+                  p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir));
+                  if (p.fwd.lengthSq() > 1e-12) p.fwd.normalize();
+                }
+              }
+            }
+          }
+        }
+
         const dist = p.speed * dt;
         _axis.crossVectors(p.dir, p.fwd).normalize();
         const ang = dist / PLANET_RADIUS;
         p.dir.applyAxisAngle(_axis, ang).normalize();
         p.fwd.applyAxisAngle(_axis, ang);
         p.fwd.addScaledVector(p.dir, -p.fwd.dot(p.dir)).normalize();
+      }
+
+      // ...and the last resort, AFTER the move: anyone who has ended up in a wall is pushed out of
+      // it. Someone who cannot be pushed out — Dubai's footprints abut, so half the time there is no
+      // daylight to push into — is teleported to open ground after a second of being stuck, which is
+      // ugly once and better than a soldier standing inside a tower for the rest of the battle.
+      if (cityReady) {
+        _cityPos.copy(p.dir).multiplyScalar(groundRadius);
+        if (worldToCity(_cityPos, _cityPos)) {
+          if (resolveBuildings(_cityPos.x, _cityPos.z, PERSON_RADIUS_M, _fix)) {
+            p.stuck = isInsideBuilding(_fix.x, 1, _fix.z, PERSON_RADIUS_M) ? p.stuck + 1 : 0;
+            if (p.stuck > 60) { findFreeSpot(_fix.x, _fix.z, PERSON_RADIUS_M, _fix); p.stuck = 0; }
+            _cityAhead.set(_fix.x, _cityPos.y, _fix.z);
+            cityToWorld(_cityAhead, _cityAhead);
+            p.dir.copy(_cityAhead).normalize();
+          } else p.stuck = 0;
+        }
       }
 
       // DISTANCE CULL, and it is the biggest single saving available here.
