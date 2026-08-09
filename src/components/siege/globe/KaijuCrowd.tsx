@@ -136,6 +136,13 @@ interface Person {
    * enough that a Kaiju walking into the crowd visibly pulls fire onto itself within a few seconds.
    */
   retargetIn: number;
+  /**
+   * Seconds left on this person's firing animation.
+   *
+   * Only used when STANDING: the running clip is Run_Shoot, which already shows him firing on the
+   * move, so overriding it would replace a good animation with a worse one.
+   */
+  shootFor: number;
 }
 
 let crowdOn = false;
@@ -315,7 +322,13 @@ function Crowd() {
     const shootClip = byName(pickClip(info, ['idle_gun_shoot', 'gun_shoot', 'shoot']));
     const clip = moveClip ?? idleClip;
 
-    const out: { obj: THREE.Group; mixer: THREE.AnimationMixer; action: THREE.AnimationAction | null; idle: THREE.AnimationAction | null; shoot: THREE.AnimationAction | null }[] = [];
+    const out: {
+      obj: THREE.Group; mixer: THREE.AnimationMixer;
+      action: THREE.AnimationAction | null; idle: THREE.AnimationAction | null;
+      shoot: THREE.AnimationAction | null;
+      /** Whether this figure is currently in the scene graph at all. */
+      attached: boolean;
+    }[] = [];
     let localised = 0;
     for (let i = 0; i < CROWD_SIZE; i++) {
       const obj = SkeletonUtils.clone(source) as THREE.Group;

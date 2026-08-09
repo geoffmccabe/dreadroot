@@ -33,6 +33,11 @@ import {
 import { detailMetres } from './globeDetail';
 import { cityBaseMetres } from './cityGround';
 import { sampleGlobeElevation } from './globeGround';
+// USED BUT NEVER IMPORTED. Both of these throw ReferenceError the moment their line runs — the
+// terrain material at build time and the look store on every render. Caught by check:undeclared,
+// which gates on exactly this class of error and is the only reason it was found at all.
+import { makeTerrainMaterial } from './terrainMaterial';
+import { useGlobeLook } from '@/features/look/globeLookStore';
 // PATCH, DATA_LAG, dataFor and the node-key helpers live in globePatchIndex so that the ground
 // sampler and this mesh builder cannot drift apart. They used to be defined here and re-derived
 // there, which is precisely how the surface you stand on ended up being a different height from

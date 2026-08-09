@@ -144,5 +144,45 @@ console.log('\n== Kaiju are kept apart by their meshes ==\n');
      `${mesh}/200 — any shortfall is the capsule coming back`);
 }
 
+// --- 6. THE QUERY MUST NOT DEGENERATE ------------------------------------------------------------
+// THE REGRESSION THIS EXISTS FOR, and it cost Geoff a one-second freeze every time two Kaiju met.
+//
+// closestPointToGeometry walks one mesh's tree and, for every leaf, needs the nearest triangles of
+// the OTHER mesh. It looks for `boundsTree` on that geometry to do it quickly; without it, it scans
+// EVERY triangle of the other mesh for EVERY leaf. Measured on two real Kaiju in contact: 3,158 ms
+// without, 7.15 ms with. Four hundred and forty times.
+//
+// This is a TIMING assertion rather than a check that some field is set, because the field is an
+// implementation detail of a library and the frame budget is not.
+{
+  clearMeshSeparation();
+  // Something with a real triangle count — twelve-triangle boxes are far too small to show it.
+  const dense = (id: string, x: number) => {
+    const g = new THREE.SphereGeometry(1.5, 48, 32);   // ~3,000 triangles, Kaiju-sized
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial());
+    const root = new THREE.Group();
+    root.add(m);
+    root.position.set(x, PLANET_RADIUS, 0);
+    root.updateMatrixWorld(true);
+    registerHitMesh(id, root);
+  };
+  dense('dense-a', 0);
+  dense('dense-b', 2.98);        // overlapping: the worst case for pruning, and the real one
+
+  const axis = new THREE.Vector3();
+  const t0 = Date.now();
+  meshSeparation('dense-a', 'dense-b', 200, axis);
+  const ms = Date.now() - t0;
+  ok(ms < 120, 'a mesh query between two touching Kaiju completes in a sane time',
+     `${ms} ms — without the other geometry's search tree this is thousands`);
+
+  // ...and only ONE query may run per tick, however many pairs are asking.
+  const before = Date.now();
+  for (let i = 0; i < 20; i++) meshSeparation('dense-a', 'dense-b', 201, axis);
+  ok(Date.now() - before < 200,
+     'twenty pairs asking in the same tick share one query between them',
+     `${Date.now() - before} ms for 20 calls`);
+}
+
 console.log(`\n${failures === 0 ? 'MESH SEPARATION CHECKS PASSED' : `${failures} CHECK(S) FAILED`}\n`);
 process.exit(failures === 0 ? 0 : 1);

@@ -10,7 +10,6 @@
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { resolveGait, stripRootMotion } from './kaijuClips';
-import { sampleGlobeNormal } from './globeGround';
 
 /** Model-local X, the axis a body topples about when it falls forward. */
 const _xAxis = new THREE.Vector3(1, 0, 0);

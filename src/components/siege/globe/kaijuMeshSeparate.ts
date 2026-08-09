@@ -56,6 +56,25 @@ const MARGIN = MARGIN_METRES * UNITS_PER_METRE;
 /** Seconds between re-posing a Kaiju's collision mesh. 30 Hz; see the cost note above. */
 const REFRESH_SECONDS = 1 / 30;
 
+/**
+ * Seconds between re-running the mesh-vs-mesh QUERY for a given pair.
+ *
+ * The bake was throttled from the start; the query was not, and that asymmetry is worth naming
+ * because it is easy to miss — the expensive-looking half was capped and the actually-expensive half
+ * ran flat out, once per pair, every frame.
+ *
+ * Even fixed, a closest-point search between two meshes in contact is about 7 ms. At 10 Hz that is
+ * under a millisecond amortised, and a 300 m Kaiju moves 1.5 m in a tenth of a second — well inside
+ * the 4 m margin being held, so nothing can cross it between updates.
+ */
+const QUERY_SECONDS = 1 / 10;
+
+/** The last answer for a pair, so the frames between queries have something true to reuse. */
+interface PairResult { depth: number; axis: THREE.Vector3; stamp: number }
+const pairs = new Map<string, PairResult>();
+/** One mesh query per tick, whichever pair is stalest. Bounds the worst frame to a single search. */
+let lastQueryTick = -1;
+
 interface Posed {
   mesh: THREE.Mesh;
   geom: THREE.BufferGeometry;
@@ -93,6 +112,9 @@ onHitMeshDropped((id) => {
 export function clearMeshSeparation(): void {
   for (const p of posed.values()) p.geom.dispose();
   posed.clear();
+  pairs.clear();
+  lastQueryTick = -1;
+  lastBakeTick = -1;
 }
 
 /** Can this agent be separated by its mesh, or must the caller fall back to a capsule? */
@@ -159,6 +181,17 @@ function ensurePosed(id: string, now: number): Posed | null {
   p.scale = Math.max(1e-6, _scale.x);
   if (!p.bvh) p.bvh = new MeshBVH(p.geom);
   else p.bvh.refit();
+  // THE LINE THAT WAS MISSING, AND IT COST A SECOND AND A HALF A FRAME.
+  //
+  // closestPointToGeometry walks THIS mesh's tree, and for every leaf it reaches it needs to find
+  // the nearest triangles of the OTHER mesh. It looks for `boundsTree` on that geometry to do it
+  // quickly — and if it is not there it falls back to scanning every triangle of the other mesh,
+  // for every leaf. Seven thousand times four thousand, in JavaScript, per pair, per frame.
+  //
+  // Measured on two Kaiju in contact: 3,158 ms without it, 7.15 ms with it. Four hundred and forty
+  // times. The other Claude's trace found it as an intersectsRange recursion storm eating a whole
+  // second of frame time, which is exactly what that is.
+  p.geom.boundsTree = p.bvh;
   meshSepDiag.bakes++;
   return p;
 }
@@ -168,8 +201,10 @@ const _inv = new THREE.Matrix4();
 const _pa = new THREE.Vector3();
 const _pb = new THREE.Vector3();
 const _rot = new THREE.Matrix4();
-const _t1: { point: THREE.Vector3; distance: number } = { point: new THREE.Vector3(), distance: 0 };
-const _t2: { point: THREE.Vector3; distance: number } = { point: new THREE.Vector3(), distance: 0 };
+// three-mesh-bvh fills these in; its HitPointInfo carries a faceIndex as well as the point and
+// distance, so the object handed in has to have room for it.
+const _t1 = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
+const _t2 = { point: new THREE.Vector3(), distance: 0, faceIndex: 0 };
 
 /**
  * How far, and in which direction, two Kaiju must move apart so their hides do not touch.
@@ -183,6 +218,23 @@ export function meshSeparation(idA: string, idB: string, now: number, axis: THRE
   const B = ensurePosed(idB, now);
   if (!A || !B) return -1;
 
+  // CACHED, AND RATE-LIMITED TO ONE QUERY A TICK. The bake was throttled from the first version and
+  // the query was not, so with four Kaiju brawling this ran six closest-point searches every single
+  // frame. Reusing the last answer between queries is safe because the margin being held is far
+  // wider than anything can move in the gap.
+  const key = idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
+  const flip = idA >= idB;
+  let cached = pairs.get(key);
+  const fresh = cached && now - cached.stamp < QUERY_SECONDS;
+  if (cached && (fresh || lastQueryTick === now)) {
+    axis.copy(cached.axis);
+    if (flip) axis.negate();
+    return cached.depth;
+  }
+  lastQueryTick = now;
+  if (!cached) { cached = { depth: 0, axis: new THREE.Vector3(), stamp: now }; pairs.set(key, cached); }
+  cached.stamp = now;
+
   // B's geometry, expressed in A's local frame. Both world matrices carry the planet's radius, so
   // this product is taken in JavaScript's 64-bit maths where that cancels exactly — the same reason
   // the soldiers' skinning had to be re-based. In 32-bit it would be noise.
@@ -192,9 +244,9 @@ export function meshSeparation(idA: string, idB: string, now: number, axis: THRE
   // The margin is in world units; the query works in A's local units.
   const localMargin = MARGIN / A.scale;
   const hit = A.bvh.closestPointToGeometry(B.geom, _AtoB, _t1, _t2, 0, localMargin);
-  if (!hit) return 0;
+  if (!hit) { cached.depth = 0; return 0; }
   const gap = _t1.distance * A.scale;
-  if (gap >= MARGIN) return 0;
+  if (gap >= MARGIN) { cached.depth = 0; return 0; }
 
   // Direction from A's surface toward B's, taken between the two closest points and rotated into
   // world space. This is what makes them slide around each other instead of being shoved along a
@@ -205,11 +257,14 @@ export function meshSeparation(idA: string, idB: string, now: number, axis: THRE
   if (axis.lengthSq() < 1e-16) {
     // Surfaces coincident. Fall back to centre-to-centre so the push still has a direction.
     axis.setFromMatrixPosition(B.mesh.matrixWorld).sub(_v.setFromMatrixPosition(A.mesh.matrixWorld));
-    if (axis.lengthSq() < 1e-16) return 0;
+    if (axis.lengthSq() < 1e-16) { cached.depth = 0; return 0; }
   }
   _rot.extractRotation(A.mesh.matrixWorld);
   axis.applyMatrix4(_rot).normalize();
-  return MARGIN - gap;
+  cached.axis.copy(axis);
+  if (flip) cached.axis.negate();
+  cached.depth = MARGIN - gap;
+  return cached.depth;
 }
 
 
