@@ -26,7 +26,7 @@
 // where you are STANDING, a shadow camera that follows you, and just enough sky bounce to keep the
 // shadow side from going black.
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT } from './cubeSphere';
@@ -104,7 +104,42 @@ const GLOBE_DPR = 1.5;
  */
 export const sunDirection = new THREE.Vector3(0, 1, 0);
 
+/**
+ * ONE KEY THAT BISECTS THIS, because three broken builds in a row is three too many.
+ *
+ * Shift+L switches the whole new look off and puts the old lights back. I cannot see the screen, and
+ * every diagnosis so far has been me reasoning from a description — which has been wrong more often
+ * than right. This turns the next report from "still white" into an answer:
+ *
+ *   WHITE GOES AWAY with the old lights  -> the cause is the lights, the grade or the exposure
+ *   STILL WHITE with the old lights      -> the cause is the terrain material, which stays either
+ *                                           way, or something not in this file at all
+ *
+ * Those need completely different fixes, and one keypress separates them.
+ */
+let newLook = true;
+const lookListeners = new Set<() => void>();
+function setNewLook(v: boolean): void {
+  newLook = v;
+  for (const l of lookListeners) l();
+  console.log(`[globe] lighting: ${v ? 'NEW (sun + shadows + grade)' : 'OLD (flat fill)'}`);
+}
+
 export function GlobeLighting() {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force((n) => n + 1);
+    lookListeners.add(fn);
+    const key = (e: KeyboardEvent) => {
+      if (e.code === 'KeyL' && e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        setNewLook(!newLook);
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', key, true);
+    return () => { lookListeners.delete(fn); window.removeEventListener('keydown', key, true); };
+  }, []);
+
   const gl = useThree((s) => s.gl);
   const setDpr = useThree((s) => s.setDpr);
   const sun = useRef<THREE.DirectionalLight>(null);
@@ -131,6 +166,7 @@ export function GlobeLighting() {
    * to go". Restored on the way out so no other map inherits a curve tuned for open landscape.
    */
   useEffect(() => {
+    if (!newLook) return;
     const hadExposure = lookStore.get().exposure;
     setCinematicGrade(true);
     lookStore.set('exposure', LOOK.grade.exposure);
@@ -138,16 +174,18 @@ export function GlobeLighting() {
       setCinematicGrade(false);
       lookStore.set('exposure', hadExposure);
     };
-  }, []);
+  }, [newLook]);
 
   useEffect(() => {
+    if (!newLook) return;
     const had = gl.getPixelRatio();
     // Never ask for more than the display actually has: on a 1x screen that would be pure waste.
     setDpr(Math.min(GLOBE_DPR, typeof window !== 'undefined' ? window.devicePixelRatio : 1));
     return () => setDpr(had);
-  }, [gl, setDpr]);
+  }, [gl, setDpr, newLook]);
 
   useEffect(() => {
+    if (!newLook) return;
     const hadShadows = gl.shadowMap.enabled;
     const hadType = gl.shadowMap.type;
     gl.shadowMap.enabled = true;
@@ -160,11 +198,11 @@ export function GlobeLighting() {
       gl.shadowMap.type = hadType;
       gl.shadowMap.needsUpdate = true;
     };
-  }, [gl]);
+  }, [gl, newLook]);
 
   useFrame(() => {
     const s = sun.current;
-    if (!s) return;
+    if (!s || !newLook) return;
 
     // THE SUN IS RELATIVE TO WHERE YOU STAND. Local up at the player, then a compass bearing in
     // that place's own tangent plane, then tilt up by the elevation. That gives a sun which is
@@ -189,6 +227,19 @@ export function GlobeLighting() {
   });
 
   const half = SHADOW_SPAN_M / METRES_PER_UNIT / 2;
+
+  // THE OLD LIGHTING, exactly as it was: the shared world's ambient and hemisphere plus the blank-map
+  // fill, and a directional light on a fixed world vector. Kept verbatim rather than approximated,
+  // so "does turning it off fix it" is a real answer and not another variable.
+  if (!newLook) {
+    return (
+      <>
+        <ambientLight intensity={0.7} />
+        <hemisphereLight args={['#ffffff', '#b9c4d0', 0.6]} />
+        <directionalLight position={[400, 600, 300]} intensity={1.1} />
+      </>
+    );
+  }
 
   return (
     <>
