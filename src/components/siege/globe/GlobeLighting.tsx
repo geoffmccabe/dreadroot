@@ -34,6 +34,7 @@ import { METRES_PER_UNIT } from './cubeSphere';
 import { body as playerBody } from './kaijuBody';
 import { globeLook, useGlobeLook } from '@/features/look/globeLookStore';
 import { lookStore } from '@/features/look/lookStore';
+import { setGlobeActive } from '@/features/look/globeActive';
 
 /**
  * The current sun direction, in world space.
@@ -81,6 +82,38 @@ export function GlobeLighting() {
   const sunColour = useMemo(() => new THREE.Color(), []);
 
   const on = look.enabled;
+
+  /**
+   * THIS MAP IS ON SCREEN. Cleared on unmount, so leaving takes the grade with it.
+   *
+   * Without this the persisted `enabled` flag alone was letting the Mini Earth's grade run on every
+   * other world — the whole game blown out because a panel had been switched on once.
+   */
+  useEffect(() => {
+    setGlobeActive(true);
+    return () => setGlobeActive(false);
+  }, []);
+
+  /**
+   * PUT EVERY BORROWED VALUE BACK WHEN THE MAP UNMOUNTS.
+   *
+   * Separate from the toggles below, and deliberately so. Those restore when a SWITCH changes; this
+   * restores when the map goes away, which is a different moment and the one that leaks. The
+   * originals are captured once on mount, never on re-run: a cleanup that re-reads the current value
+   * restores whatever the last effect wrote, which is not a restore at all.
+   */
+  useEffect(() => () => {
+    // Hand the renderer's exposure back to whatever the shared look store says.
+    gl.toneMappingExposure = lookStore.get().exposure;
+    // Hand back every light this file scaled, wherever it lives.
+    scene.traverse((o) => {
+      const l = o as THREE.Light;
+      if (l.isLight && l.userData.baseIntensity !== undefined) {
+        l.intensity = l.userData.baseIntensity;
+        delete l.userData.baseIntensity;
+      }
+    });
+  }, [scene, gl]);
 
   /**
    * SHADOWS, and restoring whatever was there before.
@@ -151,49 +184,23 @@ export function GlobeLighting() {
   }, [gl, setDpr, on, look.dpr]);
 
   /**
-   * EXPOSURE, pushed into the shared look store so LookSync applies it.
+   * EXPOSURE IS SET ON THE RENDERER, NOT IN THE SHARED STORE.
    *
-   * Restored on the way out, or leaving the map would leave every other one graded for open
-   * landscape under a low sun.
-   */
-  useEffect(() => {
-    if (!on || !look.gradeOn) return;
-    const had = lookStore.get().exposure;
-    lookStore.set('exposure', look.exposure);
-    return () => { lookStore.set('exposure', had); };
-  }, [on, look.gradeOn, look.exposure]);
-
-  /**
-   * THE NIGHT SKY.
+   * It used to go through lookStore, which PERSISTS TO LOCALSTORAGE. So a night exposure of 0.55 was
+   * being written into the game's saved settings and carried to every other map and every future
+   * session — a lighting change that outlived the map that made it, survived a reload, and had no
+   * obvious way back. That is a far worse kind of bug than a wrong number: it escapes.
    *
-   * SiegeWorldScene paints a light blue background and mounts a drei <Sky> configured for midday.
-   * Neither is LIT — they are emissive by nature — so no amount of dimming the lights touches them,
-   * which is exactly why Geoff could turn every light off and still have a bright scene. The dome is
-   * hidden rather than unmounted, because it belongs to a component shared with every other map.
+   * Written straight onto the renderer each frame instead. Nothing is saved, nothing leaks, and
+   * unmounting simply stops writing — at which point LookSync's own value is authoritative again.
    */
-  useEffect(() => {
-    if (!on) return;
-    const night = look.skyMode === 'night';
-    const hadBg = scene.background;
-    const hidden: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      // drei's Sky is a large mesh with a shader material and no name; identifying it by its
-      // material's uniforms is the reliable way, since matching on class would also catch the
-      // starfield and the cloud shells.
-      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
-      if (m && m.uniforms && 'sunPosition' in m.uniforms && 'rayleigh' in m.uniforms) {
-        if (night && o.visible) { o.visible = false; hidden.push(o); }
-      }
-    });
-    if (night) scene.background = new THREE.Color(0x05070d);
-    return () => {
-      for (const o of hidden) o.visible = true;
-      scene.background = hadBg;
-    };
-  }, [scene, on, look.skyMode]);
 
   useFrame(() => {
     const g = globeLook();
+
+    // Exposure, straight onto the renderer. See the note above on why this does not go through the
+    // persisted store.
+    if (g.enabled && g.gradeOn) gl.toneMappingExposure = g.exposure;
 
     // SCALE EVERY LIGHT THAT IS NOT MINE.
     //

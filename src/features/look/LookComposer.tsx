@@ -15,6 +15,7 @@ import { KernelSize } from 'postprocessing';
 import { LOOK } from './lookConfig';
 import { useLook } from './lookStore';
 import { useGlobeLook } from './globeLookStore';
+import { isGlobeActive } from './globeActive';
 
 function useIsLowTier() {
   return useMemo(
@@ -34,7 +35,15 @@ export function LookComposer() {
   // this curve is tuned for one strong sun over open landscape and would be a regression inside a
   // torch-lit fortress.
   const g = useGlobeLook();
-  const grade = g.enabled && g.gradeOn;
+  /**
+   * BOTH conditions, and the second one is the bug that broke every other map.
+   *
+   * `enabled` is a PERSISTED setting — it stays true across maps and sessions, which is what makes
+   * the panel worth having. But this composer is global, so checking it alone applied the Mini
+   * Earth's grade to Siege Worlds and everywhere else the instant the panel was switched on.
+   * Contrast raised on a scene that was never graded for it is exactly "blown out".
+   */
+  const grade = g.enabled && g.gradeOn && isGlobeActive();
 
   if (isLowTier || (!bloomEnabled && !grade)) return null;
 
