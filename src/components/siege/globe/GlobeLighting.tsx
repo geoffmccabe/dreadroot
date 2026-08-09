@@ -234,6 +234,27 @@ export function GlobeLighting() {
     // persisted store.
     if (g.enabled && g.gradeOn) gl.toneMappingExposure = g.exposure;
 
+    // HOLD THE SHADOW MAP ON, EVERY FRAME. This is why shadows still did not appear.
+    //
+    // The Canvas is created with `shadows={shadowsEnabled}` — a global toggle, default OFF, bound to
+    // the '-' key — and react-three-fiber OWNS that flag: it re-applies it from the prop whenever the
+    // Canvas re-renders, which in this app is often. So setting it once in an effect worked for a
+    // few frames and was then quietly switched back off, with everything else about the shadow
+    // pipeline correct and nothing to see. Asserting it each frame is one boolean write and it
+    // simply cannot be lost.
+    if (g.enabled && g.shadowsOn) {
+      if (!gl.shadowMap.enabled) { gl.shadowMap.enabled = true; gl.shadowMap.needsUpdate = true; }
+      const cam = sun.current?.shadow.camera;
+      // The bounds come from a slider, and three does not rebuild the projection when they change —
+      // so without this the shadow camera keeps whatever area it was first compiled with.
+      if (cam && cam.right !== g.shadowSpanM / METRES_PER_UNIT / 2) {
+        const half = g.shadowSpanM / METRES_PER_UNIT / 2;
+        cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
+        cam.far = (g.shadowSpanM * 2.5) / METRES_PER_UNIT;
+        cam.updateProjectionMatrix();
+      }
+    }
+
     // SCALE EVERY LIGHT THAT IS NOT MINE.
     //
     // Three lights live in SiegeWorldScene — ambient 0.35, hemisphere 0.6, directional 1.1 — added
