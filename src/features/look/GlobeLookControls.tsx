@@ -12,11 +12,12 @@
 // are the actual cause of "washed out" and dragging them to zero is the single most dramatic change
 // available here.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import {
   useGlobeLook, globeLookStore, GLOBE_LOOK_DEFAULTS, GLOBE_LOOK_PRESETS, applyGlobePreset,
+  globeLookToJson, globeLookFromJson,
 } from './globeLookStore';
 
 const sectionStyle: React.CSSProperties = { marginBottom: '6px' };
@@ -75,6 +76,29 @@ function SliderRow(props: {
 export function GlobeLookControls() {
   const g = useGlobeLook();
   const set = globeLookStore.set;
+  /**
+   * "Copied" / "Pasted", shown on the button itself.
+   *
+   * Geoff: "I clicked a copy button on the bottom but the button doesn't react in any way so I don't
+   * know if it works." A copy button with no feedback is indistinguishable from a broken one, and
+   * the clipboard API fails silently on a permissions refusal — so it may genuinely have been both.
+   */
+  const [flash, setFlash] = useState<string | null>(null);
+  const say = (msg: string) => { setFlash(msg); window.setTimeout(() => setFlash(null), 1400); };
+
+  const copy = () => {
+    const json = globeLookToJson();
+    navigator.clipboard.writeText(json)
+      .then(() => say('Copied'))
+      // The clipboard needs a secure context and permission; if it refuses, at least put the values
+      // somewhere they can be got at rather than failing into silence.
+      .catch(() => { console.log('[globe look]\n' + json); say('See console'); });
+  };
+  const paste = () => {
+    navigator.clipboard.readText()
+      .then((t) => say(globeLookFromJson(t) ? 'Pasted' : 'Not settings'))
+      .catch(() => say('Clipboard blocked'));
+  };
 
   return (
     <div style={sectionStyle}>
@@ -319,6 +343,22 @@ export function GlobeLookControls() {
             min={0} max={1} step={0.01} disabled={!g.cloudsOn}
             onChange={(v) => set('cloudOpacity', v)}
           />
+
+          <div style={groupTitleStyle}>Share a look</div>
+          <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+            <button style={{ ...btnStyle, flex: 1 }} onClick={copy}>
+              {flash === 'Copied' || flash === 'See console' ? flash : 'Copy settings'}
+            </button>
+            <button style={{ ...btnStyle, flex: 1 }} onClick={paste}>
+              {flash === 'Pasted' || flash === 'Not settings' || flash === 'Clipboard blocked' ? flash : 'Paste'}
+            </button>
+          </div>
+          <div style={noteStyle}>
+            Copy puts THESE settings on the clipboard as JSON, ready to paste into a message. The
+            Copy button at the very bottom of this panel is a different one — it belongs to the old
+            fog and day/night section and copies those instead, which is why a copied "look" came
+            back describing something else.
+          </div>
 
           <button
             style={{ ...btnStyle, width: '100%', marginTop: '6px' }}

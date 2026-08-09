@@ -39,7 +39,25 @@ export function LookComposer() {
   if (isLowTier || (!bloomEnabled && !grade)) return null;
 
   return (
-    <EffectComposer multisampling={0}>
+    /*
+      KEYED ON WHICH EFFECTS EXIST, and this is the "white sky until I click contrast" bug.
+
+      Geoff: "the whole sky remains pure white with some black dots until I click the contrast
+      slider. When I click the contrast slider, even without adjusting it, then suddenly the sky
+      turns black with white stars like it should be."
+
+      That is a rebuild, not a value. EffectComposer compiles its effects into a single merged
+      shader pass; conditionally adding or removing children does not reliably force it to rebuild
+      that pass, so the grade would sit in the tree doing nothing until ANY prop change knocked the
+      pass over and it recompiled — which is exactly what touching a slider does, whether or not the
+      value moves.
+
+      Keying on the SET of effects present makes turning the grade on a remount, so the pass is
+      rebuilt the moment it needs to be. The key deliberately does not include the slider values:
+      those flow through as uniforms and must not cause a rebuild, or every drag would recompile a
+      shader.
+    */
+    <EffectComposer key={`${bloomEnabled ? 'b' : ''}${grade ? 'g' : ''}`} multisampling={0}>
       {bloomEnabled ? (
         <Bloom
           kernelSize={KernelSize.MEDIUM}

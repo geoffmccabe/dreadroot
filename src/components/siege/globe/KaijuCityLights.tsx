@@ -39,7 +39,20 @@ import type { City } from './cityData';
 const CARS = 9000;
 /* Speeds are per road class now — see CLASS_SPEED below. */
 /** Headlight/taillight size in metres. Small — a car is 2 m wide and 20 km of city is in frame. */
-const CAR_SIZE_M = 6;
+/**
+ * One lamp, in metres. 4.5, down from 6, because there are now TWO of them per vehicle and a pair
+ * only reads as a pair when the gap between them is wider than the lamps themselves.
+ */
+const CAR_SIZE_M = 4.5;
+/**
+ * Half the gap between a vehicle's two lamps.
+ *
+ * A real car's headlights are about 1.5 m apart, which at 100 m per game unit is a fifteenth of one
+ * lamp's own width — invisible, and the two would draw exactly on top of each other. So this is
+ * deliberately exaggerated to 8 m across: from the eyeline of something 300 m tall, that is what
+ * "two lights side by side" actually needs to be to be seen as two.
+ */
+const CAR_LAMP_HALF_M = 4;
 /** Only roofs above this get an aircraft warning lamp. */
 const BEACON_MIN_HEIGHT_M = 180;
 const BEACON_SIZE_M = 14;
@@ -152,10 +165,13 @@ export function KaijuCityLights({ city }: { city: City }) {
     };
   }, [city]);
 
+  // TWO LAMPS PER VEHICLE, so every buffer is twice as long and each car writes points 2i and 2i+1.
   const carBuf = useMemo(() => ({
-    pos: new Float32Array(Math.max(1, traffic.length) * 3),
-    col: new Float32Array(Math.max(1, traffic.length) * 3),
+    pos: new Float32Array(Math.max(1, traffic.length) * 2 * 3),
+    col: new Float32Array(Math.max(1, traffic.length) * 2 * 3),
   }), [traffic.length]);
+  /** The camera in the city's own space, so "coming towards you" can be decided at all. */
+  const camLocal = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05);
@@ -165,6 +181,11 @@ export function KaijuCityLights({ city }: { city: City }) {
     // --- traffic ---------------------------------------------------------------------------------
     const C = cars.current;
     if (C && traffic.length) {
+      // The camera, brought into the city's own coordinate space. The city sits on a sphere with its
+      // own transform, so comparing a world-space camera against local-space road points would give
+      // the wrong answer everywhere except the one spot the two happen to coincide.
+      camLocal.copy(camera.position);
+      C.worldToLocal(camLocal);
       for (let i = 0; i < traffic.length; i++) {
         const c = traffic[i];
         const n = c.cum.length;
@@ -187,12 +208,41 @@ export function KaijuCityLights({ city }: { city: City }) {
         const x = c.road[s * 2] + (c.road[(s + 1) * 2] - c.road[s * 2]) * t;
         const z = c.road[s * 2 + 1] + (c.road[(s + 1) * 2 + 1] - c.road[s * 2 + 1]) * t;
 
-        const o = i * 3;
-        carBuf.pos[o] = x * U;
-        carBuf.pos[o + 1] = 3 * U;              // three metres up: headlight height
-        carBuf.pos[o + 2] = z * U;
-        if (c.dir > 0) { carBuf.col[o] = 1.0; carBuf.col[o + 1] = 0.95; carBuf.col[o + 2] = 0.80; }
-        else { carBuf.col[o] = 1.0; carBuf.col[o + 1] = 0.16; carBuf.col[o + 2] = 0.08; }
+        // WHICH WAY IS IT POINTING? Straight off the segment it is on, signed by its direction of
+        // travel — the road knows its own geometry, so nothing has to be remembered frame to frame.
+        let dx = c.road[(s + 1) * 2] - c.road[s * 2];
+        let dz = c.road[(s + 1) * 2 + 1] - c.road[s * 2 + 1];
+        const dl = Math.hypot(dx, dz) || 1;
+        dx = (dx / dl) * c.dir;
+        dz = (dz / dl) * c.dir;
+        // Ninety degrees off that, in the ground plane, which is where the second lamp goes.
+        const px = -dz * CAR_LAMP_HALF_M;
+        const pz = dx * CAR_LAMP_HALF_M;
+
+        // TOWARDS YOU OR AWAY FROM YOU. Geoff: "if they are coming towards the user, make them
+        // white and if they're going away, make them red."
+        //
+        // Judged against the CAMERA, not against the road's own direction — which is what the
+        // colour used to key off, and why it was arbitrary: whether a stream showed as headlights
+        // or tail lights depended on which way the road happened to be drawn in the source data,
+        // not on where you were standing. Every street had one white side and one red side no
+        // matter where you looked from, which is not how a city looks from anywhere.
+        const toCamX = camLocal.x - x * U;
+        const toCamZ = camLocal.z - z * U;
+        const coming = dx * toCamX + dz * toCamZ > 0;
+
+        const o = i * 6;                        // two lamps, three floats each
+        const y = 3 * U;                        // three metres up: headlight height
+        carBuf.pos[o] = (x + px) * U; carBuf.pos[o + 1] = y; carBuf.pos[o + 2] = (z + pz) * U;
+        carBuf.pos[o + 3] = (x - px) * U; carBuf.pos[o + 4] = y; carBuf.pos[o + 5] = (z - pz) * U;
+        // Headlights are white with a warm cast; tail lamps are deep red and dimmer, because a
+        // tail light emits a fraction of what a headlight does and matching them would make every
+        // street look like it was facing away.
+        const r = coming ? 1.0 : 0.85;
+        const g = coming ? 0.95 : 0.10;
+        const bl = coming ? 0.86 : 0.06;
+        carBuf.col[o] = r; carBuf.col[o + 1] = g; carBuf.col[o + 2] = bl;
+        carBuf.col[o + 3] = r; carBuf.col[o + 4] = g; carBuf.col[o + 5] = bl;
       }
       C.geometry.attributes.position.needsUpdate = true;
       C.geometry.attributes.color.needsUpdate = true;

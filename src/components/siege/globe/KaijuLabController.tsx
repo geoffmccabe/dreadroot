@@ -41,6 +41,7 @@ import { KaijuCrowd, toggleCrowd, setCrowd, setCrowdCorridor } from './KaijuCrow
 import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
+import { applyGlobePreset } from '@/features/look/globeLookStore';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
@@ -343,6 +344,14 @@ export function KaijuLabController() {
             dubaiStop = (dubaiStop + 1) % DUBAI_STOPS.length;
             const s = DUBAI_STOPS[dubaiStop];
             startArenaHere(camera, s.lat, s.lon, `${s.name}  (B3 again for the next district)`, s.facingDeg);
+            // DUBAI ARRIVES AT NIGHT. Geoff: "it's supposed to be a night scene but it's very
+            // bright so the window lights don't make sense... default to this for B3 Dubai."
+            //
+            // A city is the one place on this planet with its own light, and every one of those
+            // 59,202 buildings has lit windows that mean nothing at midday. Applied on ARRIVAL only,
+            // so it is a starting point rather than a lock — every slider stays free afterwards, and
+            // the other sites keep whatever was set.
+            applyGlobePreset('night');
           } else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
           break;
         }

@@ -262,11 +262,17 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
       // MOONLIGHT. A real moon is about a 400,000th of the sun and reads cool because the eye's
       // colour response falls away in the dark, not because moonlight is actually blue — but on a
       // screen, cool IS how night reads, so the convention is worth keeping.
+      // THE KEY LIGHT IS THE MOON. Geoff: "I have to leave the sun on for it to work. If I turn
+      // the sun off then the tops of the buildings turn white." Both halves make sense: with the
+      // key off the only thing left is hemisphere light, which comes from straight overhead — so it
+      // lands squarely on every roof and nowhere else, and blows the tops out while the walls stay
+      // black. A night scene still needs a key; it is just a dim, cool, high one.
       sunOn: true,
-      sunIntensity: 0.35,
-      sunElevation: 38,
+      sunIntensity: 0.28,
+      sunElevation: 52,
       sunWarmth: 0,
-      skyBounce: 0.06,
+      // Very low, for the reason above: hemisphere light is what whitens roofs.
+      skyBounce: 0.03,
       shadowsOn: true,
       // Long, soft shadows are most of what makes a night exterior look expensive.
       shadowSoft: true,
@@ -362,6 +368,47 @@ export function applyGlobePreset(key: string): void {
   state = { ...state, ...p.values, enabled: true };
   persist();
   listeners.forEach((l) => l());
+}
+
+/**
+ * The current settings as JSON, for pasting into a conversation.
+ *
+ * Geoff: "I need a COPY button for all the settings, so that if I get some setting I like then I
+ * can paste them to you so that you can define that as a preset."
+ *
+ * Exactly the right ask, and the panel's existing Copy button does not do it — that one belongs to
+ * the old fog and day/night section and copies fogStartPct, visualDistance and the cycle state. It
+ * has no idea the Mini Earth settings exist, which is why a copied "look" came back describing
+ * something else entirely.
+ *
+ * Formatted as the literal preset object, so a good look can be pasted straight into
+ * GLOBE_LOOK_PRESETS with no translation step and nothing lost between the two.
+ */
+export function globeLookToJson(): string {
+  const { enabled: _enabled, ...values } = state;
+  return JSON.stringify({ globeLook: values }, null, 2);
+}
+
+/** Apply a pasted settings blob. Unknown or missing keys keep their current value. */
+export function globeLookFromJson(text: string): boolean {
+  try {
+    const parsed = JSON.parse(text);
+    const values = (parsed?.globeLook ?? parsed) as Partial<GlobeLookState>;
+    if (!values || typeof values !== 'object') return false;
+    // Only take keys that exist, so a blob from the OTHER copy button cannot half-apply itself and
+    // leave the panel in a state nothing produced.
+    const next: Partial<GlobeLookState> = {};
+    for (const k of Object.keys(GLOBE_LOOK_DEFAULTS) as (keyof GlobeLookState)[]) {
+      if (k in values && typeof values[k] === typeof GLOBE_LOOK_DEFAULTS[k]) {
+        (next as Record<string, unknown>)[k] = values[k];
+      }
+    }
+    if (Object.keys(next).length === 0) return false;
+    state = { ...state, ...next, enabled: true };
+    persist();
+    listeners.forEach((l) => l());
+    return true;
+  } catch { return false; }
 }
 
 export function useGlobeLook(): GlobeLookState {
