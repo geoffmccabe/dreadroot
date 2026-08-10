@@ -69,6 +69,10 @@ const SKY_COLOUR = 0x9fc4ff;
 const GROUND_BOUNCE = 0x6b5a48;
 
 const SHADOW_MAP_SIZE = 2048;
+/** Frames between full scene scans. Two seconds at 60fps. */
+const SCAN_FRAMES = 120;
+/** The night sky colour, held as one object so it can be recognised and taken back out again. */
+const nightSky = new THREE.Color(0x05070d);
 
 /**
  * A tangent vector pointing along a compass bearing at `dir`. 0 = north, 90 = east.
@@ -97,7 +101,10 @@ export function GlobeLighting() {
     focus: new THREE.Vector3(),
   }), []);
   const sunColour = useMemo(() => new THREE.Color(), []);
-  const diagTick = useRef(0);
+  /** Frames between full scene scans. 120 at 60fps is two seconds; lights change far less often. */
+  const scanTimer = useRef(0);   // 0 = scan on the very first frame
+  const foreignLights = useRef<THREE.Light[]>([]);
+  const skyDome = useRef<THREE.Object3D | null>(null);
 
   const on = look.enabled;
 
@@ -148,30 +155,21 @@ export function GlobeLighting() {
     gl.shadowMap.enabled = true;
     gl.shadowMap.type = look.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     gl.shadowMap.needsUpdate = true;
-    // EVERY MATERIAL MUST BE RECOMPILED, and this is the other half of "shadows don't work".
+    // NO BLANKET MATERIAL INVALIDATION. This was costing 15% of the frame.
     //
-    // Whether a material samples the shadow map is baked into its SHADER at compile time, from the
-    // renderer's settings when that shader was first built. Flipping gl.shadowMap.enabled afterwards
-    // changes nothing for anything already on screen: the terrain, the Kaiju and the crowd carry on
-    // running the shader they were compiled with, which has no shadow code in it at all.
-    // `needsUpdate` forces the rebuild. It is a visible hitch, which is why it is done once on the
-    // switch rather than every frame.
-    scene.traverse((o) => {
-      const m = (o as THREE.Mesh).material;
-      if (!m) return;
-      if (Array.isArray(m)) m.forEach((x) => { x.needsUpdate = true; });
-      else m.needsUpdate = true;
-    });
+    // I used to traverse the scene here setting material.needsUpdate = true on everything, to force
+    // shaders to be rebuilt with shadow code in them. The trace shows what that actually did:
+    // getProgramParameter at 15.6% of all sampled time, which is shader linking — because on this
+    // map "everything" is 59,202 Dubai buildings plus the terrain plus two hundred soldiers, and
+    // every one of their materials was being recompiled.
+    //
+    // It was also unnecessary. three.js already tracks the lights state version and rebuilds a
+    // material's program by itself when the set of shadow-casting lights changes, which is exactly
+    // the event this was trying to respond to. Adding a light with castShadow is enough.
     return () => {
       gl.shadowMap.enabled = hadEnabled;
       gl.shadowMap.type = hadType;
       gl.shadowMap.needsUpdate = true;
-      scene.traverse((o) => {
-        const m = (o as THREE.Mesh).material;
-        if (!m) return;
-        if (Array.isArray(m)) m.forEach((x) => { x.needsUpdate = true; });
-        else m.needsUpdate = true;
-      });
     };
   }, [gl, scene, on, look.shadowsOn, look.shadowSoft]);
 
@@ -213,38 +211,6 @@ export function GlobeLighting() {
    * unmounting simply stops writing — at which point LookSync's own value is authoritative again.
    */
 
-  /**
-   * THE NIGHT SKY. Guarded on the master switch like everything else here.
-   *
-   * SiegeWorldScene paints a light blue background and mounts a drei <Sky> configured for midday.
-   * Neither is LIT — they are bright in themselves — so no amount of dimming lights touches them,
-   * which is why the scene could not be made to go dark. The dome is HIDDEN rather than unmounted,
-   * because it belongs to a component shared with every other map, and put back on the way out.
-   *
-   * This was silently lost in an earlier edit, which left the panel's Sky toggle doing nothing at
-   * all — a control that lies is worse than no control.
-   */
-  useEffect(() => {
-    if (!on || look.skyMode !== 'night') return;
-    const hadBg = scene.background;
-    const hidden: THREE.Object3D[] = [];
-    scene.traverse((o) => {
-      // drei's Sky is a large mesh with a shader material and no name. Identifying it by its
-      // uniforms is the reliable way — matching on class would also catch the starfield and the
-      // cloud shells, and hiding the starfield at night is the opposite of the intent.
-      const m = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
-      if (m && m.uniforms && 'sunPosition' in m.uniforms && 'rayleigh' in m.uniforms && o.visible) {
-        o.visible = false;
-        hidden.push(o);
-      }
-    });
-    scene.background = new THREE.Color(0x05070d);
-    return () => {
-      for (const o of hidden) o.visible = true;
-      scene.background = hadBg;
-    };
-  }, [scene, on, look.skyMode]);
-
   useFrame(() => {
     const g = globeLook();
 
@@ -252,57 +218,83 @@ export function GlobeLighting() {
     // persisted store.
     if (g.enabled && g.gradeOn) gl.toneMappingExposure = g.exposure;
 
-    // REPORT WHAT IS TRUE. Cheap enough on a scene this size at a fifth of a second.
-    shadowDiag.enabled = g.enabled;
-    shadowDiag.mapOn = gl.shadowMap.enabled;
-    if (diagTick.current++ % 12 === 0) {
+    // ONE TRAVERSE EVERY TWO SECONDS, NOT SIXTY A SECOND. This is the framerate.
+    //
+    // Geoff: "the FPS is only 3... it's terrible." Both the light scaler and the diagnostic walked
+    // the ENTIRE scene graph every frame, and on this map that graph holds 59,202 Dubai buildings,
+    // two hundred soldiers and every streamed terrain patch. Tens of thousands of nodes, sixty times
+    // a second, to adjust three light intensities that change about once a minute.
+    //
+    // The lights are cached instead and the list refreshed on a timer. Lights are added when a map
+    // mounts, not continuously, so two seconds is far more often than it needs to be and the cost is
+    // now unmeasurable.
+    // WITH THE MASTER OFF, THIS FILE COSTS NOTHING. Geoff measured 6 fps with it switched off, so
+    // whatever else is slow on this map, none of it should be mine.
+    if (!g.enabled) return;
+
+    scanTimer.current -= 1;
+    if (scanTimer.current <= 0) {
+      scanTimer.current = SCAN_FRAMES;
+      const found: THREE.Light[] = [];
       let cl = 0, cast = 0, recv = 0;
+      skyDome.current = null;
       scene.traverse((o) => {
+        // drei's Sky is a large mesh with a shader material and no name; its uniforms identify it.
+        // Matching on class would also catch the starfield, and hiding THAT at night is backwards.
+        const sm = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+        if (sm && sm.uniforms && 'sunPosition' in sm.uniforms && 'rayleigh' in sm.uniforms) {
+          skyDome.current = o;
+        }
         const l = o as THREE.Light;
-        if (l.isLight && l.castShadow) cl++;
+        if (l.isLight) {
+          if (l.castShadow) cl++;
+          if (!l.userData.globeOwned) {
+            if (l.userData.baseIntensity === undefined) l.userData.baseIntensity = l.intensity;
+            found.push(l);
+          }
+        }
         const m = o as THREE.Mesh;
         if (m.isMesh) { if (m.castShadow) cast++; if (m.receiveShadow) recv++; }
       });
+      foreignLights.current = found;
       shadowDiag.casterLights = cl;
       shadowDiag.casters = cast;
       shadowDiag.receivers = recv;
     }
 
-    // HOLD THE SHADOW MAP ON, EVERY FRAME. This is why shadows still did not appear.
-    //
-    // The Canvas is created with `shadows={shadowsEnabled}` — a global toggle, default OFF, bound to
-    // the '-' key — and react-three-fiber OWNS that flag: it re-applies it from the prop whenever the
-    // Canvas re-renders, which in this app is often. So setting it once in an effect worked for a
-    // few frames and was then quietly switched back off, with everything else about the shadow
-    // pipeline correct and nothing to see. Asserting it each frame is one boolean write and it
-    // simply cannot be lost.
-    if (g.enabled && g.shadowsOn) {
-      if (!gl.shadowMap.enabled) { gl.shadowMap.enabled = true; gl.shadowMap.needsUpdate = true; }
-      const cam = sun.current?.shadow.camera;
-      // The bounds come from a slider, and three does not rebuild the projection when they change —
-      // so without this the shadow camera keeps whatever area it was first compiled with.
-      if (cam && cam.right !== g.shadowSpanM / METRES_PER_UNIT / 2) {
-        const half = g.shadowSpanM / METRES_PER_UNIT / 2;
-        cam.left = -half; cam.right = half; cam.top = half; cam.bottom = -half;
-        cam.far = (g.shadowSpanM * 2.5) / METRES_PER_UNIT;
-        cam.updateProjectionMatrix();
+    shadowDiag.enabled = g.enabled;
+    shadowDiag.mapOn = gl.shadowMap.enabled;
+
+    // Scaling the cached list is a handful of writes, whatever the scene holds.
+    if (g.enabled && g.worldLights < 1) {
+      for (const l of foreignLights.current) {
+        l.intensity = (l.userData.baseIntensity ?? l.intensity) * g.worldLights;
       }
     }
 
-    // SCALE EVERY LIGHT THAT IS NOT MINE.
+    // --- THE SKY, SET EVERY FRAME RATHER THAN CAPTURED AND RESTORED --------------------------------
     //
-    // Three lights live in SiegeWorldScene — ambient 0.35, hemisphere 0.6, directional 1.1 — added
-    // to every world and never on this panel. They are why switching the sun off left the map lit by
-    // somebody else's midday. Held every frame rather than set once, because the shared day/night
-    // controller re-asserts intensities and would otherwise win; NightDimmer already does exactly
-    // this on the SciFi City map, which is the proof the approach holds.
-    if (g.enabled && g.worldLights < 1) {
-      scene.traverse((o) => {
-        const l = o as THREE.Light;
-        if (!l.isLight || l.userData.globeOwned) return;
-        if (l.userData.baseIntensity === undefined) l.userData.baseIntensity = l.intensity;
-        l.intensity = l.userData.baseIntensity * g.worldLights;
-      });
+    // Geoff: "if I click Golden Hour and then Night again, it may switch the sky back to white."
+    //
+    // That was an effect that hid the day dome on mount and un-hid it on cleanup, which is a state
+    // machine with two ways to desync: GlobeCamera clears scene.background every frame, so the
+    // colour captured to "restore" was often the one this file had just written; and a cleanup that
+    // runs while another run is mid-flight leaves the dome visible with nothing to hide it again.
+    //
+    // Declaring it every frame has no state to get out of step. Whatever happened last frame, this
+    // frame the sky is what the panel currently says it is.
+    if (g.enabled) {
+      const night = g.skyMode === 'night';
+      // Found ONCE, on the timed scan above — never searched for per frame. A map with no sky dome
+      // would otherwise walk the entire scene graph sixty times a second looking for something that
+      // is not there, which is the same mistake as the light scaler in a quieter disguise.
+
+      if (skyDome.current) skyDome.current.visible = !night;
+      if (night) {
+        if (!(scene.background instanceof THREE.Color)) scene.background = nightSky;
+      } else if (scene.background === nightSky) {
+        scene.background = null;
+      }
     }
 
     const s = sun.current;

@@ -46,6 +46,7 @@ import {
   MUZZLE_UP_UNITS, MUZZLE_FWD_UNITS,
 } from './kaijuGunfire';
 import { maybeShout, updateShoutAnchor } from './kaijuShouts';
+import { pickLang, type LangId } from './kaijuShoutLang';
 import {
   DROP_ALTITUDE_M, TERMINAL_MS, FREEFALL_DRIVE_MS, CANOPY_MS, CANOPY_DRIVE_MS,
   PARA_COUNT, CHUTE_COLOURS, openAltitude, driftMetres, dropSchedule,
@@ -173,6 +174,14 @@ interface Person {
   side: number;
   /** Frames spent stuck inside geometry, so a soldier wedged in a wall can be teleported clear. */
   stuck: number;
+  /**
+   * What language this man shouts in.
+   *
+   * Chosen ONCE, here, from the city's mix — not per shout. Drawing it fresh each time would give a
+   * statistically perfect mix in which every individual is incoherent, and the thing that reads as
+   * a multilingual city is precisely the opposite: each man consistent, the crowd varied.
+   */
+  lang: LangId;
 }
 
 let crowdOn = false;
@@ -288,6 +297,7 @@ function makePeople(): Person[] {
         chute: 0,
         fallV: 0,
         pinned: false,
+        lang: pickLang(),
       });
     }
     return out;
@@ -335,6 +345,7 @@ function makePeople(): Person[] {
         chute: 0,
         fallV: 0,
         pinned: false,
+        lang: pickLang(),
       });
       continue;
     }
@@ -364,6 +375,7 @@ function makePeople(): Person[] {
       chute: 0,
       fallV: 0,
       pinned: false,
+      lang: pickLang(),
     });
   }
   // ---- THE STICK ------------------------------------------------------------------------------
@@ -406,6 +418,7 @@ function makePeople(): Person[] {
         chute: Math.floor(rand() * CHUTE_COLOURS.length) % CHUTE_COLOURS.length,
         fallV: 0,
         pinned: false,
+        lang: pickLang(),
       });
     }
   }
@@ -766,7 +779,7 @@ function Crowd() {
             p.fireIn = nextShotDelay();
             fireBullet(_muzzle, aimPoint(target, _aim));
             noteGunshot(_muzzle);
-            maybeShout(_muzzle, i);
+            maybeShout(_muzzle, i, p.lang);
           }
           updateShoutAnchor(i, _muzzle);
           continue;
@@ -937,7 +950,7 @@ function Crowd() {
         }
         // ...and one shot in fifty, say something about it. The odds live in kaijuShouts with the
         // lines; `i` identifies the speaker so the bubble can follow them.
-        maybeShout(_muzzle, i);
+        maybeShout(_muzzle, i, p.lang);
       }
       // A bubble belongs to a PERSON, not to a spot on the ground. Keeping it over their head means
       // the tail still points at them a second later, when they have run fifty metres.

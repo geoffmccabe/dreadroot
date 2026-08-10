@@ -443,12 +443,14 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
   /** Read in the streaming loop, which runs outside React and must not close over a stale value. */
   const shadowsWanted = useRef(false);
   shadowsWanted.current = look.enabled && look.shadowsOn;
+  const terrainCasts = useRef(false);
+  terrainCasts.current = shadowsWanted.current && look.terrainCasts;
   useEffect(() => {
     for (const m of meshes.current.values()) {
       m.receiveShadow = shadowsWanted.current;
-      m.castShadow = shadowsWanted.current;
+      m.castShadow = terrainCasts.current;
     }
-  }, [look.enabled, look.shadowsOn]);
+  }, [look.enabled, look.shadowsOn, look.terrainCasts]);
   const material = look.enabled && look.terrainPbr ? materials.lit : materials.flat;
   useEffect(() => {
     for (const m of meshes.current.values()) m.material = material;
@@ -672,7 +674,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         // The ground takes the Kaiju's shadow and throws its own — without the second, a ridge in
         // front of the sun still lights the valley behind it, which removes all sense of relief.
         mesh.receiveShadow = shadowsWanted.current;
-        mesh.castShadow = shadowsWanted.current;
+        mesh.castShadow = terrainCasts.current;
         mesh.frustumCulled = true;
         meshes.current.set(rk, mesh);
         groupRef.current?.add(mesh);
@@ -732,7 +734,7 @@ export function GlobeTerrain({ onReady }: { onReady?: () => void }) {
         if (!built) return true;
         const mesh = new THREE.Mesh(built.geo, material);
         mesh.receiveShadow = shadowsWanted.current;
-        mesh.castShadow = shadowsWanted.current;
+        mesh.castShadow = terrainCasts.current;
         mesh.frustumCulled = true;
         meshes.current.set(key, mesh);
         builtLevel.current.set(key, built.level);

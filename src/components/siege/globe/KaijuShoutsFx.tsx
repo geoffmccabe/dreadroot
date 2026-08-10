@@ -18,7 +18,8 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
-import { SHOUTS, getShouts, stepShouts, shoutOpacity } from './kaijuShouts';
+import { getShouts, stepShouts, shoutOpacity } from './kaijuShouts';
+import { langOf, shoutLine, type LangId, type ShoutLanguage } from './kaijuShoutLang';
 
 /** Bubble body, in metres. Geoff's numbers. */
 const BODY_W_M = 10;
@@ -40,12 +41,8 @@ const BODY_FRAC = BODY_H_M / (BODY_H_M + TAIL_H_M);
 /** Superellipse exponent. 2 is an ellipse, 4 is a squircle, 8 is nearly a rounded rectangle. */
 const SQUIRCLE_N = 4;
 
-/**
- * Comic Sans, with fallbacks that are at least informal. Named explicitly because the whole point is
- * that it reads as a comic; if a machine genuinely lacks it, a rounded fallback is far better than
- * dropping to the browser's serif default.
- */
-const FONT_STACK = '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive';
+// The font is no longer a constant here. Comic Sans has no Arabic, no Devanagari and no kana, so
+// each language carries the stack that contains its own script — see kaijuShoutLang.
 
 /** One point on the superellipse, in canvas pixels. `t` runs 0..2pi, y grows DOWNWARD. */
 function squirclePoint(
@@ -58,22 +55,46 @@ function squirclePoint(
 }
 
 /**
+ * Break a line into the pieces the wrapper is allowed to put on separate rows.
+ *
+ * 'space' keeps whole words together, which is the rule for every language written with spaces.
+ *
+ * 'char' breaks between characters, which is how Japanese is genuinely set and also the only thing
+ * that WORKS: Japanese has no spaces, so splitting on them yields one enormous token, the width test
+ * fails at every font size, and a perfectly ordinary sentence collapses to the 14px minimum. Kana
+ * and kanji are near enough square that breaking anywhere looks right — the one thing to avoid is
+ * stranding closing punctuation at the start of a row, so it is glued to the character before it.
+ */
+function tokenise(text: string, wrap: 'space' | 'char'): { pieces: string[]; join: string } {
+  if (wrap === 'space') return { pieces: text.split(' '), join: ' ' };
+  const NO_LEAD = '。、！？」』）ー…・';
+  const out: string[] = [];
+  for (const ch of text) {
+    if (out.length && NO_LEAD.includes(ch)) out[out.length - 1] += ch;
+    else out.push(ch);
+  }
+  return { pieces: out, join: '' };
+}
+
+/**
  * Wrap text to fit a width, then shrink the font until the whole thing fits the height too.
  *
  * Sized rather than assumed because the lines run from "LIGHT IT UP!" to fifty-odd characters, and
- * one fixed font size would either overflow the long ones or make the short ones look lost.
+ * one fixed font size would either overflow the long ones or make the short ones look lost. That
+ * matters more across languages, not less: the same shout is 12 characters in Japanese and 55 in
+ * French, and neither should be typeset for the other's length.
  */
 function layoutText(
-  ctx: CanvasRenderingContext2D, text: string, maxW: number, maxH: number,
+  ctx: CanvasRenderingContext2D, text: string, maxW: number, maxH: number, lang: ShoutLanguage,
 ): { lines: string[]; size: number } {
+  const { pieces, join } = tokenise(text, lang.wrap);
   for (let size = 46; size >= 14; size -= 2) {
-    ctx.font = `bold ${size}px ${FONT_STACK}`;
-    const words = text.split(' ');
+    ctx.font = `bold ${size}px ${lang.font}`;
     const lines: string[] = [];
     let cur = '';
     let tooWide = false;
-    for (const w of words) {
-      const next = cur ? `${cur} ${w}` : w;
+    for (const w of pieces) {
+      const next = cur ? `${cur}${join}${w}` : w;
       if (ctx.measureText(next).width <= maxW) { cur = next; continue; }
       if (cur) lines.push(cur);
       cur = w;
@@ -82,12 +103,12 @@ function layoutText(
     if (cur) lines.push(cur);
     if (!tooWide && lines.length * size * 1.18 <= maxH) return { lines, size };
   }
-  ctx.font = `bold 14px ${FONT_STACK}`;
+  ctx.font = `bold 14px ${lang.font}`;
   return { lines: [text], size: 14 };
 }
 
 /** Draw one shout as a white squircle with a long tail and black text. */
-function bubbleTexture(text: string): THREE.CanvasTexture {
+function bubbleTexture(text: string, lang: ShoutLanguage): THREE.CanvasTexture {
   const cv = document.createElement('canvas');
   cv.width = TEX_W;
   cv.height = TEX_H;
@@ -153,13 +174,21 @@ function bubbleTexture(text: string): THREE.CanvasTexture {
   ctx.stroke();
 
   // Text, inside the body only.
+  //
+  // DIRECTION IS SET BEFORE ANYTHING IS MEASURED. Arabic is not just laid out right-to-left, it is
+  // SHAPED — letters join, and their forms depend on their neighbours — and the browser only applies
+  // the bidirectional algorithm when it knows which way the paragraph runs. Left at the default,
+  // a line ending in '!' puts the mark on the wrong end and mixed Arabic-and-digits comes out
+  // scrambled. Centred text means the difference is invisible for most lines and glaring for the
+  // few with punctuation, which is the worst way for a bug like this to hide.
+  ctx.direction = lang.rtl ? 'rtl' : 'ltr';
   const innerW = a * 1.55;
   const innerH = b * 1.5;
-  const { lines, size } = layoutText(ctx, text, innerW, innerH);
+  const { lines, size } = layoutText(ctx, text, innerW, innerH, lang);
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `bold ${size}px ${FONT_STACK}`;
+  ctx.font = `bold ${size}px ${lang.font}`;
   const lh = size * 1.18;
   const top = cy - ((lines.length - 1) * lh) / 2;
   lines.forEach((ln, i) => ctx.fillText(ln, cx, top + i * lh));
@@ -175,19 +204,27 @@ export function KaijuShoutsFx() {
   const camera = useThree((s) => s.camera);
   const group = useRef<THREE.Group>(null);
 
-  /** Rendered lines, kept for reuse. Capped, because a hundred textures resident is pointless. */
-  const cache = useMemo(() => new Map<number, THREE.CanvasTexture>(), []);
-  const CACHE_MAX = 40;
+  /**
+   * Rendered lines, kept for reuse. Capped, because a hundred textures resident is pointless.
+   *
+   * KEYED BY LANGUAGE AND LINE, not by line alone. With five languages the same index is five
+   * different pictures, and a cache that ignored that would hand a French soldier whichever
+   * language happened to shout line 40 first — a bug that only appears in a mixed city and looks
+   * like a translation error rather than a caching one.
+   */
+  const cache = useMemo(() => new Map<string, THREE.CanvasTexture>(), []);
+  const CACHE_MAX = 48;
 
-  const getTexture = (line: number): THREE.CanvasTexture => {
-    const hit = cache.get(line);
+  const getTexture = (lang: LangId, line: number): THREE.CanvasTexture => {
+    const key = `${lang}|${line}`;
+    const hit = cache.get(key);
     if (hit) return hit;
-    const tex = bubbleTexture(SHOUTS[line] ?? '');
+    const tex = bubbleTexture(shoutLine(lang, line), langOf(lang));
     if (cache.size >= CACHE_MAX) {
-      const oldest = cache.keys().next().value as number | undefined;
+      const oldest = cache.keys().next().value as string | undefined;
       if (oldest != null) { cache.get(oldest)?.dispose(); cache.delete(oldest); }
     }
-    cache.set(line, tex);
+    cache.set(key, tex);
     return tex;
   };
 
@@ -231,7 +268,7 @@ export function KaijuShoutsFx() {
       if (!s || !s.live) { m.visible = false; continue; }
 
       const mat = m.material as THREE.MeshBasicMaterial;
-      const tex = getTexture(s.line);
+      const tex = getTexture(s.lang, s.line);
       if (mat.map !== tex) { mat.map = tex; mat.needsUpdate = true; }
       mat.opacity = shoutOpacity(s);
       m.visible = mat.opacity > 0.01;

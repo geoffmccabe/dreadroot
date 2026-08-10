@@ -87,6 +87,15 @@ export interface GlobeLookState {
 
   // --- SHADOWS ------------------------------------------------------------------------------------
   shadowsOn: boolean;
+  /**
+   * Does the TERRAIN cast, as well as receive?
+   *
+   * Off, and it is a real framerate decision rather than a taste one. A shadow map is a second
+   * render of everything that casts, so switching this on renders the entire streamed planet twice
+   * per frame. What it buys is ridges shadowing the valleys behind them, which is lovely on a
+   * canyon rim and invisible almost everywhere else. Kaiju always cast; this is only the ground.
+   */
+  terrainCasts: boolean;
   /** How many metres across the shadow map covers. Smaller = sharper but a smaller area. */
   shadowSpanM: number;
   /** Soft edges cost a few extra taps and are the difference between a shadow and a stain. */
@@ -218,6 +227,7 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   skyBounce: 0.35,
 
   shadowsOn: true,
+  terrainCasts: false,
   shadowSpanM: 2000,
   shadowSoft: true,
 

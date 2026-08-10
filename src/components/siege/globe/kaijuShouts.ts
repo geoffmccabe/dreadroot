@@ -13,6 +13,9 @@
 
 import * as THREE from 'three';
 import { fxRand as rand } from './kaijuRandom';
+// TYPE ONLY, and deliberately so: kaijuShoutLang imports SHOUTS from this file, so a runtime import
+// back the other way would be a cycle. A type import is erased at compile time and cannot be one.
+import type { LangId } from './kaijuShoutLang';
 
 export const SHOUTS: string[] = [
   'LIGHT IT UP!',
@@ -137,6 +140,15 @@ export interface Shout {
    */
   speaker: number;
   line: number;
+  /**
+   * Which language this one is being shouted in.
+   *
+   * Carried on the shout rather than looked up from the speaker, because a bubble outlives the
+   * moment it was spawned: the crowd can be rebuilt, or the admin can change the city's mix, while
+   * this bubble is still fading out. Whatever he was speaking when he opened his mouth is what he
+   * finishes the sentence in.
+   */
+  lang: LangId;
   age: number;
   life: number;
   live: boolean;
@@ -153,7 +165,10 @@ const MAX_SHOUTS = 12;
 
 const shouts: Shout[] = [];
 for (let i = 0; i < MAX_SHOUTS; i++) {
-  shouts.push({ anchor: new THREE.Vector3(), speaker: -1, line: 0, age: 0, life: 0, live: false });
+  shouts.push({
+    anchor: new THREE.Vector3(), speaker: -1, line: 0, lang: 'en',
+    age: 0, life: 0, live: false,
+  });
 }
 let cursor = 0;
 
@@ -165,13 +180,21 @@ export function clearShouts(): void { for (const s of shouts) s.live = false; }
  *
  * Rolls the dice here rather than at the call site so the odds live with the thing they govern.
  * Returns true if a bubble was spawned, which is only used by the check script.
+ *
+ * `lang` is the SPEAKER'S OWN language, chosen once when he was created and passed in here. It is
+ * not drawn per shout: a man who says one sentence in Arabic and the next in Hindi reads as a bug,
+ * where a hundred men each holding one language reads as a city.
  */
-export function maybeShout(head: THREE.Vector3, speaker: number): boolean {
+export function maybeShout(head: THREE.Vector3, speaker: number, lang: LangId = 'en'): boolean {
   if (rand() >= SHOUT_CHANCE) return false;
   const s = shouts[cursor];
   cursor = (cursor + 1) % MAX_SHOUTS;
   s.anchor.copy(head);
   s.speaker = speaker;
+  s.lang = lang;
+  // The INDEX is drawn, not the text — so the same man shouting the same line number says the
+  // matching sentence whatever language he is in, and a translation can be swapped underneath
+  // without changing what anybody says.
   s.line = Math.floor(rand() * SHOUTS.length) % SHOUTS.length;
   s.age = 0;
   // 1-3 seconds, as asked. Long enough to read up close, short enough that the field never fills

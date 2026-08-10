@@ -234,6 +234,11 @@ export function GlobeLookControls() {
           <div style={groupTitleStyle}>Shadows</div>
           <ToggleRow label="Shadows on" value={g.shadowsOn} onChange={(v) => set('shadowsOn', v)} />
           <ToggleRow label="Soft edges" value={g.shadowSoft} onChange={(v) => set('shadowSoft', v)} />
+          <ToggleRow label="Terrain casts" value={g.terrainCasts} onChange={(v) => set('terrainCasts', v)} />
+          <div style={noteStyle}>
+            Terrain casting renders the whole streamed planet a SECOND time every frame, for ridges
+            shadowing the valleys behind them. Lovely on a canyon rim, invisible most places. Off.
+          </div>
           <SliderRow
             label="Area covered" value={g.shadowSpanM} display={`${(g.shadowSpanM / 1000).toFixed(1)} km`}
             min={500} max={12000} step={100} disabled={!g.shadowsOn}
