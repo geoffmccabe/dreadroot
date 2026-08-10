@@ -26,6 +26,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { applyDetailWindows } from './cityWindows';
+import { cityAssetPath } from './sites';
 
 const ROOF_FLAT = 0, ROOF_PYRAMID = 1, ROOF_DOME = 2;
 /** Rings used to loft a dome. Four is enough for a mosque dome at this distance and is 8x the tris. */
@@ -63,13 +64,13 @@ function parse(buf: ArrayBuffer): Solid[] {
   return out;
 }
 
-export function KaijuCityDetail() {
+export function KaijuCityDetail({ slug }: { slug: string }) {
   const [solids, setSolids] = useState<Solid[] | null>(null);
   const timeRef = useRef({ value: 0 });
 
   useEffect(() => {
     let alive = true;
-    fetch('/siege/city/dubai-detail.bin')
+    fetch(cityAssetPath(slug, 'detail.bin'))
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const s = parse(await res.arrayBuffer());
@@ -82,7 +83,7 @@ export function KaijuCityDetail() {
       // far better than a broken scene.
       .catch((err) => console.error('[city] detail failed to load', err));
     return () => { alive = false; };
-  }, []);
+  }, [slug]);
 
   const geometry = useMemo(() => {
     if (!solids || !solids.length) return null;

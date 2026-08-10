@@ -1,6 +1,6 @@
 // cityData — load the baked city, and give it a place to stand on a sphere.
 //
-// The file is what scripts/fetch-dubai-buildings.mjs produces: a 24-byte header holding the origin
+// The file is what scripts/city/fetch-buildings.mjs produces: a 24-byte header holding the origin
 // latitude, longitude and count, then six float32s per building — position east/south in metres from
 // that origin, width, depth, rotation, height.
 //
@@ -22,6 +22,7 @@
 import * as THREE from 'three';
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
 import { cityGroundMetres } from './cityGround';
+import { cityAssetPath, citySites } from './sites';
 
 /** One building. Metres and radians, exactly as baked. */
 export interface Building {
@@ -124,7 +125,29 @@ export function adoptCity(next: City): City {
  * Deliberately returns null rather than throwing when the file is missing: a Kaiju map with no city
  * data should be a Kaiju map, not a white screen. The diagnostic says which happened.
  */
-export function loadCity(url = '/siege/city/dubai.bin'): Promise<City | null> {
+/**
+ * Which city is loaded.
+ *
+ * ONE AT A TIME, deliberately. Two cities are never both near enough to draw — the nearest pair on
+ * the registry would have to be under 40 km apart — and holding several sets of 59,000 buildings
+ * resident to cover a case that cannot happen is a lot of memory for nothing. Jumping to a different
+ * city drops the old one.
+ */
+export function loadCity(slug?: string): Promise<City | null> {
+  const site = slug ? citySites().find((s) => s.slug === slug) : citySites()[0];
+  if (!site) return Promise.resolve(null);
+  if (city && loadedSlug === site.slug) return Promise.resolve(city);
+  if (loadedSlug !== site.slug) { city = null; loading = null; }
+  loadedSlug = site.slug;
+  return loadCityFrom(cityAssetPath(site.slug, 'buildings.bin'), site.slug);
+}
+
+/** The slug of whatever is currently resident, so a repeat request is a no-op. */
+let loadedSlug: string | null = null;
+
+export function loadedCitySlug(): string | null { return loadedSlug; }
+
+function loadCityFrom(url: string, slug: string): Promise<City | null> {
   if (city) return Promise.resolve(city);
   if (loading) return loading;
   cityDiag.state = 'loading';
@@ -141,7 +164,7 @@ export function loadCity(url = '/siege/city/dubai.bin'): Promise<City | null> {
       // The city's own declared ground, NOT a terrain sample — the terrain at Dubai is 87 m of
       // sea water and cityGround is what overrides it. Taking it from the same constant means the
       // buildings and the ground they stand on can never drift apart.
-      const frame = cityFrame(lat, lon, cityGroundMetres('Dubai'));
+      const frame = cityFrame(lat, lon, cityGroundMetres(slug));
       city = { lat, lon, buildings, ...frame };
       cityDiag.state = 'ready';
       cityDiag.count = count;

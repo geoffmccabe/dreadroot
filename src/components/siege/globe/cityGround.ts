@@ -29,10 +29,14 @@
 // 460 metres from where it was drawn. One function, called from all three.
 
 import { PLANET_RADIUS, METRES_PER_UNIT, latLonToDirection } from './cubeSphere';
-import { cityLandFraction } from './dubaiLandMask';
+import { landFractionFor } from './sites/maskRegistry';
+import { citySites, siteOverridesGround } from './sites';
+import './sites/landmasks';   // side-effect: every generated mask registers itself
 
 interface CitySite {
   name: string;
+  /** Names the land mask and the asset folder. */
+  slug: string;
   /** Unit direction from the planet centre. */
   dx: number; dy: number; dz: number;
   /** East and north unit vectors at the site, for turning a direction into local metres. */
@@ -44,6 +48,8 @@ interface CitySite {
   innerM: number;
   /** Blended back to the real terrain by this radius. */
   outerM: number;
+  /** Depth of the sea immediately around this city. Per-city; see SiteGround. */
+  seaM: number;
   /** cos of the two radii as angles, so the common case is one dot product. */
   cosInner: number;
   cosOuter: number;
@@ -51,24 +57,12 @@ interface CitySite {
 
 const EARTH_R_M = PLANET_RADIUS * METRES_PER_UNIT;
 
-/**
- * Depth of the sea immediately around a city, in metres.
- *
- * Not the raw tile value, which over Dubai is -87 m everywhere: dropping straight from the city's
- * ground to that would put a cliff along the entire shoreline. It blends out to the real depth at
- * the city's outer radius instead.
- *
- * DEEPENED FROM -12, and the reason is the water, not the seabed. Geoff: "the beaches are too broad."
- * Part of that was invented land, fixed in the mask — but part of it was that the sea here did not
- * look like sea. The ocean's transparency ramps with depth, reaching nearly opaque at 120 m, so a
- * 12 m shelf renders at nine per cent opacity: a thin blue wash over a sand-coloured seabed, which
- * the eye reads as more beach. At 30 m it is about a quarter opaque, which is water you can still
- * see the bottom through — right for the Gulf, and unmistakably water.
- */
-const SHALLOW_SEA_M = -30;
+// The sea depth around a city now lives on the site (SiteGround.shallowSeaMetres) rather than as a
+// constant here, because it is a per-city look decision — see sites/siteTypes.ts for why -30 and not
+// the raw tile value, which over Dubai is -87 m everywhere and would put a cliff along the shore.
 
-function makeSite(name: string, lat: number, lon: number, groundM: number,
-                  innerM: number, outerM: number): CitySite {
+function makeSite(name: string, slug: string, lat: number, lon: number, groundM: number,
+                  innerM: number, outerM: number, seaM: number): CitySite {
   const d = new Float64Array(3);
   latLonToDirection(lat, lon, d);
   // East = worldY x up, north = up x east — the same frame the bake used, so a building's stored
@@ -82,7 +76,8 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
   const ny = d[2] * ex - d[0] * ez;
   const nz = d[0] * ey - d[1] * ex;
   return {
-    name, dx: d[0], dy: d[1], dz: d[2], ex, ey, ez, nx, ny, nz, groundM, innerM, outerM,
+    name, slug, dx: d[0], dy: d[1], dz: d[2], ex, ey, ez, nx, ny, nz, groundM, innerM, outerM,
+    seaM,
     cosInner: Math.cos(innerM / EARTH_R_M),
     cosOuter: Math.cos(outerM / EARTH_R_M),
   };
@@ -114,9 +109,12 @@ function makeSite(name: string, lat: number, lon: number, groundM: number,
  * starts building before any fetch completes, and a ground that appears late would leave already
  * built patches showing the seabed while everything around them moved.
  */
-const SITES: CitySite[] = [
-  makeSite('Dubai', 25.14, 55.21, 0.5, 15000, 26000),
-];
+const SITES: CitySite[] = citySites()
+  .filter(siteOverridesGround)
+  .map((d) => makeSite(
+    d.name, d.slug, d.lat, d.lon,
+    d.ground.groundMetres, d.ground.innerMetres, d.ground.outerMetres, d.ground.shallowSeaMetres,
+  ));
 
 /** Smootherstep — zero derivative at both ends, so the coastline has no visible crease. */
 function smooth(t: number): number {
@@ -151,7 +149,9 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     // or something." A one-bit answer per cell can only ever produce a staircase, and the ground
     // faithfully drew it. The mask now interpolates between its four surrounding cells, so the
     // shoreline arrives as a ramp one cell wide and the terrain renders a beach instead of a kerb.
-    const landFrac = cityLandFraction(em, -nm);
+    // A CITY WITH NO MASK IS ALL LAND, not all sea. An inland city never needed one, and treating
+    // its footprint as water would sink it. Null and 0 mean opposite things here.
+    const landFrac = landFractionFor(s.slug, em, -nm) ?? 1;
 
     // SEA STAYS SEA. Geoff: "The palm is supposed to be a set of islands in the water but everything
     // is inland." It was: the override was a flat disc fifteen kilometres across, which filled in
@@ -172,11 +172,11 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
 
     // WHAT THE SEA IS HERE. Shallow close in, blending out to the real depth at the outer radius —
     // because out there the base is not wrong, the Gulf really does deepen.
-    let seaM = SHALLOW_SEA_M;
+    let seaM = s.seaM;
     if (dot < s.cosInner && base != null) {
       const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
       const t = smooth((distM - s.innerM) / (s.outerM - s.innerM));
-      seaM = SHALLOW_SEA_M + (base - SHALLOW_SEA_M) * t;
+      seaM = s.seaM + (base - s.seaM) * t;
     }
     if (landFrac <= 0) return seaM;
 
@@ -210,7 +210,7 @@ export function cityLandAt(x: number, y: number, z: number): number | null {
     const ox = x - s.dx, oy = y - s.dy, oz = z - s.dz;
     const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
     const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
-    return cityLandFraction(em, -nm);
+    return landFractionFor(s.slug, em, -nm) ?? 1;
   }
   return null;
 }

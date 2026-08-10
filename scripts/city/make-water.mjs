@@ -25,23 +25,37 @@
 // TRIANGULATED HERE, NOT IN THE BROWSER. Ear clipping is O(n^2) and these are done once; shipping
 // triangles rather than outlines also means no triangulation library in the bundle.
 //
-// Run: node scripts/make-city-water.mjs      (expects /tmp/coast_all.json)
-// Writes: public/siege/city/dubai-water.bin
+// Run:    node scripts/city/make-water.mjs <slug>
+// Writes: public/siege/city/<slug>/water.bin
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { loadCity, slugFromArgv, overpass } from './cityConfig.mjs';
 
-const IN = '/tmp/coast_all.json';
-const OUT = 'public/siege/city/dubai-water.bin';
+const city = loadCity(slugFromArgv());
+const RAW = `${city.rawDir}/coast.json`;
+const OUT = `${city.outDir}/water.bin`;
+const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
-const LAT0 = 25.14, LON0 = 55.21;
-const MPER_LAT = 111320;
-const MPER_LON = MPER_LAT * Math.cos((LAT0 * Math.PI) / 180);
-const MAX_RANGE_M = 26000;
+// The coastline and the inland water come from ONE download, shared with the land mask bake — they
+// are the same query and fetching it twice doubles the wait for nothing.
+if (!existsSync(RAW)) {
+  const [s0, w0, n0, e0] = city.coastBbox ?? city.bbox;
+  console.error(`fetching coastline + water for ${city.slug}...`);
+  const q = `[out:json][timeout:240];
+(way["natural"="coastline"](${s0},${w0},${n0},${e0});
+ way["natural"="water"](${s0},${w0},${n0},${e0});
+ relation["natural"="water"](${s0},${w0},${n0},${e0});
+ way["waterway"="riverbank"](${s0},${w0},${n0},${e0}););
+out geom;`;
+  const data = await overpass(q);
+  if (!data) { console.error('every Overpass mirror failed — try again later'); process.exit(1); }
+  writeFileSync(RAW, JSON.stringify(data));
+}
 
 /** Below this a pond is a swimming pool, and at 300 m tall you cannot see it. */
 const MIN_AREA_M2 = 2000;
 
-const project = (p) => [(p.lon - LON0) * MPER_LON, -(p.lat - LAT0) * MPER_LAT];
+const project = city.project;
 
 function area2(ring) {
   let a = 0;
@@ -91,7 +105,7 @@ function triangulate(ring) {
   return out;
 }
 
-const els = JSON.parse(readFileSync(IN, 'utf8')).elements ?? [];
+const els = JSON.parse(readFileSync(RAW, 'utf8')).elements ?? [];
 const rings = [];
 let fromWays = 0, fromRelations = 0;
 

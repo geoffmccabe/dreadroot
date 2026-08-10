@@ -1,0 +1,14 @@
+{
+  "slug": "dubai",
+  "name": "Dubai",
+  "lat0": 25.14,
+  "lon0": 55.21,
+  "bbox": [25.02, 55.02, 25.30, 55.40],
+  "coastBbox": [24.95, 54.95, 25.40, 55.45],
+  "coastal": true,
+  "groundMetres": 0.5,
+  "maxRangeMetres": 26000,
+  "maskCellMetres": 40,
+  "maskSubdivide": 4,
+  "note": "The first city. Four districts along 20 km of coast; the coastBbox is wider than the bbox so the coastline is complete past the ends of the built area."
+}

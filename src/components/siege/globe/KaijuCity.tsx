@@ -14,13 +14,14 @@
 // The instance matrices are written ONCE, at load. Buildings do not move — until one is knocked
 // down, which is phase 4's problem and will rewrite only the rows that changed.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { setBuildingSteer } from './kaijuArena';
 import { steerKaijuAroundBuildings } from './cityColliders';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { loadCity, getCity, cityDistanceUnits, cityDiag, type City } from './cityData';
+import { citySites, currentSite, subscribeSite, siteVersion } from './sites';
 import { applyCityWindows } from './cityWindows';
 import { KaijuCityLights } from './KaijuCityLights';
 import { KaijuCityRoads } from './KaijuCityRoads';
@@ -46,13 +47,34 @@ export function KaijuCity() {
     return () => setBuildingSteer(null);
   }, []);
 
+  // WHICH CITY FOLLOWS WHERE YOU ARE. Re-reading the registry on every site change is what makes a
+  // second city work at all: with a hard-coded first entry, B4 would load Dubai's buildings and
+  // stand them on the wrong continent — which would look like a placement bug rather than the
+  // wiring one it is.
+  useSyncExternalStore(subscribeSite, siteVersion, siteVersion);
+  const site = currentSite();
+  // Before you have gone anywhere, fall back to the first city on the registry so its assets warm
+  // up rather than waiting for a keypress.
+  const slug = (site?.city ? site.slug : null) ?? citySites()[0]?.slug ?? null;
+
   const [city, setCity] = useState<City | null>(getCity());
-  useEffect(() => { loadCity().then(setCity); }, []);
-  if (!city) return null;
-  return <CityMesh city={city} />;
+  useEffect(() => {
+    if (!slug) { setCity(null); return; }
+    let alive = true;
+    void loadCity(slug).then((c) => { if (alive) setCity(c); });
+    return () => { alive = false; };
+  }, [slug]);
+
+  if (!city || !slug) return null;
+  // KEYED BY SLUG, so moving to another city rebuilds the mesh rather than trying to reuse instance
+  // buffers sized for a different number of buildings.
+  return <CityMesh key={slug} city={city} slug={slug} />;
 }
 
-function CityMesh({ city }: { city: City }) {
+function CityMesh({ city, slug }: { city: City; slug: string }) {
+  // The registry entry, so the asset paths, the draw distance and the beacon height all come from
+  // the site rather than from constants scattered through the renderers.
+  const site = citySites().find((s) => s.slug === slug);
   const camera = useThree((s) => s.camera);
   const group = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.InstancedMesh>(null);
@@ -185,14 +207,14 @@ function CityMesh({ city }: { city: City }) {
       {/* The street network. Inside the same group as the buildings, so it inherits the tangent
           frame and the float precision that comes with it — a road placed in world coordinates at
           63,710 units from the origin would shimmer against the buildings it runs between. */}
-      {near && <KaijuCityRoads />}
+      {near && <KaijuCityRoads slug={slug} />}
       {/* The Marina's channels, the Burj Lake, the Creek — drawn as their own surface because the
           terrain mesh cannot resolve a 120 m canal and the planet's ocean is nearly clear at that
           depth. */}
-      {near && <KaijuCityWater />}
+      {near && site?.city?.assets.water && <KaijuCityWater slug={slug} />}
       {/* The 1,214 buildings OSM describes in 3D — spires, domes, setbacks, and all 828 m of the
           Burj Khalifa. Their boxes have been removed from the bake above, so nothing overlaps. */}
-      {near && <KaijuCityDetail />}
+      {near && site?.city?.assets.detail && <KaijuCityDetail slug={slug} />}
       {/* Traffic on those roads, and the red lamps on the roofs over 180 m. */}
       {near && <KaijuCityLights city={city} />}
     </group>

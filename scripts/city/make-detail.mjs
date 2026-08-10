@@ -23,22 +23,46 @@
 // The polygons are real, not bounding boxes: the Burj's plan is a three-lobed Y, and reducing it to
 // a rectangle would lose the one thing that makes it recognisable from below.
 //
-// Run: node scripts/make-city-detail.mjs   (expects /tmp/parts_all.json and /tmp/roofs_all.json)
-// Writes: public/siege/city/dubai-detail.bin, and REWRITES dubai.bin + dubai-ids.bin without the
-//         buildings it has replaced.
+// Run:    node scripts/city/make-detail.mjs <slug>
+// Writes: public/siege/city/<slug>/detail.bin, and REWRITES buildings.bin + ids.bin without the
+//         boxes it has replaced.
+//
+// RUN IT LAST, and only once per bake. It EDITS buildings.bin, so running it twice removes a second
+// set of boxes that were never replaced. If in doubt, re-run fetch-buildings first.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { loadCity, slugFromArgv, overpass, pause } from './cityConfig.mjs';
 
-const PARTS = '/tmp/parts_all.json';
-const ROOFS = '/tmp/roofs_all.json';
-const BIN = 'public/siege/city/dubai.bin';
-const IDS = 'public/siege/city/dubai-ids.bin';
-const OUT = 'public/siege/city/dubai-detail.bin';
+const city = loadCity(slugFromArgv());
+const PARTS = `${city.rawDir}/parts.json`;
+const ROOFS = `${city.rawDir}/roofs.json`;
+const BIN = `${city.outDir}/buildings.bin`;
+const IDS = `${city.outDir}/ids.bin`;
+const OUT = `${city.outDir}/detail.bin`;
+const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
-const LAT0 = 25.14, LON0 = 55.21;
-const MPER_LAT = 111320;
-const MPER_LON = MPER_LAT * Math.cos((LAT0 * Math.PI) / 180);
-const MAX_RANGE_M = 26000;
+// OSM's Simple 3D Buildings layer, which nothing else reads. Two queries, cached.
+{
+  const [s0, w0, n0, e0] = city.bbox;
+  if (!existsSync(PARTS)) {
+    console.error(`fetching building:part for ${city.slug}...`);
+    const d = await overpass(`[out:json][timeout:180];
+(way["building:part"](${s0},${w0},${n0},${e0});
+ relation["building:part"](${s0},${w0},${n0},${e0}););
+out geom;`);
+    if (!d) { console.error('every Overpass mirror failed'); process.exit(1); }
+    writeFileSync(PARTS, JSON.stringify(d));
+    await pause(20000);   // it throttles; the second query fails without this
+  }
+  if (!existsSync(ROOFS)) {
+    console.error(`fetching roof shapes for ${city.slug}...`);
+    const d = await overpass(`[out:json][timeout:180];
+way["building"]["roof:shape"](${s0},${w0},${n0},${e0});
+out geom;`);
+    if (!d) { console.error('every Overpass mirror failed'); process.exit(1); }
+    writeFileSync(ROOFS, JSON.stringify(d));
+  }
+}
 
 /** Roof shapes the renderer knows how to build. Everything else becomes flat. */
 const ROOF_FLAT = 0, ROOF_PYRAMID = 1, ROOF_DOME = 2;
@@ -48,7 +72,7 @@ const ROOF_CODE = {
   dome: ROOF_DOME, round: ROOF_DOME, onion: ROOF_DOME,
 };
 
-const project = (p) => [(p.lon - LON0) * MPER_LON, -(p.lat - LAT0) * MPER_LAT];
+const project = city.project;
 
 /** OSM heights come as "828", "760 m", "12,5" and worse. */
 function metres(v) {

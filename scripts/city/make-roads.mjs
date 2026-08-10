@@ -29,21 +29,31 @@
 // Emitted as a .bin rather than base64 in a .ts, unlike the first pass: at this size it belongs in
 // a file the browser can cache and decode natively, not in the JavaScript bundle.
 //
-// Run: node scripts/make-city-roads.mjs      (expects /tmp/roads_full.json)
-// Writes: public/siege/city/dubai-roads.bin
+// Run:    node scripts/city/make-roads.mjs <slug>
+// Writes: public/siege/city/<slug>/roads.bin
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { loadCity, slugFromArgv, overpass } from './cityConfig.mjs';
 
-const IN = '/tmp/roads_full.json';
-const OUT = 'public/siege/city/dubai-roads.bin';
-
-/** Must match the city bake exactly, or the streets run beside the buildings instead of between. */
-const LAT0 = 25.14, LON0 = 55.21;
-const MPER_LAT = 111320;
-const MPER_LON = MPER_LAT * Math.cos((LAT0 * Math.PI) / 180);
+const city = loadCity(slugFromArgv());
+const RAW = `${city.rawDir}/roads.json`;
+const OUT = `${city.outDir}/roads.bin`;
 
 const SIMPLIFY_M = 12;
-const MAX_RANGE_M = 26000;
+const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
+
+// FETCHED ONCE AND KEPT. Overpass throttles, and a re-bake that has to re-download 38,000 ways is a
+// re-bake nobody runs — so the raw response is cached under .city-cache/<slug>/ and reused.
+if (!existsSync(RAW)) {
+  const [s0, w0, n0, e0] = city.bbox;
+  console.error(`fetching roads for ${city.slug}...`);
+  const q = `[out:json][timeout:300];
+way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|motorway_link|trunk_link|primary_link)$"](${s0},${w0},${n0},${e0});
+out geom;`;
+  const data = await overpass(q);
+  if (!data) { console.error('every Overpass mirror failed — try again later'); process.exit(1); }
+  writeFileSync(RAW, JSON.stringify(data));
+}
 
 /**
  * Road classes, in the order they are stored.
@@ -84,7 +94,7 @@ function simplify(pts, eps) {
   return simplify(pts.slice(0, idx + 1), eps).slice(0, -1).concat(simplify(pts.slice(idx), eps));
 }
 
-const els = JSON.parse(readFileSync(IN, 'utf8')).elements ?? [];
+const els = JSON.parse(readFileSync(RAW, 'utf8')).elements ?? [];
 const roads = [];
 let dropped = 0, clipped = 0;
 
@@ -96,7 +106,7 @@ for (const e of els) {
 
   // Clip to the city box, keeping the RUNS that fall inside rather than the points — a road that
   // leaves and re-enters must become two roads, or it gets a straight line drawn across the gap.
-  const raw = g.map((p) => [(p.lon - LON0) * MPER_LON, -(p.lat - LAT0) * MPER_LAT]);
+  const raw = g.map(city.project);
   const runs = [];
   let run = [];
   for (const p of raw) {

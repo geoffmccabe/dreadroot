@@ -31,9 +31,9 @@ import { loadRoads, getRoads, ROAD_WIDTH_M, type Road } from './cityRoads';
  */
 const ROAD_LIFT_M = 0.2;
 
-export function KaijuCityRoads() {
+export function KaijuCityRoads({ slug }: { slug: string }) {
   const [roads, setRoads] = useState<Road[] | null>(getRoads());
-  useEffect(() => { void loadRoads().then(setRoads); }, []);
+  useEffect(() => { void loadRoads(slug).then(setRoads); }, [slug]);
 
   const geometry = useMemo(() => {
     if (!roads || !roads.length) return null;

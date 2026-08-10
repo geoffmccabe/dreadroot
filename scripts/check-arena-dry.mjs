@@ -15,7 +15,7 @@
 
 import { readFileSync } from 'node:fs';
 
-const SRC = readFileSync('src/components/siege/globe/dubaiLandMask.ts', 'utf8');
+const SRC = readFileSync('src/components/siege/globe/sites/landmasks/dubai.ts', 'utf8');
 const CELL = +/MASK_CELL_METRES = (\d+)/.exec(SRC)[1];
 const HALF = +/MASK_HALF_METRES = (\d+)/.exec(SRC)[1];
 const N = +/MASK_N = (\d+)/.exec(SRC)[1];

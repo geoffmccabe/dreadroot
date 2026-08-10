@@ -44,6 +44,7 @@ import { roar } from './kaijuAudio';
 import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 import { applyGlobePreset, globeLook } from '@/features/look/globeLookStore';
+import { siteForKey, nextStop, setCurrentSite } from './sites';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
@@ -56,86 +57,17 @@ import { applyGlobePreset, globeLook } from '@/features/look/globeLookStore';
  * Geoff: "make it so if I hit 2 after B then it goes to the grand canyon. Same thing with other
  * Kaijus that attack." So these are full battles, not sightseeing jumps.
  */
-export const ARENA_SITES: {
-  key: string; name: string; lat: number; lon: number;
-  /** Compass bearing to face on arrival, degrees, 0 = north. Omit for "any tangent will do". */
-  facingDeg?: number;
-}[] = [
-  { key: 'Digit1', name: 'Mount Everest',   lat: 27.9881, lon: 86.9250 },
-  // MATHER POINT, the South Rim visitor centre — not a coordinate picked off a map.
-  //
-  // Geoff: "I land on a relatively flat and featureless area... there appears to be a canyon, but
-  // it's only around 300-500 m deep."
-  //
-  // scripts/probe-canyon-sites measured the real elevation data at nine named viewpoints and found
-  // the old drop (36.1069, -112.1129) stands at 1020 m — that is the canyon FLOOR, about 1,100 m
-  // BELOW the rim. Standing on the floor of a canyon is the one place a canyon cannot read as one.
-  // Every rim viewpoint measures 2100-2600 m.
-  //
-  // scripts/probe-canyon-rim then searched a 4 km grid for the actual lip, scoring high ground with
-  // a big drop close by and a steep face. The winner is 36.0616, -112.1076: 2151 m, with 975 m
-  // falling away within a single kilometre at a 51 degree face — which is exactly Mather Point, the
-  // published visitor-centre overlook. Pleasing, and measured rather than assumed.
-  //
-  // The deepest ground lies NORTHEAST, so that is the way to look.
-  { key: 'Digit2', name: 'Grand Canyon (Mather Point)', lat: 36.0616, lon: -112.1076, facingDeg: 45 },
-  // B3 — DUBAI. Geoff: "make it B3 to jump to it."
-  //
-  // Dubai Marina, which is the densest cluster of tall towers anywhere on Earth and therefore the
-  // best place to fight AMONG buildings rather than beside them. Downtown has the Burj Khalifa and
-  // is a short walk northeast along Sheikh Zayed Road; the whole 20 km strip is loaded, so walking
-  // between districts works.
-  //
-  // Facing northeast, up the line of the Marina towers, so the skyline is in frame on arrival
-  // rather than behind you.
-  // Superseded by DUBAI_STOPS below (B3 cycles the districts); kept in step so the two files
-  // can never disagree about where 'Dubai Marina' is.
-  { key: 'Digit3', name: 'Dubai Marina', lat: 25.0760, lon: 55.1489, facingDeg: 300 },
-
-  // Matterhorn lost its number key to Dubai. It is NOT listed here on Digit0, because Digit0 is
-  // already taken by "reset size" earlier in the same switch and the site dispatch only covers 1-9 —
-  // so an entry here would be a site that silently never fires. It remains reachable through the
-  // landmark list on , and . , which is where it is verified to be.
-  { key: 'Digit4', name: 'Yosemite',        lat: 37.7459, lon: -119.5332 },
-  { key: 'Digit5', name: 'Torres del Paine', lat: -50.9423, lon: -73.4068 },
-  { key: 'Digit6', name: 'Fish River Canyon', lat: -27.5833, lon: 17.6167 },
-  { key: 'Digit7', name: 'Milford Sound',   lat: -44.6414, lon: 167.8974 },
-  { key: 'Digit8', name: 'Zhangjiajie',     lat: 29.3158, lon: 110.4344 },
-  { key: 'Digit9', name: 'Aoraki / Mt Cook', lat: -43.5950, lon: 170.1418 },
-];
-
 /**
- * B3 IS A TOUR, NOT A PLACE. Press it again to move to the next district.
+ * THE SITE LIST NOW LIVES IN sites/, not here.
  *
- * Geoff: "I don't see the Burj Khalifa and downtown area where it should be."
+ * It used to be two lists in this file — ARENA_SITES for the number keys and DUBAI_STOPS for the
+ * district tour — plus a ground override in cityGround, a land mask in its own module, asset paths
+ * in three loaders and a roster in kaijuArena. Nine places to edit to add one city. Everything is
+ * now one file per site under sites/, and this file only dispatches.
  *
- * It was there — the bake puts the tower within 43 m of its real coordinates — but B3 landed in the
- * Marina, and Downtown is EIGHTEEN AND A HALF KILOMETRES from the Marina. That is a grey box a
- * degree and a half wide on the horizon, which is not "seeing the Burj Khalifa", and no amount of
- * walking makes it a reasonable way to reach it.
- *
- * Since all four districts are loaded at once and the whole point was to have all four, the key
- * cycles them. One press per district, in the order they run up the coast.
+ * Kept as an export because other modules imported the old name; it is the registry, unchanged.
  */
-const DUBAI_STOPS: { name: string; lat: number; lon: number; facingDeg: number }[] = [
-  // ONE KILOMETRE INLAND of the Marina's own coordinates, on Geoff's instruction: "have them start
-  // 1km from their current positions, but inland 1km from now."
-  //
-  // The bearing is 120 degrees rather than a guess at "inland", and it was measured: a script walked
-  // every compass direction at 1 km against the real land mask and scored each by whether the drop
-  // point AND all four spawn positions 1.8 km around it come out on land. 120 degrees is the only
-  // direction that scores full marks. Facing back northwest, so the Marina towers and the water
-  // beyond them are in frame on arrival rather than behind you.
-  { name: 'Dubai Marina', lat: 25.0760, lon: 55.1489, facingDeg: 300 },
-  // The Palm's trunk, looking out along the fronds — the one place the islands read as islands.
-  { name: 'Palm Jumeirah', lat: 25.1124, lon: 55.1390, facingDeg: 300 },
-  // Standing off the Burj Khalifa, far enough back that all 522 m of it fits above a Kaiju's eye
-  // line, and facing it. Closer and you are inside the podium looking at a wall.
-  { name: 'Downtown / Burj Khalifa', lat: 25.1880, lon: 55.2650, facingDeg: 40 },
-  // Sheikh Zayed Road, looking down the canyon of towers that lines it.
-  { name: 'Sheikh Zayed Road', lat: 25.2175, lon: 55.2825, facingDeg: 225 },
-];
-let dubaiStop = -1;
+export { SITES as ARENA_SITES } from './sites';
 
 /**
  * THE SCALE SHOT — camera at human eye height with the crowd between you and the Kaiju.
@@ -346,29 +278,16 @@ export function KaijuLabController() {
         // NUMBER KEYS: stage the battle somewhere else. 1 Everest, 2 Grand Canyon, and so on.
         case 'Digit1': case 'Digit2': case 'Digit3': case 'Digit4': case 'Digit5':
         case 'Digit6': case 'Digit7': case 'Digit8': case 'Digit9': {
-          const site = ARENA_SITES.find((x) => x.key === e.code);
+          const site = siteForKey(e.code);
           if (!site) break;
-          // 2 is the Grand Canyon SCALE SHOT, per Geoff. The others are ordinary battles.
-          if (e.code === 'Digit2') startScaleView(camera, site.lat, site.lon, site.name, site.facingDeg);
-          // 3 tours Dubai's four districts, one per press — see DUBAI_STOPS.
-          else if (e.code === 'Digit3') {
-            dubaiStop = (dubaiStop + 1) % DUBAI_STOPS.length;
-            const s = DUBAI_STOPS[dubaiStop];
-            startArenaHere(camera, s.lat, s.lon, `${s.name}  (B3 again for the next district)`, s.facingDeg);
-            // AN ARMY IN THE STREETS. Geoff: "add to b3 the 200 soldiers and make them follow my
-            // kaiju around." The other sites are wilderness and get none; a city is the one place
-            // an army makes sense, and it is also the only place with buildings for them to flow
-            // around. They pick and chase their own Kaiju exactly as they do at the Grand Canyon.
-            setCrowd(true);
-            // DUBAI SETS THE NIGHT SLIDERS, BUT ONLY IF THE LIGHTING PANEL IS ALREADY ON.
-            //
-            // A city is the one place on this planet with light of its own, and 59,202 buildings'
-            // worth of lit windows mean nothing at midday — so night is the right look here. But
-            // this used to switch the whole system ON as a side effect of a travel key, which then
-            // persisted, which is how a jump to Dubai ended up changing what the game looked like at
-            // start-up. Arriving somewhere is not permission to take over the lighting.
-            if (globeLook().enabled) applyGlobePreset('night');
-          } else startArenaHere(camera, site.lat, site.lon, site.name, site.facingDeg);
+          setCurrentSite(site);
+          // A city cycles its districts, one per press; a wilderness site has one stop and simply
+          // re-drops you. nextStop handles both, so there is no special case here for Dubai — which
+          // is exactly the sort of special case that used to make adding a city a nine-file job.
+          const stop = nextStop(site);
+          const more = (site.city?.stops.length ?? 0) > 1 ? `  (${site.key.slice(-1)} again for the next district)` : '';
+          if (site.scaleShot) startScaleView(camera, stop.lat, stop.lon, stop.name, stop.facingDeg);
+          else startArenaHere(camera, stop.lat, stop.lon, stop.name + more, stop.facingDeg);
           break;
         }
         // O — OUTLINE THE COLLIDERS. See KaijuColliderDebug: four wrong diagnoses in a row about

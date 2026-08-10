@@ -21,6 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
+import { cityAssetPath } from './sites';
 
 /**
  * Height of the water surface, in metres relative to the city group's origin.
@@ -32,14 +33,14 @@ import { METRES_PER_UNIT } from './cubeSphere';
  */
 const WATER_Y_M = -0.35;
 
-export function KaijuCityWater() {
+export function KaijuCityWater({ slug }: { slug: string }) {
   const [tris, setTris] = useState<Float32Array | null>(null);
   const mat = useRef<THREE.MeshLambertMaterial>(null);
   const time = useRef(0);
 
   useEffect(() => {
     let alive = true;
-    fetch('/siege/city/dubai-water.bin')
+    fetch(cityAssetPath(slug, 'water.bin'))
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const buf = await res.arrayBuffer();
@@ -62,7 +63,7 @@ export function KaijuCityWater() {
       // the render tree.
       .catch((err) => console.error('[city] water failed to load', err));
     return () => { alive = false; };
-  }, []);
+  }, [slug]);
 
   const geometry = useMemo(() => {
     if (!tris) return null;

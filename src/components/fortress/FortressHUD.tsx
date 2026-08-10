@@ -24,6 +24,7 @@ import { TriagePanel } from '@/components/siege/TriagePanel';
 import { KaijuLabHud } from '@/components/siege/globe/KaijuLabHud';
 import { KaijuTrackerPanel } from '@/components/siege/globe/KaijuTrackerPanel';
 import { KaijuCommandPanel } from '@/components/siege/globe/KaijuCommandPanel';
+import { KaijuCityPanel } from '@/components/siege/globe/KaijuCityPanel';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
 import { installWorkModeHotkey } from '@/components/siege/siegeWorkMode';
@@ -981,6 +982,8 @@ export function FortressHUD(props: FortressHUDProps) {
       {isSiege && <TriagePanel />}
       {/* Mini Earth readout: Kaiju size in game units AND implied real-world size, so the
           scale decision can be made by looking. Globe map only. */}
+      {/* What this site is: its Kaiju, its garrison, its city. Reads the site definition. */}
+      {isGlobeMap && <KaijuCityPanel />}
       {isGlobeMap && <KaijuLabHud />}
       {/* Both only render once a battle has been started with B. */}
       {isGlobeMap && <KaijuTrackerPanel />}

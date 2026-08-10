@@ -24,13 +24,16 @@
 // Fetched in small tiles with a pause between them, because Overpass is a free service run on
 // donated hardware and hammering it with one enormous query is both rude and slower.
 //
-// Run: node scripts/fetch-dubai-buildings.mjs
+// Run:    node scripts/city/fetch-buildings.mjs <slug>
 // Output:
 //   public/siege/city/dubai.bin            the city: 24 bytes a building, this is what the game loads
 //   public/siege/city/dubai-ids.bin        OSM ids, for permanent damage later. Nothing loads it yet.
 //   public/siege/city/dubai-landmarks.json the named towers, for labels and for sanity-checking
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs';
+import { loadCity, slugFromArgv } from './cityConfig.mjs';
+
+const city = loadCity(slugFromArgv());
 
 /**
  * RESUMABLE, because this run takes half an hour and got killed twice.
@@ -41,7 +44,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync, appendFileSync } fr
  * away twenty-five minutes of somebody else's donated server time, which is the part that actually
  * matters.
  */
-const CACHE_DIR = '.city-cache';
+const CACHE_DIR = `${city.rawDir}/tiles`;
 const LOG = '.city-cache/progress.log';
 function note(line) {
   process.stderr.write(line);
@@ -50,18 +53,24 @@ function note(line) {
   try { appendFileSync(LOG, line); } catch { /* logging must never break the fetch */ }
 }
 
-const OUT_DIR = 'public/siege/city';
+const OUT_DIR = city.outDir;
 
 /**
  * The four areas, as Geoff listed them. Deliberately generous boxes: the gaps between districts are
  * mostly low-rise, and an empty corridor between two skylines reads worse than filler does.
  */
-const AREAS = [
-  { name: 'Dubai Marina',        s: 25.055, w: 55.125, n: 25.100, e: 55.160 },
-  { name: 'Palm Jumeirah',       s: 25.095, w: 55.110, n: 25.145, e: 55.175 },
-  { name: 'Sheikh Zayed Road',   s: 25.100, w: 55.155, n: 25.200, e: 55.280 },
-  { name: 'Downtown',            s: 25.180, w: 55.255, n: 25.225, e: 55.300 },
-];
+/**
+ * The areas to fetch, from the city's config.
+ *
+ * `areas` is a list of named sub-boxes, which is worth having rather than one big box: Overpass
+ * times out on a large dense query, and a city is usually a few built clusters with empty ground
+ * between them. Dubai is fetched as four districts. If a config gives no `areas`, the whole bbox is
+ * fetched as one — fine for a compact city, and it will simply take longer for a sprawling one.
+ */
+const AREAS = (city.areas && city.areas.length)
+  ? city.areas
+  : [{ name: city.name ?? city.slug, s: city.bbox[0], w: city.bbox[1], n: city.bbox[2], e: city.bbox[3] }];
+
 
 /** Overpass gets a box this big at a time. Small enough to answer quickly and not time out. */
 const TILE_DEG = 0.02;
@@ -231,7 +240,7 @@ const METRES_PER_DEG_LAT = 111320;
 async function main() {
   // One origin for the whole city, so every building is a small offset in metres rather than a
   // full-precision coordinate. That is what keeps it to float32 without losing centimetres.
-  const lat0 = 25.14, lon0 = 55.21;
+  const lat0 = city.lat0, lon0 = city.lon0;
   const mPerLon = METRES_PER_DEG_LAT * Math.cos((lat0 * Math.PI) / 180);
 
   mkdirSync(CACHE_DIR, { recursive: true });
@@ -366,13 +375,13 @@ async function main() {
   hv.setFloat64(0, lat0); hv.setFloat64(8, lon0); hv.setUint32(16, out.length);
   const body = new Float32Array(out.length * 6);
   out.forEach((b, i) => { for (let k = 0; k < 6; k++) body[i * 6 + k] = b[k]; });
-  writeFileSync(`${OUT_DIR}/dubai.bin`, Buffer.concat([Buffer.from(head), Buffer.from(body.buffer)]));
+  writeFileSync(`${OUT_DIR}/buildings.bin`, Buffer.concat([Buffer.from(head), Buffer.from(body.buffer)]));
   // Float64, not Int32: OSM way ids are past 1.3 billion and climbing toward the 2.1 billion that
   // an Int32 can hold. Running out of key space years from now, silently, is not a trade worth
   // 240 KB. Negative means a relation, so the two id spaces cannot collide.
-  writeFileSync(`${OUT_DIR}/dubai-ids.bin`, Buffer.from(new Float64Array(ids).buffer));
+  writeFileSync(`${OUT_DIR}/ids.bin`, Buffer.from(new Float64Array(ids).buffer));
   named.sort((a, b) => b.h - a.h);
-  writeFileSync(`${OUT_DIR}/dubai-landmarks.json`, JSON.stringify(named.slice(0, 300), null, 1));
+  writeFileSync(`${OUT_DIR}/landmarks.json`, JSON.stringify(named.slice(0, 300), null, 1));
 
   if (failedTiles.length) {
     note(`\n${failedTiles.length} TILE(S) FAILED and were NOT written: ${failedTiles.join(' ')}\n`);

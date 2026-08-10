@@ -1,9 +1,11 @@
-// cityRoads — loading Dubai's street network, once.
+// cityRoads — loading a city's street network, once.
 //
-// The bake is in scripts/make-city-roads.mjs; this is only the reader. Two things use it and they
+// The bake is in scripts/city/make-roads.mjs; this is only the reader. Two things use it and they
 // want different halves of it: KaijuCityRoads draws the asphalt, KaijuCityLights runs the traffic
 // along the same centre lines. Loading it twice would be two copies of 224 KB and, worse, two
 // chances for the cars and the road under them to disagree about where the road is.
+
+import { cityAssetPath, citySites } from './sites';
 
 /** Widths in metres, indexed by the class byte the bake writes. Real widths — see the bake. */
 export const ROAD_WIDTH_M = [44, 40, 28, 20, 15, 9, 9, 12, 12, 11];
@@ -32,7 +34,10 @@ let loading: Promise<Road[]> | null = null;
 
 export function getRoads(): Road[] | null { return roads; }
 
-export function loadRoads(url = '/siege/city/dubai-roads.bin'): Promise<Road[]> {
+export function loadRoads(slug?: string): Promise<Road[]> {
+  const site = slug ? citySites().find((s) => s.slug === slug) : citySites()[0];
+  if (!site?.city?.assets.roads) { roads = []; return Promise.resolve(roads); }
+  const url = cityAssetPath(site.slug, 'roads.bin');
   if (roads) return Promise.resolve(roads);
   if (loading) return loading;
   loading = fetch(url)
