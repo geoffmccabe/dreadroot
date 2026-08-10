@@ -185,7 +185,20 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
    * persisted store. Every other setting lives inside a globe-only component and is handed back on
    * unmount.
    */
-  enabled: true,
+  /**
+   * BACK TO OFF. Geoff asked for it on, and on breaks the start-up, so off wins until I know why.
+   *
+   * The important fact is that the SAME VALUES look right when he switches them on by hand and wrong
+   * when they are the default — his words on Golden hour were "It looks good". So this is not the
+   * values. It is something about the ORDER things mount in when the setting is already true as the
+   * app starts, versus being turned on once everything is already running. Defaulting it on again
+   * before finding that is just asking him to find it for me a third time.
+   *
+   * The preset stays 'golden', so switching the master on gives Golden hour with the button
+   * correctly highlighted — one click to exactly what he asked for, without it deciding for itself
+   * what the game looks like on load.
+   */
+  enabled: false,
   preset: 'golden',
 
   worldLights: 0.12,

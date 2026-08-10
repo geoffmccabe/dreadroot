@@ -15,7 +15,7 @@ import { KernelSize } from 'postprocessing';
 import { LOOK } from './lookConfig';
 import { useLook } from './lookStore';
 import { useGlobeLook } from './globeLookStore';
-import { isGlobeActive } from './globeActive';
+import { useGlobeActive } from './globeActive';
 
 function useIsLowTier() {
   return useMemo(
@@ -43,7 +43,10 @@ export function LookComposer() {
    * Earth's grade to Siege Worlds and everywhere else the instant the panel was switched on.
    * Contrast raised on a scene that was never graded for it is exactly "blown out".
    */
-  const grade = g.enabled && g.gradeOn && isGlobeActive();
+  // Called unconditionally, then combined. A hook inside a && chain is only reached when the terms
+  // before it are true, which is a different number of hooks per render and a React crash.
+  const globeOnScreen = useGlobeActive();
+  const grade = g.enabled && g.gradeOn && globeOnScreen;
 
   if (isLowTier || (!bloomEnabled && !grade)) return null;
 
