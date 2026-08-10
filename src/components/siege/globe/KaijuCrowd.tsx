@@ -221,6 +221,23 @@ export function toggleCrowd(): void {
   console.log(`[kaiju] crowd ${crowdOn ? 'ON' : 'OFF'} — ${CROWD_SIZE} people at 1.8 m`);
 }
 
+/**
+ * Where every soldier is standing this frame, for the distance markers.
+ *
+ * A 1.8 m man 1,470 m away is ONE PIXEL TALL — measured, on a 1080p screen, at the camera distance
+ * B3 actually uses. He is drawn correctly and he is invisible, and no amount of fixing the renderer
+ * changes that. Every game with units at range solves it the same way: draw the model when it is
+ * big enough to read, and a marker when it is not.
+ *
+ * Published as a flat buffer rather than the Person list, so the marker layer needs to know nothing
+ * about soldiers — the same split the canopies and the gunfire keep.
+ */
+const markerPos = new Float32Array(TOTAL_SOLDIERS * 3);
+let markerCount = 0;
+export function getSoldierMarkers(): { pos: Float32Array; count: number } {
+  return { pos: markerPos, count: markerCount };
+}
+
 export function KaijuCrowd() {
   const [, force] = useState(0);
   useEffect(() => subscribeCrowd(() => force((n) => n + 1)), []);
@@ -607,6 +624,7 @@ function Crowd() {
     // frame — a man who lands simply stops being added, which is the whole of "the chute disappears".
     const clock = arenaStarted() ? arenaClock() : 0;
     beginCanopies();
+    markerCount = 0;
     let pending = 0, freefalling = 0, underCanopy = 0, landed = 0;
     // ONE radius for the whole crowd's city maths. The city is flat and level in its own frame, so
     // the exact altitude a given soldier stands at moves his position in that frame by centimetres —
@@ -727,6 +745,10 @@ function Crowd() {
           f.obj.quaternion.setFromRotationMatrix(_basis);
           // The canopy only exists once it is out. In freefall there is nothing above him.
           if (canopyOut) addCanopy(f.obj.position, _up, p.fwd, p.chute);
+          markerPos[markerCount * 3] = f.obj.position.x;
+          markerPos[markerCount * 3 + 1] = f.obj.position.y;
+          markerPos[markerCount * 3 + 2] = f.obj.position.z;
+          markerCount++;
 
           // He still fires and still shouts, at exactly the rates the men on the ground use — the
           // same lines of code, reached from here. The rifle will not reach a Kaiju from two
@@ -878,6 +900,10 @@ function Crowd() {
           : playerBody.radius;
       }
       f.obj.position.copy(p.dir).multiplyScalar(radius);
+      markerPos[markerCount * 3] = f.obj.position.x;
+      markerPos[markerCount * 3 + 1] = f.obj.position.y;
+      markerPos[markerCount * 3 + 2] = f.obj.position.z;
+      markerCount++;
       _up.copy(p.dir);
       _side.crossVectors(_up, p.fwd).normalize();
       _basis.makeBasis(_side, _up, p.fwd);

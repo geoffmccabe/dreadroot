@@ -34,6 +34,7 @@ import { GlobeKaiju } from './GlobeKaiju';
 import { KaijuArenaScene } from './KaijuArenaScene';
 import { KaijuGunfireFx } from './KaijuGunfireFx';
 import { KaijuParachutes } from './KaijuParachutes';
+import { KaijuSoldierMarkers } from './KaijuSoldierMarkers';
 import { KaijuShoutsFx } from './KaijuShoutsFx';
 import { KaijuColliderDebug, toggleColliderDebug } from './KaijuColliderDebug';
 import { KaijuCity } from './KaijuCity';
@@ -426,6 +427,11 @@ export function KaijuLabController() {
       </GlobeErrorBoundary>
       {/* The canopies are their own layer: they OUTLIVE nothing and depend on nothing, and a bad
           instance matrix must not be able to take the crowd down with it. */}
+      {/* A soldier is 1.1 px at B3's camera distance. This is what makes two hundred and fifty of
+          them a visible army rather than a rumour — see KaijuSoldierMarkers. */}
+      <GlobeErrorBoundary label="kaiju-markers">
+        <KaijuSoldierMarkers />
+      </GlobeErrorBoundary>
       <GlobeErrorBoundary label="kaiju-chutes">
         <KaijuParachutes />
       </GlobeErrorBoundary>
