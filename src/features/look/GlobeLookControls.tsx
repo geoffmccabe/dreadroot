@@ -124,15 +124,32 @@ export function GlobeLookControls() {
           {/* --- PRESETS ----------------------------------------------------------------------- */}
           <div style={groupTitleStyle}>Presets — start here</div>
           <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
-            {GLOBE_LOOK_PRESETS.map((p) => (
-              <button key={p.key} style={{ ...btnStyle, flex: 1 }} onClick={() => applyGlobePreset(p.key)}>
-                {p.label}
-              </button>
-            ))}
+            {GLOBE_LOOK_PRESETS.map((p) => {
+              // THE ACTIVE ONE IS LIT. Same treatment the tone-mapping buttons in the Look section
+              // above already use, so "which is selected" reads identically in both places.
+              const active = g.preset === p.key;
+              return (
+                <button
+                  key={p.key}
+                  style={{
+                    ...btnStyle,
+                    flex: 1,
+                    background: active ? 'hsla(var(--hud-border-h) / 0.55)' : btnStyle.background,
+                    fontWeight: active ? 700 : 400,
+                    opacity: active ? 1 : 0.75,
+                  }}
+                  onClick={() => applyGlobePreset(p.key)}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
           <div style={noteStyle}>
-            Each sets every slider below at once. Pick the nearest and then adjust — building a look
-            from defaults every time is a lot of dragging for no reason.
+            {g.preset === 'custom'
+              ? 'Custom — a slider has been moved since a preset was chosen.'
+              : `${GLOBE_LOOK_PRESETS.find((p) => p.key === g.preset)?.label ?? 'Custom'} is active.`}
+            {' '}Each preset sets every slider below at once; pick the nearest and adjust from there.
           </div>
 
           {/* --- THE ONE THAT WAS MISSING ------------------------------------------------------ */}

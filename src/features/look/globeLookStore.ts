@@ -30,6 +30,16 @@ export interface GlobeLookState {
   enabled: boolean;
 
   /**
+   * Which preset is currently in effect, or 'custom' once anything has been dragged.
+   *
+   * Stored rather than derived by comparing every value: a float that has been dragged to visually
+   * the same place is not equal to the preset's, so a comparison would flicker between "Golden hour"
+   * and "custom" for no reason the user could see. Recording what was CHOSEN is both simpler and
+   * more honest — it says which button was pressed, not which numbers happen to match.
+   */
+  preset: string;
+
+  /**
    * SCALES EVERY LIGHT ON THE MAP THAT IS NOT MINE.
    *
    * Geoff: "it's supposed to be a night scene but it's very bright... You added a sun but even when
@@ -161,64 +171,55 @@ export interface GlobeLookState {
  * see and undo, not a jump.
  */
 export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
-  enabled: false,
+  /**
+   * ON, and set to Golden hour. Geoff: "I want you to default to Enable (master) ON and GOLDEN
+   * HOUR. It looks good."
+   *
+   * These values ARE the Golden hour preset below, kept identical on purpose: a default that is
+   * "nearly" a preset means the highlight would be wrong on a fresh install, and the first thing
+   * anyone did would be to press the button that was supposedly already selected.
+   *
+   * Turning this on by default is safe now in a way it was not a few days ago. The two things that
+   * escaped this map are both fixed at the source: the grade requires the globe to be ON SCREEN
+   * (globeActive), and exposure is written straight to the renderer rather than into the shared
+   * persisted store. Every other setting lives inside a globe-only component and is handed back on
+   * unmount.
+   */
+  enabled: true,
+  preset: 'golden',
 
-  // THE WORLD'S OWN LIGHTS, WAY DOWN. Geoff: "everything is bright, flat and cartoony." Flat is what
-  // an ambient-dominated scene IS — light arriving equally from everywhere cannot make a bright side
-  // and a dark side, so nothing has volume. At 8% these become a floor that stops the shadow side
-  // going pure black, which is all they should ever have been doing here.
-  worldLights: 0.08,
-  skyMode: 'night',
+  worldLights: 0.12,
+  skyMode: 'default',
 
-  // Almost nothing. Every unit of directionless light here is a unit of flatness.
-  fillAmbient: 0.03,
-  fillHemi: 0.05,
+  fillAmbient: 0.05,
+  fillHemi: 0.2,
 
-  // MOONLIGHT AT 45 DEGREES, as asked. One light doing all the shaping.
-  //
-  // 45 is a good default for a reason worth keeping: straight overhead gives no shadows to speak of,
-  // and right on the horizon gives shadows so long they leave most of the scene in darkness. Halfway
-  // is where a shadow is long enough to describe the shape that cast it and short enough to still
-  // see the ground it falls on.
-  //
-  // Cool, and bright enough to cast rather than to light: at 1.1 against world lights at 8% the moon
-  // is the only thing modelling anything, which is the entire point.
+  // A low, warm, strong key. 9 degrees is the sun sitting just above the horizon — long shadows
+  // raking across the terrain, every ridge split into a lit face and an unlit one. It is the hour
+  // landscape photographers actually turn up for, and the reason is exactly this.
   sunOn: true,
-  sunIntensity: 1.1,
-  sunElevation: 45,
+  sunIntensity: 2.6,
+  sunElevation: 9,
   sunBearing: 205,
-  sunWarmth: 0,
-  // A trace of sky, so the unlit side reads deep blue rather than black. Kept very low: a hemisphere
-  // light comes from straight above and lands on every horizontal surface at once, which is what put
-  // white tops on all the buildings.
-  skyBounce: 0.08,
+  sunWarmth: 0.85,
+  skyBounce: 0.35,
 
   shadowsOn: true,
-  // 2 km rather than 3: the same shadow map over a smaller area is a sharper shadow, and at these
-  // sizes everything worth seeing a shadow from is close.
   shadowSpanM: 2000,
   shadowSoft: true,
 
   hazeOn: true,
-  hazeVisibilityKm: 70,
+  hazeVisibilityKm: 120,
   hazeCeilingKm: 8,
 
-  // THE CHEAP CINEMATIC PART, and it is cheap: this is one full-screen pass that was already running
-  // for bloom, so contrast, saturation and vignette cost essentially nothing on top.
-  //
-  // Exposure DOWN is what makes it read as night rather than as a dim day — the lit windows can only
-  // be the brightest thing on screen if nothing else is competing with them. Contrast up separates
-  // the moonlit faces from the shadowed ones. A little saturation off, because film is less saturated
-  // than raw sRGB and over-saturated greens are the giveaway of an ungraded game. Vignette last, to
-  // put the eye in the middle of the frame.
   gradeOn: true,
-  exposure: 0.78,
-  contrast: 0.24,
-  saturation: -0.12,
-  vignette: 0.7,
+  exposure: 0.9,
+  contrast: 0.18,
+  saturation: -0.05,
+  vignette: 0.6,
 
-  // OFF. The biggest visual win available and the one that has caused every white screen so far, so
-  // it stays something to switch on deliberately rather than part of the default look.
+  // OFF. The biggest win still available and the cause of every white screen so far, so it stays a
+  // deliberate switch rather than part of the default look.
   terrainPbr: false,
   terrainDetail: 0.5,
   terrainNormal: 0.8,
@@ -236,14 +237,14 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
 };
 
 /**
- * v2 — the key is bumped so the new cinematic defaults actually arrive.
+ * v3 — bumped again so the Golden hour defaults arrive over anyone's saved v2 blob.
  *
  * Saved values are spread OVER the defaults, which is right for keeping a tuned look across reloads
  * and completely wrong the day the defaults change: everyone who has ever opened this panel would go
  * on seeing their old numbers and never the new starting point, and would reasonably report that
  * nothing had changed. Bumping the key retires the old blob once.
  */
-const KEY = 'dreadroot.globelook.v2';
+const KEY = 'dreadroot.globelook.v3';
 
 function load(): GlobeLookState {
   try {
@@ -276,7 +277,10 @@ export const globeLookStore = {
   get: (): GlobeLookState => state,
   set: <K extends keyof GlobeLookState>(key: K, value: GlobeLookState[K]) => {
     if (state[key] === value) return;
-    state = { ...state, [key]: value };
+    // Dragging any individual control means this is no longer the preset that was chosen — except
+    // for the master switch and the preset field themselves, neither of which changes the LOOK.
+    const stillPreset = key === 'enabled' || key === 'preset';
+    state = { ...state, [key]: value, ...(stillPreset ? {} : { preset: 'custom' }) };
     persist();
     listeners.forEach((l) => l());
   },
@@ -419,7 +423,7 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
 export function applyGlobePreset(key: string): void {
   const p = GLOBE_LOOK_PRESETS.find((x) => x.key === key);
   if (!p) return;
-  state = { ...state, ...p.values };
+  state = { ...state, ...p.values, preset: key };
   persist();
   listeners.forEach((l) => l());
 }
@@ -458,7 +462,7 @@ export function globeLookFromJson(text: string): boolean {
       }
     }
     if (Object.keys(next).length === 0) return false;
-    state = { ...state, ...next };
+    state = { ...state, ...next, preset: 'custom' };
     persist();
     listeners.forEach((l) => l());
     return true;

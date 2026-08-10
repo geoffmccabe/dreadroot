@@ -39,6 +39,7 @@
     "check:city-ground": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-city-ground.ts",
     "check:terrain-shader": "node scripts/check-terrain-shader.mjs",
     "check:globe-shadows": "node scripts/check-globe-shadows.mjs",
+    "check:globe-preset": "node scripts/check-globe-preset.mjs",
     "check:mesh-separate": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-mesh-separate.ts",
     "check:kaiju-footik": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-footik.ts",
     "check:kaiju-impact": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-impact.ts",
