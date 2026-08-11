@@ -110,7 +110,11 @@ export function KaijuCityPanel() {
           <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', margin: '6px 0' }} />
           <div style={{ opacity: 0.85, marginBottom: 2 }}>The city</div>
           {row('Assets', Object.entries(c.assets).filter(([, v]) => v).map(([k]) => k).join(', ') || 'none')}
-          {row('Traffic', c.cars ? `${c.cars.toLocaleString()} vehicles` : 'none')}
+          {/* Traffic RIDES the road network, so a city without roads baked has none however many
+              vehicles its config asks for. Saying "3,500 vehicles" over an empty street map is the
+              panel lying, which is the one thing it must never do. */}
+          {row('Traffic', !c.assets.roads ? 'none — roads not baked'
+            : c.cars ? `${c.cars.toLocaleString()} vehicles` : 'none')}
           {row('Roof beacons', `above ${c.beaconMinHeightMetres} m`)}
           {row('Ground', `${site.ground.groundMetres} m, sea ${site.ground.shallowSeaMetres} m`)}
           {row('Draw within', `${c.drawWithinUnits} u (${c.drawWithinUnits / 10} km)`)}

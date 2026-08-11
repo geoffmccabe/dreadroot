@@ -48,16 +48,34 @@ export const SAN_JOSE: SiteDef = {
     // Matched to the bake's own clip radius (maxRangeMetres 12000 in the config) so that everything
     // baked sits inside the flat core. A road that ends up outside it stands on blended ground and
     // floats — which is the inland version of a building in the sea.
+    // 12 km against the bake's 11 km clip, so everything baked sits inside the flat core with a
+    // kilometre to spare.
     innerMetres: 12000,
     outerMetres: 24000,
   },
 
   city: {
-    bbox: [9.84, -84.18, 10.03, -83.98],
+    // THE CORE, NOT THE WHOLE METRO. Overpass throttled every mirror to roughly a tile a minute
+    // while this was built, making the full five-area Gran Area Metropolitana a multi-hour download.
+    // This box holds all four districts below. scripts/city/cities/san-jose.json keeps the full area
+    // list as _fullAreas: restore it over `areas`, re-run fetch-buildings (which resumes from the
+    // cache and fetches only what is missing) then make-detail, and update this line to match.
+    bbox: [9.90, -84.16, 9.98, -83.98],
     // No water: OSM has almost nothing mapped as an area here. The rivers through San José — the
     // Torres and the María Aguilar — are steep wooded ravines mapped as lines, not surfaces, and a
     // line has no width to draw. Set this true if that ever changes.
-    assets: { buildings: true, detail: true, roads: true, water: false },
+    // ROADS AND DETAIL ARE FALSE, AND THAT IS A STATEMENT OF FACT RATHER THAN A DECISION. The
+    // buildings came through — 29,402 of them, every landmark verified — and then Overpass began
+    // answering 429 and 406 to everything, so the road network and the 3D-shape layer never
+    // downloaded. They are one command each once it recovers:
+    //
+    //     node scripts/city/make-roads.mjs  san-jose
+    //     node scripts/city/make-detail.mjs san-jose
+    //
+    // then flip these two to true. Marking them true now would give a city that quietly fetches two
+    // 404s and shows nothing — the assets flags exist precisely so a half-built city is honest about
+    // being half-built rather than looking broken.
+    assets: { buildings: true, detail: false, roads: false, water: false },
     drawWithinUnits: 400,
     // Fewer than Dubai's 9,000, and not arbitrarily: the network here is about a third the length,
     // and San José at night is genuinely darker and thinner than the Gulf.
