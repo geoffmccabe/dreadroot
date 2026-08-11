@@ -173,7 +173,7 @@ for (let i = 0; i < MAX_SHOUTS; i++) {
 let cursor = 0;
 
 export function getShouts(): Shout[] { return shouts; }
-export function clearShouts(): void { for (const s of shouts) s.live = false; }
+export function clearShouts(): void { for (const s of shouts) s.live = false; liveShouts = 0; }
 
 /**
  * Maybe say something, given that this soldier just fired.
@@ -200,6 +200,7 @@ export function maybeShout(head: THREE.Vector3, speaker: number, lang: LangId = 
   // 1-3 seconds, as asked. Long enough to read up close, short enough that the field never fills
   // up with speech.
   s.life = 1 + rand() * 2;
+  if (!s.live) liveShouts++;
   s.live = true;
   return true;
 }
@@ -208,8 +209,20 @@ export function maybeShout(head: THREE.Vector3, speaker: number, lang: LangId = 
  * Move a live bubble with the person who said it. Called from the crowd's own loop each frame,
  * because that is the only place a soldier's current position exists.
  */
+let liveShouts = 0;
 export function updateShoutAnchor(speaker: number, head: THREE.Vector3): void {
-  for (const s of shouts) if (s.live && s.speaker === speaker) s.anchor.copy(head);
+  // ONE COUNTER, CHECKED FIRST. This is called by every soldier every frame and used to scan all
+  // twelve slots each time — twenty-four hundred comparisons a frame to move, on average, nothing.
+  // Shouts happen on one shot in fifty, so the overwhelmingly common answer is "nobody is talking".
+  if (liveShouts === 0) return;
+  for (const s of shouts) if (s.live && s.speaker === speaker) { s.anchor.copy(head); return; }
+}
+
+/** Recount who is talking. Called by stepShouts, which is the only thing that retires one. */
+function recount(): void {
+  let n = 0;
+  for (const s of shouts) if (s.live) n++;
+  liveShouts = n;
 }
 
 export function stepShouts(dt: number): void {
@@ -218,6 +231,7 @@ export function stepShouts(dt: number): void {
     s.age += dt;
     if (s.age > s.life) s.live = false;
   }
+  recount();
 }
 
 /**

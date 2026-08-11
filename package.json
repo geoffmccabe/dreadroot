@@ -46,6 +46,7 @@
     "check:skin-precision": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-skin-precision.ts",
     "probe:terrain-live": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/probe-terrain-live.ts",
     "check:terrain-detail": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-terrain-detail.ts",
+    "check:city-scope": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-city-scope.ts",
     "check:tile-cache": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-tile-cache.ts",
     "check:meshhit-prefilter": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-meshhit-prefilter.ts",
     "bench:arena-gc": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/bench-arena-gc.ts",

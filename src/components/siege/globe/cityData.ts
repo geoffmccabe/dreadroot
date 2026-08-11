@@ -56,6 +56,9 @@ export const cityDiag = { state: 'idle' as 'idle' | 'loading' | 'ready' | 'faile
 
 export function getCity(): City | null { return city; }
 
+/** FOR TESTS ONLY: install a city without going near the network. */
+export function setCityForTest(next: City | null): void { city = next; }
+
 /**
  * Build the tangent frame at a latitude and longitude.
  *

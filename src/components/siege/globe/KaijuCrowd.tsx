@@ -101,6 +101,30 @@ const LOOKAHEAD_M = 4;
  * culled, and figures still detach once you fly away from them.
  */
 const CULL_UNITS = 2000 / METRES_PER_UNIT;
+
+/**
+ * THREE TIERS OF SOLDIER, because two hundred of them each doing everything is the frame budget.
+ *
+ * A soldier's cost is not his triangles. Per man per frame the loop was doing: a target re-check, up
+ * to four world-to-city transforms, a building lookup, a steering query against the collider grid, a
+ * building resolve, a terrain height sample, a shout-anchor scan, and a skinned mesh update. Two
+ * hundred of those is the frame.
+ *
+ * Almost none of it can be seen past a few hundred metres, so:
+ *
+ *   NEAR   everything, exactly as before.
+ *   MID    no building avoidance, terrain height sampled occasionally instead of every frame,
+ *          skinned at half the rate. He still walks, shoots and is drawn.
+ *   FAR    detached from the scene entirely. Nothing runs but his position.
+ *
+ * FAR IS A DETACH, NOT A HIDE. `visible = false` stops a figure being DRAWN and nothing else —
+ * three.js still walks it and all sixty-odd of its bones in updateMatrixWorld every frame, because
+ * that traversal never looks at visibility. That traversal is most of what a crowd costs.
+ */
+const LOD_NEAR_UNITS = 400 / METRES_PER_UNIT;
+const LOD_MID_UNITS = 1500 / METRES_PER_UNIT;
+/** How often a MID soldier re-samples the terrain under him. He moves 5 m/s; this is plenty. */
+const MID_GROUND_EVERY = 12;
 /** Running speed, metres per second. A frightened human, not an athlete. */
 const RUN_MS = 5.5;   // a running human, not an athlete
 /**
@@ -127,6 +151,11 @@ const SOLDIER_URL = '/siege/characters/soldier.glb';
 const RIFLE_URL = '/siege/weapons/ak47.glb';
 
 interface Person {
+  /**
+   * Last terrain radius sampled for this man, so a MID soldier does not pay for one every frame.
+   * Zero means never sampled, which forces one on his first visible frame.
+   */
+  groundR: number;
   /** Unit direction from the planet centre. */
   dir: THREE.Vector3;
   /** Tangent heading. */
@@ -283,6 +312,7 @@ function makePeople(): Person[] {
       out.push({
         dir, fwd, running: rand() < 0.65, timer: rand() * 3, phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        groundR: 0,
         targetId: chooseTarget(dir),
         // Stagger the OPENING shots across the whole 1-10 second window, or two hundred rifles go
         // off within a tenth of a second of each other the instant the crowd appears.
@@ -333,6 +363,7 @@ function makePeople(): Person[] {
         timer: rand() * 3,
         phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        groundR: 0,
         targetId: chooseTarget(dir),
         fireIn: nextShotDelay(),
         retargetIn: nextRetargetDelay(),
@@ -363,6 +394,7 @@ function makePeople(): Person[] {
       timer: rand() * 3,
       phase: rand(),
       speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+      groundR: 0,
       targetId: chooseTarget(dir),
       fireIn: nextShotDelay(),
       retargetIn: nextRetargetDelay(),
@@ -409,6 +441,7 @@ function makePeople(): Person[] {
         dir, fwd,
         running: false, timer: 1 + rand() * 2, phase: rand(),
         speed: (RUN_MS * (0.75 + rand() * 0.5)) / METRES_PER_UNIT,
+        groundR: 0,
         targetId: chooseTarget(dir),
         fireIn: nextShotDelay(),
         retargetIn: nextRetargetDelay(),
@@ -787,6 +820,25 @@ function Crowd() {
       }
       if (p.dropAt >= 0) landed++;
 
+      // WHICH TIER IS HE IN? From last frame's position, which is correct: he moves five metres a
+      // second and the nearest threshold is four hundred.
+      const camDist2 = f.obj.position.distanceToSquared(camera.position);
+      const lod = camDist2 > LOD_MID_UNITS * LOD_MID_UNITS ? 2
+        : camDist2 > LOD_NEAR_UNITS * LOD_NEAR_UNITS ? 1 : 0;
+
+      if (lod === 2) {
+        // Out of the scene graph entirely — see the note on LOD_NEAR_UNITS. He keeps walking, so
+        // the crowd is not frozen when you turn round, but nothing else about him runs.
+        if (f.attached) { group.current.remove(f.obj); f.attached = false; }
+        if (p.running) {
+          const dist = p.speed * dt;
+          _axis.crossVectors(p.dir, p.fwd).normalize();
+          p.dir.applyAxisAngle(_axis, dist / PLANET_RADIUS).normalize();
+        }
+        continue;
+      }
+      if (!f.attached) { group.current.add(f.obj); f.attached = true; }
+
       p.timer -= dt;
       if (p.timer <= 0) {
         p.running = !p.running;
@@ -864,7 +916,12 @@ function Crowd() {
       }
 
       // KEEP HIM WHERE HE BELONGS — on his roof, or out of the walls.
-      if (cityReady) {
+      //
+      // NEAR ONLY. This is the single most expensive thing a soldier does: a transform into the
+      // city's frame, a grid query, and a resolve against every box near him. At four hundred metres
+      // a man is a few pixels and whether he is standing half a metre inside a wall is not a thing
+      // anyone can see — but it is a thing being paid for two hundred times a frame.
+      if (cityReady && lod === 0) {
         _cityPos.copy(p.dir).multiplyScalar(groundRadius);
         if (worldToCity(_cityPos, _cityPos)) {
           const fixed = p.roof
@@ -882,7 +939,10 @@ function Crowd() {
       // worth of time, so the animation runs at the right speed for a third of the cost. At 1.8 m
       // against a 300 m Kaiju nobody can see the difference.
       if (p.shootFor > 0) p.shootFor -= dt;
-      if ((i % STAGGER) === (frame.current % STAGGER)) {
+      // MID soldiers skin at half the near rate. At that distance a man is a few pixels tall and the
+      // difference between 20 and 10 animation updates a second is not visible; the cost is.
+      const skinStep = lod === 0 ? STAGGER : STAGGER * 2;
+      if ((i % skinStep) === (frame.current % skinStep)) {
         // THREE STATES: advancing, standing, and standing-while-firing. Instant weight swaps rather
         // than crossfades — with the mixer only ticking every third frame a fade would stutter, and
         // at 1.8 m against a 300 m monster the pop is invisible.
@@ -895,7 +955,7 @@ function Crowd() {
         if (f.shoot) f.shoot.setEffectiveWeight(shootNow ? 1 : 0);
         // Everything ticks, always. Weighting an action to zero does not stop it, and a stopped
         // soldier whose idle is not advancing freezes mid-stride.
-        f.mixer.update(dt * STAGGER);
+        f.mixer.update(dt * skinStep);
       }
 
       // NEVER FALL BACK TO SEA LEVEL: on the canyon rim that is 2.1 km underground, which is why
@@ -906,11 +966,17 @@ function Crowd() {
       let radius: number;
       if (p.roof && cityReady) {
         radius = cityGroundRadius() + p.roof.h / METRES_PER_UNIT;
-      } else {
+      } else if (lod === 0 || p.groundR <= 0 || (frame.current + i) % MID_GROUND_EVERY === 0) {
+        // A terrain height lookup walks the patch index. Two hundred a frame is real work for a
+        // number that changes by centimetres as a man walks, so past four hundred metres it is
+        // sampled occasionally and remembered.
         const metres = sampleGlobeSurface(p.dir.x, p.dir.y, p.dir.z);
         radius = metres != null
           ? PLANET_RADIUS + metres / METRES_PER_UNIT
           : playerBody.radius;
+        p.groundR = radius;
+      } else {
+        radius = p.groundR;
       }
       f.obj.position.copy(p.dir).multiplyScalar(radius);
       markerPos[markerCount * 3] = f.obj.position.x;

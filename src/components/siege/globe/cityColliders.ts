@@ -65,10 +65,30 @@ let indexedCity: City | null = null;
 
 const cityOrigin = new THREE.Vector3();
 const cityInverse = new THREE.Quaternion();
+/**
+ * How far the indexed city actually reaches, in metres, plus a margin.
+ *
+ * Nothing outside this can possibly touch a building, and asking is not free — so a query from the
+ * far side of the planet is rejected on one comparison instead of walking the grid.
+ */
+let cityReachM = 0;
 
-export const cityColliderDiag = { boxes: 0, cells: 0, ready: false };
+export const cityColliderDiag = { boxes: 0, cells: 0, ready: false, reachKm: 0 };
 
-const cellKey = (cx: number, cz: number): number => (cx + HALF) * (HALF * 2) + (cz + HALF);
+/**
+ * Cell key. Returns -1 for anything outside the addressable span, which must never be looked up.
+ *
+ * The bare form of this — (cx + HALF) * (HALF * 2) + (cz + HALF) — is only a unique encoding while
+ * BOTH coordinates are inside the span. Outside it the pairs alias: a query at cz >= HALF lands on
+ * exactly the key of a real cell one step over in x, so a point far from the city could come back
+ * holding buildings that are not there. It has never fired, because the only city ever loaded sits
+ * at the origin of its own frame and worldToCity now rejects distant points before this is reached —
+ * but "it cannot happen" and "it is impossible" are different claims, and this makes it the second.
+ */
+const cellKey = (cx: number, cz: number): number =>
+  (cx < -HALF || cx >= HALF || cz < -HALF || cz >= HALF)
+    ? -1
+    : (cx + HALF) * (HALF * 2) + (cz + HALF);
 
 /**
  * Build the collider set from the loaded city. Cheap to call every frame; does the work once.
@@ -104,11 +124,21 @@ export function ensureCityColliders(): boolean {
     for (let cx = x0; cx <= x1; cx++) {
       for (let cz = z0; cz <= z1; cz++) {
         const k = cellKey(cx, cz);
+        if (k < 0) continue;                       // a building outside the addressable span
         const list = grid.get(k);
         if (list) list.push(i); else grid.set(k, [i]);
       }
     }
   }
+
+  // The city's own extent, so anything far outside it can be rejected in one comparison.
+  let reach = 0;
+  for (const b of boxes) {
+    const ex = b.hw * Math.abs(b.cos) + b.hd * Math.abs(b.sin);
+    const ez = b.hw * Math.abs(b.sin) + b.hd * Math.abs(b.cos);
+    reach = Math.max(reach, Math.hypot(Math.abs(b.x) + ex, Math.abs(b.z) + ez));
+  }
+  cityReachM = reach + CELL * 2;
 
   seen = new Int32Array(boxes.length);
   stamp = 0;
@@ -116,7 +146,9 @@ export function ensureCityColliders(): boolean {
   cityColliderDiag.boxes = boxes.length;
   cityColliderDiag.cells = grid.size;
   cityColliderDiag.ready = true;
-  console.log(`[city] ${boxes.length.toLocaleString()} colliders in ${grid.size.toLocaleString()} cells`);
+  cityColliderDiag.reachKm = cityReachM / 1000;
+  console.log(`[city] ${boxes.length.toLocaleString()} colliders in ${grid.size.toLocaleString()} cells`
+    + `, reach ${(cityReachM / 1000).toFixed(1)} km`);
   return true;
 }
 
@@ -133,7 +165,20 @@ export function clearCityColliders(): void {
 /** World position to city-local METRES. Null when there is no city to be local to. */
 export function worldToCity(world: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 | null {
   if (!indexedCity) return null;
-  return out.copy(world).sub(cityOrigin).applyQuaternion(cityInverse).multiplyScalar(METRES_PER_UNIT);
+  out.copy(world).sub(cityOrigin).applyQuaternion(cityInverse).multiplyScalar(METRES_PER_UNIT);
+  // ONLY THE LOCAL CITY, and this is the guard that makes that true.
+  //
+  // Geoff: "make sure that it's only considering the local buildings and not accidentally
+  // considering other cities on the same earth map."
+  //
+  // There is one city loaded at a time, so there is no second city to confuse it with today. But
+  // nothing here said so: this returned a coordinate for ANY point on the planet, including one
+  // twelve thousand kilometres away, and handed it to a grid that then had to reason about cells
+  // half a million cells out. Rejecting anything past the city's own measured extent makes "local"
+  // a property of the code rather than a happy accident of only ever loading one city — which is
+  // exactly the assumption that would break the day a second one is added.
+  if (out.x * out.x + out.z * out.z > cityReachM * cityReachM) return null;
+  return out;
 }
 
 /** ...and back. */
@@ -159,7 +204,9 @@ function forEachNear(x: number, z: number, radius: number, fn: (b: CityBox, i: n
   stamp++;
   for (let cx = x0; cx <= x1; cx++) {
     for (let cz = z0; cz <= z1; cz++) {
-      const list = grid.get(cellKey(cx, cz));
+      const k = cellKey(cx, cz);
+      if (k < 0) continue;
+      const list = grid.get(k);
       if (!list) continue;
       for (const i of list) {
         if (seen[i] === stamp) continue;

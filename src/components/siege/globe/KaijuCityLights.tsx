@@ -53,6 +53,14 @@ const CAR_SIZE_M = 4.5;
  * "two lights side by side" actually needs to be to be seen as two.
  */
 const CAR_LAMP_HALF_M = 4;
+/**
+ * Past this, a vehicle stops being simulated. 4 km.
+ *
+ * Its lamps are still DRAWN — they are two points in a buffer that costs nothing extra — it simply
+ * stops being walked along its road. At four kilometres a 4.5 m lamp is under a pixel, and a
+ * stationary dot there is indistinguishable from a moving one.
+ */
+const CAR_SIM_UNITS = 4000 / METRES_PER_UNIT;
 /** Only roofs above this get an aircraft warning lamp. */
 const BEACON_MIN_HEIGHT_M = 180;
 const BEACON_SIZE_M = 14;
@@ -187,8 +195,21 @@ export function KaijuCityLights({ city }: { city: City }) {
       // the wrong answer everywhere except the one spot the two happen to coincide.
       camLocal.copy(camera.position);
       C.worldToLocal(camLocal);
+      // HOW FAR CAN YOU SEE A CAR? Beyond this the lamps are sub-pixel shimmer, so the vehicle is
+      // left exactly where it was rather than being walked along its road. Nine thousand segment
+      // walks a frame is real work for lights nobody can resolve, and a stationary dot four
+      // kilometres away is indistinguishable from a moving one.
+      const farSq = CAR_SIM_UNITS * CAR_SIM_UNITS;
       for (let i = 0; i < traffic.length; i++) {
         const c = traffic[i];
+        // Cheap reject on the position it already has, before any of the segment maths.
+        {
+          const o0 = i * 6;
+          const ddx = carBuf.pos[o0] - camLocal.x;
+          const ddy = carBuf.pos[o0 + 1] - camLocal.y;
+          const ddz = carBuf.pos[o0 + 2] - camLocal.z;
+          if (ddx * ddx + ddy * ddy + ddz * ddz > farSq) continue;
+        }
         const n = c.cum.length;
         const total = c.cum[n - 1];
         c.dist += c.speed * c.dir * dt;
