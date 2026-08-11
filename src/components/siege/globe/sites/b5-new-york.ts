@@ -43,7 +43,16 @@ export const NEW_YORK: SiteDef = {
 
   city: {
     bbox: [40.68, -74.04, 40.82, -73.90],
-    assets: { buildings: true, detail: true, roads: true, water: true },
+    // DETAIL IS FALSE FOR NOW, and only that. Buildings, roads, water and the land mask are all in
+    // and all verified. Manhattan's building:part data is the densest on Earth, and those queries
+    // are heavy enough that Overpass 504s on them even when it is answering everything else — 3 of
+    // 9 tiles after three rounds. One command fills it in when the servers are quiet:
+    //
+    //     node scripts/city/make-detail.mjs new-york      (then flip this to true)
+    //
+    // What it buys is the spires and setbacks: One World Trade is 417 m to the ROOF here, and its
+    // mast to 541 m lives in that layer, as does the Empire State's.
+    assets: { buildings: true, detail: false, roads: true, water: true },
     drawWithinUnits: 400,
     cars: 9000,
     // Manhattan has a great many buildings over 180 m, so the Dubai threshold works here unchanged.
