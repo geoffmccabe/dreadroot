@@ -53,8 +53,14 @@ export function slugFromArgv() {
 export const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
 ];
+// overpass.kumi.systems IS ALSO OUT. Asked for the same small box in central San Jose it returned
+// 83 buildings where overpass-api.de returned 215, twice, and then began failing outright. A mirror
+// that answers with a THIRD of the data is more dangerous than one that answers with none: the
+// zero-element guard below cannot see it, and what you get is a city with invisible thin patches.
+// overpass.osm.ch was removed for returning zero outside Switzerland. Add a mirror only after
+// checking it agrees with overpass-api.de on a box you can count.
+
 // overpass.osm.ch is NOT in this list. It answers quickly, with valid JSON, and ZERO ELEMENTS for
 // anything outside Switzerland — a successful lie, which is the one failure mode that gets cached
 // and never noticed. It silently emptied a tile of central San Jose before it was spotted.

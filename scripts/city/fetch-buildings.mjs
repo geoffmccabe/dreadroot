@@ -88,10 +88,16 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
  * gentler, not to find a way round it. private.coffee is a public mirror of the same database.
  */
 const ENDPOINTS = [
-  'https://overpass.private.coffee/api/interpreter',
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
 ];
+// overpass.kumi.systems IS ALSO OUT. Asked for the same small box in central San Jose it returned
+// 83 buildings where overpass-api.de returned 215, twice, and then began failing outright. A mirror
+// that answers with a THIRD of the data is more dangerous than one that answers with none: the
+// zero-element guard below cannot see it, and what you get is a city with invisible thin patches.
+// overpass.osm.ch was removed for returning zero outside Switzerland. Add a mirror only after
+// checking it agrees with overpass-api.de on a box you can count.
+
 // overpass.osm.ch IS DELIBERATELY NOT HERE. It answers, quickly and with valid JSON, and returns
 // ZERO ELEMENTS for anything outside its region — it is a Switzerland-focused partial mirror. A
 // successful empty answer is the single most dangerous reply this script can receive, because every
