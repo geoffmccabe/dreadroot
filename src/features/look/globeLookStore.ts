@@ -63,7 +63,20 @@ export interface GlobeLookState {
    * brightness. A night scene has to switch them off, which is what 'night' does — dark background,
    * day dome hidden, and the starfield finally visible for what it is.
    */
-  skyMode: 'default' | 'night';
+  skyMode: 'dome' | 'own';
+  /**
+   * The sky colour, when this map paints its own.
+   *
+   * THIS IS THE WHITE SKY, and it was never a bug. SiegeWorldScene mounts a drei <Sky> configured
+   * for midday and shared with every world. Presets that left it visible ('dome') got a bright
+   * blue-white sky whatever the lights were doing — which is why Golden hour looked blown out and
+   * Night looked right: Night was the only one that hid it.
+   *
+   * So every preset paints its own now, and the dome is only for anyone who deliberately wants it
+   * back. That also removes the thing Geoff kept hitting: "sometimes they have a white sky and
+   * sometimes black" was simply which presets hid the dome and which did not.
+   */
+  skyColor: string;
 
   // --- THE FLAT FILL ------------------------------------------------------------------------------
   // The globe is classed as a "blank" map, which adds a bright directionless fill on top of the
@@ -181,50 +194,38 @@ export interface GlobeLookState {
  */
 export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   /**
-   * ON, and set to Golden hour. Geoff: "I want you to default to Enable (master) ON and GOLDEN
-   * HOUR. It looks good."
+   * ON, and NIGHT. Geoff: "I told you to set it to enable master default to on, so do that... if I
+   * click golden hour and then click night, it looks great. Can you figure out what sequence is
+   * causing the settings to look nice and then default to that?"
    *
-   * These values ARE the Golden hour preset below, kept identical on purpose: a default that is
-   * "nearly" a preset means the highlight would be wrong on a fresh install, and the first thing
-   * anyone did would be to press the button that was supposedly already selected.
+   * The sequence is not a sequence — it is the END STATE. Both of those paths finish on Night, and
+   * Night was the only preset that hid the shared midday sky dome. That dome is the white sky: it is
+   * emissive, so no lighting setting touches it, and any preset leaving it up looked blown out
+   * regardless of everything else on the panel.
    *
-   * Turning this on by default is safe now in a way it was not a few days ago. The two things that
-   * escaped this map are both fixed at the source: the grade requires the globe to be ON SCREEN
-   * (globeActive), and exposure is written straight to the renderer rather than into the shared
-   * persisted store. Every other setting lives inside a globe-only component and is handed back on
-   * unmount.
+   * Fixed at the root, so every preset now paints its own sky and none of them can produce that. But
+   * the default is Night because that is the one he has twice said looks great.
    */
-  /**
-   * BACK TO OFF. Geoff asked for it on, and on breaks the start-up, so off wins until I know why.
-   *
-   * The important fact is that the SAME VALUES look right when he switches them on by hand and wrong
-   * when they are the default — his words on Golden hour were "It looks good". So this is not the
-   * values. It is something about the ORDER things mount in when the setting is already true as the
-   * app starts, versus being turned on once everything is already running. Defaulting it on again
-   * before finding that is just asking him to find it for me a third time.
-   *
-   * The preset stays 'golden', so switching the master on gives Golden hour with the button
-   * correctly highlighted — one click to exactly what he asked for, without it deciding for itself
-   * what the game looks like on load.
-   */
-  enabled: false,
-  preset: 'golden',
+  enabled: true,
+  preset: 'night',
 
-  worldLights: 0.12,
-  skyMode: 'default',
+  worldLights: 0.06,
+  skyMode: 'own',
+  skyColor: '#05070d',
 
-  fillAmbient: 0.05,
-  fillHemi: 0.2,
+  fillAmbient: 0.02,
+  fillHemi: 0.04,
 
-  // A low, warm, strong key. 9 degrees is the sun sitting just above the horizon — long shadows
-  // raking across the terrain, every ridge split into a lit face and an unlit one. It is the hour
-  // landscape photographers actually turn up for, and the reason is exactly this.
+  // MOONLIGHT. Dim, cool, and high enough at 45 degrees to throw a shadow long enough to describe
+  // the shape that cast it and short enough to still see the ground it lands on.
   sunOn: true,
-  sunIntensity: 2.6,
-  sunElevation: 9,
+  sunIntensity: 0.9,
+  sunElevation: 45,
   sunBearing: 205,
-  sunWarmth: 0.85,
-  skyBounce: 0.35,
+  sunWarmth: 0,
+  // Very low. A hemisphere light arrives from straight overhead, so it lands on every roof at once —
+  // which is what put white tops on all the buildings when the key was switched off.
+  skyBounce: 0.05,
 
   shadowsOn: true,
   terrainCasts: false,
@@ -232,14 +233,16 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
   shadowSoft: true,
 
   hazeOn: true,
-  hazeVisibilityKm: 120,
+  hazeVisibilityKm: 90,
   hazeCeilingKm: 8,
 
+  // Exposure LOW is what makes it read as night rather than as a dim day: the city's lit windows can
+  // only be the brightest thing on screen if nothing else is competing with them.
   gradeOn: true,
-  exposure: 0.9,
-  contrast: 0.18,
+  exposure: 0.55,
+  contrast: 0.22,
   saturation: -0.05,
-  vignette: 0.6,
+  vignette: 0.75,
 
   // OFF. The biggest win still available and the cause of every white screen so far, so it stays a
   // deliberate switch rather than part of the default look.
@@ -260,14 +263,14 @@ export const GLOBE_LOOK_DEFAULTS: GlobeLookState = {
 };
 
 /**
- * v3 — bumped again so the Golden hour defaults arrive over anyone's saved v2 blob.
+ * v4 — bumped so the Night defaults and the new sky handling arrive over any saved blob.
  *
  * Saved values are spread OVER the defaults, which is right for keeping a tuned look across reloads
  * and completely wrong the day the defaults change: everyone who has ever opened this panel would go
  * on seeing their old numbers and never the new starting point, and would reasonably report that
  * nothing had changed. Bumping the key retires the old blob once.
  */
-const KEY = 'dreadroot.globelook.v3';
+const KEY = 'dreadroot.globelook.v4';
 
 function load(): GlobeLookState {
   try {
@@ -330,7 +333,8 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
       // The world's own lights nearly off — this is the setting that makes night POSSIBLE, and
       // nothing else on the panel can substitute for it.
       worldLights: 0.06,
-      skyMode: 'night',
+      skyMode: 'own',
+      skyColor: '#05070d',
       fillAmbient: 0.02,
       fillHemi: 0.04,
       // MOONLIGHT. A real moon is about a 400,000th of the sun and reads cool because the eye's
@@ -341,12 +345,14 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
       // key off the only thing left is hemisphere light, which comes from straight overhead — so it
       // lands squarely on every roof and nowhere else, and blows the tops out while the walls stay
       // black. A night scene still needs a key; it is just a dim, cool, high one.
+      // Moonlight at 45 degrees, as asked. Identical to the defaults, which claim to BE this preset
+      // — check-globe-preset compares them value for value, and caught them drifting apart here.
       sunOn: true,
-      sunIntensity: 0.28,
-      sunElevation: 52,
+      sunIntensity: 0.9,
+      sunElevation: 45,
       sunWarmth: 0,
       // Very low, for the reason above: hemisphere light is what whitens roofs.
-      skyBounce: 0.03,
+      skyBounce: 0.05,
       shadowsOn: true,
       // Long, soft shadows are most of what makes a night exterior look expensive.
       shadowSoft: true,
@@ -366,7 +372,10 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
     label: 'Twilight',
     values: {
       worldLights: 0.18,
-      skyMode: 'night',
+      skyMode: 'own',
+      // Deep indigo with a little warmth left in it, which is what the sky actually does after the
+      // sun has gone but before it is dark.
+      skyColor: '#141a2b',
       fillAmbient: 0.06,
       fillHemi: 0.14,
       sunOn: true,
@@ -391,7 +400,9 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
     label: 'Golden hour',
     values: {
       worldLights: 0.12,
-      skyMode: 'default',
+      skyMode: 'own',
+      // A dusty warm horizon rather than the midday dome, which is what made this preset blow out.
+      skyColor: '#3d3a44',
       fillAmbient: 0.05,
       fillHemi: 0.2,
       sunOn: true,
@@ -415,7 +426,8 @@ export const GLOBE_LOOK_PRESETS: { key: string; label: string; values: Partial<G
     label: 'Midday',
     values: {
       worldLights: 0.25,
-      skyMode: 'default',
+      skyMode: 'own',
+      skyColor: '#7d9ec4',
       fillAmbient: 0.1,
       fillHemi: 0.35,
       sunOn: true,

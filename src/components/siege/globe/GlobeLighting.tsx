@@ -71,8 +71,7 @@ const GROUND_BOUNCE = 0x6b5a48;
 const SHADOW_MAP_SIZE = 2048;
 /** Frames between full scene scans. Two seconds at 60fps. */
 const SCAN_FRAMES = 120;
-/** The night sky colour, held as one object so it can be recognised and taken back out again. */
-const nightSky = new THREE.Color(0x05070d);
+
 
 /**
  * A tangent vector pointing along a compass bearing at `dir`. 0 = north, 90 = east.
@@ -105,6 +104,7 @@ export function GlobeLighting() {
   const scanTimer = useRef(0);   // 0 = scan on the very first frame
   const foreignLights = useRef<THREE.Light[]>([]);
   const skyDome = useRef<THREE.Object3D | null>(null);
+  const skyColor = useRef(new THREE.Color('#05070d'));
 
   const on = look.enabled;
 
@@ -284,15 +284,15 @@ export function GlobeLighting() {
     // Declaring it every frame has no state to get out of step. Whatever happened last frame, this
     // frame the sky is what the panel currently says it is.
     if (g.enabled) {
-      const night = g.skyMode === 'night';
-      // Found ONCE, on the timed scan above — never searched for per frame. A map with no sky dome
-      // would otherwise walk the entire scene graph sixty times a second looking for something that
-      // is not there, which is the same mistake as the light scaler in a quieter disguise.
-
-      if (skyDome.current) skyDome.current.visible = !night;
-      if (night) {
-        if (!(scene.background instanceof THREE.Color)) scene.background = nightSky;
-      } else if (scene.background === nightSky) {
+      const own = g.skyMode === 'own';
+      // Found ONCE, on the timed scan above — never searched for per frame.
+      if (skyDome.current) skyDome.current.visible = !own;
+      if (own) {
+        if (skyColor.current.getHexString() !== g.skyColor.replace('#', '')) {
+          skyColor.current.set(g.skyColor);
+        }
+        if (scene.background !== skyColor.current) scene.background = skyColor.current;
+      } else if (scene.background === skyColor.current) {
         scene.background = null;
       }
     }

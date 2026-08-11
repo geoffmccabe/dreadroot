@@ -166,21 +166,27 @@ export function GlobeLookControls() {
           <div style={rowStyle}>
             <span style={labelStyle}>Sky</span>
             <div style={{ display: 'flex', gap: '3px' }}>
-              {(['default', 'night'] as const).map((m) => (
+              {(['own', 'dome'] as const).map((m) => (
                 <button
                   key={m}
-                  style={{ ...btnStyle, opacity: g.skyMode === m ? 1 : 0.5 }}
+                  style={{
+                    ...btnStyle,
+                    background: g.skyMode === m ? 'hsla(var(--hud-border-h) / 0.55)' : btnStyle.background,
+                    fontWeight: g.skyMode === m ? 700 : 400,
+                    opacity: g.skyMode === m ? 1 : 0.6,
+                  }}
                   onClick={() => set('skyMode', m)}
                 >
-                  {m === 'default' ? 'Day dome' : 'Night'}
+                  {m === 'own' ? 'Own' : 'Day dome'}
                 </button>
               ))}
             </div>
           </div>
           <div style={noteStyle}>
-            The blue background and the midday sky dome are not LIT — they are bright in themselves,
-            so dimming lights never touches them. Night hides the dome and goes dark, which is what
-            lets the city's window lights be the brightest thing on screen.
+            THE WHITE SKY WAS THIS. Every world shares a sky dome configured for midday, and it is
+            emissive — no lighting setting touches it. Presets that left it up looked blown out;
+            Night was the only one that hid it, which is the whole of "sometimes white, sometimes
+            black". Every preset paints its own sky now. "Day dome" puts the shared one back.
           </div>
 
           {/* --- THE BIG ONE ------------------------------------------------------------------- */}

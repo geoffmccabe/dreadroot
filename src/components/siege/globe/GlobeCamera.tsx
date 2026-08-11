@@ -126,7 +126,12 @@ export function GlobeCamera() {
           scene.fog = new THREE.FogExp2(col.getHex(), 1 / visibility);
         }
       }
-      if (scene.background) scene.background = null;
+      // LEAVE A SKY THIS MAP PAINTED ALONE. This line clears the background every frame so the
+      // starfield shows through, which is right — except when GlobeLighting has deliberately put a
+      // colour there. Clearing it unconditionally is half of why the sky flickered between presets:
+      // one file wrote a colour and the other wiped it a frame later.
+      if (scene.background && !(scene.background as THREE.Color).isColor) scene.background = null;
+      else if (scene.background && !globeLook().enabled) scene.background = null;
     }
 
     // Distance to the horizon from here: the tangent line to a sphere of radius R from distance d.
