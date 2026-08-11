@@ -85,7 +85,7 @@ interface Car {
  */
 const CLASS_SPEED = [25, 25, 18, 14, 11, 7, 7, 12, 12, 11];
 
-export function KaijuCityLights({ city }: { city: City }) {
+export function KaijuCityLights({ city, slug }: { city: City; slug: string }) {
   const cars = useRef<THREE.Points>(null);
   const beacons = useRef<THREE.Points>(null);
   const time = useRef(0);
@@ -108,7 +108,9 @@ export function KaijuCityLights({ city }: { city: City }) {
   useEffect(() => () => dot.dispose(), [dot]);
 
   const [roads, setRoads] = useState<Road[] | null>(getRoads());
-  useEffect(() => { void loadRoads().then(setRoads); }, []);
+  // BY SLUG. Without it this loads the FIRST city on the registry, so San Jose's traffic would
+  // drive along Dubai's roads — on the other side of the planet, and invisible.
+  useEffect(() => { void loadRoads(slug).then(setRoads); }, [slug]);
 
   /**
    * Distribute vehicles over the network by LENGTH x CLASS.

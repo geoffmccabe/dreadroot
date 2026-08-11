@@ -188,6 +188,37 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
 }
 
 /**
+ * How flat this direction is being forced to be by a city, 0 to 1.
+ *
+ * 1 inside the city's core, falling to 0 at its outer radius, and 0 everywhere else.
+ *
+ * THIS EXISTS BECAUSE OF SAN JOSE, and it is the one thing Dubai could never have taught. The
+ * planet lays procedural relief over the tile data, scaled by elevation: none at sea level, rising
+ * to full ruggedness in the mountains. Dubai's declared ground is half a metre, so it gets nothing
+ * — the coastal fade zeroes it, and the city is flat by accident.
+ *
+ * San Jose sits at 1,160 m. At that elevation the same function offers up to THREE HUNDRED AND
+ * FORTY-FIVE METRES of noise, over a city whose buildings are mostly between three and fifteen
+ * metres tall. The city would not have looked bumpy; it would have been buried, with towers
+ * submerged in hills that are not there and roads climbing cliffs.
+ *
+ * A city declares its ground. Anything added on top of that declaration contradicts it, so inside
+ * the core the relief is switched off entirely and faded back in across the blend band — which is
+ * the same band the elevation itself blends over, so the two agree.
+ */
+export function cityFlatness(x: number, y: number, z: number): number {
+  for (let i = 0; i < SITES.length; i++) {
+    const s = SITES[i];
+    const dot = x * s.dx + y * s.dy + z * s.dz;
+    if (dot <= s.cosOuter) continue;
+    if (dot >= s.cosInner) return 1;
+    const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
+    return 1 - smooth((distM - s.innerM) / (s.outerM - s.innerM));
+  }
+  return 0;
+}
+
+/**
  * How much of this direction is dry land, 0 to 1 — or null if it is not inside any city.
  *
  * Geoff: "The Kaijus now are starting at Marina but they are in the water."

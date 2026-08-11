@@ -90,8 +90,13 @@ const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
 const ENDPOINTS = [
   'https://overpass.private.coffee/api/interpreter',
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
 ];
+// overpass.osm.ch IS DELIBERATELY NOT HERE. It answers, quickly and with valid JSON, and returns
+// ZERO ELEMENTS for anything outside its region — it is a Switzerland-focused partial mirror. A
+// successful empty answer is the single most dangerous reply this script can receive, because every
+// other failure mode is loud: it was caught while importing San Jose, where it had already silently
+// emptied a tile of the city centre. See the zero-element guard below.
 const UA = 'DreadRoot-Kaiju/1.0 (geoff@lightningworks.io) one-time city import';
 
 /**
@@ -121,7 +126,18 @@ async function overpass(s, w, n, e) {
       // A rate-limited mirror replies with prose, which JSON.parse reports as a syntax error and
       // which reads like a bug in this script rather than what it is.
       if (!text.startsWith('{')) throw new Error('not JSON (rate limited)');
-      return JSON.parse(text);
+      const data = JSON.parse(text);
+      // ZERO IS TREATED AS A FAILURE UNTIL EVERY MIRROR AGREES.
+      //
+      // A partial mirror answers 200 with valid JSON and an empty element list, which is
+      // indistinguishable from genuinely empty ground — and it gets written to the resume cache as
+      // though it were an answer. That is how five tiles of Dubai Marina, including three 330 m
+      // towers, went missing from the first import. So an empty result retries elsewhere, and is
+      // only believed on the last attempt, when every mirror has said the same thing.
+      if ((data.elements?.length ?? 0) === 0 && attempt < 5) {
+        throw new Error('empty (possible partial mirror)');
+      }
+      return data;
     } catch (err) {
       const wait = PAUSE_S * (attempt + 2);
       note(`    retry in ${wait}s via next mirror (${err.message})\n`);

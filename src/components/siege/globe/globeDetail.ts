@@ -22,6 +22,8 @@
 //  • Land only. Amplitude fades to zero at the coast so the sea stays flat and the shoreline does
 //    not develop procedural cliffs.
 
+import { cityFlatness } from './cityGround';
+
 /**
  * Coarsest procedural wavelength, in game units. 60 u = 6 real km.
  *
@@ -85,6 +87,15 @@ export function detailMetres(
   // Sea and the immediate shoreline stay flat: the ocean surface is a clamped plane, and adding
   // relief across the coastline would carve procedural cliffs into every beach.
   if (baseMetres <= 0) return 0;
+
+  // A CITY HAS ALREADY DECLARED ITS GROUND, and anything laid on top contradicts it.
+  //
+  // Dubai never needed this and could never have revealed it: its ground is half a metre, where the
+  // coastal fade above already zeroes the relief. San Jose stands at 1,160 m, and at that elevation
+  // this function offers up to 345 metres of it — over a city whose buildings are three to fifteen
+  // metres tall. It would not have looked bumpy, it would have been buried.
+  const flat = cityFlatness(dx, dy, dz);
+  if (flat >= 1) return 0;
   const coast = baseMetres >= COAST_FADE_M ? 1 : baseMetres / COAST_FADE_M;
 
   // Lowlands get gentle relief, mountains get a lot. Uses the real data, so the Alps stay rugged
@@ -105,7 +116,7 @@ export function detailMetres(
     amplitude *= PERSISTENCE;
   }
 
-  return sum * rugged * coast;
+  return sum * rugged * coast * (1 - flat);
 }
 
 /**

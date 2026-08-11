@@ -101,6 +101,11 @@ node scripts/city/make-detail.mjs     <slug>     # LAST — it edits buildings.b
 
 Raw downloads are cached under `.city-cache/<slug>/`, so a re-bake needs no network.
 
+> **Overpass will throttle you, and it is right to.** It is a free service on donated hardware.
+> Expect 504s and long backoffs; the buildings fetch for a metro-sized city can take hours, and the
+> script is resumable — re-run it and it picks up from the cache. Do not parallelise it, and do not
+> add mirrors without checking they actually hold your region: see the partial-mirror trap below.
+
 > **`make-detail` must run last and only once per bake.** It *removes* the boxes it replaces from
 > `buildings.bin`. Running it twice deletes a second set of boxes that were never replaced. If in
 > doubt, delete `public/siege/city/<slug>/` and start over.
@@ -143,7 +148,23 @@ add two lines to `sites/index.ts` (the import and the array entry).
 
 ### The numbers that have already gone wrong
 
-**`groundMetres`** — how high the city sits above sea level.
+**`groundMetres`** — how high the city sits above sea level, **measured against the real tile
+server before you bake anything**. Probe five or six named places across the metro and take the mean
+over your built area. San José's centre reads 1,128 m against a real 1,172 m; Cartago 1,419 m,
+Alajuela 994 m. The coarse tiles are within about 40 m in a valley and clip mountain peaks badly
+(Irazú reads 3,058 m against a real 3,432 m).
+
+> **A HIGHLAND CITY IS FLATTENED FOR YOU, BUT ONLY IF THE RADII ARE RIGHT.** The planet lays
+> procedural relief on top of the tile data, scaled by elevation — none at sea level, rising to full
+> ruggedness in the mountains. At San José's 1,160 m that is **up to 345 m of invented hills**, over
+> buildings three to fifteen metres tall. `cityFlatness` switches it off inside `innerMetres` and
+> fades it back in by `outerMetres`. Dubai never needed this and could never have revealed it: at
+> 0.5 m the coastal fade zeroes the relief anyway, so Dubai was flat by accident.
+>
+> The corollary: **set `innerMetres` to at least your config's `maxRangeMetres`.** Anything baked
+> outside the flat core stands on blended ground and floats.
+
+
 Dubai went 6 → 2 → 0.5. **Never 0**: the ocean is a mesh at exactly the planet's radius, so ground at
 exactly zero is coplanar with it and the city strobes between sand and water per pixel. Keep it small
 for a coastal city — the beach is the band between this and the water, so a high number is a wide
@@ -211,6 +232,9 @@ These are all real, all shipped, and all cost a day or more.
 | Everything flickers at distance | A procedural pattern with no mipmaps. Use `fwidth` and fade to the average. See `cityWindows.ts`. |
 | Whole screen frozen, camera dead | A throw inside *any* `useFrame` kills react-three-fiber's entire loop. City layers must catch and disable themselves. |
 | Typecheck "passes" but the game is broken | Root `tsconfig.json` has `"files": []`. Use `tsconfig.app.json`. |
+| A highland city buried in hills that are not there | Procedural relief scales with elevation: 345 m of it at 1,160 m. `cityFlatness` handles it — but only inside `innerMetres`. |
+| Chunks of the city silently absent | A **partial Overpass mirror** answered 200 with valid JSON and zero elements, and it got cached as an answer. `overpass.osm.ch` does this outside Switzerland. Empty results now retry elsewhere and are believed only when every mirror agrees. |
+| A file and a folder differing only in case | Builds on a Mac, fails on a case-sensitive server, or TypeScript loads the same file twice. `landMasks.ts` beside `landmasks/` — renamed to `maskRegistry.ts`. |
 
 ---
 

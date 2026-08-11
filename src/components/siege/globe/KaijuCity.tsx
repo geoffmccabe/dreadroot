@@ -216,7 +216,7 @@ function CityMesh({ city, slug }: { city: City; slug: string }) {
           Burj Khalifa. Their boxes have been removed from the bake above, so nothing overlaps. */}
       {near && site?.city?.assets.detail && <KaijuCityDetail slug={slug} />}
       {/* Traffic on those roads, and the red lamps on the roofs over 180 m. */}
-      {near && <KaijuCityLights city={city} />}
+      {near && <KaijuCityLights city={city} slug={slug} />}
     </group>
   );
 }

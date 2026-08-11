@@ -53,8 +53,11 @@ export function slugFromArgv() {
 export const OVERPASS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
 ];
+// overpass.osm.ch is NOT in this list. It answers quickly, with valid JSON, and ZERO ELEMENTS for
+// anything outside Switzerland — a successful lie, which is the one failure mode that gets cached
+// and never noticed. It silently emptied a tile of central San Jose before it was spotted.
 
 /**
  * POST a query, trying each mirror. Returns parsed JSON, or null on total failure.
@@ -70,7 +73,14 @@ export async function overpass(query) {
       if (!res.ok) { console.error(`  ${res.status} from ${url}`); continue; }
       const text = await res.text();
       if (!text.startsWith('{')) { console.error(`  non-JSON from ${url}`); continue; }
-      return JSON.parse(text);
+      const data = JSON.parse(text);
+      // An empty answer is not trusted from a single mirror — see the note on osm.ch above. Fall
+      // through to the next one, and only return empty once they have all agreed.
+      if ((data.elements?.length ?? 0) === 0 && url !== OVERPASS[OVERPASS.length - 1]) {
+        console.error(`  empty from ${url} — trying another mirror`);
+        continue;
+      }
+      return data;
     } catch (err) {
       console.error(`  ${url} failed: ${err.message}`);
     }
