@@ -53,6 +53,18 @@ Then pick two boxes:
 - **`coastBbox`** — for a coastal city, a *wider* box for the coastline. It must extend past both
   ends of the built area, or the flood fill that decides which side is the sea leaks around the end
   of your coastline and swallows the land behind it.
+- **`seaSeed`** — `[lat, lon]` of a point in **open water**, inside the mask grid. This is where the
+  flood fill starts, and it is not optional for a coastal city.
+
+> **Getting `seaSeed` wrong inverts the entire mask, silently.** It used to be hardcoded to the
+> grid's north-west corner, which is 25 km out in the Gulf *for Dubai*. New York's north-west corner
+> is the New Jersey Meadowlands: seeding there floods the **land**, and everything the flood cannot
+> reach — the Hudson, the East River, the Upper Bay — becomes "land". Manhattan comes out as sea and
+> the rivers as fields, in a file that is the right size and reports success.
+>
+> Pick somewhere unambiguous and well inside `maxRangeMetres`. The bake now refuses a seed that
+> falls outside the grid or lands on the coastline itself, and fails if the flood covers under 3% or
+> over 90% of the grid — but the seed is still yours to choose.
 
 Keep the whole city inside about **±26 km** of the origin. That is `maxRangeMetres`, and int16 metres
 tops out at 32,767.
@@ -102,9 +114,14 @@ node scripts/city/make-detail.mjs     <slug>     # LAST — it edits buildings.b
 Raw downloads are cached under `.city-cache/<slug>/`, so a re-bake needs no network.
 
 > **Overpass will throttle you, and it is right to.** It is a free service on donated hardware.
-> Expect 504s and long backoffs; the buildings fetch for a metro-sized city can take hours, and the
-> script is resumable — re-run it and it picks up from the cache. Do not parallelise it, and do not
-> add mirrors without checking they actually hold your region: see the partial-mirror trap below.
+> Expect 504s, 429s and connection failures. A metro-sized fetch takes hours. Every bake is tiled and
+> every tile is cached, so **re-running fills the gaps** — run each of the coastline and roads bakes
+> two or three times rather than once, and check the "TILES FAILED" line each time.
+>
+> Do not parallelise across cities. Three concurrent imports are not three times faster; they are one
+> ban. And do not add a mirror without checking it agrees with `overpass-api.de` on a box you can
+> count — two have been removed for lying, one returning zero outside its region and one returning a
+> third of the data.
 
 > **`make-detail` must run last and only once per bake.** It *removes* the boxes it replaces from
 > `buildings.bin`. Running it twice deletes a second set of boxes that were never replaced. If in
@@ -234,6 +251,10 @@ These are all real, all shipped, and all cost a day or more.
 | Typecheck "passes" but the game is broken | Root `tsconfig.json` has `"files": []`. Use `tsconfig.app.json`. |
 | A highland city buried in hills that are not there | Procedural relief scales with elevation: 345 m of it at 1,160 m. `cityFlatness` handles it — but only inside `innerMetres`. |
 | Chunks of the city silently absent | A **partial Overpass mirror** answered 200 with valid JSON and zero elements, and it got cached as an answer. `overpass.osm.ch` does this outside Switzerland. Empty results now retry elsewhere and are believed only when every mirror agrees. |
+| The sea swallows the city, or the rivers are land | The flood fill seeded in the wrong place. Set `seaSeed` to real open water. Under 3% or over 90% flooded now fails loudly. |
+| "Re-run to fill the gaps" changes nothing | Fixed, but worth knowing: each bake used to skip its fetch if its merged output file existed, so a run that lost 55 of 56 tiles froze that result permanently. The per-tile cache under `.city-cache/<slug>/` is the real cache. |
+| A city has buildings but no streets at all | Roads, water and detail each fired ONE query for the whole city. Overpass refuses a big query outright rather than answering slowly. All three are tiled now. |
+| A city's buildings are all underground | A ground lookup keyed on the wrong field. San Jose's entire 29,402 buildings sat 1,160 m below the surface because a site was looked up by name where a slug was passed. |
 | A file and a folder differing only in case | Builds on a Mac, fails on a case-sensitive server, or TypeScript loads the same file twice. `landMasks.ts` beside `landmasks/` — renamed to `maskRegistry.ts`. |
 
 ---

@@ -38,7 +38,7 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
 // The coastline and the inland water come from ONE download, shared with the land mask bake — they
 // are the same query and fetching it twice doubles the wait for nothing.
-if (!existsSync(RAW)) {
+{
   console.error(`fetching coastline + water for ${city.slug}...`);
   // Over the COAST box, which is wider than the built area so the flood fill can enter from open
   // sea. Tiled at 0.06 degrees — coarser than the roads, since coastline ways are long and sparse.
@@ -49,6 +49,10 @@ if (!existsSync(RAW)) {
  way["waterway"="riverbank"](${s},${w},${n},${e}););
 out geom;`, city.coastBbox ?? city.bbox);
   if (!data.elements.length) { console.error('nothing came back — re-run when Overpass is quieter'); process.exit(1); }
+  // ALWAYS RE-RUN THE TILED FETCH. The per-tile cache under .city-cache is the real cache; this
+  // merged file is only an artifact. Guarding on it existing meant a run that lost 55 of 56 tiles
+  // wrote a merged file from the one survivor and then SKIPPED the fetch on every later attempt —
+  // so "re-run it to fill the gaps", which the script itself prints, did nothing at all.
   writeFileSync(RAW, JSON.stringify(data));
 }
 

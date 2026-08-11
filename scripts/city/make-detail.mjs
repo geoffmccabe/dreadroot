@@ -43,15 +43,17 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
 // OSM's Simple 3D Buildings layer, which nothing else reads. Two queries, cached.
 {
-  if (!existsSync(PARTS)) {
+  {
     console.error(`fetching building:part for ${city.slug}...`);
     const d = await overpassTiled(city, 'parts', 0.05, (s, w, n, e) => `[out:json][timeout:120];
 (way["building:part"](${s},${w},${n},${e});
  relation["building:part"](${s},${w},${n},${e}););
 out geom;`);
+    // See make-roads: the per-tile cache is the cache; skipping on this file existing froze a
+    // half-fetched result in place forever.
     writeFileSync(PARTS, JSON.stringify(d));
   }
-  if (!existsSync(ROOFS)) {
+  {
     console.error(`fetching roof shapes for ${city.slug}...`);
     const d = await overpassTiled(city, 'roofs', 0.05, (s, w, n, e) => `[out:json][timeout:120];
 way["building"]["roof:shape"](${s},${w},${n},${e});

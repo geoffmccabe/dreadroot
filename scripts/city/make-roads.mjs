@@ -44,7 +44,7 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
 // FETCHED ONCE AND KEPT. Overpass throttles, and a re-bake that has to re-download 38,000 ways is a
 // re-bake nobody runs — so the raw response is cached under .city-cache/<slug>/ and reused.
-if (!existsSync(RAW)) {
+{
   console.error(`fetching roads for ${city.slug}...`);
   // TILED at 0.04 degrees, about 4 km. One query for a whole city is refused outright on a busy day
   // — see overpassTiled — and a city with no streets is the result.
@@ -52,6 +52,10 @@ if (!existsSync(RAW)) {
 way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|motorway_link|trunk_link|primary_link)$"](${s},${w},${n},${e});
 out geom;`);
   if (!data.elements.length) { console.error('nothing came back — re-run when Overpass is quieter'); process.exit(1); }
+  // ALWAYS RE-RUN THE TILED FETCH. The per-tile cache under .city-cache is the real cache; this
+  // merged file is only an artifact. Guarding on it existing meant a run that lost 55 of 56 tiles
+  // wrote a merged file from the one survivor and then SKIPPED the fetch on every later attempt —
+  // so "re-run it to fill the gaps", which the script itself prints, did nothing at all.
   writeFileSync(RAW, JSON.stringify(data));
 }
 
