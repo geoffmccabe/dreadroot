@@ -22,6 +22,12 @@ const index = readFileSync(`${SITES_DIR}/index.ts`, 'utf8');
 const registered = [...index.matchAll(/^import \{ (\w+) \} from '\.\/(b\d+-[\w-]+)';$/gm)]
   .map((m) => ({ symbol: m[1], file: m[2] }));
 const listed = (/export const SITES: SiteDef\[\] = \[([\s\S]*?)\];/.exec(index)?.[1] ?? '')
+  // COMMENTS STRIPPED FIRST. Splitting the array body on commas without this turns a explanatory
+  // note inside the array into three imaginary site names, which is exactly what happened the first
+  // time a comment was put there — the check reported failures that did not exist, which is the one
+  // thing a check must never do.
+  .replace(/\/\/[^\n]*/g, '')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
   .split(',').map((x) => x.trim()).filter(Boolean);
 
 console.log(`== ${registered.length} site files, ${listed.length} in the SITES array ==\n`);

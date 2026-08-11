@@ -4,51 +4,23 @@
   "lat0": 9.9333,
   "lon0": -84.0784,
   "bbox": [
-    9.84,
-    -84.18,
-    10.03,
+    9.9,
+    -84.16,
+    9.98,
     -83.98
   ],
   "coastal": false,
   "groundMetres": 1160,
-  "maxRangeMetres": 12000,
+  "maxRangeMetres": 11000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [
     {
-      "name": "San Jose centro",
+      "name": "San Jose core",
       "s": 9.9,
-      "w": -84.14,
-      "n": 9.97,
-      "e": -84.06
-    },
-    {
-      "name": "San Pedro / Curridabat",
-      "s": 9.9,
-      "w": -84.06,
-      "n": 9.97,
+      "w": -84.16,
+      "n": 9.98,
       "e": -83.98
-    },
-    {
-      "name": "Tibas / Moravia / Heredia",
-      "s": 9.97,
-      "w": -84.14,
-      "n": 10.03,
-      "e": -83.98
-    },
-    {
-      "name": "Desamparados / south",
-      "s": 9.84,
-      "w": -84.18,
-      "n": 9.9,
-      "e": -84.0
-    },
-    {
-      "name": "Escazu / Santa Ana",
-      "s": 9.88,
-      "w": -84.18,
-      "n": 9.97,
-      "e": -84.14
     }
   ],
   "note": "INLAND, and the first city to be so. No coastline, therefore no land mask: landFractionFor returns null and the whole footprint counts as land, which is correct. It sits at 1,160 m in the Valle Central, which is what forced cityFlatness — at that altitude the planet's procedural relief offers 345 m of hills over buildings 3-15 m tall.",
@@ -95,5 +67,43 @@
       "within": 400,
       "expect": 10
     }
-  ]
+  ],
+  "_fullAreas": [
+    {
+      "name": "San Jose centro",
+      "s": 9.9,
+      "w": -84.14,
+      "n": 9.97,
+      "e": -84.06
+    },
+    {
+      "name": "San Pedro / Curridabat",
+      "s": 9.9,
+      "w": -84.06,
+      "n": 9.97,
+      "e": -83.98
+    },
+    {
+      "name": "Tibas / Moravia / Heredia",
+      "s": 9.97,
+      "w": -84.14,
+      "n": 10.03,
+      "e": -83.98
+    },
+    {
+      "name": "Desamparados / south",
+      "s": 9.84,
+      "w": -84.18,
+      "n": 9.9,
+      "e": -84.0
+    },
+    {
+      "name": "Escazu / Santa Ana",
+      "s": 9.88,
+      "w": -84.18,
+      "n": 9.97,
+      "e": -84.14
+    }
+  ],
+  "_note_scope": "SHIPPED AS THE CORE FIRST. Overpass throttled every mirror to roughly one tile a minute, so the full five-area metro is a multi-hour download. The core box below is what was already cached plus a handful more, and it holds all four districts the site drops you into. _fullAreas is the complete list: restore it over `areas`, re-run fetch-buildings (which resumes from .city-cache and only fetches what is missing) and then make-detail again, and the outer suburbs fill in without touching anything else."
 }

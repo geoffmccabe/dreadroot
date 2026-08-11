@@ -11,6 +11,8 @@
 import { EVEREST } from './b1-everest';
 import { GRAND_CANYON } from './b2-grand-canyon';
 import { DUBAI } from './b3-dubai';
+import { SAN_JOSE } from './b4-san-jose';
+
 import type { SiteDef } from './siteTypes';
 
 export * from './siteTypes';
@@ -25,6 +27,11 @@ export const SITES: SiteDef[] = [
   EVEREST,
   GRAND_CANYON,
   DUBAI,
+  SAN_JOSE,
+  // B5 New York and B6 Seattle are DESIGNED AND CONFIGURED but not registered yet: their bakes are
+  // still downloading. Their site files sit beside this one, and their bake configs are in
+  // scripts/city/cities/. Add the two imports and two lines here the moment check-sites passes for
+  // them — a shortcode that jumps you to an empty city is worse than one that does not exist.
 ];
 
 /** The site on a given number key, or undefined. */
