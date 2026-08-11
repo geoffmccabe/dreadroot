@@ -3,12 +3,67 @@
   "name": "Dubai",
   "lat0": 25.14,
   "lon0": 55.21,
-  "bbox": [25.02, 55.02, 25.30, 55.40],
-  "coastBbox": [24.95, 54.95, 25.40, 55.45],
+  "bbox": [
+    25.02,
+    55.02,
+    25.3,
+    55.4
+  ],
+  "coastBbox": [
+    24.95,
+    54.95,
+    25.4,
+    55.45
+  ],
   "coastal": true,
   "groundMetres": 0.5,
   "maxRangeMetres": 26000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
-  "note": "The first city. Four districts along 20 km of coast; the coastBbox is wider than the bbox so the coastline is complete past the ends of the built area."
+  "note": "The first city. Four districts along 20 km of coast; the coastBbox is wider than the bbox so the coastline is complete past the ends of the built area.",
+  "landmarks": [
+    {
+      "name": "Burj Khalifa",
+      "lat": 25.1972,
+      "lon": 55.2744,
+      "within": 250,
+      "expect": 20
+    },
+    {
+      "name": "Dubai Mall",
+      "lat": 25.1972,
+      "lon": 55.2797,
+      "within": 300,
+      "expect": 5,
+      "note": "A mall is ONE footprint, not a district. Expecting twenty buildings here was the assertion being wrong, not the bake."
+    },
+    {
+      "name": "Dubai Marina",
+      "lat": 25.0805,
+      "lon": 55.1403,
+      "within": 400,
+      "expect": 40
+    },
+    {
+      "name": "Palm Jumeirah trunk",
+      "lat": 25.1124,
+      "lon": 55.139,
+      "within": 400,
+      "expect": 10
+    },
+    {
+      "name": "Emirates Towers (SZR)",
+      "lat": 25.2175,
+      "lon": 55.2825,
+      "within": 400,
+      "expect": 30
+    },
+    {
+      "name": "Burj Al Arab",
+      "lat": 25.1412,
+      "lon": 55.1853,
+      "within": 400,
+      "expect": 5
+    }
+  ]
 }

@@ -1,0 +1,99 @@
+{
+  "slug": "san-jose",
+  "name": "San Jose",
+  "lat0": 9.9333,
+  "lon0": -84.0784,
+  "bbox": [
+    9.84,
+    -84.18,
+    10.03,
+    -83.98
+  ],
+  "coastal": false,
+  "groundMetres": 1160,
+  "maxRangeMetres": 12000,
+  "maskCellMetres": 40,
+  "maskSubdivide": 4,
+  "areas": [
+    {
+      "name": "San Jose centro",
+      "s": 9.9,
+      "w": -84.14,
+      "n": 9.97,
+      "e": -84.06
+    },
+    {
+      "name": "San Pedro / Curridabat",
+      "s": 9.9,
+      "w": -84.06,
+      "n": 9.97,
+      "e": -83.98
+    },
+    {
+      "name": "Tibas / Moravia / Heredia",
+      "s": 9.97,
+      "w": -84.14,
+      "n": 10.03,
+      "e": -83.98
+    },
+    {
+      "name": "Desamparados / south",
+      "s": 9.84,
+      "w": -84.18,
+      "n": 9.9,
+      "e": -84.0
+    },
+    {
+      "name": "Escazu / Santa Ana",
+      "s": 9.88,
+      "w": -84.18,
+      "n": 9.97,
+      "e": -84.14
+    }
+  ],
+  "note": "INLAND, and the first city to be so. No coastline, therefore no land mask: landFractionFor returns null and the whole footprint counts as land, which is correct. It sits at 1,160 m in the Valle Central, which is what forced cityFlatness — at that altitude the planet's procedural relief offers 345 m of hills over buildings 3-15 m tall.",
+  "landmarks": [
+    {
+      "name": "Teatro Nacional / centro",
+      "lat": 9.9327,
+      "lon": -84.0716,
+      "within": 250,
+      "expect": 30
+    },
+    {
+      "name": "Mercado Central",
+      "lat": 9.9339,
+      "lon": -84.08,
+      "within": 250,
+      "expect": 30
+    },
+    {
+      "name": "Estadio Nacional (La Sabana)",
+      "lat": 9.9367,
+      "lon": -84.1077,
+      "within": 400,
+      "expect": 10
+    },
+    {
+      "name": "Universidad de Costa Rica",
+      "lat": 9.9377,
+      "lon": -84.05,
+      "within": 400,
+      "expect": 20
+    },
+    {
+      "name": "Multiplaza Escazu",
+      "lat": 9.9312,
+      "lon": -84.1425,
+      "within": 400,
+      "expect": 10
+    },
+    {
+      "name": "Hospital Mexico (La Uruca)",
+      "lat": 9.9528,
+      "lon": -84.1258,
+      "within": 400,
+      "expect": 10
+    }
+  ]
+}
