@@ -33,7 +33,7 @@
 // Writes: public/siege/city/<slug>/roads.bin
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCity, slugFromArgv, overpass } from './cityConfig.mjs';
+import { loadCity, slugFromArgv, overpassTiled } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
 const RAW = `${city.rawDir}/roads.json`;
@@ -45,13 +45,13 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 // FETCHED ONCE AND KEPT. Overpass throttles, and a re-bake that has to re-download 38,000 ways is a
 // re-bake nobody runs — so the raw response is cached under .city-cache/<slug>/ and reused.
 if (!existsSync(RAW)) {
-  const [s0, w0, n0, e0] = city.bbox;
   console.error(`fetching roads for ${city.slug}...`);
-  const q = `[out:json][timeout:300];
-way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|motorway_link|trunk_link|primary_link)$"](${s0},${w0},${n0},${e0});
-out geom;`;
-  const data = await overpass(q);
-  if (!data) { console.error('every Overpass mirror failed — try again later'); process.exit(1); }
+  // TILED at 0.04 degrees, about 4 km. One query for a whole city is refused outright on a busy day
+  // — see overpassTiled — and a city with no streets is the result.
+  const data = await overpassTiled(city, 'roads', 0.04, (s, w, n, e) => `[out:json][timeout:120];
+way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|motorway_link|trunk_link|primary_link)$"](${s},${w},${n},${e});
+out geom;`);
+  if (!data.elements.length) { console.error('nothing came back — re-run when Overpass is quieter'); process.exit(1); }
   writeFileSync(RAW, JSON.stringify(data));
 }
 

@@ -33,6 +33,11 @@ export const DUBAI: SiteDef = {
     // ...and the blend runs to 26 km so the transition happens over open desert and water rather
     // than through the middle of a district.
     outerMetres: 26000,
+    // FALSE, and Dubai is the reason the flag exists. Its tiles read -87 m across the whole emirate
+    // — a nine-kilometre average of gulf and low desert — so blending the land back toward them
+    // would put the desert under sixty metres of water. Here the override is correcting a lie, not
+    // simplifying a truth, and it must hold all the way out.
+    trustBaseOutside: false,
   },
 
   city: {

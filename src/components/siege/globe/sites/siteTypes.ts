@@ -60,6 +60,26 @@ export interface SiteGround {
   innerMetres: number;
   /** Blended back to the real terrain by this radius. Put it over empty ground, not through a district. */
   outerMetres: number;
+  /**
+   * Is the planet's own elevation data usable OUTSIDE the city?
+   *
+   * Geoff, at San Jose: "the land is perfectly flat. San Jose has deep valleys, hills, and
+   * volcanoes around it."
+   *
+   * He is right, and the cause is that LAND never blended. Dubai's tiles read -87 m across the
+   * whole emirate — a nine-kilometre average of gulf and desert — so blending its land back toward
+   * that would sink the desert under sixty metres of water. Land there is therefore held flat all
+   * the way to the outer radius, and that was hardcoded for every city.
+   *
+   * San Jose is the opposite case. Its tiles are COARSE but RIGHT: centro reads 1,128 m against a
+   * real 1,172, Cartago 1,419, Alajuela 994, Irazu 3,058. Holding all of that flat throws away the
+   * Valle Central, which is the whole shape of the place.
+   *
+   * So: true (the default) blends the city's flat ground back into the real terrain between the two
+   * radii, and the valleys and volcanoes return. false holds it flat, for a city whose surrounding
+   * data is simply wrong.
+   */
+  trustBaseOutside?: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -50,6 +50,8 @@ interface CitySite {
   outerM: number;
   /** Depth of the sea immediately around this city. Per-city; see SiteGround. */
   seaM: number;
+  /** Whether the planet's elevation outside the core is usable. See SiteGround.trustBaseOutside. */
+  trustBase: boolean;
   /** cos of the two radii as angles, so the common case is one dot product. */
   cosInner: number;
   cosOuter: number;
@@ -62,7 +64,7 @@ const EARTH_R_M = PLANET_RADIUS * METRES_PER_UNIT;
 // the raw tile value, which over Dubai is -87 m everywhere and would put a cliff along the shore.
 
 function makeSite(name: string, slug: string, lat: number, lon: number, groundM: number,
-                  innerM: number, outerM: number, seaM: number): CitySite {
+                  innerM: number, outerM: number, seaM: number, trustBase: boolean): CitySite {
   const d = new Float64Array(3);
   latLonToDirection(lat, lon, d);
   // East = worldY x up, north = up x east — the same frame the bake used, so a building's stored
@@ -77,7 +79,7 @@ function makeSite(name: string, slug: string, lat: number, lon: number, groundM:
   const nz = d[0] * ey - d[1] * ex;
   return {
     name, slug, dx: d[0], dy: d[1], dz: d[2], ex, ey, ez, nx, ny, nz, groundM, innerM, outerM,
-    seaM,
+    seaM, trustBase,
     cosInner: Math.cos(innerM / EARTH_R_M),
     cosOuter: Math.cos(outerM / EARTH_R_M),
   };
@@ -114,6 +116,7 @@ const SITES: CitySite[] = citySites()
   .map((d) => makeSite(
     d.name, d.slug, d.lat, d.lon,
     d.ground.groundMetres, d.ground.innerMetres, d.ground.outerMetres, d.ground.shallowSeaMetres,
+    d.ground.trustBaseOutside !== false,
   ));
 
 /** Smootherstep — zero derivative at both ends, so the coastline has no visible crease. */
@@ -168,7 +171,16 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     //
     // So land holds. There is a step where the override ends, 26 km out and well beyond every
     // district, and a step in empty desert nobody walks to is a far better trade than drowning it.
-    if (landFrac >= 1) return s.groundM;
+    if (landFrac >= 1) {
+      // FLAT IN THE CORE, REAL OUTSIDE IT — when the surrounding data is worth having. Dubai sets
+      // trustBaseOutside false because its tiles read -87 m everywhere and blending toward that
+      // drowns the desert; San Jose leaves it true, so past the core the Valle Central's walls and
+      // the volcanoes beyond come back instead of a twenty-four kilometre table.
+      if (!s.trustBase || base == null || dot >= s.cosInner) return s.groundM;
+      const dM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
+      const t = smooth((dM - s.innerM) / (s.outerM - s.innerM));
+      return s.groundM + (base - s.groundM) * t;
+    }
 
     // WHAT THE SEA IS HERE. Shallow close in, blending out to the real depth at the outer radius —
     // because out there the base is not wrong, the Gulf really does deepen.
@@ -221,7 +233,9 @@ export function cityFlatness(x: number, y: number, z: number): number {
     const ox = x - s.dx, oy = y - s.dy, oz = z - s.dz;
     const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
     const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
-    if ((landFractionFor(s.slug, em, -nm) ?? 1) >= 1) return 1;
+    // Land is held flat to the outer radius only where the base is NOT trusted; where it is, the
+    // relief must come back on exactly the same ramp the elevation does.
+    if (!s.trustBase && (landFractionFor(s.slug, em, -nm) ?? 1) >= 1) return 1;
 
     // Sea, which does blend — so the relief may come back with it.
     const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
@@ -259,6 +273,12 @@ export function cityLandAt(x: number, y: number, z: number): number | null {
 }
 
 /** Ground elevation at a city's own centre, for placing the buildings themselves. */
-export function cityGroundMetres(name: string): number {
-  return SITES.find((s) => s.name === name)?.groundM ?? 0;
+export function cityGroundMetres(slug: string): number {
+  // BY SLUG, and this cost San Jose its entire skyline. It used to match on `name`, and when the
+  // registry landed the caller started passing a slug — 'san-jose' never equals 'San José, Costa
+  // Rica', so the lookup silently returned the 0 default and the city group was placed at SEA LEVEL,
+  // eleven hundred and sixty metres below the ground it stands on. Twenty-nine thousand buildings,
+  // all present, all correct, all buried. Dubai hid it: 'dubai' does not match 'Dubai' either, but
+  // its ground is half a metre, so the same bug moved the city by 50 cm and nobody could see it.
+  return SITES.find((s) => s.slug === slug)?.groundM ?? 0;
 }

@@ -29,7 +29,7 @@
 // Writes: public/siege/city/<slug>/water.bin
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCity, slugFromArgv, overpass } from './cityConfig.mjs';
+import { loadCity, slugFromArgv, overpassTiled } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
 const RAW = `${city.rawDir}/coast.json`;
@@ -39,16 +39,16 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 // The coastline and the inland water come from ONE download, shared with the land mask bake — they
 // are the same query and fetching it twice doubles the wait for nothing.
 if (!existsSync(RAW)) {
-  const [s0, w0, n0, e0] = city.coastBbox ?? city.bbox;
   console.error(`fetching coastline + water for ${city.slug}...`);
-  const q = `[out:json][timeout:240];
-(way["natural"="coastline"](${s0},${w0},${n0},${e0});
- way["natural"="water"](${s0},${w0},${n0},${e0});
- relation["natural"="water"](${s0},${w0},${n0},${e0});
- way["waterway"="riverbank"](${s0},${w0},${n0},${e0}););
-out geom;`;
-  const data = await overpass(q);
-  if (!data) { console.error('every Overpass mirror failed — try again later'); process.exit(1); }
+  // Over the COAST box, which is wider than the built area so the flood fill can enter from open
+  // sea. Tiled at 0.06 degrees — coarser than the roads, since coastline ways are long and sparse.
+  const data = await overpassTiled(city, 'coast', 0.06, (s, w, n, e) => `[out:json][timeout:120];
+(way["natural"="coastline"](${s},${w},${n},${e});
+ way["natural"="water"](${s},${w},${n},${e});
+ relation["natural"="water"](${s},${w},${n},${e});
+ way["waterway"="riverbank"](${s},${w},${n},${e}););
+out geom;`, city.coastBbox ?? city.bbox);
+  if (!data.elements.length) { console.error('nothing came back — re-run when Overpass is quieter'); process.exit(1); }
   writeFileSync(RAW, JSON.stringify(data));
 }
 

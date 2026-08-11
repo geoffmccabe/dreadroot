@@ -48,10 +48,16 @@ export const SAN_JOSE: SiteDef = {
     // Matched to the bake's own clip radius (maxRangeMetres 12000 in the config) so that everything
     // baked sits inside the flat core. A road that ends up outside it stands on blended ground and
     // floats — which is the inland version of a building in the sea.
-    // 12 km against the bake's 11 km clip, so everything baked sits inside the flat core with a
-    // kilometre to spare.
+    // 12 km against the bake's clip, so every building sits inside the flat core...
     innerMetres: 12000,
-    outerMetres: 24000,
+    // ...and the blend is SHORT — six kilometres, not twelve — so the real ground returns as soon
+    // as the buildings stop. Geoff: "the land is perfectly flat. San Jose has deep valleys, hills,
+    // and volcanoes around it." Past 18 km the tiles are back in charge, which puts Cartago's ridge,
+    // the drop to Alajuela and the flanks of Irazu and Barva where they belong.
+    outerMetres: 18000,
+    // TRUE, unlike Dubai. The tiles here are coarse but RIGHT — centro 1,128 m against a real 1,172,
+    // Cartago 1,419, Irazu 3,058 — so outside the core they are far better than a flat table.
+    trustBaseOutside: true,
   },
 
   city: {

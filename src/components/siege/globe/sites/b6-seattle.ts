@@ -37,6 +37,8 @@ export const SEATTLE: SiteDef = {
     // Deliberately small. See the note above: past this the real hills come back.
     innerMetres: 9000,
     outerMetres: 20000,
+    // Seattle IS its hills; holding them flat past the core would be the worst possible choice here.
+    trustBaseOutside: true,
   },
 
   city: {

@@ -37,6 +37,8 @@ export const NEW_YORK: SiteDef = {
     // The built area reaches about 11 km from Midtown; 12 km covers it and matches the bake's clip.
     innerMetres: 12000,
     outerMetres: 26000,
+    // The harbour and the Palisades are real in the tile data, so let them be real.
+    trustBaseOutside: true,
   },
 
   city: {

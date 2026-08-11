@@ -31,7 +31,7 @@
 // set of boxes that were never replaced. If in doubt, re-run fetch-buildings first.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCity, slugFromArgv, overpass, pause } from './cityConfig.mjs';
+import { loadCity, slugFromArgv, overpassTiled } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
 const PARTS = `${city.rawDir}/parts.json`;
@@ -43,23 +43,19 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 
 // OSM's Simple 3D Buildings layer, which nothing else reads. Two queries, cached.
 {
-  const [s0, w0, n0, e0] = city.bbox;
   if (!existsSync(PARTS)) {
     console.error(`fetching building:part for ${city.slug}...`);
-    const d = await overpass(`[out:json][timeout:180];
-(way["building:part"](${s0},${w0},${n0},${e0});
- relation["building:part"](${s0},${w0},${n0},${e0}););
+    const d = await overpassTiled(city, 'parts', 0.05, (s, w, n, e) => `[out:json][timeout:120];
+(way["building:part"](${s},${w},${n},${e});
+ relation["building:part"](${s},${w},${n},${e}););
 out geom;`);
-    if (!d) { console.error('every Overpass mirror failed'); process.exit(1); }
     writeFileSync(PARTS, JSON.stringify(d));
-    await pause(20000);   // it throttles; the second query fails without this
   }
   if (!existsSync(ROOFS)) {
     console.error(`fetching roof shapes for ${city.slug}...`);
-    const d = await overpass(`[out:json][timeout:180];
-way["building"]["roof:shape"](${s0},${w0},${n0},${e0});
+    const d = await overpassTiled(city, 'roofs', 0.05, (s, w, n, e) => `[out:json][timeout:120];
+way["building"]["roof:shape"](${s},${w},${n},${e});
 out geom;`);
-    if (!d) { console.error('every Overpass mirror failed'); process.exit(1); }
     writeFileSync(ROOFS, JSON.stringify(d));
   }
 }
