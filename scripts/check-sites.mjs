@@ -39,6 +39,10 @@ for (const l of listed) {
 const keys = new Map();
 const slugs = new Map();
 const coastal = [];
+/** innerMetres and groundMetres per slug, for the cross-checks against the bake config below. */
+const siteInner = new Map();
+const siteOuter = new Map();
+const siteGround = new Map();
 
 for (const r of registered) {
   const path = `${SITES_DIR}/${r.file}.ts`;
@@ -63,6 +67,9 @@ for (const r of registered) {
   const inner = Number(/innerMetres:\s*(-?[\d.]+)/.exec(src)?.[1] ?? NaN);
   const outer = Number(/outerMetres:\s*(-?[\d.]+)/.exec(src)?.[1] ?? NaN);
   const hasCity = /city:\s*\{/.test(src);
+  siteInner.set(slug, inner);
+  siteOuter.set(slug, outer);
+  siteGround.set(slug, ground);
   if (hasCity) {
     if (ground === 0) fail(`${name}: groundMetres 0 is coplanar with the ocean mesh — use 0.5`);
     if (!(inner > 0)) fail(`${name}: a city needs innerMetres > 0 or its ground is not overridden`);
@@ -116,6 +123,24 @@ for (const [slug, name] of slugs) {
   if (!existsSync(cfg)) { fail(`${name}: has baked assets but no ${cfg} — a rebuild is impossible`); continue; }
   const c = JSON.parse(readFileSync(cfg, 'utf8'));
   if (c.slug !== slug) fail(`${cfg} says slug "${c.slug}"`);
+
+  // EVERYTHING BAKED MUST SIT WHERE THE GROUND IS HELD FLAT. The bakes clip at maxRangeMetres, and
+  // the city holds LAND flat all the way to outerMetres (only sea blends back to the real depth), so
+  // outerMetres is the number to check against — not innerMetres, which is where the SEA starts
+  // blending. Getting that backwards was this script's own first version, and it failed Dubai, which
+  // is correct.
+  const inner = siteInner.get(slug);
+  const outer = siteOuter.get(slug);
+  const range = c.maxRangeMetres ?? 26000;
+  if (outer != null && outer < range) {
+    fail(`${name}: outerMetres ${outer} is smaller than ${cfg}'s maxRangeMetres ${range} — anything baked beyond it stands on unheld ground`);
+  }
+  // Procedural relief scales with elevation and is near zero only close to sea level. A highland
+  // city relies entirely on cityFlatness, which needs a core to switch off inside.
+  const ground = siteGround.get(slug);
+  if (ground != null && ground > 120 && !(inner > 0)) {
+    fail(`${name}: ground ${ground} m is above the relief fade — without innerMetres > 0 the city gets hundreds of metres of procedural hills`);
+  }
   if (!Array.isArray(c.bbox) || c.bbox.length !== 4) fail(`${cfg}: bbox must be [s, w, n, e]`);
   // The mask must be no coarser than the terrain, which resolves 38 m at full detail.
   if ((c.maskCellMetres ?? 40) > 40) fail(`${cfg}: maskCellMetres ${c.maskCellMetres} is coarser than the 38 m terrain — the coast will look like squares`);

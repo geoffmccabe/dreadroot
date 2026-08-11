@@ -212,6 +212,18 @@ export function cityFlatness(x: number, y: number, z: number): number {
     const dot = x * s.dx + y * s.dy + z * s.dz;
     if (dot <= s.cosOuter) continue;
     if (dot >= s.cosInner) return 1;
+
+    // IT FOLLOWS THE ELEVATION, WHICH IS THE WHOLE POINT. cityBaseMetres holds LAND at the city's
+    // ground all the way out to the outer radius — only sea blends back to the real depth — so
+    // fading the relief back in over that same band would lay hills on ground that is still being
+    // held perfectly flat. The two must answer the same question the same way or the city grows
+    // lumps just outside its core, exactly where nobody thinks to look.
+    const ox = x - s.dx, oy = y - s.dy, oz = z - s.dz;
+    const em = (ox * s.ex + oy * s.ey + oz * s.ez) * EARTH_R_M;
+    const nm = (ox * s.nx + oy * s.ny + oz * s.nz) * EARTH_R_M;
+    if ((landFractionFor(s.slug, em, -nm) ?? 1) >= 1) return 1;
+
+    // Sea, which does blend — so the relief may come back with it.
     const distM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
     return 1 - smooth((distM - s.innerM) / (s.outerM - s.innerM));
   }
