@@ -153,5 +153,29 @@ for (const [slug, name] of slugs) {
 }
 
 if (!fails) pass(`${keys.size} sites, ${slugs.size} slugs, ${coastal.length} with land masks — all coherent`);
+// --- the lookup that buried a city -----------------------------------------------------------------
+//
+// A TRIPWIRE, and it is honest about being one. cityGroundMetres decides how far above sea level a
+// city's whole group of buildings sits. It used to find its site by NAME; when the registry landed,
+// the caller started passing a SLUG. 'san-jose' never equals 'San José, Costa Rica', so the lookup
+// returned its 0 default and San Jose's 29,402 buildings were placed at SEA LEVEL — eleven hundred
+// and sixty metres underground. Every one present, every one correctly positioned, none visible.
+//
+// Dubai could not have caught it: 'dubai' does not match 'Dubai' either, but its ground is half a
+// metre, so the same bug moved that city by 50 cm. Nothing in the type system objects, because both
+// fields are strings. So this greps for it.
+{
+  const src = readFileSync('src/components/siege/globe/cityGround.ts', 'utf8');
+  const fn = /export function cityGroundMetres\([\s\S]*?\n\}/.exec(src)?.[0] ?? '';
+  if (!/s\.slug === /.test(fn)) {
+    fail('cityGroundMetres does not look up by slug — if it matches on name, every city sinks to sea level');
+  }
+  const caller = readFileSync('src/components/siege/globe/cityData.ts', 'utf8');
+  if (!/cityGroundMetres\(slug\)/.test(caller)) {
+    fail('cityData does not pass a slug to cityGroundMetres — check the two agree on the key');
+  }
+  if (!fails) pass('cityGroundMetres is keyed by slug, and cityData passes one');
+}
+
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 process.exit(fails ? 1 : 0);
