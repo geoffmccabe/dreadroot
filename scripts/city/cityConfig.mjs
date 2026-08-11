@@ -73,26 +73,41 @@ export const OVERPASS = [
  * Khalifa went absent from the first Dubai bake.
  */
 export async function overpass(query) {
-  for (const url of OVERPASS) {
+  // SIX ATTEMPTS WITH BACKOFF, cycling the mirrors — the same patience the buildings fetcher has
+  // always had, and which this did not.
+  //
+  // It tried each mirror ONCE and gave up, and on a busy afternoon that meant 55 of New York's 56
+  // coastline tiles failed. The land mask built from the one that survived flooded 99.5% of the
+  // grid: no coastline to stop it, so the sea swallowed Manhattan and the file came out looking
+  // perfectly valid. Overpass refuses far more often than it fails permanently, and waiting twenty
+  // seconds is the difference between a city and a puddle.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const url = OVERPASS[attempt % OVERPASS.length];
     try {
-      const res = await fetch(url, { method: 'POST', body: query });
-      if (!res.ok) { console.error(`  ${res.status} from ${url}`); continue; }
+      const res = await fetch(url, {
+        method: 'POST',
+        body: query,
+        headers: { 'User-Agent': UA, 'Content-Type': 'text/plain' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
-      if (!text.startsWith('{')) { console.error(`  non-JSON from ${url}`); continue; }
+      if (!text.startsWith('{')) throw new Error('not JSON (rate limited)');
       const data = JSON.parse(text);
-      // An empty answer is not trusted from a single mirror — see the note on osm.ch above. Fall
-      // through to the next one, and only return empty once they have all agreed.
-      if ((data.elements?.length ?? 0) === 0 && url !== OVERPASS[OVERPASS.length - 1]) {
-        console.error(`  empty from ${url} — trying another mirror`);
-        continue;
-      }
+      // An empty answer is not trusted from a single mirror — see the note on partial mirrors above.
+      // Believed only on the last attempt, once they have all agreed.
+      if ((data.elements?.length ?? 0) === 0 && attempt < 5) throw new Error('empty (possible partial mirror)');
       return data;
     } catch (err) {
-      console.error(`  ${url} failed: ${err.message}`);
+      if (attempt === 5) { console.error(`  gave up: ${err.message}`); return null; }
+      const wait = 4000 * (attempt + 2);
+      await pause(wait);
     }
   }
   return null;
 }
+
+/** Sent on every request, so Overpass can see who is asking and throttle us rather than block us. */
+const UA = 'DreadRoot-Kaiju/1.0 (geoff@lightningworks.io) one-time city import';
 
 /** Sleep, for backing off between Overpass calls. It throttles, and hammering it gets you blocked. */
 export const pause = (ms) => new Promise((r) => setTimeout(r, ms));

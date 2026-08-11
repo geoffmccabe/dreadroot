@@ -136,12 +136,40 @@ console.error(`stroked ${coastWays} coastline ways, held ${waterAreas.length} wa
 
 // --- 2. flood the sea in from the open Gulf -------------------------------------------------------
 //
-// The northwest corner of the grid is 26 km west and 26 km north of the city origin, which puts it
-// roughly 25 km offshore. There is nothing there but the Persian Gulf.
+// WHERE THE SEA STARTS HAS TO BE STATED, and this used to be hardcoded to the grid's northwest
+// corner because for Dubai that corner is 25 km out in the Persian Gulf. It is a property of one
+// city, not of cities.
+//
+// For New York the northwest corner of the grid is the New Jersey Meadowlands. Seeding there floods
+// the LAND, and everything the flood cannot reach — the Hudson, the East River, the Upper Bay —
+// becomes "land". The mask comes out inverted: Manhattan is sea and the rivers are fields. Nothing
+// about that failure is loud; the file is the right size and the script reports success.
+//
+// So `seaSeed` is a real coordinate in open water, given per city in its config, and it is checked.
 const queue = new Int32Array(FN * FN);
 let qh = 0, qt = 0;
-const seed = idx(1, 1);
-if (grid[seed] !== BARRIER) { grid[seed] = SEA; queue[qt++] = seed; }
+let seedCx, seedCy;
+if (city.seaSeed) {
+  const [sx, sz] = city.project({ lat: city.seaSeed[0], lon: city.seaSeed[1] });
+  seedCx = toCellX(sx); seedCy = toCellX(sz);
+  if (seedCx < 0 || seedCy < 0 || seedCx >= FN || seedCy >= FN) {
+    console.error(`seaSeed ${city.seaSeed} is OUTSIDE the mask grid (+/-${HALF / 1000} km) — pick open water nearer the origin`);
+    process.exit(1);
+  }
+  console.error(`sea seeded at ${city.seaSeed[0]}, ${city.seaSeed[1]} (${Math.round(sx)} m E, ${Math.round(sz)} m S)`);
+} else {
+  seedCx = 1; seedCy = 1;
+  console.error('WARNING: no seaSeed in the config — falling back to the northwest corner, which is '
+    + 'only open water for some cities. If the coastline comes out inverted, this is why.');
+}
+const seed = idx(seedCx, seedCy);
+if (grid[seed] === BARRIER) {
+  // A seed sitting exactly on a stroked coastline cannot start the fill, and the result is a mask
+  // that is entirely land — which looks like a working file.
+  console.error('seaSeed landed ON the coastline itself — move it further out to sea');
+  process.exit(1);
+}
+grid[seed] = SEA; queue[qt++] = seed;
 while (qh < qt) {
   const k = queue[qh++];
   const cx = k % FN, cy = (k / FN) | 0;
@@ -152,7 +180,20 @@ while (qh < qt) {
   if (cy > 0 && grid[k - FN] === 0) { grid[k - FN] = SEA; queue[qt++] = k - FN; }
   if (cy < FN - 1 && grid[k + FN] === 0) { grid[k + FN] = SEA; queue[qt++] = k + FN; }
 }
-console.error(`flood reached ${qt} cells (${((qt / grid.length) * 100).toFixed(1)}%)`);
+const floodPct = (qt / grid.length) * 100;
+console.error(`flood reached ${qt} cells (${floodPct.toFixed(1)}%)`);
+// A COASTAL CITY IS NEITHER ALL SEA NOR ALL LAND. Outside this band something has gone wrong in a
+// way that produces a perfectly well-formed file: the seed was on the wrong side (inverted), or the
+// coastline had a gap and the fill walked inland through it (drowned). Both are silent otherwise.
+if (floodPct < 3) {
+  console.error('\nFAILED: the flood barely spread. The seed is probably enclosed by coastline, or on land.');
+  process.exit(1);
+}
+if (floodPct > 90) {
+  console.error('\nFAILED: the flood covered almost everything. The coastline has a gap and the sea leaked inland,');
+  console.error('or the seed is on the land side. Widen coastBbox so the shore is complete past both ends of the city.');
+  process.exit(1);
+}
 
 // --- 3. land is everything the sea could not reach -------------------------------------------------
 const fine = new Uint8Array(FN * FN);

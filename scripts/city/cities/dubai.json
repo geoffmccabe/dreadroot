@@ -65,5 +65,10 @@
       "within": 400,
       "expect": 5
     }
-  ]
+  ],
+  "seaSeed": [
+    25.3,
+    55.0
+  ],
+  "seaSeedNote": "Open Gulf, 18 km northwest. Was the hardcoded corner; now stated."
 }

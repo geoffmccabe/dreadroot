@@ -211,7 +211,7 @@ keep.forEach((src, dst) => {
 });
 writeFileSync(BIN, Buffer.from(nb));
 writeFileSync(IDS, Buffer.from(nids.buffer));
-console.error(`dubai.bin now ${keep.length.toLocaleString()} boxes (was ${count.toLocaleString()})`);
+console.error(`${city.slug}/buildings.bin now ${keep.length.toLocaleString()} boxes (was ${count.toLocaleString()})`);
 
 // --- pack the solids ---------------------------------------------------------------------------------
 // uint32 count, then per solid:

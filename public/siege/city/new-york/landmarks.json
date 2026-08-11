@@ -1,0 +1,692 @@
+[
+ {
+  "name": "Central Park Tower",
+  "h": 472,
+  "x": 757,
+  "z": -2940
+ },
+ {
+  "name": "Empire State Building",
+  "h": 443,
+  "x": 366,
+  "z": -940
+ },
+ {
+  "name": "432 Park Avenue",
+  "h": 426,
+  "x": 1531,
+  "z": -2415
+ },
+ {
+  "name": "270 Park Avenue",
+  "h": 423,
+  "x": 1183,
+  "z": -1778
+ },
+ {
+  "name": "One World Trade Center",
+  "h": 417,
+  "x": -1956,
+  "z": 3006
+ },
+ {
+  "name": "One Vanderbilt",
+  "h": 397,
+  "x": 966,
+  "z": -1444
+ },
+ {
+  "name": "30 Hudson Yards",
+  "h": 395,
+  "x": -892,
+  "z": -1552
+ },
+ {
+  "name": "Bank of America Tower",
+  "h": 366,
+  "x": 446,
+  "z": -1732
+ },
+ {
+  "name": "The Torch",
+  "h": 325,
+  "x": 193,
+  "z": -2147
+ },
+ {
+  "name": "3 World Trade Center",
+  "h": 320,
+  "x": -1830,
+  "z": 3230
+ },
+ {
+  "name": "53 West 53",
+  "h": 320,
+  "x": 999,
+  "z": -2427
+ },
+ {
+  "name": "The Spiral",
+  "h": 317,
+  "x": -808,
+  "z": -1698
+ },
+ {
+  "name": "50 Hudson Yards",
+  "h": 308,
+  "x": -853,
+  "z": -1616
+ },
+ {
+  "name": "35 Hudson Yards",
+  "h": 305,
+  "x": -1033,
+  "z": -1629
+ },
+ {
+  "name": "520 5th Avenue",
+  "h": 305,
+  "x": 791,
+  "z": -1612
+ },
+ {
+  "name": "One Manhattan West",
+  "h": 303,
+  "x": -648,
+  "z": -1417
+ },
+ {
+  "name": "220 Central Park South",
+  "h": 290,
+  "x": 795,
+  "z": -3010
+ },
+ {
+  "name": "Four Seasons Private Residences New York Downtown",
+  "h": 286,
+  "x": -1615,
+  "z": 3025
+ },
+ {
+  "name": "Two Manhattan West",
+  "h": 285,
+  "x": -682,
+  "z": -1341
+ },
+ {
+  "name": "15 Hudson Yards",
+  "h": 279,
+  "x": -1121,
+  "z": -1497
+ },
+ {
+  "name": "10 Hudson Yards",
+  "h": 273,
+  "x": -976,
+  "z": -1414
+ },
+ {
+  "name": "262 Fifth Avenue",
+  "h": 262,
+  "x": 232,
+  "z": -588
+ },
+ {
+  "name": "425 Park Avenue",
+  "h": 262,
+  "x": 1601,
+  "z": -2274
+ },
+ {
+  "name": "Sutton 58",
+  "h": 258,
+  "x": 2422,
+  "z": -2035
+ },
+ {
+  "name": "343 Madison Avenue",
+  "h": 257,
+  "x": 1030,
+  "z": -1589
+ },
+ {
+  "name": "Jenga Building",
+  "h": 250,
+  "x": -1371,
+  "z": 2489
+ },
+ {
+  "name": "28 Liberty",
+  "h": 248,
+  "x": -1601,
+  "z": 3579
+ },
+ {
+  "name": "MetLife Building",
+  "h": 246,
+  "x": 1125,
+  "z": -1503
+ },
+ {
+  "name": "138 East 50th Street",
+  "h": 245,
+  "x": 1533,
+  "z": -1787
+ },
+ {
+  "name": "Link Apartments 8 Carlisle",
+  "h": 240,
+  "x": -2016,
+  "z": 3475
+ },
+ {
+  "name": "520 Park Avenue",
+  "h": 238,
+  "x": 1687,
+  "z": -2679
+ },
+ {
+  "name": "50 West Street",
+  "h": 237,
+  "x": -2110,
+  "z": 3583
+ },
+ {
+  "name": "45 East 22nd Street",
+  "h": 237,
+  "x": 224,
+  "z": 1
+ },
+ {
+  "name": "55 Hudson Yards",
+  "h": 237,
+  "x": -992,
+  "z": -1694
+ },
+ {
+  "name": "19 Dutch",
+  "h": 231,
+  "x": -1466,
+  "z": 3360
+ },
+ {
+  "name": "Queens Plaza Park",
+  "h": 230,
+  "x": 4529,
+  "z": -1132
+ },
+ {
+  "name": "7 World Trade Center",
+  "h": 228,
+  "x": -1862,
+  "z": 2962
+ },
+ {
+  "name": "Brooklyn Point",
+  "h": 227,
+  "x": 595,
+  "z": 5368
+ },
+ {
+  "name": "One Liberty Plaza",
+  "h": 226,
+  "x": -1759,
+  "z": 3369
+ },
+ {
+  "name": "Jersey City Urby",
+  "h": 217,
+  "x": -3759,
+  "z": 2189
+ },
+ {
+  "name": "General Motors Building",
+  "h": 215,
+  "x": 1494,
+  "z": -2622
+ },
+ {
+  "name": "25 Park Row",
+  "h": 214,
+  "x": -1464,
+  "z": 3197
+ },
+ {
+  "name": "Marine Midland Building",
+  "h": 210,
+  "x": -1690,
+  "z": 3493
+ },
+ {
+  "name": "Times Square Tower",
+  "h": 210,
+  "x": 267,
+  "z": -1727
+ },
+ {
+  "name": "Sky",
+  "h": 206,
+  "x": -752,
+  "z": -2399
+ },
+ {
+  "name": "Chanin Building",
+  "h": 205,
+  "x": 1121,
+  "z": -1252
+ },
+ {
+  "name": "Silver Towers",
+  "h": 205,
+  "x": -773,
+  "z": -2306
+ },
+ {
+  "name": "161 Maiden Lane",
+  "h": 204,
+  "x": -1249,
+  "z": 3836
+ },
+ {
+  "name": "Paramount Plaza",
+  "h": 203,
+  "x": 450,
+  "z": -2459
+ },
+ {
+  "name": "Tower 28",
+  "h": 197,
+  "x": 4253,
+  "z": -1066
+ },
+ {
+  "name": "Aloft",
+  "h": 196,
+  "x": -879,
+  "z": -1932
+ },
+ {
+  "name": "One New York Plaza",
+  "h": 195,
+  "x": -1859,
+  "z": 4208
+ },
+ {
+  "name": "Rose Hill",
+  "h": 195,
+  "x": 445,
+  "z": -463
+ },
+ {
+  "name": "Journal Squared 3",
+  "h": 195,
+  "x": -5919,
+  "z": 845
+ },
+ {
+  "name": "601 West 29th Street",
+  "h": 194,
+  "x": -1251,
+  "z": -1479
+ },
+ {
+  "name": "55 Hudson Street",
+  "h": 194,
+  "x": -3832,
+  "z": 2903
+ },
+ {
+  "name": "Salesforce Tower",
+  "h": 192,
+  "x": 439,
+  "z": -1632
+ },
+ {
+  "name": "Burlington House",
+  "h": 191,
+  "x": 923,
+  "z": -2560
+ },
+ {
+  "name": "Olympic Tower",
+  "h": 190,
+  "x": 1176,
+  "z": -2146
+ },
+ {
+  "name": "One Madison",
+  "h": 188,
+  "x": 156,
+  "z": -53
+ },
+ {
+  "name": "Eventi",
+  "h": 187,
+  "x": -13,
+  "z": -790
+ },
+ {
+  "name": "Tower 49",
+  "h": 187,
+  "x": 1096,
+  "z": -1919
+ },
+ {
+  "name": "555Ten",
+  "h": 186,
+  "x": -548,
+  "z": -2091
+ },
+ {
+  "name": "Gotham Point North Tower",
+  "h": 186,
+  "x": 2426,
+  "z": 66
+ },
+ {
+  "name": "Hawthorn Park",
+  "h": 182,
+  "x": 331,
+  "z": -3558
+ },
+ {
+  "name": "AVA DoBro",
+  "h": 182,
+  "x": 435,
+  "z": 5375
+ },
+ {
+  "name": "Eagle Lofts Tower",
+  "h": 182,
+  "x": 4256,
+  "z": -809
+ },
+ {
+  "name": "David N. Dinkins Manhattan Municipal Building",
+  "h": 180,
+  "x": -1151,
+  "z": 3010
+ },
+ {
+  "name": "Hub",
+  "h": 180,
+  "x": 799,
+  "z": 5876
+ },
+ {
+  "name": "The Set",
+  "h": 179,
+  "x": -750,
+  "z": -1743
+ },
+ {
+  "name": "5203 Center Boulevard",
+  "h": 179,
+  "x": 2570,
+  "z": -220
+ },
+ {
+  "name": "M Social Hotel New York Downtown",
+  "h": 178,
+  "x": -1709,
+  "z": 3218
+ },
+ {
+  "name": "The Ritz-Carlton",
+  "h": 177,
+  "x": 80,
+  "z": -632
+ },
+ {
+  "name": "28-30 Jackson Avenue",
+  "h": 177,
+  "x": 4397,
+  "z": -944
+ },
+ {
+  "name": "Lotte New York Palace",
+  "h": 176,
+  "x": 1272,
+  "z": -2002
+ },
+ {
+  "name": "299 Park Avenue",
+  "h": 175,
+  "x": 1334,
+  "z": -1784
+ },
+ {
+  "name": "1166 Avenue of the Americas",
+  "h": 175,
+  "x": 674,
+  "z": -1879
+ },
+ {
+  "name": "Lyra NYC Apartments",
+  "h": 174,
+  "x": -811,
+  "z": -2057
+ },
+ {
+  "name": "780 Third Avenue",
+  "h": 174,
+  "x": 1535,
+  "z": -1673
+ },
+ {
+  "name": "The Ashland",
+  "h": 173,
+  "x": 938,
+  "z": 5820
+ },
+ {
+  "name": "Helmsley Building",
+  "h": 172,
+  "x": 1172,
+  "z": -1602
+ },
+ {
+  "name": "Turkish House",
+  "h": 171,
+  "x": 1812,
+  "z": -1267
+ },
+ {
+  "name": "Trump International Hotel and Tower",
+  "h": 171,
+  "x": 711,
+  "z": -3240
+ },
+ {
+  "name": "33 Thomas Street",
+  "h": 170,
+  "x": -1343,
+  "z": 2613
+ },
+ {
+  "name": "Summit",
+  "h": 170,
+  "x": 1459,
+  "z": -1258
+ },
+ {
+  "name": "100 United Nations Plaza Tower",
+  "h": 170,
+  "x": 1875,
+  "z": -1468
+ },
+ {
+  "name": "3 Times Square",
+  "h": 169,
+  "x": 245,
+  "z": -1845
+ },
+ {
+  "name": "Merchandise Mart Building",
+  "h": 167,
+  "x": 314,
+  "z": -263
+ },
+ {
+  "name": "101 Hudson Street",
+  "h": 167,
+  "x": -3790,
+  "z": 2660
+ },
+ {
+  "name": "606 West 30th Street",
+  "h": 166,
+  "x": -1245,
+  "z": -1493
+ },
+ {
+  "name": "One Willoughby Square",
+  "h": 165,
+  "x": 513,
+  "z": 5438
+ },
+ {
+  "name": "South Park Tower",
+  "h": 163,
+  "x": 350,
+  "z": -3349
+ },
+ {
+  "name": "The Encore",
+  "h": 163,
+  "x": 279,
+  "z": -3465
+ },
+ {
+  "name": "15 William",
+  "h": 161,
+  "x": -1716,
+  "z": 3854
+ },
+ {
+  "name": "90 Columbus",
+  "h": 161,
+  "x": -4290,
+  "z": 2289
+ },
+ {
+  "name": "507 West Chelsea",
+  "h": 160,
+  "x": -1008,
+  "z": -1263
+ },
+ {
+  "name": "599 Lexington Avenue",
+  "h": 160,
+  "x": 1626,
+  "z": -1987
+ },
+ {
+  "name": "The Lexington",
+  "h": 160,
+  "x": 1432,
+  "z": -1657
+ },
+ {
+  "name": "Americas Tower",
+  "h": 160,
+  "x": 595,
+  "z": -1923
+ },
+ {
+  "name": "Paramount Tower",
+  "h": 160,
+  "x": 1285,
+  "z": -891
+ },
+ {
+  "name": "1214 Fifth Avenue",
+  "h": 160,
+  "x": 3179,
+  "z": -5697
+ },
+ {
+  "name": "The Brooklyner",
+  "h": 160,
+  "x": 341,
+  "z": 5260
+ },
+ {
+  "name": "Hotel Riu Plaza Manhattan Times Square",
+  "h": 159,
+  "x": 558,
+  "z": -2109
+ },
+ {
+  "name": "Museum Tower",
+  "h": 159,
+  "x": 1065,
+  "z": -2375
+ },
+ {
+  "name": "20 Times Square",
+  "h": 157,
+  "x": 500,
+  "z": -2141
+ },
+ {
+  "name": "One Columbus Place",
+  "h": 157,
+  "x": 368,
+  "z": -3245
+ },
+ {
+  "name": "Williamsburgh Savings Bank Tower",
+  "h": 156,
+  "x": 1036,
+  "z": 6066
+ },
+ {
+  "name": "375 Pearl",
+  "h": 155,
+  "x": -946,
+  "z": 3241
+ },
+ {
+  "name": "125 Broad Street",
+  "h": 154,
+  "x": -1730,
+  "z": 4192
+ },
+ {
+  "name": "The Copper, West Tower",
+  "h": 154,
+  "x": 1504,
+  "z": -512
+ },
+ {
+  "name": "The Paxton",
+  "h": 152,
+  "x": 716,
+  "z": 5701
+ },
+ {
+  "name": "One Battery Park Plaza",
+  "h": 151,
+  "x": -2005,
+  "z": 4077
+ },
+ {
+  "name": "The Highpoint",
+  "h": 151,
+  "x": 1384,
+  "z": -946
+ },
+ {
+  "name": "Fuller Building",
+  "h": 151,
+  "x": 1532,
+  "z": -2489
+ },
+ {
+  "name": "Met Life Tower",
+  "h": 150,
+  "x": 223,
+  "z": -141
+ }
+]

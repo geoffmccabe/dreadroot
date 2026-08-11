@@ -1,30 +1,117 @@
 {
   "slug": "seattle",
   "name": "Seattle",
-  "lat0": 47.6080,
-  "lon0": -122.3350,
-  "bbox": [47.55, -122.42, 47.68, -122.27],
-  "coastBbox": [47.45, -122.55, 47.80, -122.15],
+  "lat0": 47.608,
+  "lon0": -122.335,
+  "bbox": [
+    47.55,
+    -122.42,
+    47.68,
+    -122.27
+  ],
+  "coastBbox": [
+    47.45,
+    -122.55,
+    47.8,
+    -122.15
+  ],
   "coastal": true,
   "groundMetres": 35,
   "maxRangeMetres": 9000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [
-    { "name": "Downtown / Belltown",   "s": 47.595, "w": -122.360, "n": 47.625, "e": -122.320 },
-    { "name": "South Lake Union",      "s": 47.615, "w": -122.350, "n": 47.645, "e": -122.310 },
-    { "name": "Capitol Hill / First Hill", "s": 47.600, "w": -122.330, "n": 47.640, "e": -122.290 },
-    { "name": "SoDo / Pioneer Square", "s": 47.555, "w": -122.360, "n": 47.600, "e": -122.310 },
-    { "name": "Queen Anne / Magnolia", "s": 47.620, "w": -122.420, "n": 47.660, "e": -122.350 },
-    { "name": "Ballard / Fremont",     "s": 47.645, "w": -122.400, "n": 47.680, "e": -122.320 }
+    {
+      "name": "Downtown / Belltown",
+      "s": 47.595,
+      "w": -122.36,
+      "n": 47.625,
+      "e": -122.32
+    },
+    {
+      "name": "South Lake Union",
+      "s": 47.615,
+      "w": -122.35,
+      "n": 47.645,
+      "e": -122.31
+    },
+    {
+      "name": "Capitol Hill / First Hill",
+      "s": 47.6,
+      "w": -122.33,
+      "n": 47.64,
+      "e": -122.29
+    },
+    {
+      "name": "SoDo / Pioneer Square",
+      "s": 47.555,
+      "w": -122.36,
+      "n": 47.6,
+      "e": -122.31
+    },
+    {
+      "name": "Queen Anne / Magnolia",
+      "s": 47.62,
+      "w": -122.42,
+      "n": 47.66,
+      "e": -122.35
+    },
+    {
+      "name": "Ballard / Fremont",
+      "s": 47.645,
+      "w": -122.4,
+      "n": 47.68,
+      "e": -122.32
+    }
   ],
   "landmarks": [
-    { "name": "Columbia Center",   "lat": 47.6045, "lon": -122.3301, "within": 250, "expect": 15 },
-    { "name": "Space Needle",      "lat": 47.6205, "lon": -122.3493, "within": 300, "expect": 10 },
-    { "name": "Pike Place Market", "lat": 47.6097, "lon": -122.3422, "within": 250, "expect": 15 },
-    { "name": "Amazon Spheres / SLU", "lat": 47.6154, "lon": -122.3390, "within": 300, "expect": 15 },
-    { "name": "Pioneer Square",    "lat": 47.6015, "lon": -122.3343, "within": 300, "expect": 15 },
-    { "name": "Fremont",           "lat": 47.6510, "lon": -122.3500, "within": 400, "expect": 15 }
+    {
+      "name": "Columbia Center",
+      "lat": 47.6045,
+      "lon": -122.3301,
+      "within": 250,
+      "expect": 15
+    },
+    {
+      "name": "Space Needle",
+      "lat": 47.6205,
+      "lon": -122.3493,
+      "within": 300,
+      "expect": 10
+    },
+    {
+      "name": "Pike Place Market",
+      "lat": 47.6097,
+      "lon": -122.3422,
+      "within": 250,
+      "expect": 15
+    },
+    {
+      "name": "Amazon Spheres / SLU",
+      "lat": 47.6154,
+      "lon": -122.339,
+      "within": 300,
+      "expect": 15
+    },
+    {
+      "name": "Pioneer Square",
+      "lat": 47.6015,
+      "lon": -122.3343,
+      "within": 300,
+      "expect": 15
+    },
+    {
+      "name": "Fremont",
+      "lat": 47.651,
+      "lon": -122.35,
+      "within": 400,
+      "expect": 15
+    }
   ],
-  "note": "THE HARDEST OF THE THREE, because Seattle's character IS its topography and this framework flattens a city onto one tangent plane. Measured: downtown 35 m, Capitol Hill 107 m, Queen Anne 63 m, Elliott Bay -73 m. The inner radius is kept small (9 km) so the flattening covers the dense core and the hills beyond it survive. Also the first city with FRESH WATER: Lake Union reads +32 m in the coarse data, i.e. as land, so the water bake matters as much as the coastline."
+  "note": "THE HARDEST OF THE THREE, because Seattle's character IS its topography and this framework flattens a city onto one tangent plane. Measured: downtown 35 m, Capitol Hill 107 m, Queen Anne 63 m, Elliott Bay -73 m. The inner radius is kept small (9 km) so the flattening covers the dense core and the hills beyond it survive. Also the first city with FRESH WATER: Lake Union reads +32 m in the coarse data, i.e. as land, so the water bake matters as much as the coastline.",
+  "seaSeed": [
+    47.605,
+    -122.395
+  ],
+  "seaSeedNote": "Elliott Bay, west of the waterfront and open to Puget Sound."
 }

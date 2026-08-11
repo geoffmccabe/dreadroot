@@ -1,30 +1,117 @@
 {
   "slug": "new-york",
   "name": "New York City",
-  "lat0": 40.7400,
-  "lon0": -73.9900,
-  "bbox": [40.68, -74.04, 40.82, -73.90],
-  "coastBbox": [40.55, -74.20, 40.92, -73.75],
+  "lat0": 40.74,
+  "lon0": -73.99,
+  "bbox": [
+    40.68,
+    -74.04,
+    40.82,
+    -73.9
+  ],
+  "coastBbox": [
+    40.55,
+    -74.2,
+    40.92,
+    -73.75
+  ],
   "coastal": true,
   "groundMetres": 2,
   "maxRangeMetres": 12000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [
-    { "name": "Lower Manhattan",   "s": 40.700, "w": -74.020, "n": 40.740, "e": -73.970 },
-    { "name": "Midtown",           "s": 40.740, "w": -74.010, "n": 40.780, "e": -73.960 },
-    { "name": "Upper Manhattan",   "s": 40.780, "w": -73.990, "n": 40.820, "e": -73.930 },
-    { "name": "Brooklyn / LIC",    "s": 40.680, "w": -74.010, "n": 40.740, "e": -73.930 },
-    { "name": "Queens west",       "s": 40.740, "w": -73.960, "n": 40.800, "e": -73.900 },
-    { "name": "Jersey City",       "s": 40.700, "w": -74.060, "n": 40.760, "e": -74.020 }
+    {
+      "name": "Lower Manhattan",
+      "s": 40.7,
+      "w": -74.02,
+      "n": 40.74,
+      "e": -73.97
+    },
+    {
+      "name": "Midtown",
+      "s": 40.74,
+      "w": -74.01,
+      "n": 40.78,
+      "e": -73.96
+    },
+    {
+      "name": "Upper Manhattan",
+      "s": 40.78,
+      "w": -73.99,
+      "n": 40.82,
+      "e": -73.93
+    },
+    {
+      "name": "Brooklyn / LIC",
+      "s": 40.68,
+      "w": -74.01,
+      "n": 40.74,
+      "e": -73.93
+    },
+    {
+      "name": "Queens west",
+      "s": 40.74,
+      "w": -73.96,
+      "n": 40.8,
+      "e": -73.9
+    },
+    {
+      "name": "Jersey City",
+      "s": 40.7,
+      "w": -74.06,
+      "n": 40.76,
+      "e": -74.02
+    }
   ],
   "landmarks": [
-    { "name": "One World Trade Center", "lat": 40.7127, "lon": -74.0134, "within": 250, "expect": 10 },
-    { "name": "Empire State Building",  "lat": 40.7484, "lon": -73.9857, "within": 250, "expect": 20 },
-    { "name": "Central Park Tower",     "lat": 40.7663, "lon": -73.9810, "within": 250, "expect": 20 },
-    { "name": "Chrysler Building",      "lat": 40.7516, "lon": -73.9755, "within": 250, "expect": 20 },
-    { "name": "Downtown Brooklyn",      "lat": 40.6928, "lon": -73.9903, "within": 400, "expect": 30 },
-    { "name": "Long Island City",       "lat": 40.7447, "lon": -73.9485, "within": 400, "expect": 20 }
+    {
+      "name": "One World Trade Center",
+      "lat": 40.7127,
+      "lon": -74.0134,
+      "within": 250,
+      "expect": 10
+    },
+    {
+      "name": "Empire State Building",
+      "lat": 40.7484,
+      "lon": -73.9857,
+      "within": 250,
+      "expect": 20
+    },
+    {
+      "name": "Central Park Tower",
+      "lat": 40.7663,
+      "lon": -73.981,
+      "within": 250,
+      "expect": 20
+    },
+    {
+      "name": "Chrysler Building",
+      "lat": 40.7516,
+      "lon": -73.9755,
+      "within": 250,
+      "expect": 20
+    },
+    {
+      "name": "Downtown Brooklyn",
+      "lat": 40.6928,
+      "lon": -73.9903,
+      "within": 400,
+      "expect": 30
+    },
+    {
+      "name": "Long Island City",
+      "lat": 40.7447,
+      "lon": -73.9485,
+      "within": 400,
+      "expect": 20
+    }
   ],
-  "note": "COASTAL AND FULL OF ISLANDS, which makes the land mask do more work here than anywhere. The coarse elevation reads the EAST RIVER as +4 m — land — so without a mask Manhattan would be welded to Queens and the Hudson would be a field. The coastBbox is deliberately far wider than the bbox so the flood fill enters from open ocean south of the Narrows and reaches every waterway."
+  "note": "COASTAL AND FULL OF ISLANDS, which makes the land mask do more work here than anywhere. The coarse elevation reads the EAST RIVER as +4 m — land — so without a mask Manhattan would be welded to Queens and the Hudson would be a field. The coastBbox is deliberately far wider than the bbox so the flood fill enters from open ocean south of the Narrows and reaches every waterway.",
+  "seaSeed": [
+    40.685,
+    -74.045
+  ],
+  "seaSeedNote": "Upper Bay, off Governors Island — unambiguous open water inside the grid, and connected to the Hudson, the East River and the Kill Van Kull."
 }
