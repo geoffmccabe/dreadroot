@@ -49,7 +49,7 @@ export const NEW_YORK: SiteDef = {
     // antiprism with its mast, and the Chrysler from 246 m into 319 m with its spire. Buildings over
     // 100 m went from 441 to 3,222 — most of Manhattan's skyline is described in that layer and
     // none of it was being drawn.
-    assets: { buildings: true, detail: true, roads: true, water: true },
+    assets: { buildings: true, detail: true, roads: true, water: true, bridges: true },
     drawWithinUnits: 400,
     cars: 9000,
     // Manhattan has a great many buildings over 180 m, so the Dubai threshold works here unchanged.

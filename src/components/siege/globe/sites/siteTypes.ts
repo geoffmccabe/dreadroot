@@ -127,6 +127,14 @@ export interface CityAssets {
   roads: boolean;
   /** water.bin — inland waterways: marinas, lakes, canals, creeks. */
   water: boolean;
+  /**
+   * bridges.bin — spans lifted off the water, with towers on the long ones.
+   *
+   * Optional and defaulting to off, because most cities do not need it: without this file a bridge
+   * is simply part of the road network, painted flat, which is fine for an overpass. It matters
+   * where the crossings ARE the skyline.
+   */
+  bridges?: boolean;
 }
 
 export interface CityDef {

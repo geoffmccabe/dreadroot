@@ -33,7 +33,7 @@
 // Run:    node scripts/city/make-ground.mjs <slug>
 // Writes: public/siege/city/<slug>/ground.bin — one int16 metre value per building, in order.
 
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { loadCity, slugFromArgv } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
@@ -137,6 +137,38 @@ for (let i = 0; i < count; i++) {
 }
 
 writeFileSync(OUT, Buffer.from(out.buffer));
+
+// --- and the same for the detailed solids ----------------------------------------------------------
+//
+// THE TOWERS NEED IT TOO, and forgetting them is worse than forgetting the boxes. OSM heights are
+// measured from a building's OWN ground, and the renderer draws a solid from the city group's
+// origin — so in follow mode every detailed tower would sit at the city's single reference height
+// while the boxes around it stood on real terrain. In New York that is up to 42 m of error: the
+// tallest, most recognisable buildings in the city, sunk into the ground or floating over it.
+{
+  const DPATH = `${city.outDir}/detail.bin`;
+  if (existsSync(DPATH)) {
+    const db = readFileSync(DPATH);
+    const d = new DataView(db.buffer, db.byteOffset, db.byteLength);
+    let o = 0;
+    const n = d.getUint32(o, true); o += 4;
+    const dg = new Int16Array(n);
+    for (let i = 0; i < n; i++) {
+      o += 1;                                    // roof shape
+      const pts = d.getUint16(o, true); o += 2;
+      o += 6;                                    // min height, height, roof height
+      const cx = d.getInt16(o, true); o += 2;
+      const cz = d.getInt16(o, true); o += 2;
+      o += pts * 4;
+      const lat = lat0 - cz / MPER_LAT;
+      const lon = lon0 + cx / MPER_LON;
+      const m = await elevation(lat, lon);
+      dg[i] = m == null ? 0 : Math.max(1, Math.round(m));
+    }
+    writeFileSync(`${city.outDir}/detail-ground.bin`, Buffer.from(dg.buffer));
+    console.error(`wrote ${city.outDir}/detail-ground.bin — ${n.toLocaleString()} solids`);
+  }
+}
 console.error(`wrote ${OUT} — ${(out.byteLength / 1024).toFixed(0)} KB, ${fetched} tiles read`);
 console.error(`ground under the city runs ${min} m to ${max} m (a spread of ${max - min} m)`);
 if (missing) console.error(`${missing} buildings had no elevation data and were set to 0`);

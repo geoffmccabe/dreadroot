@@ -27,6 +27,7 @@ import { KaijuCityLights } from './KaijuCityLights';
 import { KaijuCityRoads } from './KaijuCityRoads';
 import { KaijuCityWater } from './KaijuCityWater';
 import { KaijuCityDetail } from './KaijuCityDetail';
+import { KaijuCityBridges } from './KaijuCityBridges';
 
 /**
  * Beyond this the city is not drawn at all.
@@ -220,7 +221,10 @@ function CityMesh({ city, slug }: { city: City; slug: string }) {
       {near && site?.city?.assets.water && <KaijuCityWater slug={slug} />}
       {/* The 1,214 buildings OSM describes in 3D — spires, domes, setbacks, and all 828 m of the
           Burj Khalifa. Their boxes have been removed from the bake above, so nothing overlaps. */}
-      {near && site?.city?.assets.detail && <KaijuCityDetail slug={slug} />}
+      {near && site?.city?.assets.detail && <KaijuCityDetail slug={slug} refGroundM={refGroundM} />}
+      {/* The river crossings, lifted off the water. Without this they are part of the road network
+          and get painted flat on it. */}
+      {near && site?.city?.assets.bridges && <KaijuCityBridges slug={slug} refGroundM={refGroundM} />}
       {/* Traffic on those roads, and the red lamps on the roofs over 180 m. */}
       {near && <KaijuCityLights city={city} slug={slug} />}
     </group>

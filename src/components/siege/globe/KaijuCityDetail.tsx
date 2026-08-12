@@ -34,6 +34,8 @@ const DOME_RINGS = 4;
 
 interface Solid {
   shape: number;
+  /** Ground under this solid, metres above sea level. Null when the city is flattened. */
+  ground?: number;
   minH: number; h: number; roofH: number;
   cx: number; cz: number;
   /** Flat [x,z,...] in metres from the city origin. */
@@ -64,7 +66,7 @@ function parse(buf: ArrayBuffer): Solid[] {
   return out;
 }
 
-export function KaijuCityDetail({ slug }: { slug: string }) {
+export function KaijuCityDetail({ slug, refGroundM }: { slug: string; refGroundM: number }) {
   const [solids, setSolids] = useState<Solid[] | null>(null);
   const timeRef = useRef({ value: 0 });
 
@@ -74,6 +76,17 @@ export function KaijuCityDetail({ slug }: { slug: string }) {
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const s = parse(await res.arrayBuffer());
+        // PER-SOLID GROUND. OSM heights are measured from a building's own ground, and without this
+        // every detailed tower sits at the city's single reference height while the boxes around it
+        // stand on real terrain — up to 42 m out in New York, on precisely its most recognisable
+        // buildings. Absent for a 'flatten' city, where one height is the right answer.
+        try {
+          const gres = await fetch(cityAssetPath(slug, 'detail-ground.bin'));
+          if (gres.ok) {
+            const g = new Int16Array(await gres.arrayBuffer());
+            if (g.length === s.length) for (let i = 0; i < s.length; i++) s[i].ground = g[i];
+          }
+        } catch { /* no per-solid ground: the reference height is the fallback and was the old one */ }
         if (!alive) return;
         const tallest = s.reduce((a, b) => (b.h > a ? b.h : a), 0);
         console.log(`[city] ${s.length.toLocaleString()} detailed solids, tallest ${tallest} m`);
@@ -135,7 +148,9 @@ export function KaijuCityDetail({ slug }: { slug: string }) {
       colour.setHSL(0.08 + 0.5 * tall * (0.4 + 0.6 * t), 0.05 + 0.10 * t, 0.42 + 0.22 * t);
       const cr = colour.r, cg = colour.g, cb = colour.b;
 
-      const y0 = s.minH * U, y1 = s.h * U;
+      // Offset by how far this solid's own ground differs from the height the group sits at.
+      const base = s.ground == null ? 0 : (s.ground - refGroundM);
+      const y0 = (base + s.minH) * U, y1 = (base + s.h) * U;
 
       // --- walls -------------------------------------------------------------------------------
       let along = 0;
@@ -157,7 +172,7 @@ export function KaijuCityDetail({ slug }: { slug: string }) {
       const rr = cr * 0.72, rg = cg * 0.72, rb = cb * 0.74;
 
       if (s.shape === ROOF_PYRAMID && s.roofH > 0) {
-        const apex = (s.h + s.roofH) * U;
+        const apex = (base + s.h + s.roofH) * U;
         for (let i = 0; i < n; i++) {
           const j = (i + 1) % n;
           tri(s.ring[i * 2] * U, y1, s.ring[i * 2 + 1] * U,
@@ -174,7 +189,7 @@ export function KaijuCityDetail({ slug }: { slug: string }) {
         for (let ring = 1; ring <= DOME_RINGS; ring++) {
           const a = (ring / DOME_RINGS) * (Math.PI / 2);
           const k = Math.cos(a);
-          const yr = (s.h + s.roofH * Math.sin(a)) * U;
+          const yr = (base + s.h + s.roofH * Math.sin(a)) * U;
           for (let i = 0; i < n; i++) {
             const j = (i + 1) % n;
             const pax = cxU + (s.ring[i * 2] * U - cxU) * prevK, paz = czU + (s.ring[i * 2 + 1] * U - czU) * prevK;
