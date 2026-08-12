@@ -29,18 +29,32 @@ export interface Road {
   length: number;
 }
 
+/**
+ * CACHED PER CITY, and this was a single shared variable until New York had no streets.
+ *
+ * Geoff: "New York needs its streets so add those." They were baked, present and correct — the
+ * reader was handing back somebody else's. One `roads` variable served every city: San Jose has no
+ * road network, so arriving there set it to the empty array, and every city visited afterwards got
+ * that empty array back from the `if (roads) return` short-circuit. Whether Manhattan had streets
+ * depended on where you had been first, which is the worst kind of bug to reproduce.
+ */
+const byCity = new Map<string, Road[]>();
+const inFlight = new Map<string, Promise<Road[]>>();
+/** The most recently loaded city, for getRoads() — the renderers ask per frame and pass no slug. */
 let roads: Road[] | null = null;
-let loading: Promise<Road[]> | null = null;
 
 export function getRoads(): Road[] | null { return roads; }
 
 export function loadRoads(slug?: string): Promise<Road[]> {
   const site = slug ? citySites().find((s) => s.slug === slug) : citySites()[0];
   if (!site?.city?.assets.roads) { roads = []; return Promise.resolve(roads); }
-  const url = cityAssetPath(site.slug, 'roads.bin');
-  if (roads) return Promise.resolve(roads);
-  if (loading) return loading;
-  loading = fetch(url)
+  const key = site.slug;
+  const cached = byCity.get(key);
+  if (cached) { roads = cached; return Promise.resolve(cached); }
+  const already = inFlight.get(key);
+  if (already) return already;
+  const url = cityAssetPath(key, 'roads.bin');
+  const loading = fetch(url)
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const buf = await res.arrayBuffer();
@@ -66,17 +80,22 @@ export function loadRoads(slug?: string): Promise<Road[]> {
         }
         out.push({ cls, pts, cum, length: s });
       }
+      byCity.set(key, out);
       roads = out;
       const km = out.reduce((a, r) => a + r.length, 0) / 1000;
-      console.log(`[city] ${out.length.toLocaleString()} roads, ${km.toFixed(0)} km`);
+      console.log(`[city] ${key}: ${out.length.toLocaleString()} roads, ${km.toFixed(0)} km`);
       return out;
     })
     .catch((err) => {
       // Scenery. A city with no road markings is worse than a city with them and better than no
       // city at all, so this never rejects into the render tree.
       console.error('[city] roads failed to load', err);
+      // NOT cached as an answer: a failed fetch must be retryable, where an empty road network
+      // cached under this city's name would be permanent for the session.
+      inFlight.delete(key);
       roads = [];
-      return roads;
+      return [];
     });
+  inFlight.set(key, loading);
   return loading;
 }

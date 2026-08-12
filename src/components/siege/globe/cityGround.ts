@@ -179,7 +179,17 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
       if (!s.trustBase || base == null || dot >= s.cosInner) return s.groundM;
       const dM = Math.acos(Math.min(1, dot)) * EARTH_R_M;
       const t = smooth((dM - s.innerM) / (s.outerM - s.innerM));
-      return s.groundM + (base - s.groundM) * t;
+      // LAND MAY NOT BLEND UNDER THE SEA. The mask has said this point is land; if the blend takes it
+      // below zero it goes under the ocean mesh and simply disappears, taking whatever stands on it.
+      //
+      // This is not hypothetical. Auditing the two new cities against the real tiles found it in
+      // both: New York reads -3 m south at 19 km and -12 m at 25 km (the Lower Bay shallows), and
+      // Seattle -8 m southwest at 20 km. Those are places the coarse data averages a shoreline into
+      // a negative, and the land there would have quietly drowned.
+      //
+      // Half a metre rather than zero, for the same reason the city's own ground is: ground at
+      // exactly the ocean's radius is coplanar with it and strobes.
+      return Math.max(0.5, s.groundM + (base - s.groundM) * t);
     }
 
     // WHAT THE SEA IS HERE. Shallow close in, blending out to the real depth at the outer radius —
