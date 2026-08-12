@@ -41,6 +41,14 @@ export const SAN_JOSE: SiteDef = {
   ground: {
     // 1,160 m — the mean of the measurements above across the built area. The city is genuinely a
     // plateau, so flattening it costs about 60 m of real relief at the rim and nothing in the middle.
+    // FOLLOW, not flatten. Geoff: "Costa Rica's terrain is very wrong... it's all flat... nearby
+    // the city are Poas volcano and other volcanoes that need to be there." The data was never
+    // missing — sampled on a 4 km grid it runs from 67 m to 3,058 m within forty kilometres, with
+    // Irazu at 3,058, Barva 2,533 and Poas 2,479. A twelve-kilometre flat disc was erasing the
+    // Valle Central and everything it sits in. Now the terrain keeps its shape and each building
+    // stands on its own piece of it, from ground.bin.
+    mode: 'follow',
+    // Still the reference height the city group sits at — per-building grounds are offsets from it.
     groundMetres: 1160,
     // Inland, so this is never read. Carried anyway because a site is one shape: a field that exists
     // only on coastal cities is a field every consumer has to test for.
@@ -70,18 +78,11 @@ export const SAN_JOSE: SiteDef = {
     // No water: OSM has almost nothing mapped as an area here. The rivers through San José — the
     // Torres and the María Aguilar — are steep wooded ravines mapped as lines, not surfaces, and a
     // line has no width to draw. Set this true if that ever changes.
-    // ROADS AND DETAIL ARE FALSE, AND THAT IS A STATEMENT OF FACT RATHER THAN A DECISION. The
-    // buildings came through — 29,402 of them, every landmark verified — and then Overpass began
-    // answering 429 and 406 to everything, so the road network and the 3D-shape layer never
-    // downloaded. They are one command each once it recovers:
-    //
-    //     node scripts/city/make-roads.mjs  san-jose
-    //     node scripts/city/make-detail.mjs san-jose
-    //
-    // then flip these two to true. Marking them true now would give a city that quietly fetches two
-    // 404s and shows nothing — the assets flags exist precisely so a half-built city is honest about
-    // being half-built rather than looking broken.
-    assets: { buildings: true, detail: false, roads: false, water: false },
+    // ROADS ARE IN: 6,198 of them, 1,700 km. Geoff: "there are no chasms, rivers, roads."
+    // Detail stays false — San Jose has almost nothing in OSM's 3D layer (165 elements against
+    // Manhattan's thousands), which is a fact about the city's mapping, not about the bake.
+    // Water stays false: the Torres and Maria Aguilar are mapped as lines, not surfaces.
+    assets: { buildings: true, detail: false, roads: true, water: false },
     drawWithinUnits: 400,
     // Fewer than Dubai's 9,000, and not arbitrarily: the network here is about a third the length,
     // and San José at night is genuinely darker and thinner than the Gulf.

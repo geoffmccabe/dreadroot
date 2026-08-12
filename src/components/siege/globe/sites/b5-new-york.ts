@@ -32,6 +32,8 @@ export const NEW_YORK: SiteDef = {
   ground: {
     // Low and coastal, like Dubai and for the same reasons: the beach is the band between this and
     // the water, and Manhattan's shoreline is a hard edge that wants no beach at all.
+    // FOLLOW, not flatten. Manhattan is not flat: the audit found 60 m of high ground 11 km north being levelled to 2 m.
+    mode: 'follow',
     groundMetres: 2,
     shallowSeaMetres: -30,
     // The built area reaches about 11 km from Midtown; 12 km covers it and matches the bake's clip.
@@ -43,16 +45,11 @@ export const NEW_YORK: SiteDef = {
 
   city: {
     bbox: [40.68, -74.04, 40.82, -73.90],
-    // DETAIL IS FALSE FOR NOW, and only that. Buildings, roads, water and the land mask are all in
-    // and all verified. Manhattan's building:part data is the densest on Earth, and those queries
-    // are heavy enough that Overpass 504s on them even when it is answering everything else — 3 of
-    // 9 tiles after three rounds. One command fills it in when the servers are quiet:
-    //
-    //     node scripts/city/make-detail.mjs new-york      (then flip this to true)
-    //
-    // What it buys is the spires and setbacks: One World Trade is 417 m to the ROOF here, and its
-    // mast to 541 m lives in that layer, as does the Empire State's.
-    assets: { buildings: true, detail: false, roads: true, water: true },
+    // ALL FOUR. The 3D layer is what turns One World Trade from a 417 m box into the full 541 m
+    // antiprism with its mast, and the Chrysler from 246 m into 319 m with its spire. Buildings over
+    // 100 m went from 441 to 3,222 — most of Manhattan's skyline is described in that layer and
+    // none of it was being drawn.
+    assets: { buildings: true, detail: true, roads: true, water: true },
     drawWithinUnits: 400,
     cars: 9000,
     // Manhattan has a great many buildings over 180 m, so the Dubai threshold works here unchanged.

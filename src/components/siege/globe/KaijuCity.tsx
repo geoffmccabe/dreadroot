@@ -75,6 +75,8 @@ function CityMesh({ city, slug }: { city: City; slug: string }) {
   // The registry entry, so the asset paths, the draw distance and the beacon height all come from
   // the site rather than from constants scattered through the renderers.
   const site = citySites().find((s) => s.slug === slug);
+  /** The height the group itself sits at; per-building grounds are offsets from it. */
+  const refGroundM = site?.ground.groundMetres ?? 0;
   const camera = useThree((s) => s.camera);
   const group = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.InstancedMesh>(null);
@@ -132,7 +134,11 @@ function CityMesh({ city, slug }: { city: City; slug: string }) {
       const b = city.buildings[i];
       sizes[i * 3] = b.w; sizes[i * 3 + 1] = b.h; sizes[i * 3 + 2] = b.d;
       seeds[i] = ((i * 2654435761) % 1024) / 1024;
-      dummy.position.set(b.x * U, 0, b.z * U);
+      // EACH BUILDING ON ITS OWN GROUND. The group's origin sits at the city's reference height, so
+      // a building whose measured ground differs from it is offset by the difference. Without this
+      // the whole city is one plane and Seattle's hills and San Jose's valley are levelled — which
+      // is exactly what Geoff saw.
+      dummy.position.set(b.x * U, b.g == null ? 0 : (b.g - refGroundM) * U, b.z * U);
       // NEGATIVE rot. The bake stores the angle in a (east, south) plane, and a rotation about the
       // local +Y axis carries +X toward -Z — the opposite way round. Getting this wrong mirrors
       // every building's orientation, which on a grid city reads as "almost right" and is exactly

@@ -61,6 +61,31 @@ export interface SiteGround {
   /** Blended back to the real terrain by this radius. Put it over empty ground, not through a district. */
   outerMetres: number;
   /**
+   * FLATTEN the ground under the city, or FOLLOW it?
+   *
+   * Geoff: "we need Seattle to look like Seattle... Costa Rica's terrain is very wrong, it's all
+   * flat... nearby the city are Poas volcano and other volcanoes that need to be there."
+   *
+   * 'flatten' forces one height across the whole core. It is the original behaviour and it is right
+   * for exactly one situation: a city that is genuinely flat AND whose elevation data is wrong.
+   * Dubai is both — the tiles read -87 m across the emirate — so it stays.
+   *
+   * 'follow' leaves the measured elevation alone and puts every building on its own piece of it,
+   * using the per-building heights baked by scripts/city/make-ground.mjs. The valley San Jose sits
+   * in comes back, and so do Seattle's hills. The data was always there: sampled around San Jose it
+   * runs from 67 m to 3,058 m within forty kilometres.
+   *
+   * SEA IS STILL FORCED in follow mode, because the mask is better evidence than the tiles: New
+   * York's East River reads +4 m, and left alone it would be dry ground between Manhattan and
+   * Queens.
+   *
+   * Procedural relief is suppressed across a follow city's footprint even so — see cityFlatness.
+   * That is not optional: the renderer band-limits its fractal detail by the patch's own vertex
+   * spacing, so the height at a point CHANGES with the level of detail, and nothing sampled offline
+   * could match it at every LOD. Measured elevation is stable; the fractal on top of it is not.
+   */
+  mode?: 'flatten' | 'follow';
+  /**
    * Is the planet's own elevation data usable OUTSIDE the city?
    *
    * Geoff, at San Jose: "the land is perfectly flat. San Jose has deep valleys, hills, and

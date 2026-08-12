@@ -52,6 +52,8 @@ interface CitySite {
   seaM: number;
   /** Whether the planet's elevation outside the core is usable. See SiteGround.trustBaseOutside. */
   trustBase: boolean;
+  /** 'follow' keeps the real terrain and puts buildings on it; 'flatten' forces one height. */
+  follow: boolean;
   /** cos of the two radii as angles, so the common case is one dot product. */
   cosInner: number;
   cosOuter: number;
@@ -64,7 +66,8 @@ const EARTH_R_M = PLANET_RADIUS * METRES_PER_UNIT;
 // the raw tile value, which over Dubai is -87 m everywhere and would put a cliff along the shore.
 
 function makeSite(name: string, slug: string, lat: number, lon: number, groundM: number,
-                  innerM: number, outerM: number, seaM: number, trustBase: boolean): CitySite {
+                  innerM: number, outerM: number, seaM: number, trustBase: boolean,
+                  follow: boolean): CitySite {
   const d = new Float64Array(3);
   latLonToDirection(lat, lon, d);
   // East = worldY x up, north = up x east — the same frame the bake used, so a building's stored
@@ -79,7 +82,7 @@ function makeSite(name: string, slug: string, lat: number, lon: number, groundM:
   const nz = d[0] * ey - d[1] * ex;
   return {
     name, slug, dx: d[0], dy: d[1], dz: d[2], ex, ey, ez, nx, ny, nz, groundM, innerM, outerM,
-    seaM, trustBase,
+    seaM, trustBase, follow,
     cosInner: Math.cos(innerM / EARTH_R_M),
     cosOuter: Math.cos(outerM / EARTH_R_M),
   };
@@ -117,6 +120,7 @@ const SITES: CitySite[] = citySites()
     d.name, d.slug, d.lat, d.lon,
     d.ground.groundMetres, d.ground.innerMetres, d.ground.outerMetres, d.ground.shallowSeaMetres,
     d.ground.trustBaseOutside !== false,
+    d.ground.mode === 'follow',
   ));
 
 /** Smootherstep — zero derivative at both ends, so the coastline has no visible crease. */
@@ -172,6 +176,11 @@ export function cityBaseMetres(x: number, y: number, z: number, base: number | n
     // So land holds. There is a step where the override ends, 26 km out and well beyond every
     // district, and a step in empty desert nobody walks to is a far better trade than drowning it.
     if (landFrac >= 1) {
+      // FOLLOW MODE LEAVES THE LAND ALONE. The terrain keeps its own shape — hills, valleys, the
+      // flanks of volcanoes — and the buildings are placed on it individually from ground.bin. The
+      // only correction is the floor: a coarse tile that averages a shoreline into a negative would
+      // otherwise put dry land under the ocean mesh.
+      if (s.follow) return base == null ? s.groundM : Math.max(0.5, base);
       // FLAT IN THE CORE, REAL OUTSIDE IT — when the surrounding data is worth having. Dubai sets
       // trustBaseOutside false because its tiles read -87 m everywhere and blending toward that
       // drowns the desert; San Jose leaves it true, so past the core the Valle Central's walls and

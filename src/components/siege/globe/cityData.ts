@@ -35,6 +35,13 @@ export interface Building {
   /** Rotation of the long axis, in the (east, south) plane. */
   rot: number;
   h: number;
+  /**
+   * Ground elevation under THIS building, in metres above sea level.
+   *
+   * Null when the city has no ground.bin, which means it is a 'flatten' city and every building
+   * sits at the city's single declared height. See scripts/city/make-ground.mjs.
+   */
+  g: number | null;
 }
 
 export interface City {
@@ -106,7 +113,9 @@ export function parseCity(buf: ArrayBuffer): { lat: number; lon: number; buildin
   const buildings: Building[] = new Array(count);
   for (let i = 0; i < count; i++) {
     const o = i * 6;
-    buildings[i] = { x: f[o], z: f[o + 1], w: f[o + 2], d: f[o + 3], rot: f[o + 4], h: f[o + 5] };
+    // g null here: parseCity reads the box file alone, which the headless checks exercise. The
+    // per-building ground arrives from a second file and is filled in by the loader.
+    buildings[i] = { x: f[o], z: f[o + 1], w: f[o + 2], d: f[o + 3], rot: f[o + 4], h: f[o + 5], g: null };
   }
   return { lat, lon, buildings };
 }
@@ -167,6 +176,28 @@ function loadCityFrom(url: string, slug: string): Promise<City | null> {
       // The city's own declared ground, NOT a terrain sample — the terrain at Dubai is 87 m of
       // sea water and cityGround is what overrides it. Taking it from the same constant means the
       // buildings and the ground they stand on can never drift apart.
+      // PER-BUILDING GROUND, if this city has it. Fetched alongside rather than inside the main
+      // file so the format did not have to change and a city without it still loads.
+      //
+      // A FAILURE HERE IS NOT FATAL. Without it every building falls back to the city's single
+      // declared height, which is exactly what every city did before this existed — a flatter city,
+      // not a broken one.
+      try {
+        const gres = await fetch(cityAssetPath(slug, 'ground.bin'));
+        if (gres.ok) {
+          const gbuf = await gres.arrayBuffer();
+          const g = new Int16Array(gbuf);
+          if (g.length === count) {
+            for (let i = 0; i < count; i++) buildings[i].g = g[i];
+            let lo = Infinity, hi = -Infinity;
+            for (let i = 0; i < count; i++) { if (g[i] < lo) lo = g[i]; if (g[i] > hi) hi = g[i]; }
+            console.log(`[city] ground under ${slug}: ${lo} m to ${hi} m`);
+          } else {
+            console.warn(`[city] ground.bin has ${g.length} entries for ${count} buildings — ignored`);
+          }
+        }
+      } catch { /* no ground.bin for this city; the flat fallback is correct */ }
+
       const frame = cityFrame(lat, lon, cityGroundMetres(slug));
       city = { lat, lon, buildings, ...frame };
       cityDiag.state = 'ready';

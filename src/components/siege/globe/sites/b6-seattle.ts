@@ -32,6 +32,8 @@ export const SEATTLE: SiteDef = {
   ground: {
     // 35 m, the measured downtown elevation, rather than an average over the hills — the core is
     // what gets flattened, so the core's own height is the honest number to use.
+    // FOLLOW, not flatten. Geoff: "we need Seattle to look like Seattle." It is hills, and the flat core was shaving 51 m off Capitol Hill alone.
+    mode: 'follow',
     groundMetres: 35,
     shallowSeaMetres: -40,
     // Deliberately small. See the note above: past this the real hills come back.
