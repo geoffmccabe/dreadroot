@@ -1,0 +1,68 @@
+[
+ {
+  "name": "Rainier Square",
+  "h": 259,
+  "x": 19,
+  "z": -108
+ },
+ {
+  "name": "F5 Tower",
+  "h": 201,
+  "x": 295,
+  "z": 310
+ },
+ {
+  "name": "Space Needle",
+  "h": 184,
+  "x": -1074,
+  "z": -1392
+ },
+ {
+  "name": "Amazon.com Doppler",
+  "h": 160,
+  "x": -247,
+  "z": -774
+ },
+ {
+  "name": "Amazon.com Day 1",
+  "h": 159,
+  "x": -385,
+  "z": -896
+ },
+ {
+  "name": "Hyatt Regency Seattle",
+  "h": 158,
+  "x": 53,
+  "z": -765
+ },
+ {
+  "name": "Amazon.com re:Invent",
+  "h": 158,
+  "x": -279,
+  "z": -941
+ },
+ {
+  "name": "Rainier Tower",
+  "h": 156,
+  "x": 49,
+  "z": -91
+ },
+ {
+  "name": "First Light Seattle",
+  "h": 154,
+  "x": -450,
+  "z": -537
+ },
+ {
+  "name": "Qwest Plaza",
+  "h": 152,
+  "x": 45,
+  "z": -583
+ },
+ {
+  "name": "Amazon.com Blackfoot",
+  "h": 150,
+  "x": -69,
+  "z": -852
+ }
+]

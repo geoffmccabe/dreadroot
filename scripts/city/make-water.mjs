@@ -29,7 +29,7 @@
 // Writes: public/siege/city/<slug>/water.bin
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCity, slugFromArgv, overpassTiled } from './cityConfig.mjs';
+import { loadCity, slugFromArgv, overpassTiled, assembleRings } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
 const RAW = `${city.rawDir}/coast.json`;
@@ -120,14 +120,10 @@ for (const e of els) {
   // Ways carry their own geometry; relations (multipolygons — the Creek and the bigger lagoons are
   // mapped this way) carry it on their outer members. Skipping relations would lose exactly the
   // large, famous water that prompted this.
-  const candidates = [];
-  if (e.geometry) candidates.push(e.geometry);
-  else if (e.members) {
-    for (const m of e.members) {
-      if (m.role === 'inner') continue;            // islands in a lake; ignored, they are tiny here
-      if (m.geometry && m.geometry.length >= 3) candidates.push(m.geometry);
-    }
-  }
+  // STITCHED into closed rings. Taking members one at a time gave open arcs, which triangulate to
+  // slivers or to nothing — the drawn water and the land mask must agree, and they only do if both
+  // assemble the relation the same way.
+  const candidates = e.geometry ? [e.geometry] : (e.members ? assembleRings(e.members) : []);
 
   for (const g of candidates) {
     if (g.length < 3) continue;

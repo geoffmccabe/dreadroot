@@ -36,8 +36,11 @@ export const SEATTLE: SiteDef = {
     mode: 'follow',
     groundMetres: 35,
     shallowSeaMetres: -40,
-    // Deliberately small. See the note above: past this the real hills come back.
-    innerMetres: 9000,
+    // 10 km, matching the bake's clip: the furthest building is 9,382 m out, and in FOLLOW mode
+    // this radius is what suppresses procedural relief across the city so the buildings and the
+    // ground agree. A building outside it stands on fractal terrain nothing sampled offline could
+    // have predicted.
+    innerMetres: 10000,
     outerMetres: 20000,
     // Seattle IS its hills; holding them flat past the core would be the worst possible choice here.
     trustBaseOutside: true,
@@ -45,6 +48,8 @@ export const SEATTLE: SiteDef = {
 
   city: {
     bbox: [47.55, -122.42, 47.68, -122.27],
+    // All four. The 3D layer here is thin next to Manhattan's — Seattle has far less mapped in OSM's
+    // Simple 3D Buildings — but it carries the stadiums and the Seattle Center structures.
     assets: { buildings: true, detail: true, roads: true, water: true },
     drawWithinUnits: 400,
     cars: 5000,

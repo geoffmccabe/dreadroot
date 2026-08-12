@@ -17,7 +17,7 @@
   ],
   "coastal": true,
   "groundMetres": 35,
-  "maxRangeMetres": 9000,
+  "maxRangeMetres": 10000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [

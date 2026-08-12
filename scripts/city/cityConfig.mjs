@@ -178,3 +178,52 @@ export async function overpassTiled(city, name, stepDeg, buildQuery, bbox) {
   console.error(`${name}: ${merged.length} elements from ${done}/${tiles.length} tiles`);
   return { elements: merged, failed };
 }
+
+/**
+ * Assemble a multipolygon relation's member ways into closed rings.
+ *
+ * A BIG LAKE IS NOT ONE WAY. OSM maps anything with islands, or anything longer than a way's node
+ * limit, as a relation whose outer boundary is split across many member ways — each an OPEN ARC,
+ * in arbitrary order and arbitrary direction. Treating each member as a polygon in its own right
+ * fills nothing, because an arc has no interior.
+ *
+ * That is exactly why Seattle's first two land masks had Lake Union, Lake Washington and the Ship
+ * Canal as dry ground while Elliott Bay and Puget Sound came out right: salt water arrives as
+ * coastline ways and works, fresh water arrives as relations and did not. Lake Washington alone is
+ * 112 member ways.
+ *
+ * So: walk the members, joining end to end, reversing where needed, until the ring closes.
+ * Endpoints are matched with a tolerance because they are floats that have been through a
+ * projection — an exact comparison finds nothing.
+ */
+export function assembleRings(members, tolMetres = 1) {
+  const ways = members
+    .filter((m) => m.role !== 'inner' && m.geometry && m.geometry.length >= 2)
+    .map((m) => m.geometry.slice());
+  const rings = [];
+  const used = new Array(ways.length).fill(false);
+  // Degrees, roughly: a metre of latitude. Good enough to decide "is this the same node".
+  const tol = tolMetres / 111320;
+  const near = (a, b) => Math.abs(a.lat - b.lat) < tol && Math.abs(a.lon - b.lon) < tol;
+
+  for (let i = 0; i < ways.length; i++) {
+    if (used[i]) continue;
+    used[i] = true;
+    const ring = ways[i].slice();
+    let grew = true;
+    while (grew) {
+      grew = false;
+      const end = ring[ring.length - 1];
+      for (let j = 0; j < ways.length; j++) {
+        if (used[j]) continue;
+        const w = ways[j];
+        if (near(end, w[0])) { ring.push(...w.slice(1)); used[j] = true; grew = true; break; }
+        if (near(end, w[w.length - 1])) { ring.push(...w.slice(0, -1).reverse()); used[j] = true; grew = true; break; }
+      }
+      // A ring that has closed on itself is finished, whatever is left over.
+      if (ring.length > 3 && near(ring[0], ring[ring.length - 1])) break;
+    }
+    if (ring.length >= 4) rings.push(ring);
+  }
+  return rings;
+}

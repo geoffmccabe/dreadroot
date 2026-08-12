@@ -38,7 +38,7 @@
 // Writes: src/components/siege/globe/sites/landmasks/<slug>.ts
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { loadCity, slugFromArgv } from './cityConfig.mjs';
+import { loadCity, slugFromArgv, assembleRings } from './cityConfig.mjs';
 
 const city = loadCity(slugFromArgv());
 const BIN = `${city.outDir}/buildings.bin`;
@@ -116,19 +116,31 @@ function stroke(x0, y0, x1, y1) {
 const coast = JSON.parse(readFileSync(COAST, 'utf8')).elements ?? [];
 let coastWays = 0, waterAreas = [];
 for (const e of coast) {
-  const g = e.geometry ?? [];
-  if (g.length < 2) continue;
   const t = e.tags ?? {};
   if (t.natural === 'coastline') {
+    const g = e.geometry ?? [];
+    if (g.length < 2) continue;
     coastWays++;
     for (let i = 1; i < g.length; i++) {
       const [ax, ay] = project(g[i - 1]);
       const [bx, by] = project(g[i]);
       stroke(ax, ay, bx, by);
     }
-  } else {
-    // Inland water: kept as a polygon for step 4 rather than stroked, because it is an AREA and
-    // its interior is what matters, not its edge.
+    continue;
+  }
+  // INLAND WATER, AND IT MUST INCLUDE RELATIONS. A big lake is almost always a multipolygon,
+  // because it has islands — and a relation carries its geometry on its MEMBERS, not on itself.
+  // Reading only `e.geometry` skipped every one of them silently, which is why Seattle's first mask
+  // had Lake Union, Lake Washington and the Ship Canal as dry land while Elliott Bay and Puget
+  // Sound came out correctly: the salt water arrives as coastline, the fresh water as relations.
+  //
+  // make-water already did this properly. The two were reading the same file differently, which is
+  // the sort of divergence that produces a city where the sea is right and the lakes are not.
+  // STITCHED, not taken member by member — see assembleRings. Lake Washington's outer boundary is
+  // 112 separate open arcs, and filling each one individually fills nothing at all.
+  const rings = e.geometry ? [e.geometry] : (e.members ? assembleRings(e.members) : []);
+  for (const g of rings) {
+    if (g.length < 3) continue;
     waterAreas.push(g.map(project));
   }
 }
