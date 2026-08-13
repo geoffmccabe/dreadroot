@@ -51,7 +51,12 @@ export const NEW_YORK: SiteDef = {
     // none of it was being drawn.
     assets: { buildings: true, detail: true, roads: true, water: true, bridges: true },
     drawWithinUnits: 400,
-    cars: 9000,
+    // FOUR TIMES, as asked. Manhattan at night is the densest traffic anywhere in the framework and
+    // 9,000 over 500 km of street network read as a trickle. Affordable because a vehicle costs a
+    // little arithmetic and two points in one buffer, and because anything past 4 km stops being
+    // stepped at all — its lamps are still drawn, they simply hold still, which at that distance is
+    // indistinguishable from moving.
+    cars: 36000,
     // Manhattan has a great many buildings over 180 m, so the Dubai threshold works here unchanged.
     beaconMinHeightMetres: 180,
 

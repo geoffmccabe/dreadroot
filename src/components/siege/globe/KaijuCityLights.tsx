@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
 import { loadRoads, getRoads, ROAD_TRAFFIC, type Road } from './cityRoads';
 import type { City } from './cityData';
+import { currentSite } from './sites';
 
 /**
  * How many vehicles across the whole 5,921 km of road.
@@ -36,7 +37,24 @@ import type { City } from './cityData';
  * points in one buffer. The earlier 900 were spread over 386 km of motorway only, which is why
  * they read as sparse: the same count over the full network would have been a rumour.
  */
-const CARS = 9000;
+const CARS_FALLBACK = 9000;
+
+/**
+ * How many vehicles this city wants — READ FROM THE SITE, which it was not until now.
+ *
+ * Geoff: "for nyc can you add 4x more car lights moving around?"
+ *
+ * The count was a hardcoded 9,000 for every city on the planet, while each site carried its own
+ * `cars` figure that nothing read. The CITY panel dutifully displayed that figure, so it has been
+ * reporting a number with no effect on anything — which is precisely the failure that panel's own
+ * header warns against, and it went unnoticed because 9,000 happened to be Dubai's and New York's
+ * value anyway. San Jose asked for 3,500 and got 9,000; Seattle asked for 5,000 and got 9,000.
+ *
+ * Capped, because this allocates two points per vehicle and walks them all on the CPU each frame.
+ * Beyond the cap the limit is honesty rather than capability: a city asking for a million would get
+ * one, badly.
+ */
+const MAX_CARS = 60000;
 /* Speeds are per road class now — see CLASS_SPEED below. */
 /** Headlight/taillight size in metres. Small — a car is 2 m wide and 20 km of city is in frame. */
 /**
@@ -107,6 +125,8 @@ export function KaijuCityLights({ city, slug }: { city: City; slug: string }) {
   }, []);
   useEffect(() => () => dot.dispose(), [dot]);
 
+  const carCount = Math.min(MAX_CARS, currentSite()?.city?.cars ?? CARS_FALLBACK);
+
   const [roads, setRoads] = useState<Road[] | null>(getRoads());
   // BY SLUG. Without it this loads the FIRST city on the registry, so San Jose's traffic would
   // drive along Dubai's roads — on the other side of the planet, and invisible.
@@ -134,7 +154,7 @@ export function KaijuCityLights({ city, slug }: { city: City; slug: string }) {
     if (grand <= 0) return [] as Car[];
 
     const out: Car[] = [];
-    for (let i = 0; i < CARS; i++) {
+    for (let i = 0; i < carCount; i++) {
       const pick = Math.random() * grand;
       let lo = 0, hi = roads.length - 1;
       while (lo < hi) { const mid = (lo + hi) >> 1; if (weight[mid] < pick) lo = mid + 1; else hi = mid; }
@@ -152,7 +172,7 @@ export function KaijuCityLights({ city, slug }: { city: City; slug: string }) {
       });
     }
     return out;
-  }, [roads]);
+  }, [roads, carCount]);
 
   /** Every roof tall enough for a warning lamp, with its own blink period and phase. */
   const beaconData = useMemo(() => {
