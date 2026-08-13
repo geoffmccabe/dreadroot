@@ -50,7 +50,11 @@ export const SEATTLE: SiteDef = {
     bbox: [47.55, -122.42, 47.68, -122.27],
     // All four. The 3D layer here is thin next to Manhattan's — Seattle has far less mapped in OSM's
     // Simple 3D Buildings — but it carries the stadiums and the Seattle Center structures.
-    assets: { buildings: true, detail: true, roads: true, water: true },
+    // BRIDGES INCLUDED, and Seattle's are unlike anywhere else's: Lake Washington is too deep and
+    // too soft-bottomed for piers, so the Evergreen Point and the Lacey V. Murrow FLOAT — the two
+    // longest floating bridges in the world, lying flat on the water rather than spanning it. The
+    // bake keeps them at 2 m instead of arching them 42; see make-bridges.
+    assets: { buildings: true, detail: true, roads: true, water: true, bridges: true },
     drawWithinUnits: 400,
     cars: 5000,
     // 120 m, between Dubai's 180 and San Jose's 60. Columbia Center is 285 m and there are a dozen

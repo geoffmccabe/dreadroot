@@ -92,6 +92,28 @@ let landAt = null;
   }
 }
 
+// WHICH NAMES ARE FLOATING. OSM tags only SOME member ways of a floating bridge as floating: two of
+// the Evergreen Point's ways carry it and the rest do not, and the Lacey V. Murrow carries it on
+// none at all. Taking each way at its word therefore arches half of a pontoon bridge into the sky
+// and leaves the other half on the water, which is worse than getting it uniformly wrong.
+//
+// So the flag is propagated BY NAME — one tagged way makes every way of that name floating — and a
+// city may name the stubborn ones in its config, which is the honest place for a fact that OSM
+// simply does not record.
+const floatingNames = new Set();
+for (const e of els) {
+  const t = e.tags ?? {};
+  if (!t.name) continue;
+  if (t.bridge === 'floating' || /floating|pontoon/.test(t['bridge:structure'] ?? '')) {
+    floatingNames.add(t.name);
+  }
+}
+const configFloating = (city.floatingBridges ?? []).map((n) => n.toLowerCase());
+if (floatingNames.size || configFloating.length) {
+  console.error(`floating: ${[...floatingNames].join(', ') || '(none tagged)'}`
+    + (configFloating.length ? `  + named in config: ${city.floatingBridges.join(', ')}` : ''));
+}
+
 const bridges = [];
 let dropped = 0;
 for (const e of els) {
@@ -127,13 +149,55 @@ for (const e of els) {
   // or two of 41 m, because they were all built to clear the same shipping channel. So that is the
   // number. The George Washington is genuinely 65 m and will read a little low; one bridge slightly
   // short is a far better error than four of them arched like rainbows.
-  const crown = overWater ? 42 : 12;
+  // A FLOATING BRIDGE DOES NOT ARCH, and Seattle is the one city on Earth where this matters.
+  //
+  // The Evergreen Point and the Lacey V. Murrow are the two longest floating bridges in the world,
+  // and they are famous precisely because they lie FLAT ON Lake Washington rather than spanning it —
+  // the lake is too deep and too soft-bottomed for piers. Handed the ordinary 42 m crown they would
+  // arch two and a half kilometres into the sky over a lake, which is about the most conspicuous
+  // thing that could be wrong with Seattle. OSM says so directly.
+  const name = t.name ?? '';
+  const floating = t.bridge === 'floating'
+    || /floating|pontoon/.test(t['bridge:structure'] ?? '')
+    || (name && floatingNames.has(name))
+    || (name && configFloating.some((f) => name.toLowerCase().includes(f)));
+
+  // Two metres: a pontoon deck sits just clear of the water it rests on.
+  const crown = floating ? 2 : (overWater ? 42 : 12);
   bridges.push({
     name: t.name ?? '', pts, width: widthOf(t), span, crown,
     // Towers belong to long WATER crossings. An elevated railway has piers, not towers.
-    towers: overWater && span >= TOWER_SPAN_M,
-    overWater,
+    // No towers on a pontoon either — it has no suspension to hang from.
+    towers: !floating && overWater && span >= TOWER_SPAN_M,
+    overWater, floating,
   });
+}
+
+// A STRUCTURE'S UNNAMED CARRIAGEWAYS ARE THE SAME STRUCTURE. Naming catches the Evergreen Point and
+// the Lacey V. Murrow, and leaves the two 2.6 km unnamed ways beside them — the I-90 roadway decks —
+// arching 42 m over a lake their own bridge lies flat on. That is not a naming problem, it is a
+// geometric fact: they run alongside something already known to float.
+//
+// So a water crossing whose middle sits close to a floating one, and which is of comparable length,
+// floats too. Distance rather than name, because OSM's names here are simply absent.
+{
+  const mid = (b) => b.pts[Math.floor(b.pts.length / 2)];
+  const floats = bridges.filter((b) => b.floating);
+  let adopted = 0;
+  for (const b of bridges) {
+    if (b.floating || !b.overWater || b.span < 800) continue;
+    const m = mid(b);
+    for (const f of floats) {
+      const fm = mid(f);
+      // 250 m: wide enough to take a parallel carriageway of the same crossing, narrow enough that
+      // an unrelated bridge a quarter-kilometre away is not swept up with it.
+      if (Math.hypot(m[0] - fm[0], m[1] - fm[1]) < 250 && b.span > f.span * 0.5) {
+        b.floating = true; b.crown = 2; b.towers = false; adopted++;
+        break;
+      }
+    }
+  }
+  if (adopted) console.error(`${adopted} unnamed spans adopted as floating by proximity`);
 }
 
 bridges.sort((a, b) => b.span - a.span);
@@ -142,7 +206,7 @@ const water = bridges.filter((b) => b.overWater);
 console.error(`${water.length} of them cross water; the rest are viaducts at a level 12 m`);
 console.error('longest water crossings:');
 for (const b of water.slice(0, 10)) {
-  console.error(`  ${Math.round(b.span).toString().padStart(5)} m  crown ${Math.round(b.crown)} m  ${b.width} m wide  ${b.towers ? 'towers  ' : '        '}${b.name || '(unnamed)'}`);
+  console.error(`  ${Math.round(b.span).toString().padStart(5)} m  crown ${Math.round(b.crown)} m  ${b.width} m wide  ${b.towers ? 'towers  ' : b.floating ? 'FLOATING' : '        '}${b.name || '(unnamed)'}`);
 }
 
 // uint32 count, then per bridge: uint8 flags(1=towers), uint16 points, int16 width, int16 crown,

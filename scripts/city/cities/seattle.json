@@ -113,5 +113,12 @@
     47.605,
     -122.395
   ],
-  "seaSeedNote": "Elliott Bay, west of the waterfront and open to Puget Sound."
+  "seaSeedNote": "Elliott Bay, west of the waterfront and open to Puget Sound.",
+  "floatingBridges": [
+    "Lacey V. Murrow",
+    "Homer M. Hadley",
+    "Evergreen Point",
+    "SR 520"
+  ],
+  "floatingBridgesNote": "OSM tags only some member ways of these as floating, and the Lacey V. Murrow none at all. They are the two longest floating bridges in the world and lie flat on Lake Washington; arching them 42 m would be the most conspicuous possible error about Seattle."
 }
