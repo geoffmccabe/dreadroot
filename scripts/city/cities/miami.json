@@ -3,29 +3,109 @@
   "name": "Miami",
   "lat0": 25.7743,
   "lon0": -80.1937,
-  "bbox": [25.70, -80.30, 25.87, -80.11],
-  "coastBbox": [25.58, -80.42, 25.98, -80.00],
+  "bbox": [
+    25.7,
+    -80.3,
+    25.87,
+    -80.11
+  ],
+  "coastBbox": [
+    25.653,
+    -80.3284,
+    25.8956,
+    -80.059
+  ],
   "coastal": true,
-  "seaSeed": [25.7600, -80.1750],
+  "seaSeed": [
+    25.76,
+    -80.175
+  ],
   "seaSeedNote": "Biscayne Bay between Brickell and Key Biscayne. Seeded in the BAY rather than the Atlantic because the bay is what the city is built around and what every causeway crosses; it reaches the ocean through Government Cut, which is 200 m wide and easily open at a 10 m raster.",
   "groundMetres": 2,
   "maxRangeMetres": 11000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [
-    { "name": "Downtown / Brickell", "s": 25.750, "w": -80.220, "n": 25.800, "e": -80.170 },
-    { "name": "Wynwood / Midtown",   "s": 25.790, "w": -80.220, "n": 25.840, "e": -80.170 },
-    { "name": "Miami Beach",         "s": 25.760, "w": -80.150, "n": 25.850, "e": -80.110 },
-    { "name": "Coral Gables / west", "s": 25.700, "w": -80.300, "n": 25.790, "e": -80.220 },
-    { "name": "North / Little Haiti", "s": 25.840, "w": -80.230, "n": 25.870, "e": -80.150 }
+    {
+      "name": "Downtown / Brickell",
+      "s": 25.75,
+      "w": -80.22,
+      "n": 25.8,
+      "e": -80.17
+    },
+    {
+      "name": "Wynwood / Midtown",
+      "s": 25.79,
+      "w": -80.22,
+      "n": 25.84,
+      "e": -80.17
+    },
+    {
+      "name": "Miami Beach",
+      "s": 25.76,
+      "w": -80.15,
+      "n": 25.85,
+      "e": -80.11
+    },
+    {
+      "name": "Coral Gables / west",
+      "s": 25.7,
+      "w": -80.3,
+      "n": 25.79,
+      "e": -80.22
+    },
+    {
+      "name": "North / Little Haiti",
+      "s": 25.84,
+      "w": -80.23,
+      "n": 25.87,
+      "e": -80.15
+    }
   ],
   "landmarks": [
-    { "name": "Panorama Tower / Brickell", "lat": 25.7620, "lon": -80.1930, "within": 300, "expect": 20 },
-    { "name": "Freedom Tower / downtown",  "lat": 25.7810, "lon": -80.1900, "within": 300, "expect": 20 },
-    { "name": "Brickell City Centre",      "lat": 25.7670, "lon": -80.1930, "within": 300, "expect": 20 },
-    { "name": "South Beach / Ocean Drive", "lat": 25.7800, "lon": -80.1300, "within": 400, "expect": 20 },
-    { "name": "Wynwood",                   "lat": 25.8010, "lon": -80.1990, "within": 400, "expect": 30 },
-    { "name": "Coral Gables",              "lat": 25.7210, "lon": -80.2680, "within": 500, "expect": 20 }
+    {
+      "name": "Panorama Tower / Brickell",
+      "lat": 25.762,
+      "lon": -80.193,
+      "within": 300,
+      "expect": 20
+    },
+    {
+      "name": "Freedom Tower / downtown",
+      "lat": 25.781,
+      "lon": -80.19,
+      "within": 300,
+      "expect": 20
+    },
+    {
+      "name": "Brickell City Centre",
+      "lat": 25.767,
+      "lon": -80.193,
+      "within": 300,
+      "expect": 20
+    },
+    {
+      "name": "South Beach / Ocean Drive",
+      "lat": 25.78,
+      "lon": -80.13,
+      "within": 400,
+      "expect": 20
+    },
+    {
+      "name": "Wynwood",
+      "lat": 25.801,
+      "lon": -80.199,
+      "within": 400,
+      "expect": 30
+    },
+    {
+      "name": "Coral Gables",
+      "lat": 25.721,
+      "lon": -80.268,
+      "within": 500,
+      "expect": 20
+    }
   ],
-  "note": "FLAT — 1 to 3 m everywhere, which is the truth about Miami rather than a limitation. The mask does the work here instead: Miami Beach is a barrier island reading -1 m in the coarse data, and Biscayne Bay between it and downtown is the whole shape of the city. Causeways cross that bay, so bridges matter."
+  "note": "FLAT — 1 to 3 m everywhere, which is the truth about Miami rather than a limitation. The mask does the work here instead: Miami Beach is a barrier island reading -1 m in the coarse data, and Biscayne Bay between it and downtown is the whole shape of the city. Causeways cross that bay, so bridges matter.",
+  "coastBboxNote": "Sized to the MASK GRID plus 2.5 km, not by eye. The flood fill only reads coastline inside the grid; the margin exists so it cannot walk around the ends of the shore at the boundary. The first version of this box was three times larger, which at one Overpass tile every three minutes is hours spent fetching open ocean nobody will ever see."
 }

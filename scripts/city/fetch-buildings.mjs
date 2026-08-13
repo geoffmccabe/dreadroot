@@ -266,6 +266,10 @@ async function main() {
   const mPerLon = METRES_PER_DEG_LAT * Math.cos((lat0 * Math.PI) / 180);
 
   mkdirSync(CACHE_DIR, { recursive: true });
+  // Tiles proven empty by a SECOND independent pass. See the note where it is read.
+  const emptyFile = `${city.rawDir}/verified-empty.json`;
+  const verifiedEmpty = new Set(existsSync(emptyFile) ? JSON.parse(readFileSync(emptyFile, 'utf8')) : []);
+  const saveEmpty = () => writeFileSync(emptyFile, JSON.stringify([...verifiedEmpty]));
   const out = [];
   const ids = [];
   const failedTiles = [];
@@ -292,6 +296,7 @@ async function main() {
         const tileKey = `${s.toFixed(4)}_${w.toFixed(4)}_${n.toFixed(4)}_${e.toFixed(4)}`;
         const cacheFile = `${CACHE_DIR}/${tileKey}.json`;
         let tileRows = null;
+        let wasCachedEmpty = false;
         // AN EMPTY CACHED TILE IS NEVER TRUSTED.
         //
         // Twice now a tile has been recorded as "no buildings here" when the truth was 871 buildings
@@ -306,8 +311,19 @@ async function main() {
         if (existsSync(cacheFile)) {
           tileRows = JSON.parse(readFileSync(cacheFile, 'utf8'));
           if (tileRows.length === 0) {
-            note(`  ${s.toFixed(3)},${w.toFixed(3)}  cached EMPTY — distrusted, refetching\n`);
-            tileRows = null;
+            // ...UNLESS IT HAS ALREADY BEEN RE-VERIFIED. Distrusting every empty tile forever is
+            // right the first time and pure cost afterwards: Miami has eight tiles of open Atlantic
+            // and Everglades that are genuinely empty, and re-proving it burned ELEVEN MINUTES on
+            // every run — six mirror attempts with backoff, eight times, to learn the sea is still
+            // the sea. A tile that has come back empty on a SECOND independent pass is recorded and
+            // believed. Delete verified-empty.json to force the whole question open again.
+            if (verifiedEmpty.has(tileKey)) {
+              tileRows = [];
+            } else {
+              note(`  ${s.toFixed(3)},${w.toFixed(3)}  cached EMPTY — distrusted, refetching\n`);
+              tileRows = null;
+              wasCachedEmpty = true;
+            }
           }
         }
         if (tileRows) {
@@ -384,6 +400,10 @@ async function main() {
           added++;
         }
         writeFileSync(cacheFile, JSON.stringify(tileRows));
+        // A tile that was cached empty and has now come back empty AGAIN, from a fresh request
+        // across the mirrors, is genuinely empty ground. Record it so the next run does not spend
+        // six attempts and eighty seconds re-proving that the Atlantic has no buildings in it.
+        if (wasCachedEmpty && tileRows.length === 0) { verifiedEmpty.add(tileKey); saveEmpty(); }
         note(`  ${s.toFixed(3)},${w.toFixed(3)}  +${added}  (total ${out.length})\n`);
         await sleep(PAUSE_S);
       }
