@@ -1,0 +1,32 @@
+{
+  "slug": "london",
+  "name": "London",
+  "lat0": 51.5074,
+  "lon0": -0.1278,
+  "bbox": [51.44, -0.24, 51.57, 0.02],
+  "coastBbox": [51.36, -0.38, 51.64, 0.18],
+  "coastal": true,
+  "seaSeed": [51.5010, -0.0110],
+  "seaSeedNote": "Mid-Thames off the Isle of Dogs, where the river is at its widest inside the grid. London has no sea within reach, so the flood is seeded in the river itself — which works because OSM maps the TIDAL Thames banks as natural=coastline all the way up to Teddington.",
+  "groundMetres": 15,
+  "maxRangeMetres": 11000,
+  "maskCellMetres": 40,
+  "maskSubdivide": 4,
+  "areas": [
+    { "name": "City / Square Mile",  "s": 51.500, "w": -0.120, "n": 51.535, "e": -0.060 },
+    { "name": "Westminster / West End", "s": 51.490, "w": -0.180, "n": 51.530, "e": -0.110 },
+    { "name": "Southwark / South Bank", "s": 51.470, "w": -0.130, "n": 51.505, "e": -0.050 },
+    { "name": "Canary Wharf / Docklands", "s": 51.480, "w": -0.060, "n": 51.520, "e": 0.010 },
+    { "name": "Camden / north",      "s": 51.530, "w": -0.180, "n": 51.570, "e": -0.080 },
+    { "name": "Kensington / west",   "s": 51.470, "w": -0.240, "n": 51.520, "e": -0.170 }
+  ],
+  "landmarks": [
+    { "name": "The Shard",            "lat": 51.5045, "lon": -0.0865, "within": 250, "expect": 20 },
+    { "name": "22 Bishopsgate / City", "lat": 51.5152, "lon": -0.0813, "within": 250, "expect": 30 },
+    { "name": "One Canada Square",    "lat": 51.5049, "lon": -0.0195, "within": 300, "expect": 15 },
+    { "name": "St Paul's Cathedral",  "lat": 51.5138, "lon": -0.0984, "within": 250, "expect": 25 },
+    { "name": "Houses of Parliament", "lat": 51.4995, "lon": -0.1248, "within": 300, "expect": 15 },
+    { "name": "Tower of London",      "lat": 51.5081, "lon": -0.0759, "within": 300, "expect": 15 }
+  ],
+  "note": "THE THAMES READS +8 m IN THE COARSE DATA — as land. Without a mask the river is a field and the city has no shape at all, which is the same fault New York's East River had. Bridges matter more here than anywhere: Tower Bridge, London Bridge, Westminster and Waterloo are the crossings the skyline is read against."
+}
