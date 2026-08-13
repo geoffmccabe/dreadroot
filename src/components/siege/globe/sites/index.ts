@@ -14,6 +14,7 @@ import { DUBAI } from './b3-dubai';
 import { SAN_JOSE } from './b4-san-jose';
 import { NEW_YORK } from './b5-new-york';
 import { SEATTLE } from './b6-seattle';
+import { MIAMI } from './b7-miami';
 
 import type { SiteDef } from './siteTypes';
 
@@ -32,6 +33,7 @@ export const SITES: SiteDef[] = [
   SAN_JOSE,
   NEW_YORK,
   SEATTLE,
+  MIAMI,
 ];
 
 /** The site on a given number key, or undefined. */

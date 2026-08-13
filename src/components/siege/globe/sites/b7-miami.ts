@@ -31,8 +31,11 @@ export const MIAMI: SiteDef = {
     mode: 'follow',
     groundMetres: 2,
     shallowSeaMetres: -14,
-    innerMetres: 11000,
-    outerMetres: 22000,
+    // 14 km: Coral Gables and the northern suburbs reach 13.5 km from the bay, and in FOLLOW mode
+    // this radius is what suppresses procedural relief across the city so buildings and ground
+    // agree. A building outside it stands on fractal terrain nothing sampled offline could predict.
+    innerMetres: 14000,
+    outerMetres: 24000,
     trustBaseOutside: true,
   },
 

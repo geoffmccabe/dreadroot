@@ -22,7 +22,7 @@
   ],
   "seaSeedNote": "Biscayne Bay between Brickell and Key Biscayne. Seeded in the BAY rather than the Atlantic because the bay is what the city is built around and what every causeway crosses; it reaches the ocean through Government Cut, which is 200 m wide and easily open at a 10 m raster.",
   "groundMetres": 2,
-  "maxRangeMetres": 11000,
+  "maxRangeMetres": 14000,
   "maskCellMetres": 40,
   "maskSubdivide": 4,
   "areas": [

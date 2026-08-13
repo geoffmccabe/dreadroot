@@ -320,6 +320,9 @@ export const WILDERNESS_GROUND: SiteGround = {
 
 export const DEFAULT_GARRISON: GarrisonDef = {
   soldiers: 0, layout: 'none', fireRate: 1.5,
+  // Ground, because it is the assumption that needs no aircraft: a site that has not said how its
+  // troops arrive has not said it has an air force either.
+  arrival: 'ground', paratroopers: 0,
   humvees: 0, tanks: 0, helicopters: 0, jets: 0,
 };
 
