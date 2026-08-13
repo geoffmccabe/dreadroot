@@ -114,7 +114,7 @@ function stroke(x0, y0, x1, y1) {
 }
 
 const coast = JSON.parse(readFileSync(COAST, 'utf8')).elements ?? [];
-let coastWays = 0, waterAreas = [];
+let coastWays = 0, waterAreas = [], riverLines = [];
 for (const e of coast) {
   const t = e.tags ?? {};
   if (t.natural === 'coastline') {
@@ -126,6 +126,23 @@ for (const e of coast) {
       const [bx, by] = project(g[i]);
       stroke(ax, ay, bx, by);
     }
+    continue;
+  }
+  // A RIVER'S CENTRELINE, WHICH IS THE ONLY THING THAT CANNOT HAVE GAPS.
+  //
+  // London's Thames came out as a BROKEN channel — long stretches of dry ground where the river
+  // should run, which is worse than no river at all because you can walk across it. The cause is
+  // that a big river is one multipolygon whose member ways are spread over many tiles, and a tiled
+  // fetch hands each tile only the members inside it. Assembling those gives partial rings and
+  // therefore partial water. Nothing about that is visible in the counts: 1,489 water areas came
+  // back and not one of them was named Thames.
+  //
+  // A centreline has no such problem. Painting a corridor of the river's real width along it
+  // guarantees a continuous channel, and it is drawn UNDER the polygons rather than instead of
+  // them, so the wide parts and the docks still come from the accurate outlines.
+  if (t.waterway === 'river') {
+    const g = e.geometry ?? [];
+    if (g.length >= 2) riverLines.push(g.map(project));
     continue;
   }
   // INLAND WATER, AND IT MUST INCLUDE RELATIONS. A big lake is almost always a multipolygon,
@@ -144,7 +161,8 @@ for (const e of coast) {
     waterAreas.push(g.map(project));
   }
 }
-console.error(`stroked ${coastWays} coastline ways, held ${waterAreas.length} water areas`);
+console.error(`stroked ${coastWays} coastline ways, held ${waterAreas.length} water areas, `
+  + `${riverLines.length} river centrelines`);
 
 // --- 2. flood the sea in from the open Gulf -------------------------------------------------------
 //
@@ -158,10 +176,34 @@ console.error(`stroked ${coastWays} coastline ways, held ${waterAreas.length} wa
 // about that failure is loud; the file is the right size and the script reports success.
 //
 // So `seaSeed` is a real coordinate in open water, given per city in its config, and it is checked.
+// A RIVER CITY HAS NO COASTLINE, and London is the case that proved it.
+//
+// The whole flood-fill design assumes a shore: a barrier the sea cannot cross, seeded from open
+// water. That is right for Dubai, New York, Seattle and Miami. It is wrong for London, and the
+// assumption I wrote into its config — "OSM maps the tidal Thames banks as natural=coastline all
+// the way to Teddington" — is simply false. Britain's coastline is mapped at the actual SEA coast,
+// forty kilometres downstream; the Thames through the city is a water AREA.
+//
+// The bake said so in one line — `stroked 0 coastline ways, held 1492 water areas` — and the flood
+// then filled 100% of the grid, which the sanity band caught.
+//
+// With no coastline there is nothing to flood and nothing to flood from, and the right answer is
+// far simpler: everything is land except the water polygons, which is exactly what 1,492 riverbank
+// and water areas describe. The Thames, the docks, the reservoirs and the canal basins all come
+// from the same list the flood version punches out at step 4 — so that step does all the work and
+// the flood is skipped.
+const RIVER_CITY = coastWays === 0;
+if (RIVER_CITY) {
+  console.error('NO COASTLINE WAYS — treating this as a river city: land everywhere, minus the '
+    + `${waterAreas.length} water areas. See the note in make-landmask.`);
+}
+
 const queue = new Int32Array(FN * FN);
 let qh = 0, qt = 0;
-let seedCx, seedCy;
-if (city.seaSeed) {
+let seedCx = 1, seedCy = 1;
+if (RIVER_CITY) {
+  // Nothing to seed and nothing to fill.
+} else if (city.seaSeed) {
   const [sx, sz] = city.project({ lat: city.seaSeed[0], lon: city.seaSeed[1] });
   seedCx = toCellX(sx); seedCy = toCellX(sz);
   if (seedCx < 0 || seedCy < 0 || seedCx >= FN || seedCy >= FN) {
@@ -175,13 +217,13 @@ if (city.seaSeed) {
     + 'only open water for some cities. If the coastline comes out inverted, this is why.');
 }
 const seed = idx(seedCx, seedCy);
-if (grid[seed] === BARRIER) {
+if (!RIVER_CITY && grid[seed] === BARRIER) {
   // A seed sitting exactly on a stroked coastline cannot start the fill, and the result is a mask
   // that is entirely land — which looks like a working file.
   console.error('seaSeed landed ON the coastline itself — move it further out to sea');
   process.exit(1);
 }
-grid[seed] = SEA; queue[qt++] = seed;
+if (!RIVER_CITY) { grid[seed] = SEA; queue[qt++] = seed; }
 while (qh < qt) {
   const k = queue[qh++];
   const cx = k % FN, cy = (k / FN) | 0;
@@ -197,11 +239,11 @@ console.error(`flood reached ${qt} cells (${floodPct.toFixed(1)}%)`);
 // A COASTAL CITY IS NEITHER ALL SEA NOR ALL LAND. Outside this band something has gone wrong in a
 // way that produces a perfectly well-formed file: the seed was on the wrong side (inverted), or the
 // coastline had a gap and the fill walked inland through it (drowned). Both are silent otherwise.
-if (floodPct < 3) {
+if (!RIVER_CITY && floodPct < 3) {
   console.error('\nFAILED: the flood barely spread. The seed is probably enclosed by coastline, or on land.');
   process.exit(1);
 }
-if (floodPct > 90) {
+if (!RIVER_CITY && floodPct > 90) {
   console.error('\nFAILED: the flood covered almost everything. The coastline has a gap and the sea leaked inland,');
   console.error('or the seed is on the land side. Widen coastBbox so the shore is complete past both ends of the city.');
   process.exit(1);
@@ -237,6 +279,37 @@ for (const poly of waterAreas) {
   }
 }
 console.error(`inland water removed ${waterCells} cells`);
+
+// --- 4b. the river corridors --------------------------------------------------------------------
+// Half-width in cells, from the config. The Thames through central London is 200-265 m; a default
+// of 60 m suits an ordinary town river. A corridor slightly narrow is far better than a gap.
+{
+  const halfM = (city.riverWidthMetres ?? 60) / 2;
+  const halfCells = Math.max(1, Math.round(halfM / SUB_CELL));
+  let painted = 0;
+  for (const line of riverLines) {
+    for (let i = 1; i < line.length; i++) {
+      const [ax, az] = line[i - 1], [bx, bz] = line[i];
+      const len = Math.hypot(bx - ax, bz - az);
+      const steps = Math.max(1, Math.ceil(len / (SUB_CELL * 0.5)));
+      for (let k = 0; k <= steps; k++) {
+        const t2 = k / steps;
+        const cx = toCellX(ax + (bx - ax) * t2), cy = toCellX(az + (bz - az) * t2);
+        for (let oy = -halfCells; oy <= halfCells; oy++) {
+          for (let ox = -halfCells; ox <= halfCells; ox++) {
+            if (ox * ox + oy * oy > halfCells * halfCells) continue;
+            const px = cx + ox, py = cy + oy;
+            if (px < 0 || py < 0 || px >= FN || py >= FN) continue;
+            if (fine[idx(px, py)]) { fine[idx(px, py)] = 0; painted++; }
+          }
+        }
+      }
+    }
+  }
+  if (riverLines.length) {
+    console.error(`river corridors painted ${painted} cells at ${city.riverWidthMetres ?? 60} m wide`);
+  }
+}
 
 // --- 5. buildings are land, whatever the coastline says --------------------------------------------
 //

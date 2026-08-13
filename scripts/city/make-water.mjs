@@ -46,7 +46,8 @@ const MAX_RANGE_M = city.maxRangeMetres ?? 26000;
 (way["natural"="coastline"](${s},${w},${n},${e});
  way["natural"="water"](${s},${w},${n},${e});
  relation["natural"="water"](${s},${w},${n},${e});
- way["waterway"="riverbank"](${s},${w},${n},${e}););
+ way["waterway"="riverbank"](${s},${w},${n},${e});
+ way["waterway"="river"](${s},${w},${n},${e}););
 out geom;`, city.coastBbox ?? city.bbox);
   if (!data.elements.length) { console.error('nothing came back — re-run when Overpass is quieter'); process.exit(1); }
   // ALWAYS RE-RUN THE TILED FETCH. The per-tile cache under .city-cache is the real cache; this

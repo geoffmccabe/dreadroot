@@ -6,10 +6,19 @@
 // the same fault New York's East River had, and it is why the land mask matters more here than the
 // buildings do.
 //
-// THE FLOOD IS SEEDED IN THE RIVER ITSELF, because London has no sea within reach. That works
-// because OSM maps the TIDAL Thames banks as natural=coastline all the way up to Teddington Lock —
-// so the river is bounded the same way a coast is, and a fill started mid-stream off the Isle of
-// Dogs runs the length of it.
+// THERE IS NO FLOOD FILL HERE AT ALL, and my first attempt assumed the opposite. I wrote that OSM
+// maps the tidal Thames banks as natural=coastline up to Teddington. It does not: Britain's
+// coastline is mapped at the actual SEA coast, forty kilometres downstream, and the Thames through
+// the city is a water AREA. The bake said so in one line — "stroked 0 coastline ways" — and the
+// flood then filled 100% of the grid, which the sanity band caught before it could be written.
+//
+// A river city needs no flood: everything is land except the water polygons. Simpler, and correct.
+//
+// THE RIVER IS ALSO PAINTED FROM ITS CENTRELINE, because the polygons alone gave a BROKEN Thames
+// with dry stretches you could walk across. A big river is one multipolygon whose member ways
+// spread over many fetch tiles, so each tile assembles only a partial ring. Nothing in the counts
+// showed it: 1,489 water areas came back and not one was named Thames. A 230 m corridor along the
+// centreline cannot have gaps — 545 of 550 columns now carry water, longest dry run 0.1 km.
 //
 // AND THE BRIDGES ARE THE VIEW. Tower Bridge, London Bridge, Westminster, Waterloo, Blackfriars,
 // the Millennium footbridge — the skyline is read ACROSS them. Without the bridge pass they are

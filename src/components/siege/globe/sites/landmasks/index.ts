@@ -6,3 +6,4 @@ import './dubai';
 import './new-york';
 import './seattle';
 import './miami';
+import './london';

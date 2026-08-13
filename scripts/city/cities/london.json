@@ -114,5 +114,7 @@
     }
   ],
   "note": "THE THAMES READS +8 m IN THE COARSE DATA — as land. Without a mask the river is a field and the city has no shape at all, which is the same fault New York's East River had. Bridges matter more here than anywhere: Tower Bridge, London Bridge, Westminster and Waterloo are the crossings the skyline is read against.",
-  "coastBboxNote": "Sized to the MASK GRID plus 2.5 km, not by eye. The flood fill only reads coastline inside the grid; the margin exists so it cannot walk around the ends of the shore at the boundary. The first version of this box was three times larger, which at one Overpass tile every three minutes is hours spent fetching open ocean nobody will ever see."
+  "coastBboxNote": "Sized to the MASK GRID plus 2.5 km, not by eye. The flood fill only reads coastline inside the grid; the margin exists so it cannot walk around the ends of the shore at the boundary. The first version of this box was three times larger, which at one Overpass tile every three minutes is hours spent fetching open ocean nobody will ever see.",
+  "riverWidthMetres": 230,
+  "riverWidthNote": "The Thames through central London is 200-265 m. Painted along the centreline because the river is one multipolygon whose members split across tiles, which produced a BROKEN channel you could walk across."
 }

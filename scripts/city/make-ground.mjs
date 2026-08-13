@@ -172,6 +172,20 @@ writeFileSync(OUT, Buffer.from(out.buffer));
 console.error(`wrote ${OUT} — ${(out.byteLength / 1024).toFixed(0)} KB, ${fetched} tiles read`);
 console.error(`ground under the city runs ${min} m to ${max} m (a spread of ${max - min} m)`);
 if (missing) console.error(`${missing} buildings had no elevation data and were set to 0`);
+
+// FAIL LOUDLY RATHER THAN WRITE ZEROS. London's first ground bake hit a transient failure reaching
+// the tile host and every one of its 132,875 buildings came back with no elevation — so the file was
+// written full of zeros, reported "a spread of -Infinity", and carried on. In follow mode that puts
+// the entire city fifteen metres UNDERGROUND, and nothing downstream would have noticed: the
+// placement check passed all six landmarks, because their positions were fine and only their
+// heights were ruined.
+//
+// A tenth of a city missing its ground is a broken bake, not a warning.
+if (missing > count * 0.1) {
+  console.error(`\nFAILED: ${missing} of ${count} buildings (${((missing / count) * 100).toFixed(0)}%) `
+    + 'had no elevation. That is a network or tile problem, not a fact about the city — re-run it.');
+  process.exit(1);
+}
 if (max - min < 5) {
   console.error('NOTE: almost no spread — this city really is flat, or only the coarsest tiles exist here.');
 }
