@@ -108,8 +108,23 @@ node scripts/city/fetch-buildings.mjs <slug>     # the boxes. slowest step, resu
 node scripts/city/make-water.mjs      <slug>     # also downloads the coastline the mask needs
 node scripts/city/make-landmask.mjs   <slug>     # needs make-water to have run
 node scripts/city/make-roads.mjs      <slug>
-node scripts/city/make-detail.mjs     <slug>     # LAST — it edits buildings.bin
+node scripts/city/make-bridges.mjs    <slug>     # needs the land mask — see below
+node scripts/city/make-detail.mjs     <slug>     # edits buildings.bin, so before make-ground
+node scripts/city/make-ground.mjs     <slug>     # LAST: it samples both buildings.bin and detail.bin
 ```
+
+**Run each stage in a loop until a round adds no new tiles.** Every bake is tiled and cached, and
+Overpass fails a lot; one pass is never enough. Do not hardcode an expected tile count — size the
+boxes first and let the loop settle.
+
+> **`make-bridges` needs the land mask to exist.** It uses it to tell a river crossing from an
+> elevated railway. Without it, New York's longest "bridges" come out as the BMT Jamaica Line and
+> the IRT Flushing Line — three kilometres of elevated subway over Queens, arched 70 m into the air
+> by a rule meant for the East River.
+
+> **`make-ground` must be last.** It samples the elevation under every building AND every detailed
+> solid, and `make-detail` removes boxes from `buildings.bin` as it promotes them. Run it before
+> and the two files no longer line up.
 
 Raw downloads are cached under `.city-cache/<slug>/`, so a re-bake needs no network.
 
@@ -165,8 +180,20 @@ add two lines to `sites/index.ts` (the import and the array entry).
 
 ### The numbers that have already gone wrong
 
+**`mode`** — `'follow'` or `'flatten'`, and this is the most consequential field in the file.
+
+`'follow'` leaves the measured elevation alone and stands each building on its own piece of it,
+using `ground.bin`. **Use it unless you have a specific reason not to.** `'flatten'` forces one
+height across the whole core; it is right for exactly one situation — a city that is genuinely flat
+AND whose elevation data is wrong. Dubai is both, and is the only site that uses it.
+
+Getting this wrong is what produced *"the land is perfectly flat... nothing like Costa Rica"*: a
+twelve-kilometre flat disc over a city that sits in a valley ringed by volcanoes. The data was never
+missing — sampled on a 4 km grid around San José it runs 67 m to 3,058 m.
+
 **`groundMetres`** — how high the city sits above sea level, **measured against the real tile
-server before you bake anything**. Probe five or six named places across the metro and take the mean
+server before you bake anything**. In `follow` mode this is only the reference height the city group
+sits at; per-building grounds are offsets from it. Probe five or six named places across the metro and take the mean
 over your built area. San José's centre reads 1,128 m against a real 1,172 m; Cartago 1,419 m,
 Alajuela 994 m. The coarse tiles are within about 40 m in a valley and clip mountain peaks badly
 (Irazú reads 3,058 m against a real 3,432 m).
@@ -255,6 +282,12 @@ These are all real, all shipped, and all cost a day or more.
 | "Re-run to fill the gaps" changes nothing | Fixed, but worth knowing: each bake used to skip its fetch if its merged output file existed, so a run that lost 55 of 56 tiles froze that result permanently. The per-tile cache under `.city-cache/<slug>/` is the real cache. |
 | A city has buildings but no streets at all | Roads, water and detail each fired ONE query for the whole city. Overpass refuses a big query outright rather than answering slowly. All three are tiled now. |
 | A city's buildings are all underground | A ground lookup keyed on the wrong field. San Jose's entire 29,402 buildings sat 1,160 m below the surface because a site was looked up by name where a slug was passed. |
+| A lake reads as dry land while the sea is fine | Salt water arrives as coastline WAYS, fresh water as multipolygon RELATIONS — and a relation's boundary is split across many open arcs (Lake Washington is 112). Filling each individually fills nothing. `assembleRings` stitches them. |
+| A famous tower sits sunk or floating | OSM heights are measured from a building's OWN ground. In `follow` mode the detailed solids need `detail-ground.bin` as much as the boxes need `ground.bin`. |
+| A city with no streets at all | The roads reader cached one array with no city key, so whichever city loaded first served all of them. Anything cached across cities must be keyed by slug. |
+| Bridges painted flat on the river | A bridge is an ordinary highway with `bridge=yes`, so the road bake swallows it. `make-bridges` is a separate pass for a reason. |
+| Every run takes eleven minutes longer than it should | Empty tiles were re-fetched forever. A tile empty on a SECOND pass is recorded in `verified-empty.json` and believed. |
+| Hours spent fetching open ocean | `coastBbox` sized by eye. It only needs the mask grid plus ~2.5 km of margin. Mine were three times too big. |
 | A file and a folder differing only in case | Builds on a Mac, fails on a case-sensitive server, or TypeScript loads the same file twice. `landMasks.ts` beside `landmasks/` — renamed to `maskRegistry.ts`. |
 
 ---
