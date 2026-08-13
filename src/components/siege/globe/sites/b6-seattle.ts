@@ -88,7 +88,11 @@ export const SEATTLE: SiteDef = {
   },
 
   garrison: {
-    soldiers: 180, layout: 'scatter', fireRate: 1.4,
+    // TWO HUNDRED, ALL BY AIR, in the flag's colours. Geoff: "start with 200 soldiers in the US
+    // just like Dubai where they parachute in... make their colors red, white and blue for the flag."
+    soldiers: 200, layout: 'scatter', fireRate: 1.5,
+    arrival: 'parachute', paratroopers: 200,
+    chuteColours: [[0.55, 0.03, 0.08], [0.88, 0.88, 0.86], [0.02, 0.09, 0.35]],
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,
     note: 'Scattered rather than drawn up along one approach — there is no straight line through '
       + 'this city, which is the whole difficulty of fighting in it.',

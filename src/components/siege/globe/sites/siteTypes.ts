@@ -229,6 +229,27 @@ export interface GarrisonDef {
   /** Infantry. They shoot, they shout, and they are what gives a 300 m creature its scale. */
   soldiers: number;
   /**
+   * HOW THEY ARRIVE.
+   *
+   * Geoff: "start with 200 soldiers in the US just like Dubai where they parachute in... For Costa
+   * Rica, start them on the ground... no paratroopers."
+   *
+   * That is not decoration. A country with an army drops troops from aircraft; Costa Rica abolished
+   * its military in 1948 and what turns out is the Fuerza Pública, who arrive in vehicles because
+   * there is nothing to jump out of.
+   */
+  arrival: 'ground' | 'parachute';
+  /** How many of `soldiers` come by air. Ignored when arrival is 'ground'. */
+  paratroopers: number;
+  /**
+   * Canopy colours, as linear RGB triples.
+   *
+   * Geoff, for New York: "make their colors red, white and blue for the flag." Dubai's are its own
+   * flag — red, green, white and black — and a city dropping the wrong nation's colours is the kind
+   * of detail that is invisible until it is noticed, and then is all you can see.
+   */
+  chuteColours?: [number, number, number][];
+  /**
    * How they are arranged.
    *
    * 'corridor' lines them along the approach, 'ring' surrounds the fight, 'scatter' spreads them

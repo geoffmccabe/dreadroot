@@ -29,6 +29,8 @@ export const GRAND_CANYON: SiteDef = {
     // standing in the same frame as something 300 m tall; armed troops would turn it into a fight
     // and the comparison is the entire content.
     soldiers: 200, layout: 'corridor', fireRate: 0,
+    // Civilians. They arrive by coach, like everyone else at a viewpoint.
+    arrival: 'ground', paratroopers: 0,
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,
     note: 'Two hundred people at 1.8 m, between you and the Kaiju. They do not shoot.',
   },

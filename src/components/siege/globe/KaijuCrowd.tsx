@@ -57,6 +57,7 @@ import {
   resolveBuildings, buildingAt, clampToRoof, cityGroundRadius, type CityBox,
 } from './cityColliders';
 import { noteGunshot } from './kaijuGunAudio';
+import { currentGarrison } from './sites';
 
 /** A real person, in game units. 1.8 m at 100 m per unit. */
 const PERSON_UNITS = 1.8 / METRES_PER_UNIT;
@@ -301,7 +302,8 @@ function makePeople(): Person[] {
   if (spawnHint) {
     const { from, to } = spawnHint;
     const side = new THREE.Vector3().crossVectors(from, to).normalize();
-    for (let i = 0; i < CROWD_SIZE; i++) {
+    const groundWanted = Math.min(CROWD_SIZE, currentGarrison().ground);
+    for (let i = 0; i < groundWanted; i++) {
       // Biased toward the near end, so the closest figures — the readable ones — are the many.
       const t = 0.06 + Math.pow(rand(), 1.5) * 0.82;
       const dir = from.clone().lerp(to, t).normalize();
@@ -344,7 +346,8 @@ function makePeople(): Person[] {
   const combatants = arenaStarted() ? getAgents().filter((a) => a.alive).map((a) => a.body.dir) : [];
   const between = combatants.length >= 2;
 
-  for (let i = 0; i < CROWD_SIZE; i++) {
+  const groundWanted2 = Math.min(CROWD_SIZE, currentGarrison().ground);
+  for (let i = 0; i < groundWanted2; i++) {
     if (between) {
       const a = combatants[Math.floor(rand() * combatants.length) % combatants.length];
       const b = combatants[Math.floor(rand() * combatants.length) % combatants.length];
@@ -421,8 +424,12 @@ function makePeople(): Person[] {
   // moves itself if the altitude or either speed changes.
   {
     const drift = driftMetres() / PLANET_RADIUS / METRES_PER_UNIT;
-    const times = dropSchedule(PARA_COUNT);
-    for (let i = 0; i < PARA_COUNT; i++) {
+    // HOW MANY, AND WHETHER AT ALL, comes from the site now. Capped by PARA_COUNT because that is
+    // how many canopy instances the parachute mesh was allocated; a city asking for more gets the
+    // most that can be drawn rather than a buffer overrun.
+    const paraWanted = Math.min(PARA_COUNT, currentGarrison().para);
+    const times = dropSchedule(paraWanted);
+    for (let i = 0; i < paraWanted; i++) {
       // Aim each man at one of the combatants, then step BACK along his own approach by the drift.
       const aim = (combatants.length ? combatants[Math.floor(rand() * combatants.length) % combatants.length]
         : centre).clone();

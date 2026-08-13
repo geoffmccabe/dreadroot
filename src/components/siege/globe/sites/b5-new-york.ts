@@ -89,7 +89,11 @@ export const NEW_YORK: SiteDef = {
     // The largest garrison of the three, and the only one with armour and aircraft pencilled in.
     // They are still zero because none of it is built — but unlike San Jose, where zero is a fact
     // about the country, these are zero only until the vehicles exist.
-    soldiers: 300, layout: 'corridor', fireRate: 1.6,
+    // TWO HUNDRED, ALL BY AIR, in the flag's colours. Geoff: "start with 200 soldiers in the US
+    // just like Dubai where they parachute in... make their colors red, white and blue for the flag."
+    soldiers: 200, layout: 'scatter', fireRate: 1.5,
+    arrival: 'parachute', paratroopers: 200,
+    chuteColours: [[0.55, 0.03, 0.08], [0.88, 0.88, 0.86], [0.02, 0.09, 0.35]],
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,
     note: 'Heavy infantry along the avenues. The one site where armour and helicopters belong once '
       + 'they exist — the counts here are a placeholder, not a statement about the city.',

@@ -134,6 +134,10 @@ export const SAN_JOSE: SiteDef = {
     // for a Kaiju here is the Fuerza Pública — police, not infantry — so the force is smaller than
     // Dubai's, scattered rather than drawn up along an approach, and slower to shoot.
     soldiers: 120, layout: 'scatter', fireRate: 1.0,
+    // ON THE GROUND, and this is a fact about the country rather than a setting. Geoff: "For Costa
+    // Rica, start them on the ground... no paratroopers." There is no air force to jump from —
+    // the military was abolished in 1948 — so the Fuerza Publica arrives by road.
+    arrival: 'ground', paratroopers: 0,
     // These stay at zero, and for this city that is not merely "not built yet". Costa Rica has no
     // tanks and no combat aircraft. If a future city fields armour, San José still should not.
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,

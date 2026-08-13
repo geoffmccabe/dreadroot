@@ -27,8 +27,9 @@ import { AR_SHOUTS } from './shouts/ar';
 import { FR_SHOUTS } from './shouts/fr';
 import { HI_SHOUTS } from './shouts/hi';
 import { JA_SHOUTS } from './shouts/ja';
+import { ES_SHOUTS } from './shouts/es';
 
-export type LangId = 'en' | 'ar' | 'hi' | 'fr' | 'ja';
+export type LangId = 'en' | 'ar' | 'hi' | 'fr' | 'ja' | 'es';
 
 export interface ShoutLanguage {
   id: LangId;
@@ -82,6 +83,11 @@ export const LANGUAGES: Record<LangId, ShoutLanguage> = {
     // Latin script, so the comic face works and French keeps the same look as English.
     font: LATIN_FONT, lines: FR_SHOUTS,
   },
+  es: {
+    id: 'es', name: 'Spanish', native: 'Español', rtl: false, wrap: 'space',
+    // Latin script, so the comic face works and Spanish keeps the same look as English.
+    font: LATIN_FONT, lines: ES_SHOUTS,
+  },
   ja: {
     id: 'ja', name: 'Japanese', native: '日本語', rtl: false, wrap: 'char',
     // Maru Gothic is the rounded one, which is as close to a comic face as Japanese gets.
@@ -90,7 +96,7 @@ export const LANGUAGES: Record<LangId, ShoutLanguage> = {
   },
 };
 
-export const LANG_IDS: LangId[] = ['en', 'ar', 'hi', 'fr', 'ja'];
+export const LANG_IDS: LangId[] = ['en', 'ar', 'hi', 'fr', 'ja', 'es'];
 
 /** Weights per language. Relative, not percentages — 3 and 1 means three quarters and one quarter. */
 export type LangMix = Partial<Record<LangId, number>>;
@@ -111,6 +117,14 @@ export const DEFAULT_MIXES: Record<string, LangMix> = {
   Dubai: { ar: 4, en: 4, hi: 2 },
   Paris: { fr: 8, en: 2 },
   Tokyo: { ja: 8, en: 2 },
+  // SEVENTY-THIRTY, as Geoff asked: "make them all speaking spanish translations 70% of the time
+  // and English 30% of the time." Costa Rica is overwhelmingly Spanish-speaking, and the English is
+  // the international response that would arrive with a Kaiju rather than the local street.
+  'San José, Costa Rica': { es: 7, en: 3 },
+  'New York City': { en: 10 },
+  Seattle: { en: 10 },
+  Miami: { es: 5, en: 5 },
+  London: { en: 10 },
   Default: { en: 10 },
 };
 

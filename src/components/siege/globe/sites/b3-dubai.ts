@@ -87,6 +87,8 @@ export const DUBAI: SiteDef = {
 
   garrison: {
     soldiers: 200, layout: 'corridor', fireRate: 1.5,
+    // Dubai's flag: red, green, white, black. The original palette.
+    arrival: 'parachute', paratroopers: 50,
     // Declared and zero. The city has the roads for them; nothing drives on them yet.
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,
     note: 'Infantry along the approach. Tracers, ricochets and shouting, which is what gives the '

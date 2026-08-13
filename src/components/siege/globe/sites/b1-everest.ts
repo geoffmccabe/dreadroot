@@ -19,6 +19,7 @@ export const EVEREST: SiteDef = {
     // the death zone would read as a joke — but a handful gives the scale reference the site exists
     // for, which is the whole reason to put a Kaiju here.
     soldiers: 40, layout: 'ring', fireRate: 1.2,
+    arrival: 'ground', paratroopers: 0,
     humvees: 0, tanks: 0, helicopters: 0, jets: 0,
     note: 'A token ring. There is no road to 8,849 m and nothing heavier could get here.',
   },

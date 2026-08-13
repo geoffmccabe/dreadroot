@@ -102,3 +102,29 @@ export function nextStop(s: SiteDef): { lat: number; lon: number; facingDeg: num
 export function currentStopIndex(slug: string): number {
   return stopIndex.get(slug) ?? 0;
 }
+
+/**
+ * The garrison actually in play, with defaults filled in.
+ *
+ * Read every time the crowd is built rather than captured once, so arriving at a new city brings
+ * its own force — 200 US paratroopers over Manhattan, 120 Fuerza Publica on the ground in San Jose.
+ * Counts are CAPPED by the caller against its buffer sizes; this only says what the city wants.
+ */
+export function currentGarrison(): {
+  ground: number; para: number; colours: [number, number, number][];
+} {
+  const g = currentSite()?.garrison;
+  if (!g) return { ground: 200, para: 50, colours: DEFAULT_CHUTES };
+  const para = g.arrival === 'parachute' ? (g.paratroopers || g.soldiers) : 0;
+  return {
+    // A parachuting garrison is not ALSO standing on the ground waiting for itself.
+    ground: Math.max(0, g.soldiers - para),
+    para,
+    colours: g.chuteColours?.length ? g.chuteColours : DEFAULT_CHUTES,
+  };
+}
+
+/** Dubai's flag — red, green, white, black. The original palette, and the fallback. */
+const DEFAULT_CHUTES: [number, number, number][] = [
+  [0.44, 0.02, 0.05], [0.00, 0.16, 0.06], [0.85, 0.85, 0.83], [0.02, 0.02, 0.02],
+];

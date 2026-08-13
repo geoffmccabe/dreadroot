@@ -45,6 +45,7 @@ import { body as playerBody } from './kaijuBody';
 import { initArena, ARENA_HEIGHT, arenaStarted } from './kaijuArena';
 import { applyGlobePreset, globeLook } from '@/features/look/globeLookStore';
 import { siteForKey, nextStop, setCurrentSite } from './sites';
+import { setShoutSite } from './kaijuShoutLang';
 
 // The Kaiju is no longer parked at a fixed place: it follows the camera in third person, so it
 // is always in front of you (see GlobeKaiju). K now means "drop to the ground here", which is
@@ -281,6 +282,10 @@ export function KaijuLabController() {
           const site = siteForKey(e.code);
           if (!site) break;
           setCurrentSite(site);
+          // WHAT THIS CITY SOUNDS LIKE. Nothing called this before, so the shout language never
+          // changed with the city — every site spoke whatever the previous one did, which in
+          // practice meant Dubai's Arabic and Hindi in San Jose and Seattle alike.
+          setShoutSite(site.name);
           // A city cycles its districts, one per press; a wilderness site has one stop and simply
           // re-drops you. nextStop handles both, so there is no special case here for Dubai — which
           // is exactly the sort of special case that used to make adding a city a nine-file job.

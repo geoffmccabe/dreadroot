@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { METRES_PER_UNIT } from './cubeSphere';
+import { currentGarrison } from './sites';
 import {
   getCanopies, canopyCount, PARA_COUNT, CHUTE_COLOURS,
   CHUTE_RIM_M, CHUTE_HALF_ANGLE, CHUTE_SPHERE_R, CHUTE_LIFT_M,
@@ -110,7 +111,12 @@ export function KaijuParachutes() {
       scratch.m.makeBasis(scratch.side, scratch.up, scratch.fwd);
       scratch.m.setPosition(c.pos);
       m.setMatrixAt(i, scratch.m);
-      const rgb = CHUTE_COLOURS[c.colour % CHUTE_COLOURS.length];
+      // THE CITY'S OWN FLAG. Geoff, for New York: "make their colors red, white and blue for the
+      // flag." The index was chosen when the man jumped; the PALETTE is read now, from whichever
+      // site you are at, so the same drop code gives Dubai red-green-white-black and Manhattan
+      // red-white-blue.
+      const palette = currentGarrison().colours;
+      const rgb = palette[c.colour % palette.length] ?? CHUTE_COLOURS[0];
       scratch.colour.setRGB(rgb[0], rgb[1], rgb[2]);
       m.setColorAt(i, scratch.colour);
     }
