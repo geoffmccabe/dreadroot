@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { remotePlayerBuffer } from '@/features/netcode/transformBuffer';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as THREE from 'three';
@@ -139,6 +140,9 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
           if (leftPresences && leftPresences.length > 0) {
             const leftUserId = leftPresences[0].presence_ref?.split(':')[0] || leftPresences[0].user_id;
             if (leftUserId) {
+              // Drop their interpolation history too, or a rejoin would
+              // interpolate from wherever they were standing when they left.
+              remotePlayerBuffer.remove(leftUserId);
               setPlayers(prev => {
                 const next = new Map(prev);
                 next.delete(leftUserId);
@@ -155,6 +159,14 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
 
         const { user_id, position, rotation, username, color } = payload;
         if (!user_id || user_id === user?.id) return;
+
+        // Feed the interpolation buffer at ARRIVAL time, not at React render
+        // time, so the timeline reflects the network rather than the UI. The
+        // renderer samples this ~100 ms in the past and interpolates; React
+        // state below is now only for identity/appearance, not for motion.
+        remotePlayerBuffer.push(
+          user_id, position.x, position.y, position.z, rotation.yaw, performance.now(),
+        );
 
         setPlayers((prev) => {
           const next = new Map(prev);

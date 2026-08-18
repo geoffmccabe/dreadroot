@@ -4,6 +4,7 @@ import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text, useFBX } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { frameLoop } from '@/lib/frameLoop';
+import { remotePlayerBuffer, type SampledTransform } from '@/features/netcode/transformBuffer';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -35,29 +36,44 @@ function PlayersController({
     walkAction: THREE.AnimationAction;
     targetPosition: THREE.Vector3;
     targetRotation: number;
-    lastPosition: THREE.Vector3;
     currentAction: string;
   }>>(new Map());
   
+  /** Reused sample target — one object for all players, never per-frame alloc. */
+  const sampleRef = useRef<SampledTransform>({ x: 0, y: 0, z: 0, yaw: 0, speed: 0 });
+
   // Register with centralized frame loop instead of useFrame
   useEffect(() => {
     const unregister = frameLoop.register('multiplayer-players', (delta) => {
-      playersRefs.current.forEach((playerData) => {
-        const { mesh, mixer, walkAction, targetPosition, targetRotation, lastPosition } = playerData;
-        
-        // Lerp position
-        mesh.position.lerp(targetPosition, 0.3);
-        
-        // Lerp rotation
-        mesh.rotation.y = THREE.MathUtils.lerp(mesh.rotation.y, targetRotation, 0.3);
-        
+      const now = performance.now();
+      const sample = sampleRef.current;
+
+      playersRefs.current.forEach((playerData, userId) => {
+        const { mesh, mixer, walkAction, targetPosition, targetRotation } = playerData;
+
+        // TIME-BASED INTERPOLATION. Render ~100 ms in the past and interpolate
+        // between the two transforms that bracket that moment. Replaces the
+        // old per-frame `lerp(target, 0.3)`, which ran at a speed that
+        // depended on the viewer's frame rate and lerped yaw numerically (so
+        // crossing the ±PI seam span the long way round).
+        let isMoving: boolean;
+        if (remotePlayerBuffer.sample(userId, now, sample)) {
+          mesh.position.set(sample.x, sample.y, sample.z);
+          mesh.rotation.y = sample.yaw;
+          // Speed comes from the samples themselves, which is far steadier
+          // than measuring how far a smoothed mesh drifted this frame.
+          isMoving = sample.speed > 0.1;
+        } else {
+          // No network history yet (just joined): sit on the last known state
+          // rather than sliding in from the world origin.
+          mesh.position.copy(targetPosition);
+          mesh.rotation.y = targetRotation;
+          isMoving = false;
+        }
+
         // Update animation mixer
         mixer.update(delta);
-        
-        // Detect movement for animation switching
-        const distanceMoved = mesh.position.distanceTo(lastPosition);
-        const isMoving = distanceMoved > 0.01;
-        
+
         const desiredAction = isMoving ? 'walk' : 'idle';
         if (desiredAction !== playerData.currentAction) {
           if (desiredAction === 'walk') {
@@ -67,8 +83,6 @@ function PlayersController({
           }
           playerData.currentAction = desiredAction;
         }
-        
-        lastPosition.copy(mesh.position);
       });
     }, 55); // Medium-low priority
     
@@ -140,7 +154,6 @@ function OtherPlayer({
       walkAction,
       targetPosition: new THREE.Vector3(player.position.x, player.position.y, player.position.z),
       targetRotation: player.rotation.yaw,
-      lastPosition: new THREE.Vector3(player.position.x, player.position.y, player.position.z),
       currentAction: 'idle'
     });
 
