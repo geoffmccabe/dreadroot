@@ -138,10 +138,15 @@ export const FruitsTab: React.FC<FruitsTabProps> = ({
           duration: 3000,
         });
       } else {
-        const tierDef = getFruitTier(newTier);
+        // The SERVER rolls the forge bonus and owns the resulting tier (the
+        // client roll above is display-only and is ignored by the RPC), so
+        // report what actually came back rather than what we guessed.
+        const forgedTier = data?.[0]?.tier ?? newTier;
+        const actualBonus = forgedTier - selectedTier;
+        const tierDef = getFruitTier(forgedTier);
         toast({
-          title: `Forged Tier ${newTier} ${tierDef.name}!`,
-          description: `+${bonus} tier${bonus > 1 ? 's' : ''} bonus`,
+          title: `Forged Tier ${forgedTier} ${tierDef.name}!`,
+          description: `+${actualBonus} tier${actualBonus > 1 ? 's' : ''} bonus`,
           duration: 4000,
         });
       }
