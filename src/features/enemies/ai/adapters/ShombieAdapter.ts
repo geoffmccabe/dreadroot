@@ -458,4 +458,29 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     const behaviors = shombie.definition.ai_config?.behaviors ?? ['chase', 'attack'];
     return getBehaviorsByIds(behaviors);
   },
+
+  // ── EntityFeed seam ───────────────────────────────────────────────────────
+  // Shombie is the pilot creature for server-owned monsters, so it is the
+  // first adapter to implement these. Only authoritative state is exposed;
+  // twitches, body fires and tumble spin stay local and derived, because
+  // presentation must never cost bandwidth.
+
+  getYaw(shombie: ShombieWithAI): number {
+    return shombie.rotation;
+  },
+
+  getHealth(shombie: ShombieWithAI): number {
+    return shombie.currentHealth;
+  },
+
+  setTransform(shombie: ShombieWithAI, x: number, y: number, z: number, yaw: number): void {
+    // Mutate in place: position is a THREE.Vector3 the renderer already holds
+    // a reference to, so replacing it would both allocate and orphan the
+    // renderer's view.
+    shombie.position.set(x, y, z);
+    shombie.rotation = yaw;
+    // The server owns motion in this mode, so any locally-accumulated velocity
+    // (knockback, gravity) is stale and would fight the incoming transform.
+    shombie.velocity.set(0, 0, 0);
+  },
 };

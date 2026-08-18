@@ -245,6 +245,22 @@ export interface EnemyAdapter<TEnemy> {
 
   /** Get behaviors enabled for this enemy */
   getBehaviors(enemy: TEnemy): BehaviorModule[];
+
+  // ── EntityFeed seam (see features/enemies/feed/entityFeed.ts) ────────────
+  // All optional and additive. An adapter that omits them simply cannot be
+  // driven by a remote authority yet; nothing else changes.
+
+  /** Current facing, radians. Replicated, so the server can own it. */
+  getYaw?(enemy: TEnemy): number;
+
+  /** Current health. Replicated, because clients draw health bars. */
+  getHealth?(enemy: TEnemy): number;
+
+  /** Write an authoritative transform onto the instance. Called INSTEAD of the
+   *  local AI when the feed is in 'remote' mode. Must not allocate, and must
+   *  not touch presentation state (twitches, fires, tumble) — that stays local
+   *  and is derived per client. */
+  setTransform?(enemy: TEnemy, x: number, y: number, z: number, yaw: number): void;
 }
 
 // =============================================================================

@@ -24,6 +24,7 @@ const BT_ENABLED_TYPES = new Set<string>([
   'shombie', 'shroomer', 'vortax', 'shnake', 'shwarm',
 ]);
 import { EnemySpatialIndex } from './EnemySpatialIndex';
+import { entityFeed } from '../feed/entityFeed';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import {
   type EnemyAdapter,
@@ -429,11 +430,23 @@ class EnemyManagerClass {
     this.sharedContext.deltaMs = deltaMs;
     this.sharedContext.elapsedMs = elapsedTime * 1000;
     
+    // EntityFeed seam: read the mode ONCE per tick, not per enemy. In the
+    // default 'local' mode both are false and the seam costs two booleans.
+    const feedRemote = entityFeed.isRemote();
+    const feedShadow = entityFeed.getMode() === 'shadow';
+
     // Reuse pre-allocated array (clear without reallocating)
     this.spatialEntries.length = 0;
     
     // Process each enemy
     for (const [id, reg] of this.enemies) {
+      // Remote authority: the server decides where this entity is, so write
+      // its transform on before anything reads the position.
+      if (feedRemote && reg.adapter.setTransform !== undefined) {
+        const fs = entityFeed.get(id);
+        if (fs !== undefined) reg.adapter.setTransform(reg.enemy, fs.x, fs.y, fs.z, fs.yaw);
+      }
+
       const pos = reg.adapter.getPosition(reg.enemy);
       
       // Calculate squared distance to player (avoid sqrt for LOD checks)
@@ -466,7 +479,16 @@ class EnemyManagerClass {
       // on it (0 height → not standable).
       entry.topY = pos.y + (reg.adapter.getHeight ? reg.adapter.getHeight(reg.enemy) : 0);
       this.spatialEntries.push(entry);
-      
+
+      // Shadow mode: grade the server against the local sim without letting it
+      // change anything the player sees.
+      if (feedShadow) entityFeed.compare(id, pos.x, pos.y, pos.z);
+
+      // Remote mode: the server already decided. Skip all local decision-making
+      // for this entity (its spatial entry above is still published, so
+      // collision, targeting and standability keep working).
+      if (feedRemote) continue;
+
       // Check if enough time has passed for this LOD level
       const interval = TICK_INTERVALS_MS[newLod];
       const elapsed = now - reg.lastTickTime;
