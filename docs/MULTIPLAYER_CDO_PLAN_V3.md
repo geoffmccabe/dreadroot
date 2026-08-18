@@ -867,11 +867,23 @@ non-transferability removes the business case.
 
 ## 5. Hazards to carry forward
 
-- **The Siege Worlds worker will overwrite DreadRoot's live server.** The
-  copy at `/Users/geoffreymccabe/dreadroot-sww/worker/wrangler.toml` still
-  declares the worker name `dreadroot-l2` and the custom domain
-  `server.dreadroot.com`. Deploying from that directory would replace the
-  DreadRoot game server. Rename it before anyone runs a deploy there.
+- **CORRECTED 2026-Aug-14: there is no separate Siege Worlds repo or worker.**
+  An earlier version of this document (and the memory note it came from)
+  claimed `/Users/geoffreymccabe/dreadroot-sww` was a separate project whose
+  worker config would overwrite DreadRoot's live server. That is wrong and was
+  verified wrong: that directory is a second working copy of the SAME GitHub
+  repository (`geoffmccabe/dreadroot`), on the same branch, roughly 50
+  versions behind. `worker/wrangler.toml` is byte-identical because it is the
+  same file. There is nothing to rename.
+  The real caution is milder: that checkout is stale, so do not work in it.
+  Use `/Users/geoffreymccabe/dreadroot`.
+- **Siege Worlds has no multiplayer at all today.** `useMultiplayer` is
+  consumed only by `MultiplayerPlayers.tsx`, which mounts in the DreadRoot
+  scene. So Siege cannot be regressed by this work, and it also starts from
+  zero rather than from an upgrade. Its integration cost is real but small:
+  the engine is literally shared (one copy, one repo), while the hook-up is
+  per-game because Siege does not use the central per-frame registry that
+  DreadRoot does.
 - **The performance harness is coupled to the diagnostics metric layout.**
   Adding netcode metrics without updating the harness silently corrupts its
   output. This has bitten before.
@@ -900,10 +912,84 @@ non-transferability removes the business case.
 - Monsters before player-movement authority.
 - Delta compression deferred; pack the numbers tighter first.
 
-## 7. Recommended immediate next step
+## 7. Staging: how we actually roll this out
 
-Phase 0 in full, because it is small, it removes traps, and it closes live
-money holes that exist regardless of whether multiplayer ever ships. Then
-Phase 1, which is mostly wiring and produces a visible result.
+Agreed with Geoff 2026-Aug-14. The phases above say WHAT to build. This says
+in what order to switch things on, so that the game improves at every step and
+nothing a player sees depends on the new server until very late.
 
-Phase 2 is the one to plan carefully once Phase 1 is real.
+The governing idea: **build the seam first, swap what is behind it later.**
+
+### Stage 1 (in progress) Safety and groundwork. Invisible to players.
+
+Phase 0 in full. Toolchain, the live economy holes, the open server, the
+missing migrations. None of it touches gameplay and all of it is worth doing
+whether or not multiplayer ever ships.
+
+### Stage 2 Build the seam. Still invisible to players.
+
+Separate monster DRAWING from monster DECIDING. Monsters get rendered from a
+feed of positions; something else decides what is in that feed. Then point the
+feed at the existing local simulation.
+
+Nothing changes. The game plays identically, no multiplayer is involved, and
+there is nothing to break. But the source is now swappable, so every later
+switch (local, to host, to server) is a change of source rather than a
+rewrite, and it can be flipped back instantly.
+
+This is the single largest reusable piece of the client-side Phase 2 work, and
+it carries no multiplayer risk at all. Do it early precisely for that reason.
+
+### Stage 3 Improve what already exists. Visible win, still no server.
+
+- Swap the crude fixed-factor smoothing on remote players for the proper
+  time-based interpolation that already exists unused in the repo
+  (`remoteEntities.ts`). Immediate visible improvement, and it is the exact
+  code the server path uses later.
+- Seed monster spawning off map location plus a world seed, so every player
+  entering an area gets the same creatures. Real improvement on today's
+  behaviour, where two players see entirely different monsters, and the work
+  is required for Phase 2 regardless.
+- Announce kills over the messaging that already exists, so a monster killed
+  by one player dies for everyone.
+
+Honest limits, so this is not oversold: monsters will start together and then
+drift apart, because each player's copy chases different things and browsers
+do not even do decimal arithmetic identically. And it remains fully cheatable,
+since each client still decides its own outcomes. Roughly 60 percent of the
+feeling for 20 percent of the effort, and none of the effort is wasted.
+
+### Stage 4 Dress rehearsal. The server runs but decides nothing.
+
+Connect to the Durable Object. Let it simulate the whole world. Keep showing
+players their LOCAL results, and quietly record where the two disagree.
+
+Nobody's game is affected. We watch the disagreement rate until it is boringly
+low, then flip knowing it will work, rather than finding out during someone's
+evening. If it is high, we learn that for free.
+
+### Stage 5 Flip the feed, one creature type at a time.
+
+Behind a flag, reversible, per creature. Shombie first (closest to portable).
+This is the point at which "everyone sees the same monsters" becomes true and
+uncheatable rather than approximate.
+
+### Stage 6 Player movement authority.
+
+Phase 4, unchanged, and last. What we learn in stages 4 and 5 about the
+server-side world will change how it is approached, which is the main reason
+not to attempt it earlier.
+
+### Where Siege Worlds fits
+
+Not a second build. The engine is literally shared: one repo, one copy of the
+netcode, one server. Siege has no multiplayer today, so it cannot be
+regressed, and it joins at Stage 3 or later by hooking up its own view. Its
+cost is the hook-up only, because it does not use DreadRoot's central
+per-frame registry.
+
+### Testing
+
+**DreadRoot only, until Stage 5 is proven.** It is where multiplayer already
+exists (so improvement is visible rather than theoretical), where the clean
+plug-in point is, and where the netcode lives.
