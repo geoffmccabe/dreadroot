@@ -59,7 +59,10 @@
     "probe:canyon-rim": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/probe-canyon-rim.ts",
     "check:kaiju-clips": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kaiju-clips.ts",
     "check:ground-matches-mesh": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-ground-matches-mesh.ts",
-    "measure:glb-feet": "node scripts/measure-glb-feet.mjs"
+    "measure:glb-feet": "node scripts/measure-glb-feet.mjs",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "typecheck:worker": "tsc -p worker/tsconfig.json --noEmit",
+    "check:netcode": "npm run check:snapshot-roundtrip && npm run check:netcode-pipeline && npm run check:server-tick && npm run check:prediction && npm run check:lagcomp && npm run check:game-instance"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -146,5 +149,8 @@
     "typescript-eslint": "^8.38.0",
     "vite": "^5.4.19",
     "wrangler": "^4.98.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

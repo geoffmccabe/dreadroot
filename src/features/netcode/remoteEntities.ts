@@ -92,8 +92,8 @@ export class RemoteWorld {
 
     // Pick the bracketing pair (older ≤ render < newer). The before/after/
     // single-snapshot cases collapse to older === newer (no interpolation).
-    let older: { ents: Map<number, RemoteEntity> };
-    let newer: { ents: Map<number, RemoteEntity> };
+    let older: { time: number; ents: Map<number, RemoteEntity> };
+    let newer: { time: number; ents: Map<number, RemoteEntity> };
     let t = 0;
     if (renderTimeMs <= buf[0].time) {
       older = newer = buf[0];
