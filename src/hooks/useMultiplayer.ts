@@ -282,6 +282,10 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      // Drop interpolation history with the connection. Without this a
+      // reconnect would interpolate every player from wherever they stood
+      // when the channel dropped, producing a visible slide across the map.
+      remotePlayerBuffer.clear();
       setIsConnected(false);
       setPlayers(new Map());
     };

@@ -173,7 +173,7 @@ export interface UseUniversalEnemySpawnerOptions {
 
 // Pre-allocated for performance
 /** Reused rule buffer for deterministic mode — no per-tick allocation. */
-const _detRules: import('../spawn/deterministicSpawn').ChunkSpawnRule[] = [];
+const _detRules: import('../spawn/deterministicSpawnController').DeterministicRule[] = [];
 const _playerPos = new THREE.Vector3();
 
 /**
@@ -297,20 +297,24 @@ export function useUniversalEnemySpawner({
         _detRules.push({
           enemyType: rule.enemyType,
           tier: rule.tier,
-          // Reuse the tuned per-minute chance as a per-chunk density so the
-          // world does not suddenly become far busier or far emptier.
-          density: Math.min(1, rule.spawnChancePerMinute / 100),
+          // Pass the tuning number through UNCHANGED. The controller converts
+          // it to a per-chunk density, because that conversion depends on how
+          // many chunks the rule's ring covers and getting it wrong changes
+          // the population by an order of magnitude.
+          spawnChancePerMinute: rule.spawnChancePerMinute,
           maxPerChunk: rule.maxPerChunk,
+          // Carry EACH rule's own range. Previously the first rule's range was
+          // applied to every rule, which is wrong whenever they differ and was
+          // read off a rule that might itself have been filtered out.
+          minChunkDistance: rule.minChunkDistanceFromPlayer,
+          maxChunkDistance: rule.maxChunkDistanceFromPlayer,
         });
       }
-      if (_detRules.length > 0) {
-        const first = rules[0];
+      if (_detRules.length > 0 && spawn) {
         deterministicSpawnController.tick(
           {
             playerChunkX,
             playerChunkZ,
-            minChunkDistance: first.minChunkDistanceFromPlayer,
-            maxChunkDistance: first.maxChunkDistanceFromPlayer,
             chunkSize: CHUNK_SIZE,
             rules: _detRules,
           },
