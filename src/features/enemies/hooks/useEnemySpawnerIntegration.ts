@@ -49,7 +49,7 @@ export interface UseEnemySpawnerIntegrationOptions {
   // === Shombie system ===
   shombieDefinitions?: ShombieDefinition[];
   shombiesRef: React.RefObject<ShombieInstance[]>;
-  onSpawnShombie?: (definition: ShombieDefinition, worldX: number, worldZ: number) => void;
+  onSpawnShombie?: (definition: ShombieDefinition, worldX: number, worldZ: number, presetId?: string) => void;
 }
 
 /**
@@ -208,7 +208,7 @@ export function useEnemySpawnerIntegration({
    * Handle spawn request from UES
    */
   const handleSpawnEnemy = useCallback((request: SpawnRequest) => {
-    const { enemyType, tier, worldX, worldZ, customData } = request;
+    const { enemyType, tier, worldX, worldZ, customData, id } = request;
 
     if (enemyType === 'shwarm') {
       const defs = shwarmDefsRef.current;
@@ -237,7 +237,9 @@ export function useEnemySpawnerIntegration({
       }
 
       console.log(`[UES] Spawning shombie tier ${tier} at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
-      spawn(def, worldX, worldZ);
+      // `id` is only set under deterministic spawning; undefined keeps the
+      // legacy random-id path byte-for-byte unchanged.
+      spawn(def, worldX, worldZ, id);
     }
   }, []);
 

@@ -14,6 +14,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { deterministicSpawnController } from '../spawn/deterministicSpawnController';
 
 // Spawn check interval - 1 second as requested
 const SPAWN_CHECK_INTERVAL_MS = 1000;
@@ -114,6 +115,10 @@ export interface SpawnRequest {
   chunkX: number;
   chunkZ: number;
   customData?: Record<string, unknown>;
+  /** Stable id from the deterministic planner, when that mode is active. Every
+   *  client derives the same id for the same creature, which is what lets a
+   *  kill by one player be recognised by another. Omitted = legacy behaviour. */
+  id?: string;
 }
 
 /**
@@ -167,6 +172,8 @@ export interface UseUniversalEnemySpawnerOptions {
 }
 
 // Pre-allocated for performance
+/** Reused rule buffer for deterministic mode — no per-tick allocation. */
+const _detRules: import('../spawn/deterministicSpawn').ChunkSpawnRule[] = [];
 const _playerPos = new THREE.Vector3();
 
 /**
@@ -273,6 +280,56 @@ export function useUniversalEnemySpawner({
     const playerChunkX = Math.floor(_playerPos.x / CHUNK_SIZE);
     const playerChunkZ = Math.floor(_playerPos.z / CHUNK_SIZE);
     const distanceFromOrigin = Math.sqrt(_playerPos.x * _playerPos.x + _playerPos.z * _playerPos.z);
+
+    // === DETERMINISTIC MODE (opt-in, default OFF) ===
+    // When on, the population of a chunk is DERIVED from the world seed and
+    // the chunk coordinates rather than rolled per-second near whoever happens
+    // to be playing. Every client derives the same creatures, in the same
+    // places, with the same ids — which is what "we all see the same monsters"
+    // actually requires, and what makes a shared kill possible.
+    // This REPLACES the random path below rather than running alongside it,
+    // so the two can never both populate the same world.
+    if (deterministicSpawnController.isEnabled()) {
+      _detRules.length = 0;
+      for (const rule of rules) {
+        if (!passesQuickChecks(rule, isNight, playerLevel, isInTree, isOnGround, distanceFromOrigin)) continue;
+        if (getActive(rule.enemyType, rule.tier) >= rule.maxActive) continue;
+        _detRules.push({
+          enemyType: rule.enemyType,
+          tier: rule.tier,
+          // Reuse the tuned per-minute chance as a per-chunk density so the
+          // world does not suddenly become far busier or far emptier.
+          density: Math.min(1, rule.spawnChancePerMinute / 100),
+          maxPerChunk: rule.maxPerChunk,
+        });
+      }
+      if (_detRules.length > 0) {
+        const first = rules[0];
+        deterministicSpawnController.tick(
+          {
+            playerChunkX,
+            playerChunkZ,
+            minChunkDistance: first.minChunkDistanceFromPlayer,
+            maxChunkDistance: first.maxChunkDistanceFromPlayer,
+            chunkSize: CHUNK_SIZE,
+            rules: _detRules,
+          },
+          Date.now(),
+          (planned) => {
+            spawn({
+              enemyType: planned.enemyType,
+              tier: planned.tier,
+              worldX: planned.chunkX * CHUNK_SIZE + planned.offsetX,
+              worldZ: planned.chunkZ * CHUNK_SIZE + planned.offsetZ,
+              chunkX: planned.chunkX,
+              chunkZ: planned.chunkZ,
+              id: planned.id,
+            });
+          },
+        );
+      }
+      return;
+    }
 
     // Process each spawn rule
     for (const rule of rules) {

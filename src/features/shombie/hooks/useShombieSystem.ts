@@ -16,6 +16,7 @@ import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { seededFrom } from '@/lib/seededRandom';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
 
 // Head movement type randomizer - 1/3 each
@@ -169,6 +170,11 @@ export function useShombieSystem({
     definition: ShombieDefinition,
     worldX: number,
     worldZ: number,
+    /** Stable id from the deterministic planner. When supplied, every client
+     *  names this creature the same thing — which is what makes a shared kill
+     *  possible — and any gameplay-relevant randomness is derived from it so
+     *  the creature is IDENTICAL everywhere. Omitted = legacy random spawn. */
+    presetId?: string,
   ): ShombieInstance | null => {
     if (shombiesRef.current.length >= MAX_TOTAL_SHOMBIES) {
       console.warn('[Shombie] Max total shombies reached');
@@ -179,10 +185,16 @@ export function useShombieSystem({
     const x = Math.max(SHOMBIE_SPAWN_BOUNDS.minX, Math.min(SHOMBIE_SPAWN_BOUNDS.maxX, worldX));
     const z = Math.max(SHOMBIE_SPAWN_BOUNDS.minZ, Math.min(SHOMBIE_SPAWN_BOUNDS.maxZ, worldZ));
 
-    const id = `shombie_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    
-    // Random scale variation ±20%
-    const scale = 1 + (Math.random() * 2 - 1) * SHOMBIE_SCALE_VARIATION;
+    const id = presetId ?? `shombie_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // Scale variation ±20%. This is NOT purely cosmetic — it feeds the hitbox
+    // height via the adapter — so under a deterministic id it must be derived
+    // from that id, or two players would shoot at differently-sized creatures.
+    // Purely visual randomness (twitches, head movement, animation phase) is
+    // deliberately left local: it costs nothing to disagree on.
+    const scale = presetId !== undefined
+      ? 1 + (seededFrom(presetId, 'scale').next() * 2 - 1) * SHOMBIE_SCALE_VARIATION
+      : 1 + (Math.random() * 2 - 1) * SHOMBIE_SCALE_VARIATION;
     
     const chunkX = Math.floor(x / CHUNK_SIZE);
     const chunkZ = Math.floor(z / CHUNK_SIZE);

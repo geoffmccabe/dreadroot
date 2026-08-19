@@ -1066,8 +1066,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     spawnShwarmAt(definition, worldX, worldZ);
   }, [spawnShwarmAt]);
 
-  const handleUESSpawnShombie = useCallback((definition: any, worldX: number, worldZ: number) => {
-    spawnShombieAt(definition, worldX, worldZ);
+  const handleUESSpawnShombie = useCallback((definition: any, worldX: number, worldZ: number, presetId?: string) => {
+    // presetId is only supplied under deterministic spawning; undefined keeps
+    // the legacy random-id path unchanged.
+    spawnShombieAt(definition, worldX, worldZ, presetId);
   }, [spawnShombieAt]);
 
   // UES integration - natural spawning for Shwarms and Shombies
