@@ -62,10 +62,11 @@
     "measure:glb-feet": "node scripts/measure-glb-feet.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:worker": "tsc -p worker/tsconfig.json --noEmit",
-    "check:netcode": "npm run check:snapshot-roundtrip && npm run check:netcode-pipeline && npm run check:server-tick && npm run check:prediction && npm run check:lagcomp && npm run check:game-instance && npm run check:entity-feed && npm run check:transform-buffer && npm run check:deterministic-spawn",
+    "check:netcode": "npm run check:snapshot-roundtrip && npm run check:netcode-pipeline && npm run check:server-tick && npm run check:prediction && npm run check:lagcomp && npm run check:game-instance && npm run check:entity-feed && npm run check:transform-buffer && npm run check:deterministic-spawn && npm run check:kill-bus",
     "check:entity-feed": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-entity-feed.ts",
     "check:transform-buffer": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-transform-buffer.ts",
-    "check:deterministic-spawn": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-deterministic-spawn.ts"
+    "check:deterministic-spawn": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-deterministic-spawn.ts",
+    "check:kill-bus": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-kill-bus.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

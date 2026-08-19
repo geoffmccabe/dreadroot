@@ -17,6 +17,7 @@ import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { seededFrom } from '@/lib/seededRandom';
+import { enemyKillBus } from '@/features/enemies/kill/enemyKillBus';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
 
 // Head movement type randomizer - 1/3 each
@@ -166,6 +167,24 @@ export function useShombieSystem({
   /**
    * Spawn a shombie at a specific world position with scale variation and emergence
    */
+  // Let a kill by another player remove one of our shombies. Registered once;
+  // returns false for ids we do not own so other creature systems get a turn.
+  useEffect(() => {
+    return enemyKillBus.registerRemover((id: string): boolean => {
+      const list = shombiesRef.current;
+      for (let i = 0; i < list.length; i++) {
+        const s = list[i];
+        if (s.id !== id || !s.isActive) continue;
+        // Match the local death path: deactivate and let the existing
+        // once-per-second sweep compact the array. No per-kill setState.
+        s.isActive = false;
+        deadPendingRef.current = true;
+        return true;
+      }
+      return false;
+    });
+  }, []);
+
   const spawnShombieAt = useCallback((
     definition: ShombieDefinition,
     worldX: number,
@@ -427,6 +446,11 @@ export function useShombieSystem({
 
     if (shombie.currentHealth <= 0) {
       onShombieKilled?.(shombie.definition.tier, shombie.position.x, shombie.position.y, shombie.position.z);
+
+      // Tell the other players. Only deterministic ids mean anything to them,
+      // and the bus filters the rest, so this is a no-op under legacy
+      // spawning. The reward path (record_kill) is untouched by this.
+      enemyKillBus.publishLocalKill(shombie.id);
 
       // Death sound: the shombie's own moan, pitched down to ~0 (powering down).
       // Capped + overlapping so a horde death plays a few at once, not 100 in

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { remotePlayerBuffer } from '@/features/netcode/transformBuffer';
+import { enemyKillBus } from '@/features/enemies/kill/enemyKillBus';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as THREE from 'three';
@@ -196,6 +197,14 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         });
       });
 
+      // Shared kills: a monster killed by one player is dead for everyone.
+      // Only meaningful for deterministically-spawned creatures (everyone
+      // derives the same id); the bus rejects legacy and malformed ids.
+      multiplayerChannel.on('broadcast', { event: 'enemy_killed' }, (msg: any) => {
+        const id = msg?.payload?.enemy_id;
+        if (typeof id === 'string') enemyKillBus.applyRemoteKill(id);
+      });
+
       // Listen for player hit events (fire effects on other players)
       multiplayerChannel.on('broadcast', { event: 'player_hit' }, (msg: any) => {
         const payload = msg?.payload;
@@ -250,8 +259,24 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
 
     setupMultiplayer();
 
+    // Outgoing side of shared kills: when a monster dies locally, announce it.
+    // Registered against the bus rather than called directly so the transport
+    // can be swapped for the game server later without touching the systems
+    // that actually detect deaths.
+    const offKillSender = enemyKillBus.onOutgoing((enemyId: string) => {
+      const ch = channelRef.current;
+      const u = userRef.current;
+      if (!ch || !u) return;
+      ch.send({
+        type: 'broadcast',
+        event: 'enemy_killed',
+        payload: { user_id: u.id, enemy_id: enemyId, at: Date.now() },
+      });
+    });
+
     // Cleanup: Use ref to get current channel value - fixes stale closure bug
     return () => {
+      offKillSender();
       isSettingUpRef.current = false;
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
