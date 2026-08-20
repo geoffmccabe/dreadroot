@@ -60,6 +60,32 @@ for (let i = 0; i < TRIALS; i++) {
 const mean = total / TRIALS;
 assert(mean > 3.5 && mean < 6.5, `population matches the legacy expectation ~5 (got ${mean.toFixed(2)})`);
 
+// 3b. BUG GUARD: calibration must hold for maxPerChunk > 1 too. A populated
+//     chunk yields nextInt(1, maxPerChunk), averaging (1+maxPerChunk)/2 — not
+//     1. An earlier version divided by chunk count only, so raising
+//     maxPerChunk to 4 silently inflated the population by 2.5x. Invisible
+//     while every live rule used maxPerChunk = 1.
+const meanFor = (maxPerChunk: number): number => {
+  let t = 0;
+  const N = 400;
+  for (let i = 0; i < N; i++) {
+    const c = new DeterministicSpawnController();
+    c.enable(); c.setEpochMs(5 * 60 * 1000); c.setWorldSeed(`mpc-${maxPerChunk}-${i}`);
+    t += collect(c, 0, [rule({ spawnChancePerMinute: 100, maxPerChunk })]).length;
+  }
+  return t / N;
+};
+const mpc1 = meanFor(1);
+const mpc4 = meanFor(4);
+assert(mpc1 > 3.5 && mpc1 < 6.5, `maxPerChunk=1 matches expectation ~5 (got ${mpc1.toFixed(2)})`);
+assert(mpc4 > 3.5 && mpc4 < 6.5, `maxPerChunk=4 ALSO matches ~5, not 2.5x it (got ${mpc4.toFixed(2)})`);
+assert(Math.abs(mpc4 - mpc1) < 2, `population is stable across maxPerChunk (${mpc1.toFixed(2)} vs ${mpc4.toFixed(2)})`);
+
+// 3c. The killed set cannot grow without bound while disabled.
+const cK = new DeterministicSpawnController();
+for (let i = 0; i < 9000; i++) cK.markKilled(`shombie_t1_0_0_e1_${i}`);
+assert(cK.status().killed <= 4096, `killed set is capped (got ${cK.status().killed})`);
+
 // 4. The multiplier scales the population as advertised.
 const meanAt = (mult: number): number => {
   let t = 0;

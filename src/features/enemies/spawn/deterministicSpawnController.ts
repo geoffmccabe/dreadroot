@@ -77,12 +77,20 @@ export class DeterministicSpawnController {
    * Getting this wrong is not subtle: naively reusing `chance/100` as the
    * per-chunk density produced roughly FOURTEEN TIMES the legacy population,
    * because it rolled that chance separately in each of ~72 chunks.
+   *
+   * Second correction, from a later self-audit: a chunk that IS populated
+   * yields `nextInt(1, maxPerChunk)` creatures, averaging (1+maxPerChunk)/2 —
+   * not exactly one. Dividing by that expectation keeps the calibration honest
+   * for any maxPerChunk. This was invisible while every rule used
+   * maxPerChunk = 1 (where the factor is 1), and would have silently inflated
+   * the population by 2.5x the moment anyone raised it to 4.
    */
   private densityFor(rule: DeterministicRule, ringChunks: number): number {
     if (ringChunks <= 0) return 0;
+    const perPopulatedChunk = (1 + Math.max(1, rule.maxPerChunk)) / 2;
     const epochMinutes = this.epochMs / 60000;
     const expectedPerEpoch = (rule.spawnChancePerMinute / 100) * epochMinutes;
-    return Math.min(1, (expectedPerEpoch / ringChunks) * this.densityMultiplier);
+    return Math.min(1, (expectedPerEpoch / (ringChunks * perPopulatedChunk)) * this.densityMultiplier);
   }
 
   /** Chunks in the ring [min, max] of a square spiral. */
@@ -108,8 +116,19 @@ export class DeterministicSpawnController {
     this.reset();
   }
 
+  /** Maximum remembered kills. Normally bounded by the epoch rollover inside
+   *  tick(), but tick() returns early while DISABLED, so without a hard cap a
+   *  long session that enabled and then disabled the mode could accumulate
+   *  forever. */
+  private static readonly MAX_KILLED = 4096;
+
   /** A creature died. Suppress it until the epoch rolls over. */
   markKilled(id: string): void {
+    if (this.killed.size >= DeterministicSpawnController.MAX_KILLED) {
+      // Drop the oldest entry. Set iteration order is insertion order.
+      const oldest = this.killed.values().next();
+      if (!oldest.done) this.killed.delete(oldest.value);
+    }
     this.killed.add(id);
   }
 

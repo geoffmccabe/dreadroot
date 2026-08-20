@@ -1074,6 +1074,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   // UES integration - natural spawning for Shwarms and Shombies
   useEnemySpawnerIntegration({
+    worldId: currentWorldId,
     isEnabled: enemiesEnabled, // Delay until blocks loaded
     cameraRef,
     isNight: isNightRef.current,

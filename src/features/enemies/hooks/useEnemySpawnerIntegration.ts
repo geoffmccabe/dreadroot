@@ -6,6 +6,7 @@
  */
 
 import { useMemo, useCallback, useRef, useEffect } from 'react';
+import { deterministicSpawnController } from '../spawn/deterministicSpawnController';
 import * as THREE from 'three';
 import {
   useUniversalEnemySpawner,
@@ -50,12 +51,18 @@ export interface UseEnemySpawnerIntegrationOptions {
   shombieDefinitions?: ShombieDefinition[];
   shombiesRef: React.RefObject<ShombieInstance[]>;
   onSpawnShombie?: (definition: ShombieDefinition, worldX: number, worldZ: number, presetId?: string) => void;
+
+  /** Current world. Seeds deterministic spawning, so the same coordinates in
+   *  two different worlds get DIFFERENT creatures. Without it every world
+   *  shares one seed and Magor would mirror Default World exactly. */
+  worldId?: string | null;
 }
 
 /**
  * Hook that integrates the Universal Enemy Spawner with actual enemy systems
  */
 export function useEnemySpawnerIntegration({
+  worldId,
   isEnabled,
   cameraRef,
   isNight,
@@ -203,6 +210,12 @@ export function useEnemySpawnerIntegration({
 
     return 0;
   }, [shwarmsRef, shombiesRef]);
+
+  // Keep deterministic spawning keyed to the world in play. Set even while the
+  // mode is off, so enabling it mid-session uses the right world immediately.
+  useEffect(() => {
+    if (worldId) deterministicSpawnController.setWorldSeed(worldId);
+  }, [worldId]);
 
   /**
    * Handle spawn request from UES
