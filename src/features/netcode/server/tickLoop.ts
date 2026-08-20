@@ -21,6 +21,8 @@ export const TICK_MS = 1000 / TICK_HZ; // 50
 /** Cap accumulated time so a long pause (idle DO resuming) doesn't run a spiral
  *  of catch-up ticks. */
 export const MAX_CATCHUP_MS = 250; // ≤ 5 steps in one advance()
+/** Inputs a single client may have buffered. 8 ticks = 400 ms of intent. */
+export const MAX_QUEUED_INPUTS = 8;
 
 /** Authoritative server entity: the wire fields + server-private velocity the
  *  default sim integrates. (The real AI sim carries richer per-type state.) */
@@ -53,6 +55,8 @@ export class TickLoop<I = unknown> {
   private lastTime: number | null = null;
   private entities = new Map<number, ServerEntity>();
   private inputs = new Map<string, I>();
+  /** Per-client FIFO of not-yet-applied inputs. */
+  private pending = new Map<string, I[]>();
   private simulate: SimulateFn<I>;
 
   constructor(simulate: SimulateFn<I>) {
@@ -69,9 +73,40 @@ export class TickLoop<I = unknown> {
     return this.entities;
   }
 
-  /** Queue a client's input for the NEXT tick (latest wins within a tick). */
+  /**
+   * Queue a client's input. Inputs are applied ONE PER TICK, in arrival order.
+   *
+   * This used to be last-write-wins (`inputs.set(clientId, input)`), which
+   * silently discarded every input but the most recent one to arrive between
+   * two ticks. That is invisible when a client sends exactly one input per
+   * tick, but plan v3 §4.1a REQUIRES batching — sending several inputs per
+   * message is how we stay under the per-object message-rate ceiling at 100
+   * players — and under batching it threw away half of every batch.
+   *
+   * Caught by the live dress rehearsal: after fixing the dt cap, the server
+   * still tracked only ~half the client's movement, because each 2-input
+   * batch lost one.
+   *
+   * Bounded: a client that floods cannot buffer unlimited movement to spend
+   * later. Beyond the cap the OLDEST input is dropped, so the queue always
+   * reflects recent intent.
+   */
   queueInput(clientId: string, input: I): void {
-    this.inputs.set(clientId, input);
+    let q = this.pending.get(clientId);
+    if (q === undefined) { q = []; this.pending.set(clientId, q); }
+    q.push(input);
+    if (q.length > MAX_QUEUED_INPUTS) q.shift();
+  }
+
+  /** Forget a departed client's queued inputs. Without this their queue would
+   *  linger for the lifetime of the instance. */
+  clearInputs(clientId: string): void {
+    this.pending.delete(clientId);
+  }
+
+  /** Queued-but-unapplied input count, for tests and diagnostics. */
+  queuedCount(clientId: string): number {
+    return this.pending.get(clientId)?.length ?? 0;
   }
 
   /**
@@ -88,8 +123,15 @@ export class TickLoop<I = unknown> {
     let stepped = 0;
     while (this.accumulator >= TICK_MS) {
       this.accumulator -= TICK_MS;
-      this.simulate(this.entities, this.inputs, TICK_MS, this.tick);
+      // Take exactly ONE queued input per client for this tick. Each input
+      // represents one tick's worth of time, so applying more than one per
+      // tick would let a client move faster than the simulation allows.
       this.inputs.clear();
+      for (const [clientId, q] of this.pending) {
+        const next = q.shift();
+        if (next !== undefined) this.inputs.set(clientId, next);
+      }
+      this.simulate(this.entities, this.inputs, TICK_MS, this.tick);
       this.tick++;
       stepped++;
     }
@@ -97,7 +139,7 @@ export class TickLoop<I = unknown> {
   }
 
   /** Full snapshot of the current authoritative state (wire fields only). */
-  buildSnapshot(worldId: number, zoneId: number, out?: SnapshotEntity[]): Snapshot {
+  buildSnapshot(worldId: number, zoneId: number, out?: SnapshotEntity[], ackSeq = 0): Snapshot {
     const entities = out ?? [];
     entities.length = 0;
     for (const e of this.entities.values()) {
@@ -106,6 +148,6 @@ export class TickLoop<I = unknown> {
         x: e.x, y: e.y, z: e.z, yaw: e.yaw, stateBits: e.stateBits,
       });
     }
-    return { tick: this.tick, baseTick: this.tick, worldId, zoneId, entities };
+    return { tick: this.tick, baseTick: this.tick, worldId, zoneId, ackSeq, entities };
   }
 }

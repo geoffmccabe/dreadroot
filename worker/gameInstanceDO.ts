@@ -65,6 +65,18 @@ export class GameInstanceDO {
     }
     this.conns.set(ws, clientId);
 
+    // Greet immediately: tell the client which entity is theirs and which RUN
+    // of this object they reached. Without the entity id a client cannot find
+    // itself in a snapshot; without the session id it cannot tell a restart
+    // (tick counter back to 0) from an out-of-order packet, and would discard
+    // every later snapshot forever. Cloudflare resets every live Durable
+    // Object on each code deploy, so that is guaranteed, not hypothetical.
+    const hello = this.core.buildHello(clientId);
+    if (hello !== null) {
+      try { ws.send(hello); }
+      catch { this.onClose(ws); return; }
+    }
+
     ws.addEventListener('message', (ev: MessageEvent) => {
       const d = ev.data;
       if (d instanceof ArrayBuffer) {

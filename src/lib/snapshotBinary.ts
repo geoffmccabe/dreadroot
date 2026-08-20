@@ -23,7 +23,7 @@
  */
 
 export const SNAPSHOT_MAGIC = 0x44524b53; // 'DRKS'
-export const SNAPSHOT_VERSION = 1;
+export const SNAPSHOT_VERSION = 2;
 /** Fixed-point scale: positions quantized to 1/16 of a block. */
 export const POS_SCALE = 16;
 /** Angle quantization: yaw mapped to a u16 (0..65535 ↔ 0..2π). Shared by the
@@ -65,6 +65,19 @@ export interface SnapshotEntity {
 }
 
 export interface Snapshot {
+  /**
+   * Highest client input sequence the server had APPLIED when this was built.
+   *
+   * Without this, client prediction and reconciliation cannot work at all:
+   * `PredictedPlayer.reconcile()` needs to know which of its pending inputs
+   * the server has already accounted for, or it replays inputs that are
+   * already baked into the authoritative position and drifts further away
+   * with every correction. The server computed this all along (ackSeqFor) and
+   * simply never sent it.
+   *
+   * Per-recipient: each client is told about its OWN inputs.
+   */
+  ackSeq: number;
   /** authoritative L2 tick number this snapshot was produced on. */
   tick: number;
   /** the tick this is a delta against (== tick for a full/keyframe snapshot). */
@@ -76,7 +89,7 @@ export interface Snapshot {
 
 // Header: magic u32, version u8, flags u8, zoneId u16, tick u32, baseTick u32,
 // worldId u32, entityCount u16.  = 22 bytes.
-const HEADER_BYTES = 22;
+const HEADER_BYTES = 26;
 // Per-entity: origin u8 + type u8 + id u32 + x/y/z int32 (12) + yaw u16 + state
 // u16 = 22 bytes.
 const ENTITY_BYTES = 22;
@@ -101,6 +114,7 @@ export function encodeSnapshot(snap: Snapshot): ArrayBuffer {
   dv.setUint32(o, snap.baseTick >>> 0); o += 4;
   dv.setUint32(o, snap.worldId >>> 0); o += 4;
   dv.setUint16(o, n & 0xffff); o += 2;
+  dv.setUint32(o, (snap.ackSeq ?? 0) >>> 0); o += 4;
 
   for (let i = 0; i < n; i++) {
     const e = snap.entities[i];
@@ -129,6 +143,7 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot {
   const baseTick = dv.getUint32(o); o += 4;
   const worldId = dv.getUint32(o); o += 4;
   const n = dv.getUint16(o); o += 2;
+  const ackSeq = dv.getUint32(o); o += 4;
 
   const entities: SnapshotEntity[] = new Array(n);
   for (let i = 0; i < n; i++) {
@@ -142,5 +157,5 @@ export function decodeSnapshot(buf: ArrayBuffer): Snapshot {
     const stateBits = dv.getUint16(o); o += 2;
     entities[i] = { registryOrigin, entityType, id, x, y, z, yaw, stateBits };
   }
-  return { tick, baseTick, worldId, zoneId, entities };
+  return { tick, baseTick, worldId, zoneId, ackSeq, entities };
 }

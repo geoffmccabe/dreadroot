@@ -21,6 +21,15 @@ export type NetCommand =
 
 // ── WORKER → GAME events ────────────────────────────────────────────────────
 export type NetEvent =
+  | {
+      /** Server greeting: who we are, and which RUN of the server this is. */
+      kind: 'hello';
+      sessionId: number;
+      yourEntityId: number;
+      tick: number;
+      tickRate: number;
+      registryOrigin: number;
+    }
   | { kind: 'connected'; instanceId: string }
   | { kind: 'disconnected'; reason?: string }
   | { kind: 'error'; message: string }
@@ -29,6 +38,9 @@ export type NetEvent =
       kind: 'diff';
       tick: number;
       baseTick: number;
+      /** Highest input sequence the server had applied for US. Drives
+       *  reconciliation; 0 before any input has been acknowledged. */
+      ackSeq: number;
       worldId: number;
       zoneId: number;
       added: SnapshotEntity[];

@@ -10,6 +10,7 @@ import { decodeSnapshot, type Snapshot, type SnapshotEntity } from '@/lib/snapsh
 import { diffSnapshots, entityKey } from './snapshotDiff';
 import type { NetCommand, NetEvent } from './protocol';
 import { SyntheticTransport, WebSocketTransport, type NetTransport } from './transport';
+import { isHello, decodeHello } from './helloBinary';
 
 // `self` is the worker global; cast for postMessage/onmessage without pulling
 // the webworker lib (which conflicts with the app's DOM lib).
@@ -21,6 +22,39 @@ const ctx = self as unknown as {
 let transport: NetTransport | null = null;
 let last: Snapshot | null = null;
 const prevByKey = new Map<number, SnapshotEntity>();
+/** Which run of the server we are talking to. Changes on restart/deploy. */
+let sessionId: number | null = null;
+
+/** Route an incoming frame by its magic. */
+function handleMessage(buf: ArrayBuffer): void {
+  if (isHello(buf)) { handleHello(buf); return; }
+  handleSnapshot(buf);
+}
+
+function handleHello(buf: ArrayBuffer): void {
+  try {
+    const h = decodeHello(buf);
+    // A NEW session means the server restarted. Its tick counter is back near
+    // zero, so the stale-tick guard below would otherwise discard every
+    // snapshot from here on, permanently and silently. Drop the baseline so
+    // the fresh stream is accepted.
+    if (sessionId !== null && sessionId !== h.sessionId) {
+      last = null;
+      prevByKey.clear();
+    }
+    sessionId = h.sessionId;
+    ctx.postMessage({
+      kind: 'hello',
+      sessionId: h.sessionId,
+      yourEntityId: h.yourEntityId,
+      tick: h.tick,
+      tickRate: h.tickRate,
+      registryOrigin: h.registryOrigin,
+    });
+  } catch (e) {
+    ctx.postMessage({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+  }
+}
 
 function handleSnapshot(buf: ArrayBuffer): void {
   let snap: Snapshot;
@@ -42,6 +76,7 @@ function handleSnapshot(buf: ArrayBuffer): void {
   ctx.postMessage({
     kind: 'diff',
     tick: d.tick, baseTick: d.baseTick, worldId: d.worldId, zoneId: d.zoneId,
+    ackSeq: snap.ackSeq,
     added: d.added, changed: d.changed, removed: d.removed,
   });
 }
@@ -52,11 +87,12 @@ ctx.onmessage = (e) => {
     case 'connect': {
       transport?.close();
       last = null;
+      sessionId = null;
       transport = cmd.transport === 'websocket'
         ? new WebSocketTransport(cmd.url ?? '', cmd.token)
         : new SyntheticTransport();
       transport.onOpen = () => ctx.postMessage({ kind: 'connected', instanceId: cmd.instanceId });
-      transport.onMessage = handleSnapshot;
+      transport.onMessage = handleMessage;
       transport.onClose = (reason) => ctx.postMessage({ kind: 'disconnected', reason });
       transport.connect();
       break;
@@ -65,6 +101,7 @@ ctx.onmessage = (e) => {
       transport?.close();
       transport = null;
       last = null;
+      sessionId = null;
       break;
     case 'sendInput':
       transport?.send(cmd.payload);

@@ -95,6 +95,11 @@ import { getHandGrenades, setHandGrenade, armedHandsOfKindRightFirst, armedHands
 import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
+// Side-effect import: registers the console-only debug handles for the
+// multiplayer migration (__feed, __spawn, __shadow). None of them do anything
+// until explicitly switched on; without the import they would be tree-shaken
+// out of the production bundle and the handles would not exist.
+import '@/features/netcode/shadowSession';
 
 
 // Main Fortress orchestrator component

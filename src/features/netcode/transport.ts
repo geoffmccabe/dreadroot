@@ -52,7 +52,7 @@ export function makeSyntheticSnapshot(tick: number): Snapshot {
       x: 0, y: 64, z: 0, yaw: 0, stateBits: 0,
     });
   }
-  return { tick, baseTick: tick, worldId: 1, zoneId: 0, entities };
+  return { tick, baseTick: tick, worldId: 1, zoneId: 0, ackSeq: 0, entities };
 }
 
 export class SyntheticTransport implements NetTransport {

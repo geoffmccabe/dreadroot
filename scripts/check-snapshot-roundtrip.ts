@@ -17,6 +17,7 @@ const close = (a: number, b: number, eps: number) => Math.abs(a - b) <= eps;
 const snap: Snapshot = {
   tick: 123456,
   baseTick: 123456,
+  ackSeq: 4242,
   worldId: 7,
   zoneId: 3,
   entities: [
@@ -30,11 +31,13 @@ const snap: Snapshot = {
 };
 
 const buf = encodeSnapshot(snap);
-assert(buf.byteLength === 22 + snap.entities.length * 22, `byte length (got ${buf.byteLength})`);
+// v2 header is 26 bytes (22 + the 4-byte per-client input ack).
+assert(buf.byteLength === 26 + snap.entities.length * 22, `byte length (got ${buf.byteLength})`);
 
 const out = decodeSnapshot(buf);
 assert(out.tick === snap.tick, 'tick');
 assert(out.baseTick === snap.baseTick, 'baseTick');
+assert(out.ackSeq === 4242, `ackSeq round-trips (got ${out.ackSeq})`);
 assert(out.worldId === snap.worldId, 'worldId');
 assert(out.zoneId === snap.zoneId, 'zoneId');
 assert(out.entities.length === snap.entities.length, 'entity count');
@@ -57,7 +60,7 @@ for (let i = 0; i < snap.entities.length; i++) {
 
 // Bad magic must throw.
 let threw = false;
-try { decodeSnapshot(new ArrayBuffer(22)); } catch { threw = true; }
+try { decodeSnapshot(new ArrayBuffer(26)); } catch { threw = true; }
 assert(threw, 'bad-magic throws');
 
 if (failures === 0) {

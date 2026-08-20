@@ -18,6 +18,7 @@ import { LagCompensationBuffer } from './lagCompensation';
 import { encodeSnapshot, ORIGIN_L1, type SnapshotEntity } from '../../../lib/snapshotBinary';
 import { entityKey } from '../snapshotDiff';
 import { stepPlayer, PLAYER_SPEED, type PlayerInputCmd } from '../playerSim';
+import { encodeHello, HELLO_VERSION } from '../helloBinary';
 import { decodeInput } from '../inputBinary';
 import { decodeFrame, type StateReport } from '../clientFrames';
 
@@ -34,6 +35,8 @@ export interface GameInstanceConfig {
   aoiRadius: number;
   /** Max concurrent players in one instance (abuse cap). Default 64. */
   maxPlayers?: number;
+  /** Override the session id. Tests pin it; production leaves it random. */
+  sessionId?: number;
   /** Override the per-tick simulation (the real enemy AI plugs in here). The
    *  default applies queued player inputs via the shared stepPlayer. */
   simulate?: SimulateFn<QueuedInput>;
@@ -50,10 +53,36 @@ export class GameInstanceCore {
   private nextId = 1;
   private filtered: SnapshotEntity[] = [];
   private cfg: GameInstanceConfig;
+  /** Identifies THIS RUN of the instance. A restart, eviction or code deploy
+   *  produces a new value, which is how a client tells "the server restarted"
+   *  apart from "that packet was out of order" — the difference between
+   *  resyncing and hanging forever. */
+  private readonly sessionId: number;
 
   constructor(cfg: GameInstanceConfig) {
     this.cfg = cfg;
     this.loop = new TickLoop<QueuedInput>(cfg.simulate ?? this.defaultSimulate);
+    // Not security-sensitive: it only has to CHANGE across restarts.
+    this.sessionId = (cfg.sessionId ?? ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+  }
+
+  getSessionId(): number { return this.sessionId; }
+
+  /**
+   * The greeting for a freshly-joined client: who they are and which run of
+   * the server they reached. Returns null for an unknown client.
+   */
+  buildHello(clientId: string): ArrayBuffer | null {
+    const p = this.players.get(clientId);
+    if (p === undefined) return null;
+    return encodeHello({
+      version: HELLO_VERSION,
+      sessionId: this.sessionId,
+      yourEntityId: p.id,
+      tick: this.loop.tick,
+      tickRate: Math.round(1000 / TICK_MS),
+      registryOrigin: ORIGIN_L1,
+    });
   }
 
   /** Spawn a player entity for a newly-connected client. Returns its entity id,
@@ -76,6 +105,9 @@ export class GameInstanceCore {
     const p = this.players.get(clientId);
     if (!p) return;
     this.loop.removeEntity(ORIGIN_L1, p.id);
+    // Drop any inputs they queued but never had applied, or the queue would
+    // linger for the lifetime of the instance.
+    this.loop.clearInputs(clientId);
     this.players.delete(clientId);
     this.centers.delete(clientId);
     this.lastSeq.delete(clientId);
@@ -143,7 +175,14 @@ export class GameInstanceCore {
     const full = this.loop.buildSnapshot(this.cfg.worldId, this.cfg.zoneId);
     for (const [clientId, c] of this.centers) {
       filterAoI(full.entities, c.x, c.z, this.cfg.aoiRadius, this.filtered);
-      out.set(clientId, encodeSnapshot({ ...full, entities: this.filtered }));
+      // Each client is told how far through ITS OWN input stream we are, so
+      // reconciliation can drop the inputs already baked into this position
+      // and replay only the rest. Computed here all along; never sent before.
+      out.set(clientId, encodeSnapshot({
+        ...full,
+        ackSeq: this.lastSeq.get(clientId) ?? 0,
+        entities: this.filtered,
+      }));
     }
     return true;
   }
