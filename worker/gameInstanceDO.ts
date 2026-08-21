@@ -44,9 +44,20 @@ const DEFAULT_AOI_RADIUS = 80;
  */
 const TEST_INSTANCE_PREFIX = 'smoke-';
 
+/** Message budget window and cap. ~20 inputs/sec is normal play; 200 per
+ *  2 seconds leaves a wide margin for bursts and reconnect chatter. */
+const RATE_WINDOW_MS = 2000;
+const MAX_MESSAGES_PER_WINDOW = 200;
+
 export class GameInstanceDO {
   private core: GameInstanceCore;
   private conns = new Map<WebSocket, string>(); // ws → clientId
+  /** Per-connection message budget. Cloudflare's own rate limiting acts on the
+   *  HTTP upgrade and then stops, so everything per-frame is ours to police.
+   *  A client sends ~20 inputs/sec; this allows a generous burst above that
+   *  and hangs up on sustained flooding, which is both a cost and a CPU
+   *  protection on an endpoint that has no authentication yet. */
+  private budget = new Map<WebSocket, { count: number; windowStart: number }>();
   private interval: ReturnType<typeof setInterval> | null = null;
   private nextClient = 1;
   private outBuffers = new Map<string, ArrayBuffer>();
@@ -121,6 +132,7 @@ export class GameInstanceDO {
     }
 
     ws.addEventListener('message', (ev: MessageEvent) => {
+      if (!this.allowMessage(ws)) return;
       const d = ev.data;
       if (d instanceof ArrayBuffer) {
         this.core.applyClientMessage(clientId, d);
@@ -139,11 +151,29 @@ export class GameInstanceDO {
     this.ensureTicking();
   }
 
+  /** True if this connection is within its message budget. Closes it if not. */
+  private allowMessage(ws: WebSocket): boolean {
+    const now = Date.now();
+    let b = this.budget.get(ws);
+    if (b === undefined) { b = { count: 0, windowStart: now }; this.budget.set(ws, b); }
+    if (now - b.windowStart >= RATE_WINDOW_MS) { b.count = 0; b.windowStart = now; }
+    b.count++;
+    if (b.count > MAX_MESSAGES_PER_WINDOW) {
+      // Distinct close code so flooding is distinguishable from a normal drop
+      // in the logs; that separation is free telemetry on who is probing.
+      try { ws.close(1008, 'rate limit'); } catch { /* already closing */ }
+      this.onClose(ws);
+      return false;
+    }
+    return true;
+  }
+
   private onClose(ws: WebSocket): void {
     const clientId = this.conns.get(ws);
     if (clientId === undefined) return;
     this.core.removePlayer(clientId);
     this.conns.delete(ws);
+    this.budget.delete(ws);
     if (this.conns.size === 0) this.stopTicking();
   }
 

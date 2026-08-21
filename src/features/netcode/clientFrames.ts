@@ -15,6 +15,12 @@ import type { PlayerInputCmd } from './playerSim';
 
 export const FRAME_INPUT = 1;
 export const FRAME_STATE = 2;
+/** "I killed entity N". A CLAIM, not a fact: combat is still client-side, so
+ *  the server can only sanity-check it (does the entity exist, is it a
+ *  monster, is the claimer anywhere near it) rather than verify it. Real proof
+ *  arrives when combat itself moves server-side. */
+export const FRAME_KILL = 3;
+const KILL_BYTES = 4; // entity id u32
 
 const STATE_BYTES = 18; // seq u32 + x/y/z int32(×POS_SCALE) + yaw u16
 
@@ -34,6 +40,14 @@ export function encodeInputFrame(cmd: PlayerInputCmd): ArrayBuffer {
   return out.buffer;
 }
 
+export function encodeKillFrame(entityId: number): ArrayBuffer {
+  const buf = new ArrayBuffer(1 + KILL_BYTES);
+  const dv = new DataView(buf);
+  dv.setUint8(0, FRAME_KILL);
+  dv.setUint32(1, entityId >>> 0);
+  return buf;
+}
+
 export function encodeStateFrame(s: StateReport): ArrayBuffer {
   const buf = new ArrayBuffer(1 + STATE_BYTES);
   const dv = new DataView(buf);
@@ -49,6 +63,7 @@ export function encodeStateFrame(s: StateReport): ArrayBuffer {
 export type DecodedFrame =
   | { kind: 'input'; cmd: PlayerInputCmd }
   | { kind: 'state'; state: StateReport }
+  | { kind: 'kill'; entityId: number }
   | { kind: 'unknown' };
 
 export function decodeFrame(buf: ArrayBuffer): DecodedFrame {
@@ -69,6 +84,9 @@ export function decodeFrame(buf: ArrayBuffer): DecodedFrame {
         yaw: dequantizeYaw(dv.getUint16(17)),
       },
     };
+  }
+  if (type === FRAME_KILL && buf.byteLength >= 1 + KILL_BYTES) {
+    return { kind: 'kill', entityId: dv.getUint32(1) };
   }
   return { kind: 'unknown' };
 }

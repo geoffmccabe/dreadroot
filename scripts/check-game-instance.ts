@@ -68,15 +68,38 @@ assert(close(cheated.x, 1.5, 0.05), `anti-cheat clamps speed/teleport to ~1.5 (g
 
 // 6b. Presence: a STATE frame sets the player's position directly (client-
 //     reported), and it shows up in the snapshot (no input/simulation needed).
+// SECURITY REGRESSION GUARD (audit, 4.351.0). Client-reported positions used
+// to be accepted verbatim. Because each client's area-of-interest centre
+// follows its entity, that let a modified client teleport anywhere and receive
+// every entity near those coordinates — sweep the coordinates, locate every
+// player. Demonstrated working against production before it was closed.
 const { encodeStateFrame } = await import('../src/features/netcode/clientFrames.ts');
+
+// 1. REJECTED BY DEFAULT.
 const pres = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 200 });
 const presId = pres.addPlayer('P')!;
 pres.tick(0, out); // prime
 pres.applyClientMessage('P', encodeStateFrame({ seq: 1, x: 42, y: 70, z: -17, yaw: 1.5 }));
 pres.tick(50, out);
 const reported = decodeSnapshot(out.get('P')!).entities.find(e => e.id === presId)!;
-assert(close(reported.x, 42, 0.1) && close(reported.z, -17, 0.1), `presence state report places player (got ${reported.x},${reported.z})`);
-assert(pres.ackSeqFor('P') === 1, 'presence ack tracks state seq');
+assert(!close(reported.x, 42, 0.1), `client-reported position is IGNORED by default (got ${reported.x},${reported.z})`);
+assert(pres.ackSeqFor('P') === 0, 'a rejected state report is not acknowledged');
+
+// 2. Even when explicitly enabled, an implausible jump is refused.
+const opted = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 200, allowClientState: true });
+const optId = opted.addPlayer('P')!;
+opted.tick(0, out);
+opted.applyClientMessage('P', encodeStateFrame({ seq: 1, x: 5000, y: 70, z: 5000, yaw: 0 }));
+opted.tick(50, out);
+const far = decodeSnapshot(out.get('P')!).entities.find(e => e.id === optId)!;
+assert(!close(far.x, 5000, 1), `a teleport is refused even when client state is enabled (got ${far.x})`);
+
+// 3. ...and a plausible step IS accepted when enabled.
+opted.applyClientMessage('P', encodeStateFrame({ seq: 2, x: 2, y: 64, z: 1, yaw: 0.5 }));
+opted.tick(100, out);
+const near = decodeSnapshot(out.get('P')!).entities.find(e => e.id === optId)!;
+assert(close(near.x, 2, 0.1) && close(near.z, 1, 0.1), `a plausible step is accepted when enabled (got ${near.x},${near.z})`);
+assert(opted.ackSeqFor('P') === 2, 'an accepted state report is acknowledged');
 
 // 7. Connection cap: a full instance refuses new players.
 const capped = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 80, maxPlayers: 2 });

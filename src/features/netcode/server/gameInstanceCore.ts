@@ -41,12 +41,22 @@ export interface GameInstanceConfig {
   /** Server-owned monsters. Omit or pass false to keep the instance
    *  players-only (which is what it was before stage 5). */
   enemies?: Partial<ServerEnemyConfig> | false;
+  /** Accept client-reported positions. DEFAULT FALSE — see applyState for why
+   *  this is dangerous. Local experiments only; never in production. */
+  allowClientState?: boolean;
   /** Override the per-tick simulation (the real enemy AI plugs in here). The
    *  default applies queued player inputs via the shared stepPlayer. */
   simulate?: SimulateFn<QueuedInput>;
 }
 
 const DEFAULT_MAX_PLAYERS = 64;
+/** Longest gap a client-reported position may account for, when enabled. */
+const MAX_STATE_GAP_MS = 1000;
+/** Headroom so legitimate movement is never throttled by the clamp above. */
+const AOI_CENTRE_SLACK = 4;
+/** How far away a kill may be claimed from. Generous: ranged weapons exist,
+ *  and the point is to reject the absurd, not to police the plausible. */
+const MAX_KILL_RANGE = 120;
 
 export class GameInstanceCore {
   private loop: TickLoop<QueuedInput>;
@@ -136,11 +146,40 @@ export class GameInstanceCore {
 
   /** Presence: set a client's player to a reported position (client-trusted for
    *  now). The tick loop's broadcast + AoI machinery does the rest. */
+  /**
+   * Client-reported position (frame type 2).
+   *
+   * DISABLED BY DEFAULT since 4.351.0. It accepted whatever the client
+   * claimed, with no validation of any kind, and each client's
+   * area-of-interest centre follows its entity — so a modified client could
+   * teleport to any coordinates and immediately receive every entity near
+   * them. Sweeping coordinates that way locates every player in the world.
+   * Demonstrated working against production before it was closed.
+   *
+   * It also bypassed every anti-cheat clamp in stepPlayer, making the speed
+   * and teleport protection there decorative.
+   *
+   * Nothing legitimate uses it: the client sends INPUT frames, which the
+   * server simulates. It survives only behind an explicit opt-in for local
+   * experiments, and even then movement is clamped to what a player could
+   * actually have travelled.
+   */
   applyState(clientId: string, s: StateReport): void {
+    if (this.cfg.allowClientState !== true) return;
     const p = this.players.get(clientId);
     if (!p) return;
     const e = this.loop.getEntities().get(p.key);
-    if (e) { e.x = s.x; e.y = s.y; e.z = s.z; e.yaw = s.yaw; this.lastSeq.set(clientId, s.seq); }
+    if (!e) return;
+
+    // Even when enabled, never accept a jump further than a player could
+    // plausibly have moved since we last heard from them.
+    const maxStep = (PLAYER_SPEED * MAX_STATE_GAP_MS) / 1000;
+    const dx = s.x - e.x;
+    const dz = s.z - e.z;
+    if (dx * dx + dz * dz > maxStep * maxStep) return;
+
+    e.x = s.x; e.y = s.y; e.z = s.z; e.yaw = s.yaw;
+    this.lastSeq.set(clientId, s.seq);
   }
 
   /** Route a typed client frame (the DO calls this for every WS message). */
@@ -151,7 +190,51 @@ export class GameInstanceCore {
       if (p) this.loop.queueInput(clientId, { playerKey: p.key, cmd: f.cmd });
     } else if (f.kind === 'state') {
       this.applyState(clientId, f.state);
+    } else if (f.kind === 'kill') {
+      this.applyKillClaim(clientId, f.entityId);
     }
+  }
+
+  /**
+   * "I killed monster N."
+   *
+   * Combat still runs on the client, so this is a CLAIM the server cannot
+   * verify. What it CAN do is refuse the obviously false ones, which is worth
+   * far more than nothing and is the first real server-side combat check:
+   *   • the entity must exist and must be a monster (you cannot kill a player
+   *     this way, nor delete something that was never there),
+   *   • the claimer must be plausibly near it — a player across the map cannot
+   *     clear the world from a distance.
+   * Rejections are silent: telling an attacker exactly which rule they tripped
+   * is free debugging for them.
+   *
+   * Real proof arrives when combat itself moves server-side, at which point
+   * this message disappears rather than being trusted harder.
+   */
+  private applyKillClaim(clientId: string, entityId: number): boolean {
+    if (this.enemySim === null) return false;
+    const p = this.players.get(clientId);
+    if (p === undefined) return false;
+
+    const ents = this.loop.getEntities();
+    const killer = ents.get(p.key);
+    if (killer === undefined) return false;
+
+    const key = entityKey(ORIGIN_L1, entityId);
+    const target = ents.get(key);
+    if (target === undefined) return false;
+    if (target.entityType === ENTITY_PLAYER) return false;
+
+    const dx = target.x - killer.x;
+    const dz = target.z - killer.z;
+    if (dx * dx + dz * dz > MAX_KILL_RANGE * MAX_KILL_RANGE) return false;
+
+    const planId = this.enemySim.planIdForEntity(entityId);
+    if (planId === null) return false;
+
+    this.enemySim.kill(planId);
+    ents.delete(key);
+    return true;
   }
 
   private defaultSimulate: SimulateFn<QueuedInput> = (entities, inputs) => {
@@ -194,7 +277,18 @@ export class GameInstanceCore {
     for (const [clientId, p] of this.players) {
       const e = ents.get(p.key);
       const c = this.centers.get(clientId);
-      if (e && c) { c.x = e.x; c.z = e.z; }
+      if (e && c) {
+        // Clamp how far the view centre can travel in one tick, regardless of
+        // how the entity got there. Belt and braces: if anything ever moves a
+        // player instantly again, it still cannot be used to scan the world.
+        const maxStep = (PLAYER_SPEED * TICK_MS) / 1000 * AOI_CENTRE_SLACK;
+        const dx = e.x - c.x, dz = e.z - c.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 > maxStep * maxStep) {
+          const inv = maxStep / Math.sqrt(d2);
+          c.x += dx * inv; c.z += dz * inv;
+        } else { c.x = e.x; c.z = e.z; }
+      }
     }
     this.lagComp.record(this.loop.tick, ents);
 

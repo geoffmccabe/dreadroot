@@ -18,6 +18,7 @@ import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegist
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { seededFrom } from '@/lib/seededRandom';
 import { enemyKillBus } from '@/features/enemies/kill/enemyKillBus';
+import { shadowSession } from '@/features/netcode/shadowSession';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
 
 // Head movement type randomizer - 1/3 each
@@ -451,6 +452,10 @@ export function useShombieSystem({
       // and the bus filters the rest, so this is a no-op under legacy
       // spawning. The reward path (record_kill) is untouched by this.
       enemyKillBus.publishLocalKill(shombie.id);
+      // If this was a SERVER-owned monster, tell the server instead: it owns
+      // the creature, so only it can remove it for everyone. Ignored for
+      // locally-spawned ids.
+      shadowSession.reportKill(shombie.id);
 
       // Death sound: the shombie's own moan, pitched down to ~0 (powering down).
       // Capped + overlapping so a horde death plays a few at once, not 100 in

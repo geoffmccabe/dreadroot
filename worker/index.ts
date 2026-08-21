@@ -42,6 +42,18 @@ function originAllowed(request: Request): boolean {
   }
 }
 
+/**
+ * Instance names this worker will route to.
+ *   shadow        the shared world used while server monsters are being tested
+ *   world-<uuid>  a real world, one server each (the eventual shape)
+ *   smoke-<n>     throwaway instances for the automated live test
+ */
+const INSTANCE_PATTERN = /^(shadow|world-[0-9a-f-]{36}|smoke-[a-z0-9-]{1,32})$/i;
+
+function isAllowedInstance(name: string): boolean {
+  return name.length <= 64 && INSTANCE_PATTERN.test(name);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -59,6 +71,15 @@ export default {
     const instance = url.searchParams.get('instance')
       ?? url.pathname.split('/').filter(Boolean).pop()
       ?? 'default';
+
+    // Only known instance shapes may be addressed. Previously ANY string
+    // created a Durable Object, so anyone could spin up unlimited live game
+    // servers just by inventing names — each one billable while connected.
+    // This does not replace authentication (still Phase 3); it reduces an
+    // unbounded namespace to a small, predictable one.
+    if (!isAllowedInstance(instance)) {
+      return new Response('unknown instance', { status: 400 });
+    }
     const stub = env.GAME_INSTANCE.get(env.GAME_INSTANCE.idFromName(instance));
     return stub.fetch(request);
   },

@@ -32,7 +32,7 @@
  *   __shadow.stop()
  */
 import { netcodeClient } from './netcodeClient';
-import { encodeInputFrame } from './clientFrames';
+import { encodeInputFrame, encodeKillFrame } from './clientFrames';
 import { PredictedPlayer } from './prediction';
 import { PLAYER_SPEED, type PlayerInputCmd } from './playerSim';
 import { entityKey } from './snapshotDiff';
@@ -142,6 +142,18 @@ export class ShadowSession {
   }
 
   isRunning(): boolean { return this.running; }
+
+  /**
+   * Report that a server-owned monster died here. The server sanity-checks the
+   * claim (does it exist, is it a monster, are we near it) and, if it accepts,
+   * removes it for EVERYONE — which is what makes a kill actually shared.
+   */
+  reportKill(feedId: string): void {
+    if (!this.running || !this.connected) return;
+    const entityId = serverEntityIdFrom(feedId);
+    if (entityId === null) return;
+    netcodeClient.sendInput(encodeKillFrame(entityId));
+  }
 
   /**
    * Called when the server introduces a monster we have not seen, and when it
@@ -363,6 +375,13 @@ export class ShadowSession {
  *  with a locally-spawned creature's id. */
 export function serverMonsterId(entityId: number): string {
   return `srv_${entityId}`;
+}
+
+/** Inverse of serverMonsterId. Null if this is not a server-owned monster. */
+export function serverEntityIdFrom(feedId: string): number | null {
+  if (!feedId.startsWith('srv_')) return null;
+  const n = Number(feedId.slice(4));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export const shadowSession = new ShadowSession();

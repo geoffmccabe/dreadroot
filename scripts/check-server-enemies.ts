@@ -101,3 +101,63 @@ assert(capped.aliveCount() <= 5, `maxAlive is enforced (got ${capped.aliveCount(
 
 if (failures > 0) { console.error(`\n❌ server enemies: ${failures} failure(s)`); process.exit(1); }
 console.log('✅ server enemies OK (derived population / same world same monsters / no doubling per player / chase / stop-short / kill / cap)');
+
+// ── kill-claim validation (added in the security audit) ────────────────────
+// Combat is still client-side, so a kill is a CLAIM. The server cannot verify
+// it, but it must refuse the obviously false ones.
+import { GameInstanceCore } from '../src/features/netcode/server/gameInstanceCore.ts';
+import { encodeKillFrame } from '../src/features/netcode/clientFrames.ts';
+
+{
+  let f2 = 0;
+  const a2 = (c: boolean, m: string) => { if (!c) { console.error('  ✗ ' + m); f2++; } };
+
+  const core = new GameInstanceCore({
+    worldId: 1, zoneId: 0, aoiRadius: 200, sessionId: 1,
+    enemies: { spawnChancePerMinute: 100000, detectionRange: 0, maxAlive: 10 },
+  });
+  const meId = core.addPlayer('me');
+  const outMap = new Map<string, ArrayBuffer>();
+  core.tick(0, outMap);
+  core.tick(60, outMap);
+
+  const sim = core.getEnemySim();
+  a2(sim !== null && sim.aliveCount() > 0, 'monsters exist to be killed');
+  const before = sim!.aliveCount();
+
+  // Find a monster id by asking the sim (mirrors what a client would target).
+  let victim = -1;
+  for (let id = 100000; id < 100100; id++) {
+    if (sim!.planIdForEntity(id) !== null) { victim = id; break; }
+  }
+  a2(victim > 0, 'found a live monster id');
+
+  // A player who was never told about the world cannot delete things.
+  core.applyClientMessage('ghost', encodeKillFrame(victim));
+  a2(sim!.aliveCount() === before, 'an unknown client cannot kill anything');
+
+  // Killing a PLAYER via the monster path is refused. Assert the player's
+  // ENTITY survives, which is the property that actually matters.
+  const playerKey = (n: number) => n; // entity ids are dense from 1 for players
+  core.applyClientMessage('me', encodeKillFrame(meId as number));
+  const stillHere = new Map<string, ArrayBuffer>();
+  core.tick(120, stillHere);
+  a2(core.playerCount() === 1, 'a player cannot be deleted via a kill claim');
+  void playerKey;
+
+  // A nonexistent entity is refused without throwing.
+  core.applyClientMessage('me', encodeKillFrame(999999));
+  a2(sim!.aliveCount() === before, 'a nonexistent entity cannot be killed');
+
+  // A legitimate, in-range claim IS accepted (the player is at spawn and
+  // monsters spawn within a couple of chunks).
+  core.applyClientMessage('me', encodeKillFrame(victim));
+  a2(sim!.aliveCount() === before - 1, `an in-range claim is accepted (${before} -> ${sim!.aliveCount()})`);
+
+  // ...and the same monster cannot be killed twice for repeated credit.
+  core.applyClientMessage('me', encodeKillFrame(victim));
+  a2(sim!.aliveCount() === before - 1, 'the same monster cannot be killed twice');
+
+  if (f2 > 0) { console.error(`\n❌ kill claims: ${f2} failure(s)`); process.exit(1); }
+  console.log('✅ kill claims OK (unknown client / player target / nonexistent / in-range accepted / no double-kill)');
+}
