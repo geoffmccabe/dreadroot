@@ -36,6 +36,7 @@ import { encodeInputFrame } from './clientFrames';
 import { PredictedPlayer } from './prediction';
 import { PLAYER_SPEED, type PlayerInputCmd } from './playerSim';
 import { entityKey } from './snapshotDiff';
+import { entityFeed } from '@/features/enemies/feed/entityFeed';
 import type { NetEvent } from './protocol';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
@@ -71,6 +72,8 @@ export interface ShadowReport {
   /** Divergence over the last sample, for live watching. */
   lastDivergence: number;
   disconnects: number;
+  /** Distinct server-owned monsters seen. */
+  serverMonsters: number;
   errors: string[];
   secondsRunning: number;
 }
@@ -101,6 +104,8 @@ export class ShadowSession {
   private disconnects = 0;
   private restarts = 0;
   private errors: string[] = [];
+  /** Distinct server-owned monsters observed, for the scoreboard. */
+  private monsterIds = new Set<number>();
 
   /** Supplies the direction the real player is moving, so the graded inputs
    *  reflect actual play rather than a synthetic pattern. */
@@ -166,6 +171,7 @@ export class ShadowSession {
     this.inputsSent = 0; this.snapshots = 0; this.graded = 0; this.missingSelf = 0;
     this.divSum = 0; this.divMax = 0; this.divLast = 0;
     this.disconnects = 0; this.restarts = 0; this.errors = [];
+    this.monsterIds.clear();
     this.sessionId = null; this.myEntityId = null; this.myKey = null;
     this.predicted = null; this.seq = 1;
     this.haveLast = false;
@@ -224,9 +230,21 @@ export class ShadowSession {
     }
   }
 
-  private onDiff(d: { added: Array<{ registryOrigin: number; id: number; x: number; y: number; z: number }>; changed: Array<{ registryOrigin: number; id: number; x: number; y: number; z: number }> }): void {
+  private onDiff(d: {
+    tick?: number;
+    added: Array<{ registryOrigin: number; entityType?: number; id: number; x: number; y: number; z: number; yaw?: number }>;
+    changed: Array<{ registryOrigin: number; entityType?: number; id: number; x: number; y: number; z: number; yaw?: number }>;
+    removed?: number[];
+  }): void {
     if (!this.running) return;
     this.snapshots++;
+
+    // Hand server-owned monsters to the EntityFeed. In 'local' mode (the
+    // default) the feed ignores this entirely and the game keeps simulating
+    // its own; in 'shadow' it is graded against the local sim; in 'remote' the
+    // game renders these instead. Same data, three different levels of trust,
+    // switched with one flag.
+    if (entityFeed.isRecording()) this.ingestMonsters(d);
     if (this.myKey === null || this.predicted === null) return;
 
     // Find OUR entity in this tick.
@@ -258,6 +276,34 @@ export class ShadowSession {
     if (dist > this.divMax) this.divMax = dist;
   }
 
+  /**
+   * Route non-player entities into the feed, keyed by the SAME id the local
+   * spawner uses so the two can be matched up. The server owns X, Z and
+   * facing; Y is deliberately left to the client, because the server has no
+   * terrain and cannot know the ground height (plan v3 §1.2 E).
+   */
+  private ingestMonsters(d: {
+    tick?: number;
+    added: Array<{ registryOrigin: number; entityType?: number; id: number; x: number; y: number; z: number; yaw?: number }>;
+    changed: Array<{ registryOrigin: number; entityType?: number; id: number; x: number; y: number; z: number; yaw?: number }>;
+    removed?: number[];
+  }): void {
+    const tick = d.tick ?? 0;
+    const take = (list: typeof d.added): void => {
+      for (let i = 0; i < list.length; i++) {
+        const e = list[i];
+        if (e.entityType === undefined || e.entityType === 0) continue; // players
+        this.monsterIds.add(e.id);
+        entityFeed.ingest(serverMonsterId(e.id), e.x, e.y, e.z, e.yaw ?? 0, 0, tick);
+      }
+    };
+    take(d.added);
+    take(d.changed);
+    if (d.removed !== undefined) {
+      for (let i = 0; i < d.removed.length; i++) entityFeed.remove(String(d.removed[i]));
+    }
+  }
+
   report(): ShadowReport {
     return {
       running: this.running,
@@ -273,10 +319,17 @@ export class ShadowSession {
       maxDivergence: this.divMax,
       lastDivergence: this.divLast,
       disconnects: this.disconnects,
+      serverMonsters: this.monsterIds.size,
       errors: this.errors.slice(),
       secondsRunning: this.running ? Math.round((Date.now() - this.startedAt) / 1000) : 0,
     };
   }
+}
+
+/** The feed key for a server-owned monster. Prefixed so it can never collide
+ *  with a locally-spawned creature's id. */
+export function serverMonsterId(entityId: number): string {
+  return `srv_${entityId}`;
 }
 
 export const shadowSession = new ShadowSession();

@@ -22,9 +22,25 @@ export interface Env {
   JOIN_SECRET?: string;
   /** Optional AoI radius override (blocks), e.g. per game. Default 80. */
   AOI_RADIUS?: string;
+  /** 'off' disables server-owned monsters for this deployment. */
+  ENEMIES?: string;
+  /** Seeds monster placement. Must match the client's world seed. */
+  WORLD_SEED?: string;
 }
 
 const DEFAULT_AOI_RADIUS = 80;
+
+/**
+ * Instances whose id starts with this run a DENSE monster profile.
+ *
+ * Real spawn density is calibrated to the game's own tuning (about 1% per
+ * minute), which is far too sparse to observe in a short test — the expected
+ * wait is over an hour. A test instance is fully isolated from real worlds
+ * (one Durable Object per id) and still bounded by maxAlive, so this affects
+ * nothing a player can reach. It exists so the live end-to-end test can
+ * actually see a monster.
+ */
+const TEST_INSTANCE_PREFIX = 'smoke-';
 
 export class GameInstanceDO {
   private core: GameInstanceCore;
@@ -33,6 +49,10 @@ export class GameInstanceDO {
   private nextClient = 1;
   private outBuffers = new Map<string, ArrayBuffer>();
 
+  /** Set once, from the first request, since the instance name is not
+   *  available in the constructor. */
+  private profileApplied = false;
+
   constructor(_state: DurableObjectState, env: Env) {
     // worldId/zoneId are fixed at 1/0 for now (single-world per instance);
     // multi-world routing is a Track 5 lifecycle concern.
@@ -40,10 +60,28 @@ export class GameInstanceDO {
       worldId: 1,
       zoneId: 0,
       aoiRadius: Number(env.AOI_RADIUS) || DEFAULT_AOI_RADIUS,
+      // Server-owned monsters (stage 5). Set ENEMIES=off to run a
+      // players-only instance, which is what this was before.
+      enemies: env.ENEMIES === 'off' ? false : { worldSeed: env.WORLD_SEED ?? 'dreadroot' },
     });
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (!this.profileApplied) {
+      this.profileApplied = true;
+      const instance = new URL(request.url).searchParams.get('instance') ?? '';
+      if (instance.startsWith(TEST_INSTANCE_PREFIX)) {
+        // Dense enough to observe in seconds. Isolated to this instance and
+        // still capped by maxAlive; nothing a player can reach is affected.
+        // Also a wide detection range: monsters spawn 2-4 chunks out, so with
+        // the real 24-block range they would (correctly) just stand there and
+        // the test could not observe movement at all.
+        this.core.getEnemySim()?.setConfig({
+          spawnChancePerMinute: 100000, maxAlive: 20, detectionRange: 5000,
+        });
+      }
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('expected a WebSocket upgrade', { status: 426 });
     }

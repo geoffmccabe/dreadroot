@@ -37,6 +37,11 @@ let sumDiv = 0;
 let seq = 1;
 let predicted: PredictedPlayer | null = null;
 let sent = 0;
+const startedAt = Date.now();
+let maxMonsters = 0;
+const monsterIds = new Set<number>();
+let monsterMoved = false;
+const monsterFirstPos = new Map<number, { x: number; z: number }>();
 
 const done = (code: number) => { try { ws.close(); } catch {} process.exit(code); };
 
@@ -70,7 +75,16 @@ ws.onmessage = (ev: MessageEvent) => {
     const timer = setInterval(() => {
       if (sent >= SENDS) {
         clearInterval(timer);
-        setTimeout(finish, 600);
+        // Wait for enough snapshots rather than a fixed delay. A cold Durable
+        // Object takes a moment to warm up, and finishing early once produced
+        // only 6 snapshots — too few to observe a monster moving, which read
+        // as a failure when nothing was wrong.
+        const settle = setInterval(() => {
+          if (snapshots >= 25 || Date.now() - startedAt > 12000) {
+            clearInterval(settle);
+            finish();
+          }
+        }, 100);
         return;
       }
       for (let i = 0; i < INPUTS_PER_SEND; i++) {
@@ -88,6 +102,18 @@ ws.onmessage = (ev: MessageEvent) => {
   try { snap = decodeSnapshot(buf); } catch (e) { console.error('  ✗ undecodable snapshot:', e); failures++; return; }
   snapshots++;
   if (hello === null || predicted === null) return;
+
+  // Stage 5: count SERVER-OWNED monsters and check they actually move.
+  let monsters = 0;
+  for (const e of snap.entities) {
+    if (e.entityType !== 1) continue;   // 1 = shombie
+    monsters++;
+    monsterIds.add(e.id);
+    const first = monsterFirstPos.get(e.id);
+    if (first === undefined) monsterFirstPos.set(e.id, { x: e.x, z: e.z });
+    else if (Math.abs(e.x - first.x) + Math.abs(e.z - first.z) > 0.05) monsterMoved = true;
+  }
+  if (monsters > maxMonsters) maxMonsters = monsters;
 
   const self = snap.entities.find((e) => e.id === hello!.yourEntityId && e.registryOrigin === hello!.registryOrigin);
   if (!self) return;
@@ -121,6 +147,10 @@ function finish(): void {
   // If client and server agree, reconciling to authority should barely move
   // the predicted position. A large correction means they genuinely disagree.
   assert(maxDiv < 0.35, `reconciliation is near-nil, i.e. the sims AGREE (max correction ${maxDiv.toFixed(4)} blocks < 0.35)`);
+
+  console.log(`server-owned monsters seen: ${monsterIds.size} distinct, ${maxMonsters} at once`);
+  assert(monsterIds.size > 0, 'the SERVER spawned monsters (nobody asked it to; it derives them)');
+  assert(monsterMoved, 'server-owned monsters actually move (they chase)');
 
   if (failures > 0) { console.error(`\n❌ live L2 smoke: ${failures} failure(s)`); done(1); }
   console.log('\n✅ live L2 smoke OK (greeting / identity / input path / snapshot path / shared-sim agreement)');

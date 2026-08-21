@@ -21,6 +21,7 @@ import { stepPlayer, PLAYER_SPEED, type PlayerInputCmd } from '../playerSim';
 import { encodeHello, HELLO_VERSION } from '../helloBinary';
 import { decodeInput } from '../inputBinary';
 import { decodeFrame, type StateReport } from '../clientFrames';
+import { ServerEnemySim, type ServerEnemyConfig } from './serverEnemySim';
 
 /** Entity-type discriminator for players in the snapshot (enemies use their own
  *  small ids; kept here until a shared registry exists). */
@@ -37,6 +38,9 @@ export interface GameInstanceConfig {
   maxPlayers?: number;
   /** Override the session id. Tests pin it; production leaves it random. */
   sessionId?: number;
+  /** Server-owned monsters. Omit or pass false to keep the instance
+   *  players-only (which is what it was before stage 5). */
+  enemies?: Partial<ServerEnemyConfig> | false;
   /** Override the per-tick simulation (the real enemy AI plugs in here). The
    *  default applies queued player inputs via the shared stepPlayer. */
   simulate?: SimulateFn<QueuedInput>;
@@ -58,12 +62,21 @@ export class GameInstanceCore {
    *  apart from "that packet was out of order" — the difference between
    *  resyncing and hanging forever. */
   private readonly sessionId: number;
+  /** Server-owned monsters, or null for a players-only instance. */
+  private enemySim: ServerEnemySim | null = null;
+  /** Reused player-position array; the monster sim runs every tick. */
+  private playerPositions: Array<{ x: number; z: number }> = [];
+  /** Wall clock from the most recent tick, for spawn generations. */
+  private lastNowMs = 0;
 
   constructor(cfg: GameInstanceConfig) {
     this.cfg = cfg;
     this.loop = new TickLoop<QueuedInput>(cfg.simulate ?? this.defaultSimulate);
     // Not security-sensitive: it only has to CHANGE across restarts.
     this.sessionId = (cfg.sessionId ?? ((Math.random() * 0xffffffff) >>> 0)) >>> 0;
+    if (cfg.enemies !== false && cfg.enemies !== undefined) {
+      this.enemySim = new ServerEnemySim(cfg.enemies);
+    }
   }
 
   getSessionId(): number { return this.sessionId; }
@@ -152,8 +165,20 @@ export class GameInstanceCore {
         this.lastSeq.set(clientId, inp.cmd.seq); // last input we processed (for ack)
       }
     }
-    // The real enemy-AI simulation plugs in here (or via cfg.simulate).
+    // Server-owned monsters. One authority decides what exists and where, so
+    // every client sees the same creatures instead of inventing its own.
+    if (this.enemySim !== null) {
+      this.playerPositions.length = 0;
+      for (const p of this.players.values()) {
+        const pe = entities.get(p.key);
+        if (pe !== undefined) this.playerPositions.push({ x: pe.x, z: pe.z });
+      }
+      this.enemySim.step(entities, this.playerPositions, TICK_MS, this.lastNowMs);
+    }
   };
+
+  /** The monster simulation, or null on a players-only instance. */
+  getEnemySim(): ServerEnemySim | null { return this.enemySim; }
 
   /**
    * Advance the loop to `nowMs`. If any ticks ran, fill `out` with each client's
@@ -161,6 +186,7 @@ export class GameInstanceCore {
    */
   tick(nowMs: number, out: Map<string, ArrayBuffer>): boolean {
     out.clear();
+    this.lastNowMs = nowMs;
     if (this.loop.advance(nowMs) === 0) return false;
 
     const ents = this.loop.getEntities();
