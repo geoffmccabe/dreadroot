@@ -18,3 +18,11 @@ class_name = "GameInstanceDO"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["GameInstanceDO"]
+
+# Monster population on the server. 1 = the game's own spawn tuning, which is
+# deliberately very sparse (~1% per minute, i.e. one creature every several
+# minutes across the whole visible area) and effectively invisible in a short
+# session. Raised here so server-owned monsters can actually be SEEN and
+# judged. This is a FEEL value to tune, not a correctness one.
+[vars]
+ENEMY_DENSITY = "120"

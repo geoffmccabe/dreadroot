@@ -26,6 +26,8 @@ export interface Env {
   ENEMIES?: string;
   /** Seeds monster placement. Must match the client's world seed. */
   WORLD_SEED?: string;
+  /** Scales monster population. 1 = the game's own (very sparse) tuning. */
+  ENEMY_DENSITY?: string;
 }
 
 const DEFAULT_AOI_RADIUS = 80;
@@ -62,7 +64,10 @@ export class GameInstanceDO {
       aoiRadius: Number(env.AOI_RADIUS) || DEFAULT_AOI_RADIUS,
       // Server-owned monsters (stage 5). Set ENEMIES=off to run a
       // players-only instance, which is what this was before.
-      enemies: env.ENEMIES === 'off' ? false : { worldSeed: env.WORLD_SEED ?? 'dreadroot' },
+      enemies: env.ENEMIES === 'off' ? false : {
+        worldSeed: env.WORLD_SEED ?? 'dreadroot',
+        densityMultiplier: Number(env.ENEMY_DENSITY) || 1,
+      },
     });
   }
 

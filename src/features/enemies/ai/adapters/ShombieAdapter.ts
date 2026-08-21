@@ -473,11 +473,19 @@ export const ShombieAdapter: EnemyAdapter<ShombieWithAI> = {
     return shombie.currentHealth;
   },
 
-  setTransform(shombie: ShombieWithAI, x: number, y: number, z: number, yaw: number): void {
+  setTransform(shombie: ShombieWithAI, x: number, _y: number, z: number, yaw: number): void {
     // Mutate in place: position is a THREE.Vector3 the renderer already holds
     // a reference to, so replacing it would both allocate and orphan the
     // renderer's view.
-    shombie.position.set(x, y, z);
+    //
+    // X, Z and facing come from the server. Y DOES NOT: the server has no
+    // terrain or collision (plan v3 §1.2 E) and cannot know the ground height,
+    // so it would put every monster at a flat default and they would float or
+    // sink. The client keeps owning Y and its existing ground logic applies.
+    // This split is what lets server-owned monsters ship before the whole
+    // world data layer moves across.
+    shombie.position.x = x;
+    shombie.position.z = z;
     shombie.rotation = yaw;
     // The server owns motion in this mode, so any locally-accumulated velocity
     // (knockback, gravity) is stale and would fight the incoming transform.

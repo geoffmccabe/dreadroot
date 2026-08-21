@@ -106,6 +106,8 @@ export class ShadowSession {
   private errors: string[] = [];
   /** Distinct server-owned monsters observed, for the scoreboard. */
   private monsterIds = new Set<number>();
+  private onAdd: ((id: string, x: number, y: number, z: number, yaw: number) => void) | null = null;
+  private onRemove: ((id: string) => void) | null = null;
 
   /** Supplies the direction the real player is moving, so the graded inputs
    *  reflect actual play rather than a synthetic pattern. */
@@ -140,6 +142,20 @@ export class ShadowSession {
   }
 
   isRunning(): boolean { return this.running; }
+
+  /**
+   * Called when the server introduces a monster we have not seen, and when it
+   * takes one away. The game uses these to create and destroy a local
+   * stand-in, which the feed then drives. Without a stand-in there is nothing
+   * on screen for the server's position to move.
+   */
+  setMonsterHandlers(
+    onAdd: (id: string, x: number, y: number, z: number, yaw: number) => void,
+    onRemove: (id: string) => void,
+  ): void {
+    this.onAdd = onAdd;
+    this.onRemove = onRemove;
+  }
 
   start(url: string = DEFAULT_L2_URL, token = ''): string {
     if (this.running) return 'shadow session already running';
@@ -293,14 +309,31 @@ export class ShadowSession {
       for (let i = 0; i < list.length; i++) {
         const e = list[i];
         if (e.entityType === undefined || e.entityType === 0) continue; // players
+        const fid = serverMonsterId(e.id);
+        const isNew = !this.monsterIds.has(e.id);
         this.monsterIds.add(e.id);
-        entityFeed.ingest(serverMonsterId(e.id), e.x, e.y, e.z, e.yaw ?? 0, 0, tick);
+        // Feed FIRST, so a stand-in created below already has a position to
+        // read and never renders for a frame at the world origin.
+        entityFeed.ingest(fid, e.x, e.y, e.z, e.yaw ?? 0, 0, tick);
+        if (isNew && this.onAdd) this.onAdd(fid, e.x, e.y, e.z, e.yaw ?? 0);
       }
     };
     take(d.added);
     take(d.changed);
     if (d.removed !== undefined) {
-      for (let i = 0; i < d.removed.length; i++) entityFeed.remove(String(d.removed[i]));
+      for (let i = 0; i < d.removed.length; i++) {
+        // `removed` carries the packed (origin,id) key, not a bare id, so map
+        // it back through the ids we know about rather than guessing.
+        const key = d.removed[i];
+        for (const id of this.monsterIds) {
+          if (entityKey(this.registryOrigin, id) !== key) continue;
+          this.monsterIds.delete(id);
+          const fid = serverMonsterId(id);
+          entityFeed.remove(fid);
+          this.onRemove?.(fid);
+          break;
+        }
+      }
     }
   }
 
@@ -335,6 +368,32 @@ export function serverMonsterId(entityId: number): string {
 export const shadowSession = new ShadowSession();
 
 if (typeof window !== 'undefined') {
+  /**
+   * One switch for the whole thing: connect to the server AND let it decide.
+   *
+   *   __server.on()      the server's monsters, not your browser's
+   *   __server.off()     back to normal
+   *   __server.status()  connection + what it is sending
+   *
+   * Turning it off leaves any stand-ins behind as ordinary local monsters
+   * rather than deleting them under the player, so nothing pops out of
+   * existence mid-fight.
+   */
+  (window as unknown as { __server: unknown }).__server = {
+    on: (url?: string) => {
+      // Mode FIRST: the feed ignores incoming monsters while it is 'local',
+      // so switching after connecting would drop everything sent in between.
+      entityFeed.setMode('remote');
+      const msg = shadowSession.start(url);
+      return `${msg} — feed is REMOTE: the server now decides what monsters exist`;
+    },
+    off: () => {
+      entityFeed.setMode('local');
+      return `${shadowSession.stop()} — feed is LOCAL again; existing monsters revert to local AI`;
+    },
+    status: () => ({ feedMode: entityFeed.getMode(), ...shadowSession.report() }),
+  };
+
   (window as unknown as { __shadow: unknown }).__shadow = {
     start: (url?: string, token?: string) => shadowSession.start(url, token),
     stop: () => shadowSession.stop(),

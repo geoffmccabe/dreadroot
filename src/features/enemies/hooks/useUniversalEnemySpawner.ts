@@ -15,6 +15,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { deterministicSpawnController } from '../spawn/deterministicSpawnController';
+import { entityFeed } from '../feed/entityFeed';
 
 // Spawn check interval - 1 second as requested
 const SPAWN_CHECK_INTERVAL_MS = 1000;
@@ -280,6 +281,13 @@ export function useUniversalEnemySpawner({
     const playerChunkX = Math.floor(_playerPos.x / CHUNK_SIZE);
     const playerChunkZ = Math.floor(_playerPos.z / CHUNK_SIZE);
     const distanceFromOrigin = Math.sqrt(_playerPos.x * _playerPos.x + _playerPos.z * _playerPos.z);
+
+    // === SERVER OWNS MONSTERS ===
+    // When the feed is authoritative the server decides what exists, so local
+    // spawning must stop entirely. Otherwise both would populate the world and
+    // the player would see roughly twice as many creatures, half of which only
+    // exist for them.
+    if (entityFeed.isRemote()) return;
 
     // === DETERMINISTIC MODE (opt-in, default OFF) ===
     // When on, the population of a chunk is DERIVED from the world seed and

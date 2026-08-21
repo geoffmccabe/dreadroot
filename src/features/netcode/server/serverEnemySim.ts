@@ -50,6 +50,10 @@ export interface ServerEnemyConfig {
   detectionRange: number;
   /** Y given to a freshly spawned monster. Clients override with real ground. */
   spawnY: number;
+  /** Scales population. 1 = calibrated to the game's own spawn tuning, which
+   *  is deliberately sparse (~1% per minute). Raise it to make the world
+   *  busier; this is a FEEL knob, not a correctness one. */
+  densityMultiplier: number;
 }
 
 export const DEFAULT_ENEMY_CONFIG: ServerEnemyConfig = {
@@ -64,6 +68,7 @@ export const DEFAULT_ENEMY_CONFIG: ServerEnemyConfig = {
   speed: 2,
   detectionRange: 24,
   spawnY: 64,
+  densityMultiplier: 1,
 };
 
 interface LiveEnemy {
@@ -162,7 +167,8 @@ export class ServerEnemySim {
           const epochMinutes = this.cfg.epochMs / 60000;
           const density = Math.min(
             1,
-            ((this.cfg.spawnChancePerMinute / 100) * epochMinutes) / (ringChunks * perPopulated),
+            (((this.cfg.spawnChancePerMinute / 100) * epochMinutes) / (ringChunks * perPopulated))
+              * this.cfg.densityMultiplier,
           );
 
           const planned = planChunkSpawns(

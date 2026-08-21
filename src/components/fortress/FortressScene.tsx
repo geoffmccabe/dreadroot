@@ -160,6 +160,7 @@ import { useBurnSystem } from './useBurnSystem';
 
 // Universal Enemy Spawner (UES) - single system for all natural enemy spawning
 import { useEnemySpawnerIntegration } from '@/features/enemies/hooks/useEnemySpawnerIntegration';
+import { useServerMonsters } from '@/features/enemies/hooks/useServerMonsters';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -1073,6 +1074,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   }, [spawnShombieAt]);
 
   // UES integration - natural spawning for Shwarms and Shombies
+  // Draws the SERVER's monsters when the feed is in 'remote' mode. Inert
+  // otherwise, so mounting it changes nothing by itself.
+  useServerMonsters({
+    spawnShombieAt,
+    shombieDefinitions,
+    shombiesRef,
+  });
+
   useEnemySpawnerIntegration({
     worldId: currentWorldId,
     isEnabled: enemiesEnabled, // Delay until blocks loaded
