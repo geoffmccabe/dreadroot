@@ -20,6 +20,10 @@ import { SHTICKMAN_GRAVITY } from '../constants';
 
 // Patrol/shake constants — single home (the spawn fn imports PATHFIND_INTERVAL_MS).
 export const PATHFIND_INTERVAL_MS = 1500; // how often to recalculate the path
+/** Minimum gap before RETRYING after a search that produced no path. Without
+ *  this the "no path yet" case bypasses the interval entirely and re-requests
+ *  every frame. */
+export const PATHFIND_RETRY_MS = 500;
 export const PATHFIND_HORIZON = 100;      // local-search horizon toward a distant tree
 export const WAYPOINT_REACH_DISTANCE = 3.0;
 export const TREE_TOUCH_DISTANCE = 5.0;   // close enough to count as "touched"
@@ -129,8 +133,24 @@ export function patrolWalk(s: ShtickmanInstance, deps: ShtickmanStepDeps): void 
 
   // ── Re-path via Web Worker (async, non-blocking). Entity keeps its current
   //    path while waiting; stale out-of-order results are discarded by id.
-  if (!s.currentPath || now - s.lastPathfindAt > PATHFIND_INTERVAL_MS) {
+  // PERF, and the single largest cost in the 2026-Aug-21 trace: A* was 22% of
+  // all CPU and dominated every lag spike.
+  //
+  // Two compounding faults, both here:
+  //   1. `!s.currentPath` bypassed the interval entirely, so an entity without
+  //      a path re-requested EVERY FRAME rather than every 1.5 s.
+  //   2. Nothing tracked a request already in flight, so more were fired while
+  //      waiting for the first — and each one made the worker slower, which
+  //      made the wait longer, which fired more. A feedback loop that only
+  //      ends when the entity happens to get a path.
+  // With ten entities at 60 fps that is up to ~600 A* searches a second in
+  // place of ~7.
+  const inFlight = (s as any)._pathfindInFlight === true;
+  const dueForRefresh = now - s.lastPathfindAt > PATHFIND_INTERVAL_MS;
+  const retryDue = now - s.lastPathfindAt > PATHFIND_RETRY_MS;
+  if (!inFlight && (dueForRefresh || (!s.currentPath && retryDue))) {
     s.lastPathfindAt = now;
+    (s as any)._pathfindInFlight = true;
     const pathfindingConfig = s.definition.pathfinding_config_code || 'astar_default';
     const capturedId = s.id;
     const requestId = (s as any)._pathfindRequestId = ((s as any)._pathfindRequestId || 0) + 1;
@@ -158,6 +178,10 @@ export function patrolWalk(s: ShtickmanInstance, deps: ShtickmanStepDeps): void 
       0, // entityFeetY — ground level
     ).then(result => {
       const sx = shtickmenRef.current.find(x => x.id === capturedId);
+      // Clear the in-flight flag on the CURRENT instance object, whether or
+      // not it is still around, so a despawn cannot strand it set.
+      (s as any)._pathfindInFlight = false;
+      if (sx) (sx as any)._pathfindInFlight = false;
       if (!sx || !sx.isActive) return;
       if ((sx as any)._pathfindRequestId !== requestId) return; // stale
       if (result.success && result.path && result.path.length > 0) {
@@ -168,7 +192,12 @@ export function patrolWalk(s: ShtickmanInstance, deps: ShtickmanStepDeps): void 
         sx.currentPathIndex = 0;
       }
     }).catch(() => {
-      // Silently ignore — entity continues on current path.
+      // Silently ignore — entity continues on current path. The flag MUST be
+      // cleared here too, or one rejected request wedges this entity into
+      // never pathfinding again.
+      (s as any)._pathfindInFlight = false;
+      const sx = shtickmenRef.current.find(x => x.id === capturedId);
+      if (sx) (sx as any)._pathfindInFlight = false;
     });
   }
 
