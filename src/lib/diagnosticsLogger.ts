@@ -476,8 +476,23 @@ class DiagnosticsLogger {
     };
   }
 
+  /**
+   * Renderer stats for the whole FRAME, not just the last pass.
+   *
+   * three.js resets renderer.info at the start of every render() by default.
+   * With post-processing, r3f renders through the EffectComposer, so the last
+   * render() of a frame is the final fullscreen bloom/output quad — and
+   * reading info afterwards reported "1 draw call, 2 triangles" no matter how
+   * much of the world was on screen. Every GPU investigation using those
+   * numbers was being told the scene was free.
+   *
+   * Turning autoReset off and resetting once per frame accumulates every pass,
+   * so the numbers describe the frame. Only done while recording; when
+   * diagnostics are off, three.js keeps its normal behaviour untouched.
+   */
   captureRendererStats(renderer: THREE.WebGLRenderer): void {
     if (!this.enabled || !renderer) return;
+    if (renderer.info.autoReset) renderer.info.autoReset = false;
     this.drawCalls = renderer.info.render.calls;
     this.triangles = renderer.info.render.triangles;
     this.geometries = renderer.info.memory.geometries;
@@ -485,6 +500,13 @@ class DiagnosticsLogger {
     // Estimate GPU texture memory from atlas (8192x8192 RGBA = 256MB, no mipmaps)
     // This is a rough estimate; actual depends on atlas size constant
     this.gpuTextureMemMB = (8192 * 8192 * 4) / (1024 * 1024); // 256MB for current atlas
+    // Start the next frame's tally. Must come AFTER the reads above.
+    renderer.info.reset();
+  }
+
+  /** Restore three.js's own per-render reset when recording stops. */
+  releaseRendererStats(renderer: THREE.WebGLRenderer | null | undefined): void {
+    if (renderer && !renderer.info.autoReset) renderer.info.autoReset = true;
   }
   
   captureMemoryStats(): void {

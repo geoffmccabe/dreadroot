@@ -208,6 +208,11 @@ export function useFortressFrameLoop({
   // bypass entirely when DF isn't recording — the enemy for-loops below
   // ran unconditionally before, which is why FPS was bad even without
   // a DF report being captured.
+  // Renderer stats must be sampled EVERY frame: the tally is now accumulated
+  // across a frame's passes and reset here, so sampling every 100ms would
+  // report the sum of ~6 frames as if it were one.
+  if (diagnostics.enabled) diagnostics.captureRendererStats(state.gl);
+
   const nowDiag = now;
   if (
     diagnostics.enabled &&
@@ -215,7 +220,6 @@ export function useFortressFrameLoop({
   ) {
     lastDiagCaptureRef.current = nowDiag;
 
-    diagnostics.captureRendererStats(state.gl);
     diagnostics.captureGridStats(worldCollisionGrid.size, entityCollisionGrid.size);
 
     const activeShwarms = shwarmsRef.current;

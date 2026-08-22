@@ -14,6 +14,19 @@ import { EffectComposer, Bloom, BrightnessContrast, HueSaturation, Vignette } fr
 import { KernelSize } from 'postprocessing';
 import { LOOK } from './lookConfig';
 import { useLook } from './lookStore';
+
+/** null = use the user's setting; true/false = forced, for GPU measurement. */
+let _bloomOverride: boolean | null = null;
+const bloomOverride = (): boolean | null => _bloomOverride;
+if (typeof window !== 'undefined') {
+  const w = window as unknown as { __gpu?: Record<string, unknown> };
+  w.__gpu = w.__gpu || {};
+  w.__gpu.bloom = (on: boolean | null) => {
+    _bloomOverride = on;
+    return on === null ? 'bloom: following the user setting again'
+      : `bloom forced ${on ? 'ON' : 'OFF'} — take a D-Flow report and compare "GPU time"`;
+  };
+}
 import { useGlobeLook } from './globeLookStore';
 import { useGlobeActive } from './globeActive';
 
@@ -48,7 +61,16 @@ export function LookComposer() {
   const globeOnScreen = useGlobeActive();
   const grade = g.enabled && g.gradeOn && globeOnScreen;
 
-  if (isLowTier || (!bloomEnabled && !grade)) return null;
+  // Console override for measuring bloom's real GPU cost:
+  //     __gpu.bloom(false)   then read GPU time in the D-Flow report
+  //     __gpu.bloom(null)    back to the normal setting
+  // Bloom is a full-screen multi-pass effect, so it is the single easiest GPU
+  // cost to isolate; comparing GPU ms with it on and off says immediately
+  // whether it is worth tuning or whether the scene itself is the problem.
+  const forced = bloomOverride();
+  const bloomOn = forced === null ? bloomEnabled : forced;
+
+  if (isLowTier || (!bloomOn && !grade)) return null;
 
   return (
     /*
@@ -69,8 +91,8 @@ export function LookComposer() {
       those flow through as uniforms and must not cause a rebuild, or every drag would recompile a
       shader.
     */
-    <EffectComposer key={`${bloomEnabled ? 'b' : ''}${grade ? 'g' : ''}`} multisampling={0}>
-      {bloomEnabled ? (
+    <EffectComposer key={`${bloomOn ? 'b' : ''}${grade ? 'g' : ''}`} multisampling={0}>
+      {bloomOn ? (
         <Bloom
           kernelSize={KernelSize.MEDIUM}
           intensity={bloomIntensity}
