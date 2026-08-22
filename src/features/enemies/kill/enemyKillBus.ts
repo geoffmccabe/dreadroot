@@ -21,6 +21,7 @@
  */
 import { isDeterministicId } from '../spawn/deterministicSpawn';
 import { deterministicSpawnController } from '../spawn/deterministicSpawnController';
+import { mpStats } from '@/features/netcode/multiplayerStats';
 
 /** Removes one creature by id. Returns true if it owned and removed it. */
 export type KillRemover = (id: string) => boolean;
@@ -69,9 +70,10 @@ export class EnemyKillBus {
    * creature locally. Never re-announces — that is what would loop.
    */
   applyRemoteKill(id: string): boolean {
-    if (typeof id !== 'string' || !isDeterministicId(id)) return false;
+    if (typeof id !== 'string' || !isDeterministicId(id)) { mpStats.killsRejected++; return false; }
     if (this.seen(id)) return false;
     this.remember(id);
+    mpStats.killsReceived++;
     deterministicSpawnController.markKilled(id);
 
     let removed = false;

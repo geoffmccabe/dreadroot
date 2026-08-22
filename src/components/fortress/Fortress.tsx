@@ -100,6 +100,7 @@ import { getDefaultBulletTier } from '@/lib/bulletScaling';
 // until explicitly switched on; without the import they would be tree-shaken
 // out of the production bundle and the handles would not exist.
 import '@/features/netcode/shadowSession';
+import '@/features/netcode/multiplayerStats';
 
 
 // Main Fortress orchestrator component

@@ -12,7 +12,6 @@ const DEBUG_SHNAKE = false;
 const LENGTH_BASE = 2; // length = 2 + tier
 const CHUNK_SIZE = 16;
 const SPAWN_COOLDOWN_MS = 30000; // 30 second cooldown after failed spawn
-const REBUILD_INTERVAL_MS = 5000; // Rebuild index every 5 seconds (was 1s)
 
 const key = numPosKey;
 
@@ -130,18 +129,38 @@ export function useShnakeSystem({
   /** Last block count for change detection */
   const lastBlockCountRef = useRef(0);
 
-  // Rebuild global tree-block position indices periodically
-  // OPTIMIZATION: 5 second interval with change detection
-  useEffect(() => {
-    if (!isEnabled) return;
-    let timer: number | null = null;
+  /**
+   * Global tree-block position index, built ON DEMAND.
+   *
+   * This used to run on a blind 5-second interval. It walks EVERY loaded block
+   * in the world and allocates a Set of all of them — with 357 chunks loaded
+   * that is ~200,000 iterations and a ~200,000-entry Set, synchronously, on
+   * the main thread, every 5 seconds, whether or not anything needed it.
+   *
+   * Measured in Geoff's 2026-Aug-22 trace: 600-1100 ms main-thread stalls on a
+   * 5 s / 10 s cadence (10 s when the block count happened to be unchanged and
+   * the guard skipped a cycle), inside a TimerFire. It also churned the heap —
+   * a fresh 200k Set every cycle, which is most of the 525 MB that GC
+   * reclaimed over 17 seconds.
+   *
+   * The index has exactly three consumers — isCellOccupiedByWorld,
+   * isAdjacentToTreeBlock and spawnOnTree — all on the SPAWN path. Nothing
+   * reads it otherwise. The report for that session showed ZERO shnakes alive,
+   * so the entire scan was being done for a system with nothing to do.
+   *
+   * Now: the block count is checked cheaply, and the index is only actually
+   * rebuilt the first time a spawn attempt needs it. Same data, same
+   * staleness rule, built when consumed instead of on a timer.
+   */
+  const indexDirtyRef = useRef(true);
 
-    const rebuild = () => {
+  const ensureIndex = useCallback(() => {
       const blocks = blocksRef.current || [];
-      
-      // Skip rebuild if block count unchanged
-      if (blocks.length === lastBlockCountRef.current) return;
+
+      // Same staleness rule as before: the block count changing is the signal.
+      if (!indexDirtyRef.current && blocks.length === lastBlockCountRef.current) return;
       lastBlockCountRef.current = blocks.length;
+      indexDirtyRef.current = false;
       
       const byTier = new Map<number, Map<number, string>>();
       const nonInvisByTier = new Map<number, Set<number>>();
@@ -191,14 +210,7 @@ export function useShnakeSystem({
       nonInvisTreeBlocksByTierRef.current = nonInvisByTier;
       allTreeBlockPositionsByTierRef.current = allPosByTier;
       worldOccupiedSetRef.current = occupied;
-    };
-
-    rebuild();
-    timer = window.setInterval(rebuild, REBUILD_INTERVAL_MS);
-    return () => {
-      if (timer) window.clearInterval(timer);
-    };
-  }, [isEnabled, blocksRef]);
+  }, []);
 
   const countShnakesOnTree = useCallback((treeId: string) => {
     return shnakesRef.current.filter(s => s.isActive && s.treeId === treeId).length;
@@ -206,11 +218,13 @@ export function useShnakeSystem({
 
   // O(1) occupancy check using prebuilt Set
   const isCellOccupiedByWorld = useCallback((x: number, y: number, z: number) => {
+    ensureIndex();
     return worldOccupiedSetRef.current.has(key(x, y, z));
-  }, []);
+  }, [ensureIndex]);
 
   /** Check if a cell is adjacent to any tree block of this tier */
   const isAdjacentToTreeBlock = useCallback((tier: number, x: number, y: number, z: number) => {
+    ensureIndex();
     const positions = allTreeBlockPositionsByTierRef.current.get(tier);
     if (!positions) return false;
     
@@ -221,11 +235,14 @@ export function useShnakeSystem({
     ];
     
     return neighbors.some(n => positions.has(n));
-  }, []);
+  }, [ensureIndex]);
 
   const spawnOnTree = useCallback((tree: PlantedTree): ShnakeInstance | null => {
     // Skip fungal trees - shnakes only spawn on ordinary trees
     if (tree.seed_definition?.tree_type === 'fungal') return null;
+
+    // Build the world index only now, when a spawn actually needs it.
+    ensureIndex();
 
     const tier = (tree as any).seed_tier ?? tree.seed_definition?.tier ?? 1;
     const def = defsByTier.get(tier);

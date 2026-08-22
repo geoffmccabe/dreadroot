@@ -37,6 +37,7 @@ import { PredictedPlayer } from './prediction';
 import { PLAYER_SPEED, type PlayerInputCmd } from './playerSim';
 import { entityKey } from './snapshotDiff';
 import { entityFeed } from '@/features/enemies/feed/entityFeed';
+import { mpStats } from './multiplayerStats';
 import type { NetEvent } from './protocol';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 
@@ -153,6 +154,7 @@ export class ShadowSession {
     const entityId = serverEntityIdFrom(feedId);
     if (entityId === null) return;
     netcodeClient.sendInput(encodeKillFrame(entityId));
+    mpStats.killsSent++;
   }
 
   /**
@@ -209,23 +211,29 @@ export class ShadowSession {
     switch (ev.kind) {
       case 'connected':
         this.connected = true;
+        mpStats.connected = true;
         break;
       case 'hello': {
         if (this.sessionId !== null && this.sessionId !== ev.sessionId) {
           // The server restarted underneath us. Everything we were grading is
           // gone; start again rather than reporting nonsense.
           this.restarts++;
+          mpStats.sessionRestarts++;
           this.predicted = null;
         }
         this.sessionId = ev.sessionId;
         this.myEntityId = ev.yourEntityId;
+        mpStats.sessionId = ev.sessionId;
+        mpStats.myEntityId = ev.yourEntityId;
         this.registryOrigin = ev.registryOrigin;
         this.myKey = entityKey(ev.registryOrigin, ev.yourEntityId);
         break;
       }
       case 'disconnected':
         this.connected = false;
+        mpStats.connected = false;
         this.disconnects++;
+        mpStats.disconnects++;
         break;
       case 'error':
         if (this.errors.length < 20) this.errors.push(ev.message);
@@ -255,6 +263,7 @@ export class ShadowSession {
       this.predicted.predict(cmd);
       netcodeClient.sendInput(encodeInputFrame(cmd));
       this.inputsSent++;
+      mpStats.inputsOut++;
     }
   }
 
@@ -266,6 +275,8 @@ export class ShadowSession {
   }): void {
     if (!this.running) return;
     this.snapshots++;
+    // Rough wire size: the decoded entity count at 22 bytes each plus header.
+    mpStats.onSnapshot(26 + (d.added.length + d.changed.length) * 22);
 
     // Hand server-owned monsters to the EntityFeed. In 'local' mode (the
     // default) the feed ignores this entirely and the game keeps simulating
@@ -324,6 +335,7 @@ export class ShadowSession {
         const fid = serverMonsterId(e.id);
         const isNew = !this.monsterIds.has(e.id);
         this.monsterIds.add(e.id);
+        mpStats.serverMonsters = this.monsterIds.size;
         // Feed FIRST, so a stand-in created below already has a position to
         // read and never renders for a frame at the world origin.
         entityFeed.ingest(fid, e.x, e.y, e.z, e.yaw ?? 0, 0, tick);

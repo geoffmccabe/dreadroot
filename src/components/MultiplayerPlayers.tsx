@@ -5,6 +5,7 @@ import { Text, useFBX } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { frameLoop } from '@/lib/frameLoop';
 import { remotePlayerBuffer, type SampledTransform } from '@/features/netcode/transformBuffer';
+import { mpStats } from '@/features/netcode/multiplayerStats';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -47,6 +48,7 @@ function PlayersController({
     const unregister = frameLoop.register('multiplayer-players', (delta) => {
       const now = performance.now();
       const sample = sampleRef.current;
+      mpStats.remotePlayers = playersRefs.current.size;
 
       playersRefs.current.forEach((playerData, userId) => {
         const { mesh, mixer, walkAction, targetPosition, targetRotation } = playerData;
@@ -69,6 +71,7 @@ function PlayersController({
           mesh.position.copy(targetPosition);
           mesh.rotation.y = targetRotation;
           isMoving = false;
+          mpStats.interpStarvations++;
         }
 
         // Update animation mixer

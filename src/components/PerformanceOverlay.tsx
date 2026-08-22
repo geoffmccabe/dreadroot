@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from 'react';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { charAnimExport, charAnimLine } from '@/components/siege/charAnimDebug';
 import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
+import { mpStats } from '@/features/netcode/multiplayerStats';
 
 interface PerformanceData {
   fps: number;
@@ -373,6 +374,8 @@ CHUNK RENDERING
 
     // Add chunk pipeline current state
     text += `
+
+${mpStats.report()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CHUNK PIPELINE (current)

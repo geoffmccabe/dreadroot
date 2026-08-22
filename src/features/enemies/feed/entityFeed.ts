@@ -1,3 +1,4 @@
+import { mpStats } from '@/features/netcode/multiplayerStats';
 /**
  * EntityFeed — the seam between DECIDING where a monster is and DRAWING it.
  *
@@ -74,6 +75,7 @@ export class EntityFeed {
   setMode(mode: FeedMode): void {
     if (mode === this.mode) return;
     this.mode = mode;
+    mpStats.mode = mode;
     this.states.clear();
     this.resetDivergence();
   }
