@@ -55,6 +55,9 @@ const EVICTION_BATCH_SIZE = 10;
 const MAX_EVICT_PER_TICK = 4;
 
 // Retry configuration for failed chunk loads
+/** Live override for the chunk cache ceiling. null = the tuned default. */
+let chunkCacheCapOverride: number | null = null;
+
 const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 2000;     // 2s, 4s, 8s exponential backoff
 const FAILED_CHUNK_RETRY_INTERVAL = 5000; // Retry failed chunks every 5s
@@ -153,7 +156,24 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
   // Dynamic radii based on user's visual distance setting
   const LOAD_RADIUS = loadRadiusProp ?? DEFAULT_LOAD_RADIUS;
   const UNLOAD_RADIUS = LOAD_RADIUS + UNLOAD_HYSTERESIS;
-  const MAX_LOADED_CHUNKS = (2 * UNLOAD_RADIUS + 1) ** 2 + 50;
+  // The chunk cache ceiling. At the default load radius of 4 the working set
+  // is 81 chunks, but this ceiling is 275 — 3.4x — and each retained chunk
+  // holds blocks, colliders and mesh data.
+  //
+  // Measured in the 2026-Aug-21 20:06 trace: the post-GC heap FLOOR (memory
+  // that survives collection, i.e. genuinely retained) climbed from ~124 MB to
+  // ~270 MB as the cache filled during movement, and kept climbing until the
+  // trace ended. That is the cache doing exactly what it was told to do — it
+  // is not a leak — but it is a lot of memory to hold for chunks 7 rings away
+  // that are never rendered.
+  //
+  // The value is deliberately NOT changed here: the comments above document
+  // real stalls these numbers were tuned to fix, and lowering it blindly risks
+  // reintroducing load/evict thrash. Instead it can be tried live:
+  //     __chunks.cap(140)   // ~half; roughly LOAD_RADIUS+1 plus headroom
+  //     __chunks.cap(null)  // back to the default
+  //     __chunks.status()
+  const MAX_LOADED_CHUNKS = chunkCacheCapOverride ?? ((2 * UNLOAD_RADIUS + 1) ** 2 + 50);
   // EMIT_RADIUS: Only flatten chunks within this radius for emit (reduces downstream processing)
   const EMIT_RADIUS = emitRadius ?? LOAD_RADIUS;
 
@@ -2505,4 +2525,22 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     removeBlockById,
     removeBlocksByPositions
   ]);
+}
+
+
+// Console knob for testing the chunk cache ceiling against memory pressure.
+// See MAX_LOADED_CHUNKS above for why this is a knob rather than a new default.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __chunks: unknown }).__chunks = {
+    cap: (n: number | null) => {
+      chunkCacheCapOverride = (typeof n === 'number' && n > 0) ? Math.floor(n) : null;
+      return chunkCacheCapOverride === null
+        ? 'chunk cache ceiling: back to the tuned default'
+        : `chunk cache ceiling: ${chunkCacheCapOverride} (takes effect on the next eviction pass)`;
+    },
+    status: () => ({
+      capOverride: chunkCacheCapOverride,
+      loaded: (window as unknown as { __d?: unknown }).__d ? 'see __d for live counts' : 'unknown',
+    }),
+  };
 }

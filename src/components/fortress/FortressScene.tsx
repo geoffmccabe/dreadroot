@@ -161,6 +161,7 @@ import { useBurnSystem } from './useBurnSystem';
 // Universal Enemy Spawner (UES) - single system for all natural enemy spawning
 import { useEnemySpawnerIntegration } from '@/features/enemies/hooks/useEnemySpawnerIntegration';
 import { useServerMonsters } from '@/features/enemies/hooks/useServerMonsters';
+import { WebGLContextWatch } from './WebGLContextWatch';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -1853,6 +1854,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   return (
     <>
+      {/* Reports when the browser takes the GPU away (the silent grey screen). */}
+      <WebGLContextWatch />
       <FirstPersonControls
         onShoot={handleShoot}
         showCrosshairs={crosshairsEnabled}
