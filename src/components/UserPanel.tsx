@@ -47,6 +47,8 @@ import type { MarketplaceTab, MarketplaceFilters, MarketplaceSortOption } from '
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { playSound } from '@/lib/spatialAudio';
 import { PanelGrabBar } from '@/components/ui/PanelGrabBar';
+import { openCharacterChooser } from '@/features/characters/CharacterChooserHost';
+import { useSelectedCharacter } from '@/features/characters/characterSelection';
 
 const getRarityColor = (rarity: BlockType['rarity']) => {
   switch (rarity) {
@@ -96,6 +98,7 @@ interface UserPanelProps {
 
 export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
   const { isOpen, activeTab, closePanel, setActiveTab } = useUserPanel();
+  const selectedCharacter = useSelectedCharacter();
   const { user, signOut } = useAuth();
   const { profile, tokenBalance, inventory, isLoading, buyBlock, updateBlockchainAddress, updateDisplayName, updateAvatarUrl, updateVisualDistance, updateFogEnabled, refreshData, userRoles } = useUserData();
   const { blocks: availableBlocks, isLoading: loadingBlocks } = useBlocksData();
@@ -533,6 +536,21 @@ export const UserPanel: React.FC<UserPanelProps> = ({ onBlockPurchased }) => {
                     style={{ display: 'none' }}
                   />
                 </div>
+              </div>
+            </Card>
+
+            {/* Character — temporary chooser; players may switch freely for now. */}
+            <Card className="p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">Choose Character</div>
+                  <div className="text-xs opacity-70 truncate">
+                    Currently: {selectedCharacter} · Opt+Cmd+1-9
+                  </div>
+                </div>
+                <Button size="sm" onClick={() => { closePanel(); openCharacterChooser(); }}>
+                  Change
+                </Button>
               </div>
             </Card>
 

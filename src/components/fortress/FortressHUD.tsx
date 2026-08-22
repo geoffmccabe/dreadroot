@@ -59,6 +59,7 @@ import {
   type SlotOccupant,
 } from '@/features/inventory-system';
 import { isQASuppressed } from '@/config/qaGuard';
+import { CharacterChooserHost } from '@/features/characters/CharacterChooserHost';
 
 // (The old bottom-right "R for crosshairs" InstructionsPanel was removed and
 // replaced by <EquipSlots/> — see the render below.)
@@ -962,6 +963,8 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Siege Worlds quick-travel menu (Ctrl/Cmd+T) — shows only when armed. */}
       <SiegeTeleportMenu />
       {/* Terrain builder panel — shows only on editable (heightmap) siege maps. */}
+      {/* Character chooser: Opt+Cmd+1..9, or the button in the user panel. */}
+      <CharacterChooserHost />
       <TerrainBrushPanel />
       {/* Drop-in object builder palette — same heightmap-map gating. */}
       <BuilderPalette />
