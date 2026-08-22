@@ -19,6 +19,7 @@ import type { ShombieDefinition, ShombieInstance } from '@/features/shombie/type
 import type { ShwarmInstance } from '@/features/shwarm/hooks/useShwarmSystem';
 import { SHWARM_SPAWN_BOUNDS } from '@/features/shwarm/constants';
 import { SHOMBIE_SPAWN_BOUNDS, MAX_SHOMBIES_PER_CHUNK, MAX_TOTAL_SHOMBIES, CHUNK_SIZE } from '@/features/shombie/constants';
+import { dlog } from '@/lib/debugLog';
 
 /**
  * Options for the enemy spawner integration
@@ -234,7 +235,7 @@ export function useEnemySpawnerIntegration({
         return;
       }
 
-      console.log(`[UES] Spawning shwarm tier ${tier} at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
+      dlog('spawn', `[UES] Spawning shwarm tier ${tier} at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
       spawn(def, worldX, worldZ);
     }
 
@@ -249,7 +250,7 @@ export function useEnemySpawnerIntegration({
         return;
       }
 
-      console.log(`[UES] Spawning shombie tier ${tier} at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
+      dlog('spawn', `[UES] Spawning shombie tier ${tier} at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
       // `id` is only set under deterministic spawning; undefined keeps the
       // legacy random-id path byte-for-byte unchanged.
       spawn(def, worldX, worldZ, id);

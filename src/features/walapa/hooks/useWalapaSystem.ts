@@ -19,6 +19,7 @@ import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { WALAPA_HITBOX_RADIUS, WALAPA_HITBOX_HEIGHT } from '../constants';
+import { dlog } from '@/lib/debugLog';
 
 // Spawn check interval in ms
 const SPAWN_CHECK_INTERVAL_MS = 10000;
@@ -362,7 +363,7 @@ export function useWalapaSystem({
    * If colliders are in the way, searches upward until clear.
    */
   const spawnWalapa = useCallback((tier: number): WalapaInstance | null => {
-    console.log(`[Walapa] spawnWalapa called for tier ${tier}, current count: ${walapasRef.current.length}`);
+    dlog('spawn', `[Walapa] spawnWalapa called for tier ${tier}, current count: ${walapasRef.current.length}`);
 
     const definition = getDefinitionByTier(tier);
     if (!definition) {
@@ -388,7 +389,7 @@ export function useWalapaSystem({
 
     const spawnPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
 
-    console.log(`[Walapa] Spawning at position: (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`);
+    dlog('spawn', `[Walapa] Spawning at position: (${spawnPos.x.toFixed(1)}, ${spawnPos.y.toFixed(1)}, ${spawnPos.z.toFixed(1)})`);
     return spawnWalapaAt(definition, spawnPos);
   }, [cameraRef, getDefinitionByTier, spawnWalapaAt, definitions, hasColliderAt]);
 
@@ -420,7 +421,7 @@ export function useWalapaSystem({
       walapasRef.current = walapasRef.current.filter(w => w.id !== walapaId);
       setWalapas(walapasRef.current);
 
-      console.log(`[Walapa] Killed ${walapaId}`);
+      dlog('spawn', `[Walapa] Killed ${walapaId}`);
       return true;
     }
 

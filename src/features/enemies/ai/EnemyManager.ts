@@ -26,6 +26,7 @@ const BT_ENABLED_TYPES = new Set<string>([
 import { EnemySpatialIndex } from './EnemySpatialIndex';
 import { entityFeed } from '../feed/entityFeed';
 import { diagnostics } from '@/lib/diagnosticsLogger';
+import { dlog } from '@/lib/debugLog';
 import {
   type EnemyAdapter,
   type RegisteredEnemy,
@@ -114,7 +115,7 @@ class EnemyManagerClass {
    */
   setAIControlled(controlled: boolean): void {
     this.aiControlled = controlled;
-    if (DEBUG_AI) console.log(`[EnemyManager] AI controlled mode: ${controlled}`);
+    if (DEBUG_AI) dlog('enemies', `[EnemyManager] AI controlled mode: ${controlled}`);
   }
   
   /**
@@ -135,7 +136,7 @@ class EnemyManagerClass {
     this.isRegistered = true;
     this.lastFrameTime = performance.now();
     
-    if (DEBUG_AI) console.log('[EnemyManager] Initialized and registered with frameLoop');
+    if (DEBUG_AI) dlog('enemies', '[EnemyManager] Initialized and registered with frameLoop');
   }
   
   /**
@@ -149,7 +150,7 @@ class EnemyManagerClass {
     this.enemies.clear();
     this.spatialIndex.clear();
     
-    if (DEBUG_AI) console.log('[EnemyManager] Shutdown complete');
+    if (DEBUG_AI) dlog('enemies', '[EnemyManager] Shutdown complete');
   }
   
   /**
@@ -309,7 +310,7 @@ class EnemyManagerClass {
       reg.currentBehaviorId = null;
     }
     
-    if (DEBUG_AI) console.log('[EnemyManager] Cleared all revenge states (player respawned)');
+    if (DEBUG_AI) dlog('enemies', '[EnemyManager] Cleared all revenge states (player respawned)');
   }
   
   /**
@@ -549,14 +550,14 @@ class EnemyManagerClass {
       if (newBehaviorId !== reg.currentBehaviorId) {
         diagnostics.behaviorTransitions++;
         if (DEBUG_AI) {
-          console.log(`[AI] ${id} behavior: ${reg.currentBehaviorId} -> ${newBehaviorId} | result: ${result.kind}`);
+          dlog('enemies', `[AI] ${id} behavior: ${reg.currentBehaviorId} -> ${newBehaviorId} | result: ${result.kind}`);
         }
         reg.currentBehaviorId = newBehaviorId;
       }
       
       // Apply result via adapter (always call - gravity/knockback must run even when idle)
       if (DEBUG_AI && result.kind === 'move') {
-        console.log(`[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
+        dlog('enemies', `[AI] ${id} moving to (${result.tx.toFixed(1)}, ${result.ty.toFixed(1)}, ${result.tz.toFixed(1)})`);
       }
       reg.adapter.applyResult(reg.enemy, result, elapsed, this.sharedContext);
     }

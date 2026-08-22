@@ -4,6 +4,7 @@ import type { ShwarmDefinition, ShwarmBlock, ActiveShwarm } from '../types';
 import { SHWARM_SPAWN_BOUNDS, MAX_SHWARM_BLOCKS } from '../constants';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { dlog } from '@/lib/debugLog';
 
 /**
  * Runtime state for an active shwarm
@@ -125,7 +126,7 @@ export function useShwarmSystem({
     // Update ref synchronously first, then state
     shwarmsRef.current = [...shwarmsRef.current, instance];
     setShwarms(shwarmsRef.current);
-    console.log(`[Shwarm] Spawned tier ${definition.tier} shwarm with ${actualBlockCount} blocks at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
+    dlog('spawn', `[Shwarm] Spawned tier ${definition.tier} shwarm with ${actualBlockCount} blocks at (${worldX.toFixed(1)}, ${worldZ.toFixed(1)})`);
 
     return instance;
   }, []);
@@ -281,7 +282,7 @@ export function useShwarmSystem({
         const dead = prev.filter(s => !s.isActive);
         const active = prev.filter(s => s.isActive);
         if (dead.length > 0) {
-          console.log(`[Shwarm] Cleaned up ${dead.length} dead shwarms`);
+          dlog('spawn', `[Shwarm] Cleaned up ${dead.length} dead shwarms`);
         }
         return active;
       });

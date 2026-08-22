@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { supabase } from '@/integrations/supabase/client';
+import { dlog } from '@/lib/debugLog';
 
 interface UseStoredTextureAtlasReturn {
   atlasTexture: THREE.Texture | null;
@@ -29,14 +30,14 @@ export const useStoredTextureAtlas = (
   // Load stored atlas from Supabase storage
   const loadStoredAtlas = async () => {
     try {
-      console.log(`📥 Loading stored atlas: ${atlasFileName}`);
+      dlog('atlas', `📥 Loading stored atlas: ${atlasFileName}`);
       
       const { data, error } = await supabase.storage
         .from('billboard-media')
         .download(atlasFileName);
       
       if (error) {
-        console.log(`ℹ️ No stored atlas found for wall ${wallNumber}, will rebuild`);
+        dlog('atlas', `ℹ️ No stored atlas found for wall ${wallNumber}, will rebuild`);
         return null;
       }
       
@@ -54,7 +55,7 @@ export const useStoredTextureAtlas = (
           loadedTexture.premultiplyAlpha = false;
           loadedTexture.needsUpdate = true;
           
-          console.log(`✅ Loaded stored atlas for wall ${wallNumber}`, {
+          dlog('atlas', `✅ Loaded stored atlas for wall ${wallNumber}`, {
             width: loadedTexture.image?.width,
             height: loadedTexture.image?.height,
             format: loadedTexture.format,
@@ -86,7 +87,7 @@ export const useStoredTextureAtlas = (
     setError(null);
     
     try {
-      console.log(`🔨 Rebuilding atlas for wall ${wallNumber}`, {
+      dlog('atlas', `🔨 Rebuilding atlas for wall ${wallNumber}`, {
         imageUrls: imageUrls.filter(url => url).length + ' images'
       });
       
@@ -124,7 +125,7 @@ export const useStoredTextureAtlas = (
       const imagePromises = imageUrls.map(async (url, index) => {
         if (!url) return;
         
-        console.log(`Loading image for wall ${wallNumber}, slot ${index + 1}:`, url);
+        dlog('atlas', `Loading image for wall ${wallNumber}, slot ${index + 1}:`, url);
         
         return new Promise<void>((resolve) => {
           const img = new Image();
@@ -173,7 +174,7 @@ export const useStoredTextureAtlas = (
               idx % 4 === 3 && val < 255
             );
             
-            console.log(`Slot ${index + 1} transparency check:`, {
+            dlog('atlas', `Slot ${index + 1} transparency check:`, {
               hasTransparency,
               sampleAlpha: imageData.data[3],
               imageNaturalSize: `${img.naturalWidth}x${img.naturalHeight}`
@@ -196,7 +197,7 @@ export const useStoredTextureAtlas = (
       
       await Promise.all(imagePromises);
       
-      console.log(`✅ All images processed for wall ${wallNumber} atlas`);
+      dlog('atlas', `✅ All images processed for wall ${wallNumber} atlas`);
       
       // Convert to WebP blob with high quality to preserve alpha channel
       const blob = await new Promise<Blob>((resolve, reject) => {
@@ -207,7 +208,7 @@ export const useStoredTextureAtlas = (
               return;
             }
             
-            console.log(`📊 WebP blob created for wall ${wallNumber}:`, {
+            dlog('atlas', `📊 WebP blob created for wall ${wallNumber}:`, {
               size: blob.size,
               type: blob.type,
               canvasHadAlpha: ctx.getImageData(0, 0, 1, 1).data[3] < 255
@@ -220,13 +221,13 @@ export const useStoredTextureAtlas = (
         );
       });
       
-      console.log(`📦 Created blob for wall ${wallNumber}:`, {
+      dlog('atlas', `📦 Created blob for wall ${wallNumber}:`, {
         size: blob.size,
         type: blob.type
       });
       
       // Save to Supabase storage
-      console.log(`💾 Saving atlas for wall ${wallNumber} to storage`);
+      dlog('atlas', `💾 Saving atlas for wall ${wallNumber} to storage`);
       const { error: uploadError } = await supabase.storage
         .from('billboard-media')
         .upload(atlasFileName, blob, { 
@@ -254,7 +255,7 @@ export const useStoredTextureAtlas = (
           loadedTexture.premultiplyAlpha = false;
           loadedTexture.needsUpdate = true;
           
-          console.log(`✅ Created and saved new atlas for wall ${wallNumber}`, {
+          dlog('atlas', `✅ Created and saved new atlas for wall ${wallNumber}`, {
             width: loadedTexture.image?.width,
             height: loadedTexture.image?.height,
             blobSize: blob.size,
@@ -296,19 +297,19 @@ export const useStoredTextureAtlas = (
     let hasLoadedStored = false;
     
     const initializeAtlas = async () => {
-      console.log(`🔧 Initializing atlas for wall ${wallNumber}`);
+      dlog('atlas', `🔧 Initializing atlas for wall ${wallNumber}`);
       
       // First try to load stored atlas
       const storedAtlas = await loadStoredAtlas();
       if (storedAtlas) {
         hasLoadedStored = true;
-        console.log(`✅ Using stored atlas for wall ${wallNumber}`);
+        dlog('atlas', `✅ Using stored atlas for wall ${wallNumber}`);
         return;
       }
       
       // Only rebuild if no stored atlas and we have images
       if (imageUrls.some(url => url)) {
-        console.log(`🔨 No stored atlas found, rebuilding for wall ${wallNumber}`);
+        dlog('atlas', `🔨 No stored atlas found, rebuilding for wall ${wallNumber}`);
         await rebuildAtlas();
       }
     };
@@ -318,7 +319,7 @@ export const useStoredTextureAtlas = (
     // Listen for manual rebuild events from BCP
     const handleRebuildAtlas = (event: CustomEvent) => {
       if (event.detail.wallNumber === wallNumber) {
-        console.log(`🔔 Manual rebuild requested for wall ${wallNumber}`);
+        dlog('atlas', `🔔 Manual rebuild requested for wall ${wallNumber}`);
         rebuildAtlas();
       }
     };

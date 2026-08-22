@@ -20,6 +20,7 @@ import { seededFrom } from '@/lib/seededRandom';
 import { enemyKillBus } from '@/features/enemies/kill/enemyKillBus';
 import { shadowSession } from '@/features/netcode/shadowSession';
 import { SHOMBIE_HITBOX_RADIUS, SHOMBIE_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX } from '../constants';
+import { dlog } from '@/lib/debugLog';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -248,7 +249,7 @@ export function useShombieSystem({
     shombiesRef.current = [...shombiesRef.current, instance];
     setShombies(shombiesRef.current);
     
-    console.log(`[Shombie] Spawned tier ${definition.tier} at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)}`);
+    dlog('spawn', `[Shombie] Spawned tier ${definition.tier} at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)}`);
     return instance;
   }, []);
 
@@ -312,7 +313,7 @@ export function useShombieSystem({
       spawnShombieAt(definition, baseX + offsetX, baseZ + offsetZ);
     }
 
-    console.log(`[Shombie] Spawned group of ${spawnCount} tier ${definition.tier} shombies`);
+    dlog('spawn', `[Shombie] Spawned group of ${spawnCount} tier ${definition.tier} shombies`);
   }, [cameraRef, getDefinitionByTier, spawnShombieAt]);
 
   /**
@@ -333,13 +334,13 @@ export function useShombieSystem({
         e.preventDefault();
         
         if (!isAdmin) {
-          console.log('[Shombie] Ctrl+Z denied - admin only');
+          dlog('spawn', '[Shombie] Ctrl+Z denied - admin only');
           return;
         }
 
         setSpawningEnabled(prev => {
           const newState = !prev;
-          console.log(`[Shombie] Natural spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
+          dlog('spawn', `[Shombie] Natural spawning ${newState ? 'ENABLED' : 'DISABLED'}`);
           return newState;
         });
       }
@@ -536,17 +537,17 @@ export function useShombieSystem({
     }
     
     if (!definitions || definitions.length === 0) {
-      console.log('[Shombie] Natural spawning enabled but no definitions loaded');
+      dlog('spawn', '[Shombie] Natural spawning enabled but no definitions loaded');
       return;
     }
 
     const tier1Def = definitions.find(d => d.tier === 1);
     if (!tier1Def) {
-      console.log('[Shombie] No tier 1 definition found');
+      dlog('spawn', '[Shombie] No tier 1 definition found');
       return;
     }
 
-    console.log(`[Shombie] Natural spawning loop started, tier1 spawn_chance=${tier1Def.spawn_chance_per_minute}/min`);
+    dlog('spawn', `[Shombie] Natural spawning loop started, tier1 spawn_chance=${tier1Def.spawn_chance_per_minute}/min`);
 
     const spawnCheck = () => {
       const playerChunk = getPlayerChunk();

@@ -8,6 +8,7 @@
 // owns canonical state and doesn't need a local read cache.
 
 import type { PlacedBlock } from '@/types/blocks';
+import { dlog } from '@/lib/debugLog';
 
 export interface DBBlock extends Omit<PlacedBlock, 'created_at' | 'updated_at'> {
   created_at: string;
@@ -82,7 +83,7 @@ export class BlockDB {
           const oldVersion = event.oldVersion;
           const newVersion = event.newVersion || this.dbVersion;
           
-          console.log(`IndexedDB upgrade: v${oldVersion} -> v${newVersion}`);
+          dlog('blocks', `IndexedDB upgrade: v${oldVersion} -> v${newVersion}`);
           
           // Handle version conflicts by clearing and recreating
           if (oldVersion > newVersion) {
@@ -123,7 +124,7 @@ export class BlockDB {
           chunkStore.createIndex('worldId', 'worldId', { unique: false });
           chunkStore.createIndex('cachedAt', 'cachedAt', { unique: false });
           
-          console.log('IndexedDB stores ready');
+          dlog('blocks', 'IndexedDB stores ready');
         };
       } catch (error) {
         console.error('Error initializing IndexedDB:', error);
@@ -338,7 +339,7 @@ export class BlockDB {
       
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        console.log('💾 Saved user to IndexedDB:', userId);
+        dlog('blocks', '💾 Saved user to IndexedDB:', userId);
         resolve();
       };
     });
@@ -367,7 +368,7 @@ export class BlockDB {
       
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        console.log('💾 Cleared user session from IndexedDB');
+        dlog('blocks', '💾 Cleared user session from IndexedDB');
         resolve();
       };
     });
@@ -648,7 +649,7 @@ export class BlockDB {
 
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        console.log('[IndexedDB] Chunk cache completely cleared');
+        dlog('blocks', '[IndexedDB] Chunk cache completely cleared');
         resolve();
       };
     });
@@ -687,7 +688,7 @@ export class BlockDB {
       const store = transaction.objectStore(this.chunkCacheStoreName);
 
       transaction.oncomplete = () => {
-        console.log(`[IndexedDB] Invalidated ${chunkCoords.length} chunk cache entries`);
+        dlog('blocks', `[IndexedDB] Invalidated ${chunkCoords.length} chunk cache entries`);
         resolve();
       };
       transaction.onerror = () => reject(transaction.error);
@@ -749,7 +750,7 @@ export class BlockDB {
       let pending = chunkUpdates.length;
 
       transaction.oncomplete = () => {
-        console.log(`[IndexedDB] Updated versions for ${chunkUpdates.length} cached chunks`);
+        dlog('blocks', `[IndexedDB] Updated versions for ${chunkUpdates.length} cached chunks`);
         resolve();
       };
       transaction.onerror = () => reject(transaction.error);
@@ -803,7 +804,7 @@ export class BlockDB {
           }
           cursor.continue();
         } else {
-          console.log(`[IndexedDB] Removed ${removedCount} tree blocks from blocks store`);
+          dlog('blocks', `[IndexedDB] Removed ${removedCount} tree blocks from blocks store`);
           resolve(removedCount);
         }
       };

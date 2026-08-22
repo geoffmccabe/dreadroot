@@ -19,6 +19,7 @@ import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import { SHROOMER_HITBOX_RADIUS, SHROOMER_HITBOX_HEIGHT, MAX_KNOCKBACK_SPEED, TUMBLE_RATE_MIN, TUMBLE_RATE_MAX, EXPLODE_DURATION_MS } from '../constants';
+import { dlog } from '@/lib/debugLog';
 
 // Head movement type randomizer - 1/3 each
 function randomHeadMovementType(): HeadMovementType {
@@ -214,7 +215,7 @@ export function useShroomerSystem({
     shroomersRef.current = [...shroomersRef.current, instance];
     setShroomers(shroomersRef.current);
 
-    console.log(`[Shroomer] Spawned tier ${definition.tier} at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)}`);
+    dlog('spawn', `[Shroomer] Spawned tier ${definition.tier} at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)}`);
     return instance;
   }, []);
 
@@ -269,7 +270,7 @@ export function useShroomerSystem({
       spawnShroomerAt(definition, baseX + offsetX, baseZ + offsetZ);
     }
 
-    console.log(`[Shroomer] Spawned group of ${spawnCount} tier ${definition.tier} shroomers`);
+    dlog('spawn', `[Shroomer] Spawned group of ${spawnCount} tier ${definition.tier} shroomers`);
   }, [cameraRef, getDefinitionByTier, spawnShroomerAt]);
 
   /**
@@ -420,17 +421,17 @@ export function useShroomerSystem({
     }
 
     if (!definitions || definitions.length === 0) {
-      console.log('[Shroomer] Natural spawning enabled but no definitions loaded');
+      dlog('spawn', '[Shroomer] Natural spawning enabled but no definitions loaded');
       return;
     }
 
     const tier1Def = definitions.find(d => d.tier === 1);
     if (!tier1Def) {
-      console.log('[Shroomer] No tier 1 definition found');
+      dlog('spawn', '[Shroomer] No tier 1 definition found');
       return;
     }
 
-    console.log(`[Shroomer] Natural spawning loop started, tier1 spawn_chance=${tier1Def.spawn_chance_per_minute}/min`);
+    dlog('spawn', `[Shroomer] Natural spawning loop started, tier1 spawn_chance=${tier1Def.spawn_chance_per_minute}/min`);
 
     const spawnCheck = () => {
       const playerChunk = getPlayerChunk();

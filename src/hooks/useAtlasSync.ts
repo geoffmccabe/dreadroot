@@ -33,6 +33,10 @@ import { initLogStartStep, initLogFinishStep, initLogStep, initLogErrorStep } fr
 import { isArrayWorld } from '@/config/textureBackend';
 import { registerTextureId } from '@/lib/arrayTextureRegistry';
 import { parseStripMetadata } from '@/lib/animationToStrip';
+import { dlog } from '@/lib/debugLog';
+
+/** Stable empty array: `block_types` is absent from this project (see below). */
+const EMPTY_BLOCK_TYPES: Array<{ name: string; texture_url: string | null }> = [];
 
 interface SyncResult {
   added: number;
@@ -155,21 +159,15 @@ export function useAtlasSync(options?: {
     retry: false,
   });
 
-  const { data: blockTypes, isLoading: loadingBlocks } = useQuery({
-    queryKey: ['atlas-block-types'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('block_types' as any)
-        .select('name, texture_url');
-      if (error) return [];
-      return data ?? [];
-    },
-    enabled,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  // `block_types` does NOT exist in this Supabase project (verified against
+  // information_schema). Querying it returned a 404 on every single page load,
+  // which the browser logs at the network layer no matter how gracefully the
+  // JS handles the error — so it could not be silenced from code, only by not
+  // asking. Block textures come from the `blocks` table instead.
+  // If the table is ever added, restore the query here.
+  const blockTypes: Array<{ name: string; texture_url: string | null }> = EMPTY_BLOCK_TYPES;
 
-  const isLoading = loadingSeeds || loadingShwarms || loadingShombies || loadingShnakes || loadingWalapas || loadingBlocks;
+  const isLoading = loadingSeeds || loadingShwarms || loadingShombies || loadingShnakes || loadingWalapas;
 
   // Sync all definitions to atlas
   const syncToAtlas = useCallback(async (): Promise<SyncResult> => {
@@ -213,7 +211,7 @@ export function useAtlasSync(options?: {
         if (fruitDiag.length > 0) {
           console.warn(`[AtlasSync] Fruit texture issues: ${fruitDiag.join(', ')}`);
         }
-        console.log(`[AtlasSync] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map(d => d.tree_type || 'null'))].join(',')}`);
+        dlog('atlas', `[AtlasSync] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map(d => d.tree_type || 'null'))].join(',')}`);
       }
 
       // Fungal tree textures (30 tiers × 3 types) with deterministic slots
@@ -324,7 +322,7 @@ export function useAtlasSync(options?: {
       const stats = atlasManager.getStats();
       if (stepId) initLogFinishStep(stepId, stats.usedSlots);
 
-      console.log(`[AtlasSync] Sync complete: ${stats.usedSlots} slots used`, stats.byCategory);
+      dlog('atlas', `[AtlasSync] Sync complete: ${stats.usedSlots} slots used`, stats.byCategory);
 
       return result;
     } finally {
@@ -372,7 +370,7 @@ export async function updateAtlasTexture(
 
     if (slotIndex !== null) {
       await atlasManager.save();
-      console.log(`[AtlasSync] Updated texture ${textureId} in slot ${slotIndex}`);
+      dlog('atlas', `[AtlasSync] Updated texture ${textureId} in slot ${slotIndex}`);
       return true;
     }
 
@@ -393,7 +391,7 @@ export async function removeAtlasTexture(textureId: string): Promise<boolean> {
 
     if (removed) {
       await atlasManager.save();
-      console.log(`[AtlasSync] Removed texture ${textureId}`);
+      dlog('atlas', `[AtlasSync] Removed texture ${textureId}`);
     }
 
     return removed;
@@ -423,7 +421,6 @@ export async function syncAtlasOnInit(): Promise<void> {
     vortaxesResult,
     shnakesResult,
     walapasResult,
-    blocksResult,
   ] = await Promise.all([
     supabase.from('seed_definitions').select('*').order('tier'),
     supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
@@ -432,7 +429,6 @@ export async function syncAtlasOnInit(): Promise<void> {
     supabase.from('vortax_definitions' as any).select('tier, texture_url').order('tier'),
     supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
     supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
-    supabase.from('block_types' as any).select('name, texture_url'),
   ]);
 
   const seedDefinitions = seedsResult.data;
@@ -445,7 +441,8 @@ export async function syncAtlasOnInit(): Promise<void> {
   // back to empty arrays when the table is missing in this Supabase
   // project. Atlas sync handles the empty case.
   const walapaDefinitions = walapasResult.error ? [] : walapasResult.data;
-  const blockTypes = blocksResult.error ? [] : blocksResult.data;
+  // See the note above: this table does not exist in this project.
+  const blockTypes: Array<{ name: string; texture_url: string | null }> = EMPTY_BLOCK_TYPES;
 
   // Build batch of all texture specs for parallel loading
   const specs: Array<{
@@ -474,7 +471,7 @@ export async function syncAtlasOnInit(): Promise<void> {
     if (fruitDiag.length > 0) {
       console.warn(`[AtlasSync:init] Fruit texture issues: ${fruitDiag.join(', ')}`);
     }
-    console.log(`[AtlasSync:init] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map((d: any) => d.tree_type || 'null'))].join(',')}`);
+    dlog('atlas', `[AtlasSync:init] seedDefinitions count=${seedDefinitions.length}, tree_types: ${[...new Set(seedDefinitions.map((d: any) => d.tree_type || 'null'))].join(',')}`);
   }
 
   // Fungal tree textures (30 tiers × 3 types) with deterministic slots
@@ -589,7 +586,7 @@ export async function syncAtlasOnInit(): Promise<void> {
   const stats = atlasManager.getStats();
   if (stepId) initLogFinishStep(stepId, stats.usedSlots);
 
-  console.log('[AtlasSync] Initial sync complete');
+  dlog('atlas', '[AtlasSync] Initial sync complete');
   } catch (error) {
     console.error('[AtlasSync] Initial sync failed:', error);
     if (stepId) initLogErrorStep(stepId, error instanceof Error ? error.message : 'Unknown error');

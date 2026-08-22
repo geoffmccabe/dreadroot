@@ -55,6 +55,7 @@ import { type WaterType } from '@/lib/pondGenerator';
 import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
 import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 import { getVaultInRange, getMarketInRange } from '@/components/siege/siegeLobbyZones';
+import { dlog } from '@/lib/debugLog';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -538,10 +539,10 @@ export function FirstPersonControls({
       case 'KeyI':
         // Ctrl+I toggles Inspector Mode (admin only)
         if (event.ctrlKey) {
-          console.log('[FortressControls] Ctrl+I pressed, userRoles:', userRoles);
+          dlog('controls', '[FortressControls] Ctrl+I pressed, userRoles:', userRoles);
           if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
             event.preventDefault();
-            console.log('[FortressControls] Toggling inspector mode');
+            dlog('controls', '[FortressControls] Toggling inspector mode');
             toggleInspectorMode();
             break;
           }
@@ -669,7 +670,7 @@ export function FirstPersonControls({
 
         // T-mode: T+2 for wide tree planting
         if (tModeActiveRef.current && event.code === 'Digit2') {
-          console.log('[KeyHandler] T+2 detected, switching to wide_planting');
+          dlog('controls', '[KeyHandler] T+2 detected, switching to wide_planting');
           event.preventDefault();
           tModeActiveRef.current = false;
           if (tModeTimeoutRef.current) {
@@ -682,7 +683,7 @@ export function FirstPersonControls({
 
         // T-mode: T+3 for fungal tree planting
         if (tModeActiveRef.current && event.code === 'Digit3') {
-          console.log('[KeyHandler] T+3 detected, switching to fungal_planting');
+          dlog('controls', '[KeyHandler] T+3 detected, switching to fungal_planting');
           event.preventDefault();
           tModeActiveRef.current = false;
           if (tModeTimeoutRef.current) {
@@ -827,8 +828,8 @@ export function FirstPersonControls({
       case 'F9': // Debug: show nearby colliders and clear orphans
         if (userRoles.includes('admin') || userRoles.includes('superadmin')) {
           event.preventDefault();
-          console.log(`[Debug] Camera at: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
-          console.log(`[Debug] World Colliders: ${worldCollisionGrid.size}, Entity Colliders: ${entityCollisionGrid.size}`);
+          dlog('controls', `[Debug] Camera at: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
+          dlog('controls', `[Debug] World Colliders: ${worldCollisionGrid.size}, Entity Colliders: ${entityCollisionGrid.size}`);
           (worldCollisionGrid as any).debugNearby?.(camera.position.x, camera.position.z, 5);
         }
         break;
@@ -841,7 +842,7 @@ export function FirstPersonControls({
           console.warn('[ADMIN] collision grid clear invoked', { code: event.code });
           const oldWorldSize = worldCollisionGrid.size;
           const oldEntitySize = entityCollisionGrid.size;
-          console.log('[Debug] EMERGENCY: Clearing both collision grids!');
+          dlog('controls', '[Debug] EMERGENCY: Clearing both collision grids!');
           worldCollisionGrid.clear();
           entityCollisionGrid.clear();
 
@@ -850,7 +851,7 @@ export function FirstPersonControls({
           createFortressColliders();
 
           const newWorldSize = worldCollisionGrid.size;
-          console.log(`[Debug] Grids cleared. World was ${oldWorldSize}, now ${newWorldSize}. Entity was ${oldEntitySize}, now 0.`);
+          dlog('controls', `[Debug] Grids cleared. World was ${oldWorldSize}, now ${newWorldSize}. Entity was ${oldEntitySize}, now 0.`);
           
           // Show toast so user knows it worked
           alert(`Collision grids cleared! World: ${oldWorldSize} → ${newWorldSize}, Entity: ${oldEntitySize} → 0`);
@@ -1803,7 +1804,7 @@ export function FirstPersonControls({
           };
 
           setGlobalInspectData(inspectData);
-          console.log(inspectData.rawInfo);
+          dlog('controls', inspectData.rawInfo);
 
           // Async Supabase (server-truth) check — logs the real DB + chunk-cache state so we can
           // see whether a block actually persisted and whether the chunk cache is stale.
@@ -1825,7 +1826,7 @@ export function FirstPersonControls({
                 const blobHas = blobArr ? blobArr.some((b: any) => b.position_x === bx && b.position_y === by && b.position_z === bz) : null;
                 const liveV = (cvRes as any).data?.version ?? null;
                 const blobV = (cbRes as any).data?.version ?? null;
-                console.log('[BlockInspector:SUPABASE]', JSON.stringify({
+                dlog('controls', '[BlockInspector:SUPABASE]', JSON.stringify({
                   placed_blocks_row: pb ? {
                     block_type: pb.block_type, world_id: pb.world_id, world_number: pb.world_number,
                     chunk_x: pb.chunk_x, chunk_z: pb.chunk_z, user_id: pb.user_id, created_at: pb.created_at,
@@ -1881,7 +1882,7 @@ export function FirstPersonControls({
                 };
 
                 setGlobalInspectData(updatedData);
-                console.log('[BlockInspector] IndexedDB check complete:', match ? 'FOUND' : 'NOT FOUND');
+                dlog('controls', '[BlockInspector] IndexedDB check complete:', match ? 'FOUND' : 'NOT FOUND');
               } else {
                 // No cached chunk - update loading state
                 const updatedSources: InspectSources = {
@@ -2868,7 +2869,7 @@ export function FirstPersonControls({
       const level = playerLevelRef.current || 0;
       const newMaxBoosts = Math.floor(level / 3);
       if (newMaxBoosts !== jetBoostMaxRef.current) {
-        console.log(`[JetBoost] Level ${level} → Max boosts changing from ${jetBoostMaxRef.current} to ${newMaxBoosts}`);
+        dlog('controls', `[JetBoost] Level ${level} → Max boosts changing from ${jetBoostMaxRef.current} to ${newMaxBoosts}`);
         jetBoostMaxRef.current = newMaxBoosts;
         // Cap available to new max
         jetBoostAvailRef.current = Math.min(jetBoostAvailRef.current, newMaxBoosts);
@@ -2876,7 +2877,7 @@ export function FirstPersonControls({
         if (jetBoostAvailRef.current === 0 && newMaxBoosts > 0) {
           jetBoostAvailRef.current = newMaxBoosts;
         }
-        console.log(`[JetBoost] Available: ${jetBoostAvailRef.current}, Max: ${jetBoostMaxRef.current}`);
+        dlog('controls', `[JetBoost] Available: ${jetBoostAvailRef.current}, Max: ${jetBoostMaxRef.current}`);
       }
 
       // Refill charges every 60 seconds

@@ -15,6 +15,7 @@ import {
 import { playSpatialSound, preloadSpatialSounds } from '@/lib/spatialAudio';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
+import { dlog } from '@/lib/debugLog';
 import {
   VORTAX_HITBOX_RADIUS,
   VORTAX_HITBOX_HEIGHT,
@@ -204,7 +205,7 @@ export function useVortaxSystem({
     vortaxesRef.current = [...vortaxesRef.current, instance];
     setVortaxes(vortaxesRef.current);
 
-    console.log(`[Vortax] Spawned tier 1 at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)} spheres=${spheres.length}`);
+    dlog('spawn', `[Vortax] Spawned tier 1 at (${x.toFixed(1)}, ${z.toFixed(1)}) scale=${scale.toFixed(2)} spheres=${spheres.length}`);
     return instance;
   }, []);
 
@@ -246,7 +247,7 @@ export function useVortaxSystem({
       spawnVortaxAt(definition, baseX + offsetX, baseZ + offsetZ);
     }
 
-    console.log(`[Vortax] Spawned group of ${count} tier 1 vortaxes`);
+    dlog('spawn', `[Vortax] Spawned group of ${count} tier 1 vortaxes`);
   }, [getDefinitionByTier, spawnVortaxAt]);
 
   /**

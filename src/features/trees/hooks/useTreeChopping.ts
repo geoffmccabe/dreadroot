@@ -13,6 +13,7 @@ import { collisionGrid } from '@/lib/spatialHashGrid';
 import { generateTreeBlueprint } from '../lib/treeGrowth';
 import { generateFungalTreeBlueprint } from '../lib/fungalTreeGenerator';
 import { getSoundUrl } from '@/hooks/useGameSounds';
+import { dlog } from '@/lib/debugLog';
 
 // Throttle chopping to prevent accidental double-chops
 const CHOP_COOLDOWN_MS = 1000;
@@ -30,7 +31,7 @@ export async function returnSeedToUser(seedDefId: string, seedDef: SeedDefinitio
       seedDefId,
       1,
     );
-    console.log(`[returnSeedToUser] Seed returned to user ${targetUserId.slice(0, 8)}`);
+    dlog('trees', `[returnSeedToUser] Seed returned to user ${targetUserId.slice(0, 8)}`);
     return true;
   } catch (err) {
     console.error('[returnSeedToUser] admin_grant_inventory_row failed:', err);
@@ -211,8 +212,8 @@ export function useTreeChopping({
     blockY: number,
     blockZ: number
   ): Promise<ChopResult> => {
-    console.log(`[TreeChopping] chopTreeAtPosition called at (${blockX}, ${blockY}, ${blockZ})`);
-    console.log(`[TreeChopping] worldId=${worldId}, userId=${userId}, plantedTrees.length=${plantedTrees.length}`);
+    dlog('trees', `[TreeChopping] chopTreeAtPosition called at (${blockX}, ${blockY}, ${blockZ})`);
+    dlog('trees', `[TreeChopping] worldId=${worldId}, userId=${userId}, plantedTrees.length=${plantedTrees.length}`);
 
     if (!worldId || !userId) {
       console.error('[TreeChopping] Not authenticated - worldId or userId missing');
@@ -222,30 +223,30 @@ export function useTreeChopping({
     // Throttle chopping
     const now = Date.now();
     if (now - lastChopTimeRef.current < CHOP_COOLDOWN_MS) {
-      console.log('[TreeChopping] Throttled - please wait');
+      dlog('trees', '[TreeChopping] Throttled - please wait');
       return { success: false, error: 'Please wait before chopping again' };
     }
 
     if (isChoppingRef.current) {
-      console.log('[TreeChopping] Already chopping');
+      dlog('trees', '[TreeChopping] Already chopping');
       return { success: false, error: 'Already chopping' };
     }
 
     // Find which tree this block belongs to
-    console.log(`[TreeChopping] Searching for tree at (${blockX}, ${blockY}, ${blockZ}) among ${plantedTrees.length} trees`);
+    dlog('trees', `[TreeChopping] Searching for tree at (${blockX}, ${blockY}, ${blockZ}) among ${plantedTrees.length} trees`);
     const tree = findTreeAtPosition(blockX, blockY, blockZ, plantedTrees);
 
     if (!tree) {
       console.warn('[TreeChopping] No tree found at position:', blockX, blockY, blockZ);
-      console.log('[TreeChopping] Available trees:', plantedTrees.map(t => `${t.id.slice(0,8)} at (${t.base_x},${t.base_y},${t.base_z})`));
+      dlog('trees', '[TreeChopping] Available trees:', plantedTrees.map(t => `${t.id.slice(0,8)} at (${t.base_x},${t.base_y},${t.base_z})`));
       return { success: false, error: 'No tree found at this position' };
     }
 
-    console.log(`[TreeChopping] Found tree: ${tree.id.slice(0,8)} at base (${tree.base_x}, ${tree.base_y}, ${tree.base_z}), planted_by=${tree.planted_by?.slice(0,8)}`);
+    dlog('trees', `[TreeChopping] Found tree: ${tree.id.slice(0,8)} at base (${tree.base_x}, ${tree.base_y}, ${tree.base_z}), planted_by=${tree.planted_by?.slice(0,8)}`);
 
     // Check ownership (admin/superadmin can bypass)
     const isOwner = tree.planted_by === userId;
-    console.log(`[TreeChopping] Ownership check: tree.planted_by=${tree.planted_by?.slice(0,8)}, userId=${userId?.slice(0,8)}, isOwner=${isOwner}, canBypass=${canBypassOwnership}`);
+    dlog('trees', `[TreeChopping] Ownership check: tree.planted_by=${tree.planted_by?.slice(0,8)}, userId=${userId?.slice(0,8)}, isOwner=${isOwner}, canBypass=${canBypassOwnership}`);
     if (!isOwner && !canBypassOwnership) {
       toast({
         title: "Not your tree",
@@ -262,7 +263,7 @@ export function useTreeChopping({
       return { success: false, error: 'Seed definition not found' };
     }
 
-    console.log(`[TreeChopping] Starting chop for tree ${tree.id.slice(0,8)}, seedDef: ${seedDef.name}`);
+    dlog('trees', `[TreeChopping] Starting chop for tree ${tree.id.slice(0,8)}, seedDef: ${seedDef.name}`);
     isChoppingRef.current = true;
     lastChopTimeRef.current = now;
 
@@ -273,28 +274,28 @@ export function useTreeChopping({
       // IMMEDIATELY remove tree from local state (labels disappear instantly)
       // Do this BEFORE deleteTree so user gets instant feedback
       if (removeTreeFromState) {
-        console.log('[TreeChopping] Removing tree from local state immediately for tree:', tree.id);
+        dlog('trees', '[TreeChopping] Removing tree from local state immediately for tree:', tree.id);
         removeTreeFromState(tree.id);
-        console.log('[TreeChopping] removeTreeFromState called successfully');
+        dlog('trees', '[TreeChopping] removeTreeFromState called successfully');
       } else {
         console.error('[TreeChopping] ERROR: removeTreeFromState is undefined! Labels will not be removed.');
       }
 
       // Play timber sound IMMEDIATELY (don't wait for DB operations)
-      console.log('[TreeChopping] Playing timber sound...');
+      dlog('trees', '[TreeChopping] Playing timber sound...');
       playTimberSound(); // Fire and forget - no await
 
       // Notify that tree was chopped (for Shnake cleanup, etc.)
       if (onTreeChopped) {
-        console.log('[TreeChopping] Calling onTreeChopped callback');
+        dlog('trees', '[TreeChopping] Calling onTreeChopped callback');
         onTreeChopped(tree);
       }
 
       // Delete the tree (local block removal + database cleanup)
       // Pass canBypassOwnership so admins can delete any tree
-      console.log('[TreeChopping] Calling deleteTree...');
+      dlog('trees', '[TreeChopping] Calling deleteTree...');
       const deleteResult = await deleteTree(tree, seedDef, removeBlocksByPositions, canBypassOwnership);
-      console.log('[TreeChopping] deleteTree result:', deleteResult);
+      dlog('trees', '[TreeChopping] deleteTree result:', deleteResult);
 
       if (!deleteResult.success) {
         // DB deletion failed - show error but don't restore visual state
@@ -388,22 +389,22 @@ export function useTreeChopping({
     blockZ: number
   ): boolean => {
     if (!userId) {
-      console.log('[TreeChopping] isOwnedTreeAtPosition: No userId');
+      dlog('trees', '[TreeChopping] isOwnedTreeAtPosition: No userId');
       return false;
     }
 
-    console.log(`[TreeChopping] isOwnedTreeAtPosition: Checking (${blockX}, ${blockY}, ${blockZ}), plantedTrees: ${plantedTrees.length}, canBypass=${canBypassOwnership}`);
+    dlog('trees', `[TreeChopping] isOwnedTreeAtPosition: Checking (${blockX}, ${blockY}, ${blockZ}), plantedTrees: ${plantedTrees.length}, canBypass=${canBypassOwnership}`);
     const tree = findTreeAtPosition(blockX, blockY, blockZ, plantedTrees);
 
     if (!tree) {
-      console.log('[TreeChopping] isOwnedTreeAtPosition: No tree found at position');
+      dlog('trees', '[TreeChopping] isOwnedTreeAtPosition: No tree found at position');
       return false;
     }
 
     // Admin/superadmin can chop any tree
     const isOwned = tree.planted_by === userId;
     const canChop = isOwned || canBypassOwnership;
-    console.log(`[TreeChopping] isOwnedTreeAtPosition: tree=${tree.id?.slice(0,8)}, isOwned=${isOwned}, canBypass=${canBypassOwnership}, canChop=${canChop}`);
+    dlog('trees', `[TreeChopping] isOwnedTreeAtPosition: tree=${tree.id?.slice(0,8)}, isOwned=${isOwned}, canBypass=${canBypassOwnership}, canChop=${canChop}`);
     return canChop;
   }, [userId, plantedTrees, canBypassOwnership]);
 

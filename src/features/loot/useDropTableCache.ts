@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { dlog } from '@/lib/debugLog';
 
 interface DropTableEntry {
   item_number: number;
@@ -89,7 +90,7 @@ export function useDropTableCache() {
 
       cacheRef.current = { tables: tableMap, itemMap };
       setIsLoaded(true);
-      console.log(`[DropTableCache] Loaded ${tableMap.size} tables, ${itemMap.size} items`);
+      dlog('inventory', `[DropTableCache] Loaded ${tableMap.size} tables, ${itemMap.size} items`);
     };
 
     load();
@@ -97,22 +98,22 @@ export function useDropTableCache() {
 
   const rollDrop = useCallback((dropRate: number | null, dropTableCode: string | null): DroppedItemInfo | null => {
     if (!dropRate || !dropTableCode || dropRate <= 0) {
-      console.log(`[Loot] rollDrop SKIP: dropRate=${dropRate}, dropTableCode=${dropTableCode}`);
+      dlog('inventory', `[Loot] rollDrop SKIP: dropRate=${dropRate}, dropTableCode=${dropTableCode}`);
       return null;
     }
 
     // First roll: does anything drop at all?
     const rateRoll = Math.random() * 100;
     if (rateRoll >= dropRate) {
-      console.log(`[Loot] Rate roll MISS: rolled ${rateRoll.toFixed(1)} >= ${dropRate}%`);
+      dlog('inventory', `[Loot] Rate roll MISS: rolled ${rateRoll.toFixed(1)} >= ${dropRate}%`);
       return null;
     }
-    console.log(`[Loot] Rate roll HIT: rolled ${rateRoll.toFixed(1)} < ${dropRate}%`);
+    dlog('inventory', `[Loot] Rate roll HIT: rolled ${rateRoll.toFixed(1)} < ${dropRate}%`);
 
     const cache = cacheRef.current;
     const entries = cache.tables.get(dropTableCode);
     if (!entries || entries.length === 0) {
-      console.log(`[Loot] No entries for table "${dropTableCode}" (cache has: ${Array.from(cache.tables.keys()).join(', ')})`);
+      dlog('inventory', `[Loot] No entries for table "${dropTableCode}" (cache has: ${Array.from(cache.tables.keys()).join(', ')})`);
       return null;
     }
 
@@ -123,7 +124,7 @@ export function useDropTableCache() {
     }
 
     if (totalWeight <= 0) {
-      console.log(`[Loot] totalWeight is 0 for table "${dropTableCode}"`);
+      dlog('inventory', `[Loot] totalWeight is 0 for table "${dropTableCode}"`);
       return null;
     }
 
@@ -139,24 +140,24 @@ export function useDropTableCache() {
     }
 
     if (!winner) {
-      console.log(`[Loot] Weighted roll found no winner (totalWeight=${totalWeight})`);
+      dlog('inventory', `[Loot] Weighted roll found no winner (totalWeight=${totalWeight})`);
       return null;
     }
 
     // "Nothing" entry (item_number = -1) means no drop
     if (winner.item_number === -1) {
-      console.log(`[Loot] Rolled "nothing" entry`);
+      dlog('inventory', `[Loot] Rolled "nothing" entry`);
       return null;
     }
 
     // Look up the item UUID
     const itemId = cache.itemMap.get(winner.item_number);
     if (!itemId) {
-      console.log(`[Loot] No itemId for item_number ${winner.item_number} "${winner.item_name}" (itemMap has ${cache.itemMap.size} entries)`);
+      dlog('inventory', `[Loot] No itemId for item_number ${winner.item_number} "${winner.item_name}" (itemMap has ${cache.itemMap.size} entries)`);
       return null;
     }
 
-    console.log(`[Loot] DROP: ${winner.item_name} (#${winner.item_number}) uuid=${itemId}`);
+    dlog('inventory', `[Loot] DROP: ${winner.item_name} (#${winner.item_number}) uuid=${itemId}`);
     return {
       itemNumber: winner.item_number,
       itemName: winner.item_name,

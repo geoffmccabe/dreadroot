@@ -29,6 +29,7 @@ import {
 } from './atlasStorage';
 import { parseStripMetadata } from './animationToStrip';
 import { decompressFrames, parseGIF } from 'gifuct-js';
+import { dlog } from '@/lib/debugLog';
 
 /**
  * Generate per-slot mipmaps to prevent cross-slot color bleeding.
@@ -378,7 +379,7 @@ class AtlasManagerClass {
   }
 
   private async _doInitialize(): Promise<void> {
-    console.log('[AtlasManager] Initializing...');
+    dlog('atlas', '[AtlasManager] Initializing...');
 
     // Try to load existing atlas from storage
     const stored = await loadAtlas(1);
@@ -409,21 +410,21 @@ class AtlasManagerClass {
           this.metadata = createEmptyMetadata(1);
         } else {
           this.metadata = stored.metadata;
-          console.log(`[AtlasManager] Restored atlas with ${slotCount} slots (schema v${stored.metadata.schemaVersion})`);
+          dlog('atlas', `[AtlasManager] Restored atlas with ${slotCount} slots (schema v${stored.metadata.schemaVersion})`);
         }
       } else {
         this.metadata = stored.metadata;
-        console.log(`[AtlasManager] Restored atlas with 0 slots`);
+        dlog('atlas', `[AtlasManager] Restored atlas with 0 slots`);
       }
     } else {
       if (stored) {
-        console.log(`[AtlasManager] Atlas schema outdated (v${stored.metadata.schemaVersion || 0} < v${ATLAS_SCHEMA_VERSION}) - rebuilding`);
+        dlog('atlas', `[AtlasManager] Atlas schema outdated (v${stored.metadata.schemaVersion || 0} < v${ATLAS_SCHEMA_VERSION}) - rebuilding`);
       }
       // Create new empty atlas
       this.canvas = createEmptyAtlasCanvas();
       this.ctx = this.canvas.getContext('2d')!;
       this.metadata = createEmptyMetadata(1);
-      console.log('[AtlasManager] Created new empty atlas');
+      dlog('atlas', '[AtlasManager] Created new empty atlas');
     }
 
     this.isInitialized = true;
@@ -771,7 +772,7 @@ class AtlasManagerClass {
     this.ctx = this.canvas.getContext('2d')!;
     this.metadata = createEmptyMetadata(1);
     await this.save();
-    console.log('[AtlasManager] Atlas cleared');
+    dlog('atlas', '[AtlasManager] Atlas cleared');
   }
 
   /**
@@ -885,12 +886,12 @@ class AtlasManagerClass {
     // Log how many textures were skipped (cache hit) vs need redrawing
     const totalSpecs = specs.length;
     const skipped = totalSpecs - toProcess.length;
-    console.log(`[AtlasManager] batchSetTextures: ${totalSpecs} specs, ${skipped} cached (skipped), ${toProcess.length} to redraw`);
+    dlog('atlas', `[AtlasManager] batchSetTextures: ${totalSpecs} specs, ${skipped} cached (skipped), ${toProcess.length} to redraw`);
     if (toProcess.length > 0) {
       // Log tree textures being redrawn (helps debug wrong-texture issues)
       const treeRedraws = toProcess.filter(p => p.category === 'tree');
       if (treeRedraws.length > 0) {
-        console.log(`[AtlasManager] Redrawing ${treeRedraws.length} tree textures:`, treeRedraws.map(t => `${t.textureId}@slot${t.resolvedSlot}`).join(', '));
+        dlog('atlas', `[AtlasManager] Redrawing ${treeRedraws.length} tree textures:`, treeRedraws.map(t => `${t.textureId}@slot${t.resolvedSlot}`).join(', '));
       }
     }
 
@@ -981,7 +982,7 @@ export const atlasManager = new AtlasManagerClass();
  */
 export async function clearAtlasCache(): Promise<void> {
   await atlasManager.clear();
-  console.log('[AtlasManager] Cache cleared. Reload the page to rebuild all textures from scratch.');
+  dlog('atlas', '[AtlasManager] Cache cleared. Reload the page to rebuild all textures from scratch.');
 }
 
 // Expose on window for easy console access

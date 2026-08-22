@@ -21,6 +21,7 @@ import { fetchChunksByRadius, fetchChunksBatched } from '@/lib/chunkFetch';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { updateChunkHeightMap, removeChunkHeightMap, clearAllHeightMaps } from '@/lib/chunkHeightMap';
 import * as THREE from 'three';
+import { dlog } from '@/lib/debugLog';
 
 // Configuration for chunk loading
 // LOAD_RADIUS is now dynamic — derived from loadRadius prop (defaults to 4)
@@ -387,7 +388,17 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     const dz = Math.abs(chunkZ - playerChunk.z);
     const distance = Math.max(dx, dz);
     
-    if (distance <= UNLOAD_RADIUS) return true;
+    // Read the CURRENT radius, not the one captured when this callback was
+    // created. This is memoised with an empty dependency list, so it used to
+    // pin against the DEFAULT radius forever. With the view distance set
+    // higher than the default it therefore treated chunks that were still in
+    // view as evictable, threw them away, and the integrity check immediately
+    // re-fetched them — a load/evict/reload loop.
+    // Symptom in Geoff's 2026-Aug-22 D-Flow: 184 unloads against 12 loads in
+    // 14 s, repeated "Integrity check: loading N missing chunks within
+    // radius", and 16 s of chunk fetching inside a 14 s session.
+    const liveUnloadRadius = loadRadiusRef.current + UNLOAD_HYSTERESIS;
+    if (distance <= liveUnloadRadius) return true;
     
     // Check for optimistic blocks
     const chunkData = loadedChunksRef.current.get(chunkKey);
@@ -405,7 +416,11 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
    */
   const evictLRUChunks = useCallback(() => {
     const chunkCount = loadedChunksRef.current.size;
-    if (chunkCount <= MAX_LOADED_CHUNKS) return;
+    // Same stale-closure hazard as isChunkPinned above: recompute from the
+    // live radius so a changed view distance is respected.
+    const liveMax = chunkCacheCapOverride
+      ?? ((2 * (loadRadiusRef.current + UNLOAD_HYSTERESIS) + 1) ** 2 + 50);
+    if (chunkCount <= liveMax) return;
 
     // Find non-pinned chunks sorted by lastAccessedAt (oldest first)
     const evictionCandidates: Array<{ key: string; lastAccessedAt: number }> = [];
@@ -426,7 +441,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
     // re-trigger. Collider work is batched (single invalidation per
     // chunk's worth of voxels) so the bigger batch is cheaper than the
     // old per-voxel grid invalidation churn.
-    const overBy = chunkCount - MAX_LOADED_CHUNKS;
+    const overBy = chunkCount - liveMax;
     const evictTarget = Math.min(
       evictionCandidates.length,
       overBy + EVICTION_BATCH_SIZE,
@@ -1178,7 +1193,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       // D-Flow: End fetch timing
       const fetchMs = performance.now() - fetchT0;
 
-      console.log(`[ChunkLoader] Fetch complete: ${blocks.length} blocks, ${failedChunkCoords.length} failed, ${fetchMs.toFixed(0)}ms${useRpcFallback ? ' (fallback)' : ' (RPC)'}`);
+      dlog('chunks', `[ChunkLoader] Fetch complete: ${blocks.length} blocks, ${failedChunkCoords.length} failed, ${fetchMs.toFixed(0)}ms${useRpcFallback ? ' (fallback)' : ' (RPC)'}`);
 
       // Track failed chunks for retry
       if (failedChunkCoords.length > 0) {
@@ -2349,7 +2364,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       }
 
       if (toLoad.length > 0) {
-        console.log(`[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius`);
+        dlog('chunks', `[ChunkLoader] Integrity check: loading ${toLoad.length} missing chunks within radius`);
         // Clear from failed set — loadSpecificChunks will re-add if they fail again
         for (const { x, z } of toLoad) {
           failed.delete(`chunk_${x}_${z}`);

@@ -12,6 +12,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
+import { dlog } from '@/lib/debugLog';
 
 const SEQUENCE_TIMEOUT_MS = 3000;
 
@@ -77,7 +78,7 @@ export function useSpawnCommands({
 
       // Check for timeout
       if (seq.step > 0 && now - seq.startTime > SEQUENCE_TIMEOUT_MS) {
-        console.log('[SpawnCommands] Sequence timeout, resetting');
+        dlog('spawn', '[SpawnCommands] Sequence timeout, resetting');
         resetSequence(); // Also clears _spawnSequenceActive
       }
 
@@ -87,7 +88,7 @@ export function useSpawnCommands({
           seq.step = 1;
           seq.startTime = now;
           _spawnSequenceActive = true;
-          console.log('[SpawnCommands] Sequence started - press 1=shwarm, 2=shnake, 3=shombie');
+          dlog('spawn', '[SpawnCommands] Sequence started - press 1=shwarm, 2=shnake, 3=shombie');
           return;
         }
         return;
@@ -100,7 +101,7 @@ export function useSpawnCommands({
           e.key === '4' || e.key === '5' || e.key === '6' || e.key === '7' || e.key === '8'
         ) {
           if (!isAdmin) {
-            console.log('[SpawnCommands] Spawn denied - admin only');
+            dlog('spawn', '[SpawnCommands] Spawn denied - admin only');
             resetSequence();
             return;
           }
@@ -108,11 +109,11 @@ export function useSpawnCommands({
           seq.step = 2;
           seq.startTime = now;
           const typeNames: Record<number, string> = { 1: 'shwarm', 2: 'shnake', 3: 'shombie', 4: 'walapa', 5: 'shtickman', 6: 'shpider', 7: 'shroomer', 8: 'vortax' };
-          console.log(`[SpawnCommands] Type: ${typeNames[seq.type]} - press 1-9 (0=10) for tier`);
+          dlog('spawn', `[SpawnCommands] Type: ${typeNames[seq.type]} - press 1-9 (0=10) for tier`);
           return;
         }
         // Invalid key
-        console.log('[SpawnCommands] Invalid type key:', e.key);
+        dlog('spawn', '[SpawnCommands] Invalid type key:', e.key);
         resetSequence();
         return;
       }
@@ -125,28 +126,28 @@ export function useSpawnCommands({
           
           // For shwarm and shnake, spawn immediately
           if (seq.type === 1) {
-            console.log(`[SpawnCommands] Spawning shwarm tier ${actualTier}`);
+            dlog('spawn', `[SpawnCommands] Spawning shwarm tier ${actualTier}`);
             callbacks.onSpawnShwarm?.(actualTier);
             resetSequence();
             return;
           }
           
           if (seq.type === 2) {
-            console.log(`[SpawnCommands] Spawning shnake tier ${actualTier}`);
+            dlog('spawn', `[SpawnCommands] Spawning shnake tier ${actualTier}`);
             callbacks.onSpawnShnake?.(actualTier);
             resetSequence();
             return;
           }
 
           if (seq.type === 4) {
-            console.log(`[SpawnCommands] Spawning walapa tier ${actualTier}`);
+            dlog('spawn', `[SpawnCommands] Spawning walapa tier ${actualTier}`);
             callbacks.onSpawnWalapa?.(actualTier);
             resetSequence();
             return;
           }
 
           if (seq.type === 5) {
-            console.log(`[SpawnCommands] Spawning shtickman tier ${actualTier}`);
+            dlog('spawn', `[SpawnCommands] Spawning shtickman tier ${actualTier}`);
             callbacks.onSpawnShtickman?.(actualTier);
             resetSequence();
             return;
@@ -158,7 +159,7 @@ export function useSpawnCommands({
             seq.step = 3;
             seq.startTime = now;
             const typeName = seq.type === 3 ? 'shombie' : seq.type === 6 ? 'shpider' : seq.type === 7 ? 'shroomer' : 'vortax';
-            console.log(`[SpawnCommands] ${typeName} tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
+            dlog('spawn', `[SpawnCommands] ${typeName} tier ${actualTier} - press 1-9 (0=10) for count, or wait for 1`);
 
             // Auto-spawn 1 if no count is entered within the window. 800ms was
             // too tight to type the 4th key — widened so the count reliably
@@ -168,7 +169,7 @@ export function useSpawnCommands({
             setTimeout(() => {
               if (sequenceRef.current.step === 3 && sequenceRef.current.tier === tierCapture) {
                 const t = tierCapture === 0 ? 10 : tierCapture;
-                console.log(`[SpawnCommands] Auto-spawning 1 ${typeName} tier ${t}`);
+                dlog('spawn', `[SpawnCommands] Auto-spawning 1 ${typeName} tier ${t}`);
                 if (typeCapture === 3)      callbacks.onSpawnShombie?.(t, 1);
                 else if (typeCapture === 6) callbacks.onSpawnShpider?.(t, 1);
                 else if (typeCapture === 7) callbacks.onSpawnShroomer?.(t, 1);
@@ -180,7 +181,7 @@ export function useSpawnCommands({
           }
         }
         // Invalid key
-        console.log('[SpawnCommands] Invalid tier key:', e.key);
+        dlog('spawn', '[SpawnCommands] Invalid tier key:', e.key);
         resetSequence();
         return;
       }
@@ -195,7 +196,7 @@ export function useSpawnCommands({
           // Vortax is TIER 1 ONLY.
           const actualTier = seq.type === 8 ? 1 : (seq.tier === 0 ? 10 : seq.tier!);
 
-          console.log(`[SpawnCommands] Spawning ${actualCount} ${typeName}(s) tier ${actualTier}`);
+          dlog('spawn', `[SpawnCommands] Spawning ${actualCount} ${typeName}(s) tier ${actualTier}`);
           if (seq.type === 3)      callbacks.onSpawnShombie?.(actualTier, actualCount);
           else if (seq.type === 6) callbacks.onSpawnShpider?.(actualTier, actualCount);
           else if (seq.type === 7) callbacks.onSpawnShroomer?.(actualTier, actualCount);
@@ -205,7 +206,7 @@ export function useSpawnCommands({
         }
         // Any other key spawns 1
         const actualTier = seq.type === 8 ? 1 : (seq.tier === 0 ? 10 : seq.tier!);
-        console.log(`[SpawnCommands] Spawning 1 ${typeName} tier ${actualTier}`);
+        dlog('spawn', `[SpawnCommands] Spawning 1 ${typeName} tier ${actualTier}`);
         if (seq.type === 3)      callbacks.onSpawnShombie?.(actualTier, 1);
         else if (seq.type === 6) callbacks.onSpawnShpider?.(actualTier, 1);
         else if (seq.type === 7) callbacks.onSpawnShroomer?.(actualTier, 1);

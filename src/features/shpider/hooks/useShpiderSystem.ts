@@ -24,6 +24,7 @@ import { playSpatialSound } from '@/lib/spatialAudio';
 import { chaseLocalPlayer, petTargetNearestHostile } from '../lib/targetSelection';
 import { EnemyManager } from '@/features/enemies/ai/EnemyManager';
 import type { EnemyEntry } from '@/features/enemies/ai/types';
+import { dlog } from '@/lib/debugLog';
 
 // Death sound: the shpider's own sound pitched down to ~0 with a glitchy
 // on/off stutter — a stuttering power-down. Starts at 50% pitch (matching the
@@ -251,7 +252,7 @@ export function useShpiderSystem({
       const radius = Math.random() * GROUP_SPREAD_RADIUS;
       spawnShpiderAt(definition, baseX + Math.cos(angle) * radius, baseZ + Math.sin(angle) * radius);
     }
-    console.log(`[Shpider] Spawned ${count} tier-${tier} shpiders`);
+    dlog('spawn', `[Shpider] Spawned ${count} tier-${tier} shpiders`);
   }, [definitions, spawnShpiderAt]);
 
   /** Remove a shpider by id (used by combat). */
@@ -394,7 +395,7 @@ export function useShpiderSystem({
     };
     (window as any).__toggleShpiderSpawning = () => {
       setSpawningEnabled(v => {
-        console.log(`[Shpider] Natural spawning: ${!v ? 'ON' : 'OFF'}`);
+        dlog('spawn', `[Shpider] Natural spawning: ${!v ? 'ON' : 'OFF'}`);
         return !v;
       });
     };
@@ -451,7 +452,7 @@ export function useShpiderSystem({
         shpidersRef.current = shpidersRef.current.filter(s => !consumed.has(s.id));
         if (newDef) {
           spawnShpiderAt(newDef, bottom.position.x, bottom.position.z);
-          console.log(`[Shpider] Stack of 4 collapsed → T${newTier} at (${bottom.position.x.toFixed(1)}, ${bottom.position.z.toFixed(1)})`);
+          dlog('spawn', `[Shpider] Stack of 4 collapsed → T${newTier} at (${bottom.position.x.toFixed(1)}, ${bottom.position.z.toFixed(1)})`);
         }
       }
       if (consumed.size > 0) setShpiders([...shpidersRef.current]);
@@ -478,7 +479,7 @@ export function useShpiderSystem({
 
     const eligibleDefs = definitions.filter(d => (d.spawn_chance_per_minute ?? 0) > 0);
     if (eligibleDefs.length === 0) return;
-    console.log(`[Shpider] Natural spawning started — ${eligibleDefs.length} eligible tiers (T${eligibleDefs.map(d => d.tier).join(',T')}), radius ${NATURAL_SPAWN_CHUNK_RADIUS} chunks`);
+    dlog('spawn', `[Shpider] Natural spawning started — ${eligibleDefs.length} eligible tiers (T${eligibleDefs.map(d => d.tier).join(',T')}), radius ${NATURAL_SPAWN_CHUNK_RADIUS} chunks`);
 
     const spawnCheck = () => {
       if (shpidersRef.current.length >= MAX_TOTAL_SHPIDERS) return;
