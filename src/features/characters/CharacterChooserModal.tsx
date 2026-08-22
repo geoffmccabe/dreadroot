@@ -14,17 +14,22 @@ import * as THREE from 'three';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { charGlbUrl } from '@/components/siege/charadmin/characterStats';
 import {
-  DREADROOT_CHARACTERS, SW_STAT_SCHEMA, type DreadrootCharacter,
+  DREADROOT_CHARACTERS, SW_STAT_SCHEMA, SW_BASELINE, statDelta,
+  MIXAMO_IDLE_LIBRARY, ROOT_RIG_ANIM_SOURCE, swSpeeds,
+  type DreadrootCharacter, type SwStats,
 } from './dreadrootCharacters';
 import { useSelectedCharacter, setSelectedCharacter } from './characterSelection';
 
-const IDLE_LIBRARY = '/siege/characters/character_idles.glb';
-/** Normalised height so every character reads the same size in the preview. */
-const TARGET_H = 1.75;
+
 
 function CharModel({ c }: { c: DreadrootCharacter }) {
-  const { scene, animations: ownAnims } = useGLTF(charGlbUrl(c.file), '/draco/');
-  const { animations: sharedAnims } = useGLTF(charGlbUrl(IDLE_LIBRARY), '/draco/');
+  const { scene } = useGLTF(charGlbUrl(c.file), '/draco/');
+  // Two incompatible skeletons: the pilot models are Mixamo-named and driven by
+  // the shared idle library; flamma/jeanette/shiyang use a different rig whose
+  // animations only exist inside Shi Yang's glb. Neither library can drive the
+  // other — they share no bone names at all.
+  const animSrc = c.rig === 'mixamo' ? MIXAMO_IDLE_LIBRARY : ROOT_RIG_ANIM_SOURCE;
+  const { animations } = useGLTF(charGlbUrl(animSrc), '/draco/');
   const root = useRef<THREE.Group>(null);
 
   const cloned = useMemo(() => {
@@ -33,37 +38,32 @@ function CharModel({ c }: { c: DreadrootCharacter }) {
     return g;
   }, [scene]);
 
-  // A character either plays a clip from the shared idle library, or one from
-  // its own glb. Flamma and Jeanette ship no animation data at all, so they
-  // stand in their bind pose — that is the asset, not a bug.
-  const clips = c.ownIdleClip ? ownAnims : sharedAnims;
-  const { actions, names } = useAnimations(clips, root);
+  const { actions, names } = useAnimations(animations, root);
 
   useEffect(() => {
-    const want = c.ownIdleClip ?? c.idleClip;
-    if (!want) return;
-    const found = names.find((n) => n === want)
-      ?? names.find((n) => n.toLowerCase() === want.toLowerCase())
+    const found = names.find((n) => n === c.idleClip)
+      ?? names.find((n) => n.toLowerCase() === c.idleClip.toLowerCase())
       ?? names[0];
     const a = found ? actions[found] : null;
     a?.reset().fadeIn(0.25).play();
     return () => { a?.fadeOut(0.2); };
   }, [actions, names, c]);
 
-  // Slow turntable so the model can be seen from more than one angle.
   useFrame((_, dt) => { if (root.current) root.current.rotation.y += dt * 0.35; });
 
-  const scale = TARGET_H / (c.rawH || 1);
+  // Normalise to the character's intended world height. Jeanette's glb is
+  // authored ~20x oversized, so without this she would tower over everyone.
+  const scale = c.targetH / (c.rawH || 1);
   return (
     <group ref={root}>
-      <primitive object={cloned} scale={scale} position={[0, -TARGET_H / 2, 0]} />
+      <primitive object={cloned} scale={scale} position={[0, -c.targetH / 2, 0]} />
     </group>
   );
 }
 
 function Preview({ c }: { c: DreadrootCharacter }) {
   return (
-    <Canvas camera={{ position: [0, 0.15, 3.1], fov: 38 }} dpr={[1, 1.5]} style={{ width: '100%', height: '100%' }}>
+    <Canvas camera={{ position: [0, 0.15, 3.0], fov: 38 }} dpr={[1, 1.5]} style={{ width: '100%', height: '100%' }}>
       <ambientLight intensity={1.1} />
       <directionalLight position={[3, 5, 4]} intensity={1.5} />
       <directionalLight position={[-3, 2, -2]} intensity={0.6} />
@@ -74,8 +74,24 @@ function Preview({ c }: { c: DreadrootCharacter }) {
   );
 }
 
-function formatStat(v: number, unit?: string): string {
-  return unit === 'multiplier' ? `${v}x` : String(v);
+function StatRow({ label, value, unit, lowerIsBetter, delta, hint }: {
+  label: string; value: number; unit: string; lowerIsBetter?: boolean; delta: number; hint?: string;
+}) {
+  // A multiplier below 1 on "damage taken" is GOOD, so the colour follows the
+  // benefit, not the number.
+  const better = delta === 0 ? null : (lowerIsBetter ? delta < 0 : delta > 0);
+  const colour = better === null ? 'inherit' : better ? 'hsl(140 60% 60%)' : 'hsl(0 70% 65%)';
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span className="opacity-80" title={hint}>{label}</span>
+      <span className="font-mono flex items-baseline gap-2">
+        {delta !== 0 && (
+          <span style={{ color: colour, fontSize: 11 }}>{delta > 0 ? '+' : ''}{delta}%</span>
+        )}
+        <span>{unit === 'multiplier' ? `${value}x` : value}</span>
+      </span>
+    </div>
+  );
 }
 
 export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -94,7 +110,7 @@ export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; o
               <div className="text-3xl font-bold leading-tight">{c.name}</div>
               <div className="text-xs opacity-70">
                 Opt+Cmd+{idx + 1}
-                {c.staticOnly ? ' · no idle animation in this model' : ''}
+
               </div>
             </div>
             <div className="flex-1 min-h-[300px]">
@@ -104,15 +120,33 @@ export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; o
 
           {/* RIGHT — everything known about the character */}
           <div className="md:w-[54%] p-5 overflow-y-auto" style={{ maxHeight: '70vh' }}>
-            <div className="text-sm font-semibold mb-2 opacity-80">Stats</div>
-            <div className="space-y-1.5 mb-5">
-              {SW_STAT_SCHEMA.map((s) => (
-                <div key={s.key} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="opacity-80">{s.label}</span>
-                  <span className="font-mono">{formatStat(s.base, s.unit)}</span>
-                </div>
-              ))}
+            <div className="text-sm font-semibold mb-2 opacity-80">
+              Stats <span className="font-normal opacity-60">· vs standard</span>
             </div>
+            <div className="space-y-1.5 mb-5">
+              {SW_STAT_SCHEMA.map((f) => {
+                const v = c.stats[f.key as keyof SwStats];
+                return (
+                  <StatRow
+                    key={f.key}
+                    label={f.label}
+                    value={v}
+                    unit={f.unit}
+                    lowerIsBetter={f.lowerIsBetter}
+                    delta={statDelta(f.key as keyof SwStats, v)}
+                    hint={f.hint}
+                  />
+                );
+              })}
+            </div>
+            <div className="text-xs opacity-70 mb-4 font-mono">
+              Siege Worlds speed: {swSpeeds(c).walk} walk / {swSpeeds(c).run} run m/s
+            </div>
+            {c.statsAreDefault && (
+              <div className="text-xs opacity-60 mb-4">
+                Not in the Siege Worlds balance table yet — showing the server default.
+              </div>
+            )}
 
             <div className="text-sm font-semibold mb-1 opacity-80">Special Ability</div>
             {c.special ? (
@@ -125,9 +159,9 @@ export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; o
             )}
 
             <div className="text-xs opacity-60 mb-4 leading-relaxed">
-              Stat fields match the Siege Worlds client so both games describe a character the same
-              way. The values are the Siege Worlds baselines: in Unity the real numbers arrive from
-              the game server at runtime, so they are not in any file to copy.
+              Stats are the live Siege Worlds balance values, relative to a 1.0 standard — so 1.2x
+              move speed is 20% faster than normal. Damage Taken multiplies incoming damage, so
+              lower is better.
             </div>
 
             <div className="text-sm font-semibold mb-2 opacity-80">Choose Character</div>
