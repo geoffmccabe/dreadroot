@@ -25,7 +25,7 @@ import { useThree } from '@react-three/fiber';
 
 interface GpuEvent {
   at: string;
-  kind: 'lost' | 'restored';
+  kind: 'lost' | 'restored' | 'page-hidden' | 'page-visible';
   /** For a restore, how long the screen was dead, in seconds. */
   blackoutSeconds?: number;
   /** Rough memory at the moment, to correlate with pressure. */
@@ -42,6 +42,44 @@ function heapMB(): number | undefined {
 
 export function WebGLContextWatch(): null {
   const gl = useThree((s) => s.gl);
+
+  // ── Page visibility ──────────────────────────────────────────────────────
+  // Measured cause of the 2026-Aug-21 grey screens, from Geoff's trace: the
+  // page was marked HIDDEN by the browser at 307.8s and 343.6s, and became
+  // visible again at 325.7s and 369.1s. Those windows match the blackouts to
+  // a tenth of a second.
+  //
+  // Browsers stop requestAnimationFrame completely for a hidden page. This
+  // game drives BOTH rendering and its whole simulation from rAF, so when the
+  // page is hidden: nothing draws (grey), nothing simulates (no monsters
+  // spawn), but audio and timers carry on — which is exactly the reported
+  // symptom, including still being able to hear it.
+  //
+  // A page can be marked hidden without the user switching tabs: another
+  // window fully covering it counts as occluded, and under heavy system
+  // memory pressure the browser may also release the tab's drawing surface,
+  // which is what leaves flat grey rather than the last frame.
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = (): void => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        history.push({ at: new Date().toISOString(), kind: 'page-hidden', heapMB: heapMB() });
+        console.warn(
+          '[RENDER] The browser marked this page HIDDEN. Animation frames stop while hidden, ' +
+          'so nothing will draw and the simulation pauses (no monster spawns) until it is ' +
+          'visible again. Sound keeps playing. Causes: switching tab or app, another window ' +
+          'fully covering this one, or the system reclaiming the drawing surface under memory pressure.',
+        );
+      } else {
+        const secs = hiddenAt ? (Date.now() - hiddenAt) / 1000 : undefined;
+        history.push({ at: new Date().toISOString(), kind: 'page-visible', blackoutSeconds: secs, heapMB: heapMB() });
+        console.warn(`[RENDER] Page visible again after ${secs?.toFixed(1) ?? '?'}s hidden — rendering resumes.`);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
 
   useEffect(() => {
     const canvas = gl?.domElement;
@@ -81,6 +119,8 @@ export function WebGLContextWatch(): null {
 if (typeof window !== 'undefined') {
   (window as unknown as { __gpu: unknown }).__gpu = {
     history: () => history.slice(),
+    /** Is the browser currently willing to draw this page at all? */
+    visible: () => (typeof document !== 'undefined' ? document.visibilityState : 'unknown'),
     /** Deliberately drop the context, to prove recovery works. */
     forceLose: () => {
       const c = document.querySelector('canvas') as HTMLCanvasElement | null;
