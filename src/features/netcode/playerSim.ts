@@ -28,7 +28,22 @@ export interface PlayerInputCmd {
 
 /** Default ground speed (blocks/sec). Server-authoritative; the real per-tier
  *  value is supplied by the caller later (anti-cheat: clamp to the tier max). */
-export const PLAYER_SPEED = 6;
+/**
+ * Server-authoritative player speed, in blocks/second.
+ *
+ * SIEGE WORLDS PARITY: the fastest any character may legitimately run is the
+ * Siege Worlds base run speed (3.0) times the highest character multiplier in
+ * the balance table (1.3, Jankz and Shi Yang) = 3.9. Used as the anti-cheat
+ * ceiling, so an honest client is never clamped and a hacked one is.
+ *
+ * Was 6, an invented value that predates parity.
+ *
+ * NOTE: DreadRoot-only movement — the rocket-belt boost, god-mode flight —
+ * exceeds this. Those are not represented in the server sim at all yet, and
+ * must be accounted for before server-authoritative movement goes live, or
+ * boosting would read as a speed hack.
+ */
+export const PLAYER_SPEED = 3.9;
 
 /**
  * Advance `s` by one input. Mutates in place (called in hot replay loops, so no

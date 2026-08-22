@@ -56,6 +56,8 @@ import { isPointInNoFireZone } from '@/features/enemies/ai/fortressSafeZone';
 import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 import { getVaultInRange, getMarketInRange } from '@/components/siege/siegeLobbyZones';
 import { dlog } from '@/lib/debugLog';
+import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharacters';
+import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -2645,7 +2647,22 @@ export function FirstPersonControls({
       direction.current.normalize();
 
       // Speed calculation - god mode gets faster speed
-      const baseSpeed = 4.0;
+      //
+      // SIEGE WORLDS PARITY (Geoff, 2026-Aug-22): a character must move at the
+      // same speed here as in the Unity game. Source of truth is
+      // FirstPersonController.cs — MaxWalkSpeed 2.0, MaxRunSpeed 3.0 — scaled
+      // by that character's moveSpeedMultiplier, exactly as Player.cs:410 does
+      // (`WalkSpeed = speedScale * MaxWalkSpeed`).
+      //
+      // This REPLACES DreadRoot's old 4.0 walk / 8.0 sprint, which were about
+      // 2x and 2.7x the Siege Worlds values.
+      //
+      // God mode, the rocket-belt boost and crawl are deliberately left alone:
+      // they are DreadRoot-only movement (Siege Worlds has no air-jump, glide
+      // or fly) and so have no parity counterpart.
+      const charSpeedScale = getSelectedCharacterSpeedScale();
+      const baseSpeed = SW_BASE_WALK * charSpeedScale;
+      const sprintSpeed = SW_BASE_RUN * charSpeedScale;
       const crawlSpeed = baseSpeed * 0.6;
       // Base god-mode speed, then the optional per-map fly scale (Mini Earth uses altitude;
       // everywhere else flySpeedScale is undefined and this is exactly the old value).
@@ -2706,7 +2723,7 @@ export function FirstPersonControls({
       const qBoost = qOverdrive ? 10 : 1;
       const runSpeed = godModeRef.current
         ? (boostActive ? godSpeed * 2.5 * qBoost : godSpeed)   // Shift+E super-sprint / rocket boost still speeds you up in God Mode
-        : (boostActive ? superSprintSpeed * qBoost : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? 8.0 : baseSpeed)));
+        : (boostActive ? superSprintSpeed * qBoost : (keys.current.ctrl ? crawlSpeed : (keys.current.shift ? sprintSpeed : baseSpeed)));
       
       // Apply movement
       const forward = forwardVecRef.current.set(-Math.sin(yaw.current), 0, -Math.cos(yaw.current));

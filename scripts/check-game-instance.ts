@@ -4,6 +4,7 @@
 import { GameInstanceCore } from '../src/features/netcode/server/gameInstanceCore.ts';
 import { encodeInput, decodeInput, INPUT_BYTES } from '../src/features/netcode/inputBinary.ts';
 import { decodeSnapshot } from '../src/lib/snapshotBinary.ts';
+import { PLAYER_SPEED } from '../src/features/netcode/playerSim.ts';
 
 let failures = 0;
 const assert = (c: boolean, m: string) => { if (!c) { console.error('  ✗ ' + m); failures++; } };
@@ -31,7 +32,11 @@ assert(decodeSnapshot(out.get('A')!).entities.some(e => e.id === pid), 'player s
 let now = 50;
 for (let seq = 1; seq <= 5; seq++) { core.applyInput('A', input(seq, 1)); now += 50; core.tick(now, out); }
 const me = decodeSnapshot(out.get('A')!).entities.find(e => e.id === pid)!;
-assert(close(me.x, 1.5, 0.05), `input moved player to ~1.5 (got ${me.x})`); // 5×1×6×0.05
+// 5 inputs x moveX 1 x PLAYER_SPEED x 0.05s. Derived, not hardcoded: this
+// assertion used to bake in a speed of 6 and broke when movement was matched
+// to Siege Worlds.
+const EXPECTED_X = 5 * 1 * PLAYER_SPEED * 0.05;
+assert(close(me.x, EXPECTED_X, 0.05), `input moved player to ~${EXPECTED_X.toFixed(2)} (got ${me.x})`);
 assert(core.ackSeqFor('A') === 5, `ack seq = 5 (got ${core.ackSeqFor('A')})`);
 
 // 4. Disconnect removes the entity.
@@ -53,7 +58,7 @@ assert(forA.entities.some(e => e.id === aId) && !forA.entities.some(e => e.id ==
 assert(forB.entities.some(e => e.id === bId) && !forB.entities.some(e => e.id === aId), 'AoI: B sees self, not far A');
 
 // 6. Anti-cheat: oversized move vector + teleport-sized dt are clamped to normal
-//    speed server-side (honest input is unaffected — test #3 still moved ~1.5).
+//    speed server-side (honest input is unaffected — test #3 still moved the same).
 const hard = new GameInstanceCore({ worldId: 1, zoneId: 0, aoiRadius: 80 });
 const hid = hard.addPlayer('H')!;
 let hnow = 0;
@@ -64,7 +69,7 @@ for (let seq = 1; seq <= 5; seq++) {
   hard.tick(hnow, out);
 }
 const cheated = decodeSnapshot(out.get('H')!).entities.find(e => e.id === hid)!;
-assert(close(cheated.x, 1.5, 0.05), `anti-cheat clamps speed/teleport to ~1.5 (got ${cheated.x})`);
+assert(close(cheated.x, EXPECTED_X, 0.05), `anti-cheat clamps speed/teleport to ~${EXPECTED_X.toFixed(2)} (got ${cheated.x})`);
 
 // 6b. Presence: a STATE frame sets the player's position directly (client-
 //     reported), and it shows up in the snapshot (no input/simulation needed).

@@ -7,7 +7,7 @@
  * without pulling in any React or 3D code.
  */
 import { useSyncExternalStore } from 'react';
-import { DREADROOT_CHARACTERS } from './dreadrootCharacters';
+import { DREADROOT_CHARACTERS, SW_BASELINE } from './dreadrootCharacters';
 
 const LS_KEY = 'dreadroot.character';
 const DEFAULT = DREADROOT_CHARACTERS[0].name;
@@ -52,4 +52,16 @@ export function useSelectedCharacter(): string {
     () => version,
   );
   return selected;
+}
+
+/**
+ * The selected character's Siege Worlds move-speed multiplier.
+ *
+ * Read straight from a module variable rather than React state: this is called
+ * once per frame from the movement loop, where a hook subscription would be
+ * both slower and unavailable.
+ */
+export function getSelectedCharacterSpeedScale(): number {
+  const c = DREADROOT_CHARACTERS.find((x) => x.name === selected);
+  return c ? c.stats.moveSpeedMultiplier : SW_BASELINE.moveSpeedMultiplier;
 }
