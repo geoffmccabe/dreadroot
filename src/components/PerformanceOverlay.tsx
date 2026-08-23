@@ -7,6 +7,7 @@ import { diagnostics } from '@/lib/diagnosticsLogger';
 import { charAnimExport, charAnimLine } from '@/components/siege/charAnimDebug';
 import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 import { mpStats } from '@/features/netcode/multiplayerStats';
+import { gpuVerdict } from '@/features/look/GpuProbe';
 
 interface PerformanceData {
   fps: number;
@@ -318,6 +319,7 @@ GPU & RENDERING
   Particles:      ${data.particleCount}
   Render submit:  ${rt.submitAvgMs.toFixed(2)}ms avg, ${rt.submitMaxMs.toFixed(2)}ms max  (CPU cost of issuing the draw calls)
   GPU time:       ${rt.gpuSupported ? `${rt.gpuMs.toFixed(2)}ms (real GPU execution)` : 'unavailable (timer queries disabled by this browser/GPU)'}
+  Bottleneck:     ${gpuVerdict().ran ? gpuVerdict().summary : 'measuring… (runs itself ~10s after the world loads)'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COLLISION & SPATIAL
