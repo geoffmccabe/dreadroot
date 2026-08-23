@@ -163,6 +163,7 @@ import { useEnemySpawnerIntegration } from '@/features/enemies/hooks/useEnemySpa
 import { useServerMonsters } from '@/features/enemies/hooks/useServerMonsters';
 import { WebGLContextWatch } from './WebGLContextWatch';
 import { GpuProbe } from '@/features/look/GpuProbe';
+import { markBeginnerDrop } from '@/features/loot/beginnerDropBadges';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -520,16 +521,24 @@ export function FortressScene({
   // deploy→run-SQL window.
   const handleShwarmBlockKilled = useCallback(async (definition: ShwarmDefinition, blockPosition: THREE.Vector3) => {
     if (!currentUserId) return;
-    let handled = false;
+    let result: Awaited<ReturnType<typeof worldStore.rollShwarmDrop>> = null;
     try {
-      handled = await worldStore.rollShwarmDrop(
+      result = await worldStore.rollShwarmDrop(
         definition.tier, blockPosition.x, blockPosition.y, blockPosition.z,
       );
     } catch (e) {
       console.error('[Loot] rollShwarmDrop failed:', e);
       return;
     }
-    if (handled) return;
+    if (result) {
+      // One of the player's first kills, which the server guaranteed. Register
+      // the floating "Beginner's Drop: x/10" label against this specific drop;
+      // the renderer starts its 2s clock when the item is first drawn.
+      if (result.beginner && result.row?.id && result.beginnerIndex && result.beginnerTotal) {
+        markBeginnerDrop(result.row.id, result.beginnerIndex, result.beginnerTotal);
+      }
+      return;
+    }
     // Fallback: RPC not deployed — legacy client-side roll.
     if (!dropTablesLoaded) return;
     const currentDef = shwarmDefinitions?.find(d => d.tier === definition.tier) ?? definition;

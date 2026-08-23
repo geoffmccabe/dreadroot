@@ -1853,6 +1853,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      // Guest accounts + starter loadout. Hand-added: this file is generated,
+      // but it is far out of date (most RPCs are missing), and regenerating it
+      // wholesale is a separate job from shipping these.
+      grant_starter_loadout: { Args: never; Returns: Json }
+      register_guest_device: {
+        Args: { p_device_id: string; p_user_agent?: string }
+        Returns: Json
+      }
+      claim_guest_account: {
+        Args: { p_device_id: string; p_guest_user_id: string }
+        Returns: Json
+      }
       bump_chunk_version: {
         Args: { p_cx: number; p_cz: number; p_world: string }
         Returns: undefined

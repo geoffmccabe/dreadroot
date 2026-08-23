@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useIndexedDB } from '@/hooks/useIndexedDB';
 import { initLogStep } from '@/contexts/InitializationContext';
+import { getOrCreateDeviceId, loadGuestIdentity, saveGuestIdentity } from '@/features/guest/guestIdentity';
 
 // Dedupe guard for init log - prevents duplicate "User: email" rows
 let lastInitLoggedEmail: string | null = null;
@@ -15,6 +16,7 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithSSO: () => void;
+  signInAsGuest: () => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -63,9 +65,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(newSession?.user ?? null);
         setIsLoading(false);
         
+        // Guests: keep our stored refresh token current. Supabase ROTATES the
+        // refresh token on every renewal, so a copy taken once at sign-in goes
+        // stale and the "come back weeks later" resume would silently fail.
+        if (newSession?.user?.is_anonymous && newSession.refresh_token) {
+          void saveGuestIdentity({
+            guestUserId: newSession.user.id,
+            refreshToken: newSession.refresh_token,
+          });
+        }
+
         // Log user info for initialization overlay (only once per email to avoid duplicates)
         if (newSession?.user) {
-          const email = newSession.user.email || 'unknown';
+          const email = newSession.user.email || (newSession.user.is_anonymous ? 'guest' : 'unknown');
           if (email !== lastInitLoggedEmail) {
             lastInitLoggedEmail = email;
             initLogStep('AuthContext.tsx', `User: ${email}`);
@@ -142,13 +154,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       `${SSO_BASE_URL}/login?app=dreadroot&redirect=${encodeURIComponent(redirect)}`;
   };
 
+  /**
+   * "Play Without Account" — one guest account per device.
+   *
+   * The guest is a genuine Supabase ANONYMOUS auth user, so auth.uid(), RLS,
+   * the signup trigger and every existing RPC keep working with no special
+   * cases. What it lacks is an email, which is what makes it unrecoverable
+   * once the browser forgets it.
+   *
+   * RESUME FIRST. If this device already has a guest and we still hold its
+   * refresh token, we revive that account rather than making a new one — that
+   * is what lets somebody come back days or weeks later and still find their
+   * stuff. If the token is gone or expired, they get a fresh guest and the old
+   * one is simply abandoned, which the design accepts.
+   */
+  const signInAsGuest = async () => {
+    const deviceId = await getOrCreateDeviceId();
+    const saved = await loadGuestIdentity();
+
+    if (saved?.refreshToken) {
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: saved.refreshToken,
+      });
+      if (!error && data.session) {
+        await saveGuestIdentity({
+          deviceId,
+          guestUserId: data.session.user.id,
+          refreshToken: data.session.refresh_token,
+        });
+        void registerDevice(deviceId);
+        return { error: null };
+      }
+      // Expired or revoked — fall through and start a new guest.
+    }
+
+    const { data, error } = await supabase.auth.signInAnonymously();
+    if (error) {
+      toast.error('Could not start a guest session', { description: error.message });
+      return { error };
+    }
+    if (data.session) {
+      await saveGuestIdentity({
+        deviceId,
+        guestUserId: data.session.user.id,
+        refreshToken: data.session.refresh_token,
+      });
+      void registerDevice(deviceId);
+    }
+    return { error: null };
+  };
+
+  /** Bind this device to the signed-in guest. Never blocks entering the game:
+   *  failing to record the device costs a future resume, not this session. */
+  const registerDevice = async (deviceId: string) => {
+    try {
+      await supabase.rpc('register_guest_device', {
+        p_device_id: deviceId,
+        p_user_agent: navigator.userAgent,
+      });
+    } catch {
+      /* non-fatal by design */
+    }
+  };
+
   const signOut = async () => {
     // Force navigate to clear session page which will handle cleanup
     window.location.href = '/clear-session';
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signInWithSSO, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, signUp, signIn, signInWithSSO, signInAsGuest, signOut }}>
       {children}
     </AuthContext.Provider>
   );

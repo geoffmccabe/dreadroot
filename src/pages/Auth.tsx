@@ -41,7 +41,7 @@ function ytApiReady(): Promise<void> {
 // player, world initializing in the background), the button reads START GAME and
 // enters the world; otherwise it's the LOGIN gate.
 export default function Auth({ onStart }: { onStart?: () => void }) {
-  const { signInWithSSO } = useAuth();
+  const { signInWithSSO, signInAsGuest } = useAuth();
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -199,6 +199,17 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
           >
             {onStart ? 'START GAME' : 'LOGIN'}
           </Button>
+          {/* Guest entry. Only on the LOGIN gate — once you are in, the
+              button above is START GAME and this would make no sense. */}
+          {!onStart && (
+            <button
+              type="button"
+              onClick={() => { void signInAsGuest(); }}
+              className="mt-1 text-sm font-semibold tracking-wide text-white/70 hover:text-white underline underline-offset-4 transition-colors"
+            >
+              PLAY WITHOUT ACCT
+            </button>
+          )}
           {/* Build version, small, right under the button. */}
           <span className="font-mono text-xs text-white/55 select-none pointer-events-none">
             v{APP_VERSION}

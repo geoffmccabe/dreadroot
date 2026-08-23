@@ -4,9 +4,10 @@
  * Shows "Press F to pick up" text when player is within pickup range.
  */
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
+import { getBeginnerBadge } from '@/features/loot/beginnerDropBadges';
 import * as THREE from 'three';
 import type { DroppedWorldItem } from '@/features/shwarm/types';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
@@ -54,6 +55,13 @@ function DroppedItemSprite({ item, userId, cameraRef }: DroppedItemSpriteProps) 
   const groupRef = useRef<THREE.Group>(null);
   const textRef = useRef<THREE.Object3D>(null);
   const isNearRef = useRef(false);
+  // "Beginner's Drop: x/10". Held in a ref and driven from useFrame so the
+  // label appearing and expiring never triggers a React re-render — these are
+  // scene objects in the hot path.
+  const badgeRef = useRef<THREE.Object3D>(null);
+  const [badgeLabel, setBadgeLabel] = useState<string | null>(
+    () => getBeginnerBadge(item.id, Date.now()),
+  );
 
   const material = useMemo(() => {
     const texture = getItemTexture(item.itemNumber);
@@ -100,6 +108,17 @@ function DroppedItemSprite({ item, userId, cameraRef }: DroppedItemSpriteProps) 
         textRef.current.rotation.y = -group.rotation.y;
       }
     }
+
+    // Beginner badge: billboard it too, and drop it once its 2s is up. The
+    // clock starts on the first call, i.e. the first frame this drop is drawn.
+    if (badgeLabel !== null) {
+      const still = getBeginnerBadge(item.id, now);
+      if (still === null) {
+        setBadgeLabel(null);
+      } else if (badgeRef.current) {
+        badgeRef.current.rotation.y = -group.rotation.y;
+      }
+    }
   });
 
   return (
@@ -125,6 +144,22 @@ function DroppedItemSprite({ item, userId, cameraRef }: DroppedItemSpriteProps) 
       >
         Press F to pick up
       </Text>
+      {/* Guaranteed early-game drop. Sits above the pickup prompt so the two
+          never overlap when the player is standing close enough for both. */}
+      {badgeLabel !== null && (
+        <Text
+          ref={badgeRef as any}
+          position={[0, 1.15, 0]}
+          fontSize={0.17}
+          color="#ffd76a"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.018}
+          outlineColor="black"
+        >
+          {badgeLabel}
+        </Text>
+      )}
     </group>
   );
 }

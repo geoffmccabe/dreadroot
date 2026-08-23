@@ -215,10 +215,38 @@ export const useUserData = () => {
       // v4.11.0: merged inventory = items (from user_slots) + blocks/seeds (from user_inventory).
       // v4.12.5: preserve the user_slots.slot value on the synthesized
       // row so the UI can position by DB slot instead of a separate
+      // Starter loadout for a brand-new player, guest or registered.
+      //
+      // Was: four pistols and four flame gloves dropped in the BAG. Equipped
+      // gear is read from region 'equip' and the hotbar from 'quick_select',
+      // so a new player spawned holding NOTHING and could not fire a shot
+      // until they worked out the inventory UI unaided. Nothing said so.
+      //
+      // Now one server-side call that names its own items, quantities and
+      // slots and refuses to run for anyone who already owns one, so the
+      // client no longer chooses what it is handed:
+      //   left hand  Flame Glove      right hand  Basic Pistol
+      //   hotbar 6   Grenade          bag         Grenade x2
+      //
+      // Granted HERE, before the rows below are read, so the new items appear
+      // on this very load with no second pass and no refetch.
+      let slotRows: any[] = (userSlotsData as any[]) ?? [];
+      if (slotRows.length === 0) {
+        try {
+          if (await worldStore.grantStarterLoadout()) {
+            const { data: fresh } = await (supabase as any)
+              .from('user_slots').select('*').eq('user_id', user.id);
+            slotRows = (fresh as any[]) ?? [];
+          }
+        } catch (err) {
+          console.error('[starter loadout] failed:', err);
+        }
+      }
+
       // local array. The legacy UserInventoryItem type doesn't have
       // a slot field, but we attach it via `as any` and read it
       // back the same way in FortressHUD.
-      const slotItemRows: UserInventoryItem[] = ((userSlotsData as any[]) ?? [])
+      const slotItemRows: UserInventoryItem[] = slotRows
         .filter((s: any) => s.region === 'inventory')
         .map((s: any) => ({
           id: s.id, user_id: s.user_id, item_type: 'item',
@@ -230,12 +258,12 @@ export const useUserData = () => {
         .filter(r => r.item_type !== 'item' || r.item_id === null);
       setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
       // QS equipped state: derive from user_slots region='quick_select'.
-      const qsRows = ((userSlotsData as any[]) ?? [])
+      const qsRows = slotRows
         .filter((s: any) => s.region === 'quick_select')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
       setEquippedItems(qsRows);
       // Equip gear: derive from user_slots region='equip' (slots 1-4).
-      const equipRows = ((userSlotsData as any[]) ?? [])
+      const equipRows = slotRows
         .filter((s: any) => s.region === 'equip')
         .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
       setEquippedGear(equipRows);
@@ -272,46 +300,6 @@ export const useUserData = () => {
       // migration ran in D-final-cleanup, and the D-races advisory lock
       // prevents new duplicates from forming). No client-side merge needed.
       const inv = inventoryData || [];
-
-      // Starter items (#15 Pistol, #193 Flame Glove) are for brand-new
-      // players. If the user already has ANY user_slots rows
-      // (inventory or QS), they're not a new player — skip the grant
-      // entirely. Without this guard, every login tries to top up to
-      // 4-of-each, which overflows into QS when inventory is full and
-      // creates phantom items the user can't see.
-      const hasAnySlots = ((userSlotsData as any[]) ?? []).some(
-        (s: any) => s.region === 'inventory' || s.region === 'quick_select'
-      );
-      const { data: starterDefs } = hasAnySlots
-        ? { data: null as any[] | null }
-        : await supabase
-            .from('items')
-            .select('id, item_number')
-            .in('item_number', [15, 193]);
-
-      if (starterDefs && starterDefs.length > 0) {
-        for (const sd of starterDefs) {
-          const existing = inv.find(i => i.item_type === 'item' && i.item_id === sd.id);
-          const needed = existing ? Math.max(0, 4 - existing.quantity) : 4;
-          if (needed === 0) continue;
-          try {
-            const result = await worldStore.grantInventoryItem(sd.id, needed);
-            if (result.rows && result.rows.length > 0) {
-              setInventory(prev => {
-                const next = [...prev];
-                for (const row of result.rows) {
-                  const idx = next.findIndex(i => i.id === row.id);
-                  if (idx >= 0) next[idx] = row as UserInventoryItem;
-                  else next.push(row as UserInventoryItem);
-                }
-                return next;
-              });
-            }
-          } catch (err) {
-            console.error('[starter items] grantInventoryItem failed:', err);
-          }
-        }
-      }
 
       // QS equipped state is now sourced from user_slots region='quick_select'
       // (set earlier in this function). user_equipped_items is legacy and

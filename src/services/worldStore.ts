@@ -781,6 +781,23 @@ export async function equipTransfer(
   return data as { replayed: boolean; moved?: boolean; swapped?: boolean; noop?: boolean };
 }
 
+/**
+ * One-time starter kit for a brand-new player (guest or registered).
+ *
+ * Server-side on purpose. The old starter path called grant_slot with an item
+ * id the CLIENT chose, which made "give me my starter items" indistinguishable
+ * from "give me anything I name". This RPC picks its own items, quantities and
+ * slots and refuses to run for anyone who already owns a slot.
+ *
+ * Returns true only when it actually granted, so the caller knows whether to
+ * re-read the slot rows.
+ */
+export async function grantStarterLoadout(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('grant_starter_loadout');
+  if (error) throw error;
+  return (data as { granted?: boolean } | null)?.granted === true;
+}
+
 export async function grantSlot(
   region: 'inventory' | 'quick_select' | 'vault',
   itemId: string,
@@ -1022,21 +1039,45 @@ export async function recordKill(enemyType: string): Promise<void> {
   }
 }
 
-/** Server-authoritative loot roll for a killed shwarm. The server looks
- *  up the drop rate + table, rolls, and spawns the world_drop (realtime
- *  delivers the visual). Returns true if the RPC ran; false ONLY when the
- *  RPC isn't deployed yet, so the caller can fall back to the legacy
- *  client-side roll during the deploy→run-SQL window. */
+/** Server-authoritative loot roll for a killed shwarm. The server looks up
+ *  the drop rate + table, rolls, and spawns the world_drop (realtime delivers
+ *  the visual).
+ *
+ *  Returns null ONLY when the RPC isn't deployed yet, so the caller can fall
+ *  back to the legacy client-side roll during the deploy -> run-SQL window.
+ *
+ *  `beginner` marks one of a new player's first N kills, which the server
+ *  forces to pay out regardless of drop rate. */
+export interface ShwarmDropResult {
+  dropped: boolean;
+  row?: { id: string } | null;
+  beginner?: boolean;
+  beginnerIndex?: number | null;
+  beginnerTotal?: number | null;
+}
+
 export async function rollShwarmDrop(
   tier: number, x: number, y: number, z: number,
-): Promise<boolean> {
-  const { error } = await supabase.rpc('roll_shwarm_drop', {
+): Promise<ShwarmDropResult | null> {
+  const { data, error } = await supabase.rpc('roll_shwarm_drop', {
     p_tier: tier, p_x: x, p_y: y, p_z: z,
     p_client_request_id: crypto.randomUUID(),
   });
-  if (!error) return true;
-  if (isMissingFunction(error)) return false;
-  throw error;
+  if (error) {
+    if (isMissingFunction(error)) return null;
+    throw error;
+  }
+  const d = data as {
+    dropped?: boolean; row?: { id: string } | null;
+    beginner?: boolean; beginner_index?: number | null; beginner_total?: number | null;
+  } | null;
+  return {
+    dropped: d?.dropped === true,
+    row: d?.row ?? null,
+    beginner: d?.beginner === true,
+    beginnerIndex: d?.beginner_index ?? null,
+    beginnerTotal: d?.beginner_total ?? null,
+  };
 }
 
 /** Coin drops — see docs/COIN_DROPS.md. Server reads the monster tier's
@@ -1223,6 +1264,7 @@ export async function mineBlockAt(
  *  Both supported. New methods land here as Phase D sub-phases ship. */
 export const worldStore = {
   grantInventoryItem,
+  grantStarterLoadout,
   grantInventoryBlock,
   grantInventorySeed,
   consumeInventoryTarget,

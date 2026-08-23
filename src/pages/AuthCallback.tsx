@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { loadGuestIdentity, clearGuestIdentity } from '@/features/guest/guestIdentity';
 
 // Lightningworks SSO callback. SSO returns here with the token in the URL
 // HASH fragment (#access_token=...). We hand it to the sso-exchange edge
@@ -28,6 +29,10 @@ export default function AuthCallback() {
       }
 
       try {
+        // Read the guest BEFORE signing in: verifyOtp replaces the session, and
+        // with it any way of knowing which guest this device was playing as.
+        const guest = await loadGuestIdentity();
+
         const { data, error: fnErr } = await supabase.functions.invoke('sso-exchange', {
           body: { access_token: accessToken },
         });
@@ -39,6 +44,31 @@ export default function AuthCallback() {
           type: 'magiclink',
         });
         if (otpErr) throw new Error(otpErr.message);
+
+        // CONVERSION. This device was playing as a guest and has now signed in
+        // for real, so hand the guest's progress to the real account. The
+        // server refuses if the real account already has items, so signing in
+        // on a machine somebody else guested on can never overwrite your own
+        // stuff. Failure here must not block the login — the player is signed
+        // in either way, they would just keep the guest progress separate.
+        if (guest?.deviceId && guest.guestUserId) {
+          try {
+            const { data: claim } = await supabase.rpc('claim_guest_account', {
+              p_device_id: guest.deviceId,
+              p_guest_user_id: guest.guestUserId,
+            });
+            const c = claim as { claimed?: boolean; migrated?: boolean } | null;
+            if (c?.claimed) {
+              await clearGuestIdentity();
+              toast.success(c.migrated
+                ? 'Your guest progress has been moved to your account.'
+                : 'Signed in. Your existing account progress was kept.');
+            }
+          } catch (convErr) {
+            console.error('[SSO callback] guest conversion failed', convErr);
+          }
+        }
+
         // onAuthStateChange in AuthContext picks up the session.
         navigate('/', { replace: true });
       } catch (e) {

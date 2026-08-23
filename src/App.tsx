@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -32,6 +32,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // reload. Logged-in players see the branded screen + START GAME before the
   // world loads, instead of being dropped straight into the game.
   const [started, setStarted] = useState(false);
+  const isGuest = user?.is_anonymous === true;
+
+  // Guests never see START GAME, so nothing else would ever flip this — and
+  // the loading overlay is gated on it. Without this a guest would stare at a
+  // blank screen with no sign the world was streaming in.
+  useEffect(() => {
+    if (isGuest) { setGameStarted(true); setStarted(true); }
+  }, [isGuest, setGameStarted]);
 
   if (isLoading) {
     return (
@@ -41,15 +49,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Reject anonymous users (from old auth system) or users without email
-  if (!user || !session?.user?.email) {
+  // A guest ("Play Without Account") is a Supabase ANONYMOUS user: a real auth
+  // user with a real uid, but no email. That is the one case allowed through
+  // without one. Everything else still needs an email — which is what keeps
+  // out the broken half-sessions from the old auth system this check was
+  // originally written for.
+  if (!user || (!session?.user?.email && !isGuest)) {
     return <Navigate to="/auth" replace />;
   }
 
   // Logged in: show the homescreen with START GAME until the player clicks it.
   // Flip gameStarted too, so the init overlay only appears after START (it may
   // have been initializing in the background meanwhile).
-  if (!started) {
+  // Guests just clicked PLAY WITHOUT ACCT, which IS the start action — making
+  // them click START GAME straight after would be a second gate for the group
+  // we are trying to get in fastest.
+  if (!started && !isGuest) {
     return <Auth onStart={() => { setGameStarted(true); setStarted(true); }} />;
   }
 
