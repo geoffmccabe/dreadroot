@@ -792,6 +792,24 @@ export async function equipTransfer(
  * Returns true only when it actually granted, so the caller knows whether to
  * re-read the slot rows.
  */
+/**
+ * Remember where the player is standing.
+ *
+ * Everything else already persists as it changes; position was the one thing
+ * that did not, so every login dropped you back at the same fixed spawn.
+ * Returns false if the server judged the coordinates unusable rather than
+ * throwing — a rejected save must never interrupt play.
+ */
+export async function savePlayerPosition(
+  x: number, y: number, z: number,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc('save_player_position', {
+    p_x: x, p_y: y, p_z: z,
+  });
+  if (error) throw error;
+  return (data as { saved?: boolean } | null)?.saved === true;
+}
+
 export async function grantStarterLoadout(): Promise<boolean> {
   const { data, error } = await supabase.rpc('grant_starter_loadout');
   if (error) throw error;
@@ -1265,6 +1283,7 @@ export async function mineBlockAt(
 export const worldStore = {
   grantInventoryItem,
   grantStarterLoadout,
+  savePlayerPosition,
   grantInventoryBlock,
   grantInventorySeed,
   consumeInventoryTarget,

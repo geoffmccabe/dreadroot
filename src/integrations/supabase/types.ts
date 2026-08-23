@@ -1715,6 +1715,10 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          last_x: number | null
+          last_y: number | null
+          last_z: number | null
+          last_position_at: string | null
           avatar_url: string | null
           blockchain_address: string | null
           coins: number
@@ -1857,6 +1861,10 @@ export type Database = {
       // but it is far out of date (most RPCs are missing), and regenerating it
       // wholesale is a separate job from shipping these.
       grant_starter_loadout: { Args: never; Returns: Json }
+      save_player_position: {
+        Args: { p_x: number; p_y: number; p_z: number }
+        Returns: Json
+      }
       register_guest_device: {
         Args: { p_device_id: string; p_user_agent?: string }
         Returns: Json

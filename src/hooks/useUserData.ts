@@ -23,6 +23,12 @@ export interface UserProfile {
   fog_enabled?: boolean;
   total_points?: number;
   current_level?: number;
+  /** Where the player last stood. Null until they have saved once, in which
+   *  case they spawn at the world's default point as before. */
+  last_x?: number | null;
+  last_y?: number | null;
+  last_z?: number | null;
+  last_position_at?: string | null;
   created_at: string;
   updated_at: string;
 }

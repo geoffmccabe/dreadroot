@@ -1034,6 +1034,67 @@ export function Fortress() {
     return () => window.removeEventListener('playerTeleport', handler);
   }, []);
 
+  // ── Saving your game ──────────────────────────────────────────────────────
+  //
+  // Everything you own already saves the instant it changes — items, the
+  // blocks you placed, coins, points, health, level all go straight to the
+  // server. There was never an unsaved game. The ONE thing that did not
+  // persist was WHERE YOU WERE: the camera started at the same fixed point for
+  // everybody, every session, which is the part a player actually notices.
+  //
+  // So Cmd-S (Ctrl-S on Windows) saves your position, and it also saves
+  // whenever you leave — which is what makes "log back in and it just works"
+  // true without needing anyone to remember a shortcut.
+  const savePositionNow = useCallback(async (announce: boolean) => {
+    const p = playerPositionRef.current;
+    if (!p || !user?.id) return;
+    try {
+      const ok = await worldStore.savePlayerPosition(p.x, p.y, p.z);
+      if (announce && ok) toast({ title: 'Game saved' });
+    } catch (err) {
+      console.error('[save] position save failed:', err);
+      if (announce) toast({ title: 'Could not save just now', variant: 'destructive' });
+    }
+  }, [user?.id, toast]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Cmd-S / Ctrl-S. preventDefault or the browser opens its own Save
+      // dialog over the game.
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        void savePositionNow(true);
+      }
+    };
+    // Capture phase: a dozen other listeners here call stopImmediatePropagation,
+    // which is exactly what was eating the D-Flow hotkey.
+    window.addEventListener('keydown', onKey, true);
+
+    // 'hidden' rather than beforeunload: beforeunload is unreliable on mobile
+    // and is skipped entirely when a tab is discarded, whereas visibilitychange
+    // fires on tab switch, minimise and close alike.
+    const onHide = () => { if (document.visibilityState === 'hidden') void savePositionNow(false); };
+    document.addEventListener('visibilitychange', onHide);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('visibilitychange', onHide);
+    };
+  }, [savePositionNow]);
+
+  // Put the player back where they left off. Runs once per session, only when
+  // a saved spot exists, and reuses the respawn teleport so it lands after the
+  // world is ready instead of fighting the camera's initial placement.
+  const restoredPositionRef = useRef(false);
+  useEffect(() => {
+    if (restoredPositionRef.current) return;
+    const px = profile?.last_x, py = profile?.last_y, pz = profile?.last_z;
+    if (px === null || px === undefined || py === null || py === undefined
+        || pz === null || pz === undefined) return;
+    restoredPositionRef.current = true;
+    setRespawnPosition(new THREE.Vector3(px, py, pz));
+  }, [profile?.last_x, profile?.last_y, profile?.last_z]);
+
+
   // Clear block cache once on mount to ensure new block types (wood, fruit) are loaded
   useEffect(() => {
     if (TREE_CONFIG.ENABLED) {
