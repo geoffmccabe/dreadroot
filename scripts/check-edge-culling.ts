@@ -68,5 +68,23 @@ const hasTop = withLookup.some((b: B) => b.position_y === 63);
 const hasBottom = withLookup.some((b: B) => b.position_y === 60);
 assert(hasTop && hasBottom, 'top and bottom layers remain visible');
 
+// 7. NON-TREE blocks are culled too, now that culling is neighbour-aware.
+//    They used to be kept unconditionally even when fully buried.
+{
+  const FORT = 'fortress_block';
+  const solid: any[] = [];
+  for (let x = 0; x < 16; x++) for (let z = 0; z < 16; z++) for (let y = 60; y < 68; y++) {
+    solid.push({ position_x: x, position_y: y, position_z: z, block_type: FORT });
+  }
+  const only = new Map<string, { blocks: any[] }>([['chunk_0_0', { blocks: solid }]]);
+  const vis = computeSurfaceVisibleBlocks(0, 0, solid as never, makeNeighbourSolid(only as never));
+  assert(vis.length < solid.length, `buried non-tree blocks are culled (${solid.length} -> ${vis.length})`);
+  // Its interior must be gone but its skin must remain.
+  const interior = vis.some((b: any) => b.position_x === 8 && b.position_z === 8 && b.position_y === 63);
+  const top = vis.some((b: any) => b.position_y === 67);
+  assert(!interior, 'a fully enclosed non-tree block is dropped');
+  assert(top, 'the top surface of non-tree blocks is still drawn');
+}
+
 if (failures > 0) { console.error(`\n❌ edge culling: ${failures} failure(s)`); process.exit(1); }
 console.log('✅ edge culling OK (unchanged without lookup / culls hidden borders / unloaded neighbour is safe / holes stay visible)');

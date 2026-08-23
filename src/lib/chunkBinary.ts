@@ -18,7 +18,6 @@
 
 import type { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
-import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -208,10 +207,21 @@ export function computeSurfaceVisibleBlocks(
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
 
-    if (!isTreeBlockType(b.block_type)) {
-      visible.push(b);
-      continue;
-    }
+    /**
+     * Non-tree blocks used to be kept unconditionally, buried or not — mostly
+     * `fortress_block`, about 11% of blocks in a sampled area. That exemption
+     * predates the occupancy grid: culling a user-placed block was risky when
+     * the culler could only see one chunk and would have hidden anything on a
+     * chunk edge.
+     *
+     * With neighbour-aware culling (2026-Aug-23) that reason is gone: a block
+     * is now only dropped when every one of its six faces is genuinely against
+     * another block, in this chunk or a LOADED neighbour. A fully enclosed
+     * block cannot be seen by definition, whoever placed it.
+     *
+     * Kept deliberately: the whole top and bottom layer, and anything beside
+     * an unloaded neighbour.
+     */
 
     const lx = b.position_x - originX;
     const lz = b.position_z - originZ;
