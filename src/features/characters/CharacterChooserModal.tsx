@@ -51,12 +51,47 @@ function CharModel({ c }: { c: DreadrootCharacter }) {
 
   useFrame((_, dt) => { if (root.current) root.current.rotation.y += dt * 0.35; });
 
-  // Normalise to the character's intended world height. Jeanette's glb is
-  // authored ~20x oversized, so without this she would tower over everyone.
-  const scale = c.targetH / (c.rawH || 1);
+  /**
+   * Size and stand the model from its ACTUAL rendered bounds, not from a
+   * number in the roster.
+   *
+   * The roster's rawH came from reading raw mesh data, which ignores the node
+   * transforms above the mesh — so it was wrong for any model whose exporter
+   * put the scale on the root (Jeanette read as 33.7 units). Measuring the
+   * real world-space box after loading is correct for every character and
+   * needs no per-model number.
+   *
+   * The rotation still has to be declared: a bounding box cannot tell you
+   * whether a character is lying down or simply wide.
+   */
+  const fitted = useMemo(() => {
+    const holder = new THREE.Group();
+    if (c.rootFix?.rotXDeg) holder.rotation.x = (c.rootFix.rotXDeg * Math.PI) / 180;
+    if (c.rootFix?.scale) holder.scale.setScalar(c.rootFix.scale);
+    holder.add(cloned);
+    holder.updateWorldMatrix(true, true);
+
+    const box = new THREE.Box3().setFromObject(holder);
+    const size = new THREE.Vector3();
+    const centre = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(centre);
+
+    // Height is the tallest axis only AFTER the root fix has stood it up.
+    const h = size.y > 1e-6 ? size.y : Math.max(size.x, size.z, 1);
+    const k = c.targetH / h;
+
+    const outer = new THREE.Group();
+    outer.add(holder);
+    outer.scale.setScalar(k);
+    // Sit its feet on the origin, then drop by half so it is centred in view.
+    holder.position.set(-centre.x, -box.min.y, -centre.z);
+    return outer;
+  }, [cloned, c]);
+
   return (
-    <group ref={root}>
-      <primitive object={cloned} scale={scale} position={[0, -c.targetH / 2, 0]} />
+    <group ref={root} position={[0, -c.targetH / 2, 0]}>
+      <primitive object={fitted} />
     </group>
   );
 }

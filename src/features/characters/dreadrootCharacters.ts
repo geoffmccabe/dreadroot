@@ -65,6 +65,17 @@ export interface DreadrootCharacter {
   /** Clip name to idle on. */
   idleClip: string;
   stats: SwStats;
+  /**
+   * Correction applied to the model's root before anything else.
+   *
+   * These glbs are authored Z-up and the exporter normally writes a +90° X
+   * rotation and a 0.01 scale onto the root Armature node. Jeanette's export
+   * has NEITHER (root rotation and scale are both null, where Flamma's and Shi
+   * Yang's carry them), which is why she rendered flat on her back at 100x
+   * size. Applied here rather than editing the glb, so the asset stays as the
+   * artist exported it.
+   */
+  rootFix?: { rotXDeg?: number; scale?: number };
   /** True when the numbers are the server default because the character does
    *  not exist in the Siege Worlds balance table yet. */
   statsAreDefault?: boolean;
@@ -138,6 +149,8 @@ export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
   // to the same 1.7 m as everyone else.
   { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 33.7349, targetH: STANDARD_H,
     rig: 'root', idleClip: ROOT_IDLE,
+    // Her export is missing the root rotation + scale the others have.
+    rootFix: { rotXDeg: 90, scale: 0.01 },
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 },
     special: { header: 'Defenders Might', description: 'Potions heal extra 200HP.' } },
   { name: 'Shi Yang', file: '/siege/characters/shiyang.glb', rawH: 1.9247, targetH: STANDARD_H,
