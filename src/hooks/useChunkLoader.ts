@@ -15,6 +15,7 @@ import {
   signaturesEqual,
   computeChunkSignature,
   computeSurfaceVisibleBlocks,
+  makeNeighbourSolid,
   sortBlocksDeterministic,
 } from '@/lib/chunkBinary';
 import { fetchChunksByRadius, fetchChunksBatched } from '@/lib/chunkFetch';
@@ -824,7 +825,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         // interiors) — so physics/builds are unaffected. Colliding only this
         // set is what stops complete trees exploding the grid ~30x. Computed
         // once here, reused for visibleBlocks below.
-        const surfaceBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks);
+        const surfaceBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, chunkBlocks, makeNeighbourSolid(loadedChunksRef.current));
 
         // Only SMALL chunks get synchronous colliders (instant ground, ~ms).
         // Bigger chunks (complete trees) go through the budgeted queue —
@@ -1095,7 +1096,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       sortBlocksDeterministic(blocks);
       // Surface-only set for collision + rendering (see canonical note in the
       // server-load path). Computed once, reused for visibleBlocks below.
-      const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, blocks);
+      const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, blocks, makeNeighbourSolid(loadedChunksRef.current));
       // Small chunks sync (instant ground); big chunks → budgeted queue
       // (mass-sync collider creation on big trees = the freeze).
       if (surfaceBlocks.length <= SYNC_COLLIDER_CAP) {
@@ -1294,7 +1295,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
 
         // Surface-only set for collision + rendering (see canonical note in
         // the server-load path). Computed once, reused for visibleBlocks below.
-        const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks);
+        const surfaceBlocks = computeSurfaceVisibleBlocks(x, z, chunkBlocks, makeNeighbourSolid(loadedChunksRef.current));
 
         // Small chunks sync (instant ground); big chunks → budgeted queue
         // (mass-sync collider creation on big trees = the freeze).
@@ -1879,7 +1880,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
       hasOptimisticBlocks: optimisticBlocks.length > 0,
       signature: newSignature
     };
-    refetchedChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, mergedBlocks);
+    refetchedChunkData.visibleBlocks = computeSurfaceVisibleBlocks(chunkX, chunkZ, mergedBlocks, makeNeighbourSolid(loadedChunksRef.current));
     loadedChunksRef.current.set(chunkKey, refetchedChunkData);
     // Update height map for pathfinding
     updateChunkHeightMap(chunkKey, mergedBlocks);
@@ -1914,6 +1915,7 @@ export function useChunkLoader({ worldId, onBlocksChanged, onRevisionChanged, em
         if (!nData) continue;
         nData.visibleBlocks = computeSurfaceVisibleBlocks(
           chunkX + dx, chunkZ + dz, nData.blocks,
+          makeNeighbourSolid(loadedChunksRef.current),
         );
       }
     }

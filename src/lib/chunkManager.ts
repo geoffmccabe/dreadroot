@@ -1,4 +1,4 @@
-import { PlacedBlock } from '@/types/blocks';
+import type { PlacedBlock } from '@/types/blocks';
 
 // Debug flag for chunk organization logging - disable in production for FPS
 const DEBUG_CHUNK_LOGGING = false;

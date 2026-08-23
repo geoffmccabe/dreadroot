@@ -62,7 +62,7 @@
     "measure:glb-feet": "node scripts/measure-glb-feet.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "typecheck:worker": "tsc -p worker/tsconfig.json --noEmit",
-    "check:netcode": "npm run check:snapshot-roundtrip && npm run check:netcode-pipeline && npm run check:server-tick && npm run check:prediction && npm run check:lagcomp && npm run check:game-instance && npm run check:entity-feed && npm run check:transform-buffer && npm run check:deterministic-spawn && npm run check:kill-bus && npm run check:spawn-controller && npm run check:hello && npm run check:server-enemies && npm run check:pathfind-throttle",
+    "check:netcode": "npm run check:snapshot-roundtrip && npm run check:netcode-pipeline && npm run check:server-tick && npm run check:prediction && npm run check:lagcomp && npm run check:game-instance && npm run check:entity-feed && npm run check:transform-buffer && npm run check:deterministic-spawn && npm run check:kill-bus && npm run check:spawn-controller && npm run check:hello && npm run check:server-enemies && npm run check:pathfind-throttle && npm run check:edge-culling",
     "check:entity-feed": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-entity-feed.ts",
     "check:transform-buffer": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-transform-buffer.ts",
     "check:deterministic-spawn": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-deterministic-spawn.ts",
@@ -71,7 +71,8 @@
     "check:hello": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-hello.ts",
     "smoke:l2-live": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-l2-live.ts",
     "check:server-enemies": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-server-enemies.ts",
-    "check:pathfind-throttle": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfind-throttle.ts"
+    "check:pathfind-throttle": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfind-throttle.ts",
+    "check:edge-culling": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-edge-culling.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

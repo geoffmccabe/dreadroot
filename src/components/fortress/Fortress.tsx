@@ -2029,6 +2029,33 @@ export function Fortress() {
     openPanel(tab);
   }, [openPanel]);
 
+  /**
+   * D-Flow toggle (Shift+3 = #), on the CAPTURE phase so nothing can swallow it.
+   *
+   * It used to live in the general shortcut handler, which listens on the
+   * bubble phase. The app registers a dozen other keydown listeners on the
+   * CAPTURE phase — several of which call stopImmediatePropagation() — so they
+   * all run first and can eat the keystroke before it ever arrives. That is
+   * why it needed spamming to open.
+   *
+   * A diagnostics hotkey has to work when the game is misbehaving, which is
+   * exactly when some other handler is most likely to be misbehaving too, so
+   * this one goes first and is deliberately not swallowed (no
+   * stopPropagation): anything else that wants '#' still sees it.
+   */
+  useEffect(() => {
+    const onDflowKey = (event: KeyboardEvent) => {
+      const el = document.activeElement;
+      // Still respect real typing, or '#' in a chat box would toggle the panel.
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)) return;
+      if (event.key === '#' || (event.shiftKey && event.code === 'Digit3')) {
+        diagnostics.toggle();
+      }
+    };
+    window.addEventListener('keydown', onDflowKey, true);
+    return () => window.removeEventListener('keydown', onDflowKey, true);
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2038,11 +2065,6 @@ export function Fortress() {
         return;
       }
       
-      // D-Flow diagnostics toggle (Shift+3 = #)
-      if (event.key === '#' || (event.shiftKey && event.code === 'Digit3')) {
-        diagnostics.toggle();
-        return;
-      }
       
       // World switching with < and > (Shift+comma / Shift+period)
       if (event.key === '<') {

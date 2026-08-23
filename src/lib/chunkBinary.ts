@@ -16,7 +16,7 @@
 // globals except a single Uint8Array scratch buffer for surface culling).
 // Same input → same output every time. Safe to mirror server-side.
 
-import { PlacedBlock } from '@/types/blocks';
+import type { PlacedBlock } from '@/types/blocks';
 import { CHUNK_SIZE } from '@/lib/chunkManager';
 import { isTreeBlockType } from '@/features/trees/lib/blockTypeEncoder';
 
@@ -110,10 +110,62 @@ let _occBufSize = INITIAL_OCC_BUF_SIZE;
 /** Surface-only culling. Returns a NEW array of blocks with at least
  *  one exposed face. Chunk edges and non-tree (user-placed) blocks are
  *  always kept. */
+/**
+ * Is there a solid block at this WORLD position, outside the chunk being
+ * culled? Returns null when the answer is unknown (the neighbouring chunk is
+ * not loaded), which must be treated as "exposed" — guessing solid there would
+ * punch holes in the world.
+ */
+export type NeighbourSolidFn = (wx: number, wy: number, wz: number) => boolean | null;
+
+/**
+ * Build a neighbour lookup over the already-loaded chunks.
+ *
+ * Occupancy for a neighbour chunk is built once, on first question, and cached
+ * for the life of this lookup — so culling one chunk touches at most its four
+ * side neighbours, and only if it actually has blocks on those edges.
+ *
+ * A chunk that is not loaded yields null (unknown), which the culler treats as
+ * exposed. That is the safe direction: an unloaded neighbour can only cause a
+ * briefly over-drawn border, never a hole.
+ */
+export function makeNeighbourSolid(
+  loadedChunks: Map<string, { blocks?: PlacedBlock[] } | undefined>,
+): NeighbourSolidFn {
+  const cache = new Map<string, Set<number> | null>();
+  // Pack a world position into one number. Y is bounded in practice; X/Z are
+  // offset so negatives stay non-negative. Avoids per-query string allocation
+  // on a path that runs for every edge block of every chunk load.
+  const K = (x: number, y: number, z: number): number =>
+    ((x + 32768) * 4096 + (y + 512)) * 65536 + (z + 32768);
+
+  return (wx, wy, wz) => {
+    const cx = Math.floor(wx / CHUNK_SIZE);
+    const cz = Math.floor(wz / CHUNK_SIZE);
+    const key = `chunk_${cx}_${cz}`;
+    let set = cache.get(key);
+    if (set === undefined) {
+      const data = loadedChunks.get(key);
+      if (!data || !data.blocks) { cache.set(key, null); return null; }
+      const built = new Set<number>();
+      const arr = data.blocks;
+      for (let i = 0; i < arr.length; i++) {
+        const b = arr[i];
+        built.add(K(b.position_x, b.position_y, b.position_z));
+      }
+      cache.set(key, built);
+      set = built;
+    }
+    if (set === null) return null;
+    return set.has(K(wx, wy, wz));
+  };
+}
+
 export function computeSurfaceVisibleBlocks(
   chunkX: number,
   chunkZ: number,
   blocks: PlacedBlock[],
+  neighbourSolid?: NeighbourSolidFn,
 ): PlacedBlock[] {
   if (blocks.length < 50) return blocks; // Not worth culling tiny sets
 
@@ -171,12 +223,37 @@ export function computeSurfaceVisibleBlocks(
     }
 
     const base = (ly * stride) + (lz * 16) + lx;
+
+    /**
+     * A face is exposed if the cell beyond it is empty.
+     *
+     * Chunk edges used to short-circuit to "exposed" unconditionally — this
+     * function only ever saw ONE chunk's blocks, so it could not tell whether
+     * the neighbour occluded them. That kept the entire 1-block border of
+     * every chunk: 60 of the 256 columns in a 16x16 chunk, ~23% of every
+     * layer, drawn whether or not anything could see them. With the world
+     * measured as GEOMETRY bound (2026-Aug-23: GPU 16.37ms -> 14.19ms at a
+     * quarter of the pixels, only 1.15x), those triangles cost real frame rate.
+     *
+     * When a neighbour lookup is supplied, edge cells ask it instead. Unknown
+     * (neighbour not loaded) still means exposed, so a missing chunk can never
+     * cause a hole — only a temporarily over-drawn border, which resolves when
+     * that chunk loads and the border is recomputed.
+     */
+    const openAt = (dx: number, dz: number, dy: number, localIdx: number, atEdge: boolean): boolean => {
+      if (!atEdge) return occ[localIdx] === 0;
+      if (!neighbourSolid) return true;                 // no lookup -> old behaviour
+      const solid = neighbourSolid(b.position_x + dx, b.position_y + dy, b.position_z + dz);
+      return solid !== true;                            // null (unknown) or false -> exposed
+    };
+
     const exposed =
-      (lx === 0) || (lx === 15) || (lz === 0) || (lz === 15) ||
       (ly === 0) || (ly === ySpan - 1) ||
-      (occ[base - 1] === 0) || (occ[base + 1] === 0) ||       // ±X
-      (occ[base - 16] === 0) || (occ[base + 16] === 0) ||     // ±Z
-      (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y
+      openAt(-1, 0, 0, base - 1, lx === 0) ||
+      openAt(+1, 0, 0, base + 1, lx === 15) ||
+      openAt(0, -1, 0, base - 16, lz === 0) ||
+      openAt(0, +1, 0, base + 16, lz === 15) ||
+      (occ[base - stride] === 0) || (occ[base + stride] === 0); // ±Y stays local
 
     if (exposed) visible.push(b);
   }
