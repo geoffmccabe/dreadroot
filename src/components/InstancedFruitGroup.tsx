@@ -181,6 +181,7 @@ export function InstancedFruitGroup({ blocks, atlasTexture }: InstancedFruitGrou
 
   return (
     <instancedMesh
+      name="fruit"
       ref={meshRef}
       // key on bucketed capacity → remount only when crossing a 32 boundary
       key={capacity}

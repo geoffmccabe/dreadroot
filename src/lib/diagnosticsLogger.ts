@@ -504,6 +504,63 @@ class DiagnosticsLogger {
     renderer.info.reset();
   }
 
+  /**
+   * Per-mesh-type triangle breakdown.
+   *
+   * WHY: the renderer reports a total (2.5M triangles) and the probe says the
+   * frame is GEOMETRY bound, but the total is roughly TWICE what the visible
+   * surface-block count should produce. Without a breakdown that gap is pure
+   * guesswork, and guessing wrong costs a full test cycle each time. This walks
+   * the scene once a second and attributes every triangle to a named bucket.
+   *
+   * Also reports DEAD instances: an InstancedMesh draws `count` instances, and
+   * slots that were freed but not compacted are still run through the vertex
+   * shader even though they are scaled to nothing. On a geometry-bound frame
+   * those are pure waste and invisible in every other metric.
+   */
+  geometryBuckets = new Map<string, { tris: number; draws: number; instances: number }>();
+  private lastGeoScanMs = 0;
+
+  captureSceneGeometry(scene: THREE.Scene | null | undefined): void {
+    if (!this.enabled || !scene) return;
+    const now = performance.now();
+    if (now - this.lastGeoScanMs < 1000) return;
+    this.lastGeoScanMs = now;
+
+    const buckets = new Map<string, { tris: number; draws: number; instances: number }>();
+    scene.traverse((obj) => {
+      const anyObj = obj as unknown as {
+        visible?: boolean; isMesh?: boolean; isInstancedMesh?: boolean; isPoints?: boolean;
+        isLine?: boolean; count?: number; name?: string; type?: string;
+        geometry?: THREE.BufferGeometry; material?: unknown;
+      };
+      if (!anyObj.visible) return;
+      if (!anyObj.isMesh && !anyObj.isPoints && !anyObj.isLine) return;
+      const geo = anyObj.geometry;
+      if (!geo) return;
+
+      const idx = geo.index;
+      const pos = geo.getAttribute?.('position');
+      const verts = idx ? idx.count : (pos ? pos.count : 0);
+      if (verts === 0) return;
+      const perInstance = anyObj.isLine ? verts / 2 : verts / 3;
+      const instances = anyObj.isInstancedMesh ? (anyObj.count ?? 0) : 1;
+
+      // Name it something a human can act on. Explicit name wins; otherwise
+      // fall back to the three.js type so nothing lands in an "unknown" pile.
+      const label = anyObj.name && anyObj.name.length > 0
+        ? anyObj.name
+        : (anyObj.type ?? 'Mesh');
+
+      let b = buckets.get(label);
+      if (!b) buckets.set(label, (b = { tris: 0, draws: 0, instances: 0 }));
+      b.tris += perInstance * instances;
+      b.draws += 1;
+      b.instances += instances;
+    });
+    this.geometryBuckets = buckets;
+  }
+
   /** Restore three.js's own per-render reset when recording stops. */
   releaseRendererStats(renderer: THREE.WebGLRenderer | null | undefined): void {
     if (renderer && !renderer.info.autoReset) renderer.info.autoReset = true;
@@ -1129,6 +1186,18 @@ class DiagnosticsLogger {
     lines.push(`Player Chunk: (${this.playerChunkX}, ${this.playerChunkZ})`);
     lines.push(`Loaded Chunks: ${this.loadedChunkCount} (${this.totalLoadedBlocks} blocks)`);
     lines.push(`Visible Chunks: ${this.visibleChunkCount} (${this.totalVisibleBlocks} surface blocks)`);
+    if (this.geometryBuckets.size > 0) {
+      const rows = Array.from(this.geometryBuckets.entries()).sort((a, b) => b[1].tris - a[1].tris);
+      let totalTris = 0;
+      for (const [, v] of rows) totalTris += v.tris;
+      lines.push('');
+      lines.push('GEOMETRY BY MESH (what the triangles actually are)');
+      lines.push(`  TOTAL: ${(totalTris / 1000).toFixed(1)}K tris across ${rows.length} mesh names`);
+      for (const [name, v] of rows.slice(0, 12)) {
+        const pct = totalTris > 0 ? ((v.tris / totalTris) * 100).toFixed(1) : '0.0';
+        lines.push(`  ${name}: ${(v.tris / 1000).toFixed(1)}K tris (${pct}%), ${v.draws} objects, ${v.instances} instances`);
+      }
+    }
     lines.push(`Rendered Chunks: ${this.renderedChunkCount}`);
     lines.push(`Chunks In Flight: ${this.chunksInFlight}`);
     lines.push(`ChunkRebuilds: ${this.chunkRebuildCountTotal} (${this.chunkRebuildMsTotal.toFixed(1)}ms)`);

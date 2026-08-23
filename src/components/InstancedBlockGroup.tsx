@@ -620,6 +620,7 @@ export const InstancedBlockGroup: React.FC<InstancedBlockGroupProps> = ({
   return (
     <>
       <instancedMesh
+        name="block-group"
         ref={meshRef}
         args={[geometry, material, bufferSize]}
         castShadow={fxEnabled}

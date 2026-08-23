@@ -212,6 +212,7 @@ const WaterInstancedMesh: React.FC<WaterInstancedMeshProps> = ({
 
   return (
     <instancedMesh
+      name="water"
       ref={meshRef}
       args={[sharedWaterGeometry, material, bufferSize]}
       frustumCulled={true}

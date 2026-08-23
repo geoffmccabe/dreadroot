@@ -211,7 +211,11 @@ export function useFortressFrameLoop({
   // Renderer stats must be sampled EVERY frame: the tally is now accumulated
   // across a frame's passes and reset here, so sampling every 100ms would
   // report the sum of ~6 frames as if it were one.
-  if (diagnostics.enabled) diagnostics.captureRendererStats(state.gl);
+  if (diagnostics.enabled) {
+    diagnostics.captureRendererStats(state.gl);
+    // Self-throttled to once a second; attributes triangles to named meshes.
+    diagnostics.captureSceneGeometry(state.scene);
+  }
 
   const nowDiag = now;
   if (

@@ -31,7 +31,7 @@
  * globally would destroy the frustum culling that keeps the triangle count
  * down.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { PlacedBlock } from '@/types/blocks';
 import type { BlockType } from '@/types/blocks';
@@ -66,13 +66,37 @@ export const GlobalNonTreeBlocks: React.FC<GlobalNonTreeBlocksProps> = ({
   hoveredBlockId,
   performanceMode,
 }) => {
+  // Per-chunk cache of "which of this chunk's blocks are non-tree".
+  //
+  // WHY THIS EXISTS. `entries` gets a new identity every time ANY chunk loads
+  // or unloads, and that happens constantly while moving — 75 unloads in a
+  // 14-second recording. Without this cache, one chunk changing re-walked
+  // EVERY block in EVERY visible chunk (~100k of them) just to re-find the
+  // ~1% that are not trees. That is roughly 7.5 million block reads over those
+  // 14 seconds, and it showed up exactly where you would expect: 371MB of
+  // garbage collected in 14 seconds and constant stutter.
+  //
+  // A chunk's block array is replaced wholesale when it changes, so reference
+  // equality is a sound and free way to know the cached answer still holds.
+  const chunkCache = useRef(new Map<string, { src: PlacedBlock[]; nonTree: PlacedBlock[] }>());
+  const lastGroups = useRef<Map<string, { blocks: PlacedBlock[]; textureOverride?: string }> | null>(null);
+
   const groups = useMemo(() => {
-    // Collect the non-tree blocks across every visible chunk. This walks all
-    // visible blocks, but only when the visible set actually changes, and the
-    // non-tree share is under 1% so the collected arrays stay small.
-    const nonTree: PlacedBlock[] = [];
+    const cache = chunkCache.current;
+    const live = new Set<string>();
+    // True only if nothing that affects NON-TREE blocks changed. Tree-only
+    // churn (the overwhelmingly common case) must not rebuild these batches,
+    // because handing InstancedBlockGroup a new array makes it rewrite every
+    // instance matrix it owns.
+    let unchanged = lastGroups.current !== null;
+
     for (let e = 0; e < entries.length; e++) {
-      const arr = entries[e].blocks;
+      const { key, blocks: arr } = entries[e];
+      live.add(key);
+      const hit = cache.get(key);
+      if (hit !== undefined && hit.src === arr) continue;
+
+      const nonTree: PlacedBlock[] = [];
       for (let i = 0; i < arr.length; i++) {
         const b = arr[i];
         // A block with a missing type cannot be rendered, and reading a
@@ -82,6 +106,28 @@ export const GlobalNonTreeBlocks: React.FC<GlobalNonTreeBlocksProps> = ({
         if (isTreeBlockType(b.block_type)) continue;
         nonTree.push(b);
       }
+      cache.set(key, { src: arr, nonTree });
+      // Re-grouping is only needed if this chunk actually contributes, or used
+      // to contribute, a non-tree block.
+      if (nonTree.length > 0 || (hit !== undefined && hit.nonTree.length > 0)) unchanged = false;
+    }
+
+    // Drop chunks that are no longer visible, so the cache cannot grow forever.
+    for (const key of cache.keys()) {
+      if (live.has(key)) continue;
+      if ((cache.get(key)?.nonTree.length ?? 0) > 0) unchanged = false;
+      cache.delete(key);
+    }
+
+    if (unchanged && lastGroups.current !== null) return lastGroups.current;
+
+    // From here on we only ever touch the non-tree blocks — under 1% of the
+    // world — so this is cheap even though it rebuilds from scratch.
+    const nonTree: PlacedBlock[] = [];
+    for (const key of live) {
+      const c = cache.get(key);
+      if (c === undefined) continue;
+      for (let i = 0; i < c.nonTree.length; i++) nonTree.push(c.nonTree[i]);
     }
 
     // How many distinct textures each type uses, world-wide rather than per
@@ -117,6 +163,22 @@ export const GlobalNonTreeBlocks: React.FC<GlobalNonTreeBlocksProps> = ({
       }
       g.blocks.push(block);
     }
+
+    // Reuse the PREVIOUS array for any group whose contents are identical, so
+    // an unrelated group changing does not force every batch to rebuild.
+    const prev = lastGroups.current;
+    if (prev !== null) {
+      for (const [k, g] of out) {
+        const p = prev.get(k);
+        if (p === undefined || p.blocks.length !== g.blocks.length) continue;
+        let same = true;
+        for (let i = 0; i < g.blocks.length; i++) {
+          if (p.blocks[i] !== g.blocks[i]) { same = false; break; }
+        }
+        if (same) out.set(k, p);
+      }
+    }
+    lastGroups.current = out;
     return out;
   }, [entries]);
 

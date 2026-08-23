@@ -1705,6 +1705,7 @@ export const InstancedAtlasBlockGroup: React.FC<InstancedAtlasBlockGroupProps> =
 
   return (
     <instancedMesh
+      name="tree-atlas"
       ref={meshRef}
       args={[geometry, material, meshCapacity]}
       frustumCulled={false} // Initial only — flipped to true after the first rebuild sets valid per-chunk bounds (pre-build bounds mis-cull tall trees)

@@ -56,7 +56,7 @@ function FadeRing({ blocks }: { blocks: PlacedBlock[] }) {
 
   if (blocks.length === 0) return null;
   return (
-    <instancedMesh ref={meshRef} args={[geometry, material, MAX_INSTANCES_PER_RING]} frustumCulled={false} />
+    <instancedMesh name="far-ring" ref={meshRef} args={[geometry, material, MAX_INSTANCES_PER_RING]} frustumCulled={false} />
   );
 }
 
