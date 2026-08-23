@@ -20,6 +20,7 @@ interface ChunkRendererProps {
   hoistedAtlasReady?: boolean;
   hoistedBlocksMap?: Map<string, BlockType>;
   hoistedBlockDefsLoading?: boolean;
+  skipNonTree?: boolean;
 }
 
 const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
@@ -32,7 +33,8 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
   hoistedAtlasTexture,
   hoistedAtlasReady,
   hoistedBlocksMap,
-  hoistedBlockDefsLoading
+  hoistedBlockDefsLoading,
+  skipNonTree
 }) => {
   const t0 = performance.now();
 
@@ -49,6 +51,7 @@ const ChunkRendererInner: React.FC<ChunkRendererProps> = ({
       hoistedAtlasReady={hoistedAtlasReady}
       hoistedBlocksMap={hoistedBlocksMap}
       hoistedBlockDefsLoading={hoistedBlockDefsLoading}
+      skipNonTree={skipNonTree}
     />
   );
 
@@ -67,6 +70,7 @@ const ChunkRenderer = React.memo(ChunkRendererInner, (prev, next) => {
     prev.showOwnershipOutline === next.showOwnershipOutline &&
     prev.currentUserId === next.currentUserId &&
     prev.performanceMode === next.performanceMode &&
+    prev.skipNonTree === next.skipNonTree &&
     prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
     prev.hoistedAtlasReady === next.hoistedAtlasReady &&
     prev.hoistedBlocksMap === next.hoistedBlocksMap &&

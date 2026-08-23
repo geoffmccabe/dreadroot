@@ -21,6 +21,9 @@ import { getAtlasVersion, useTextureAtlas } from '@/hooks/useTextureAtlas';
 import { useAtlasSync } from '@/hooks/useAtlasSync';
 import { useBlocksData } from '@/hooks/useBlocksData';
 import { useWorldPonds } from '@/hooks/useWorldPonds';
+import { GlobalNonTreeBlocks } from '@/components/GlobalNonTreeBlocks';
+import { DEFAULT_BLOCK_FALLBACK, TREE_BLOCK_FALLBACK } from '@/components/PlacedBlocks';
+import { SharedBlockGeometry } from '@/components/PlacedBlocks';
 
 
 export function CameraTrackedBlocks({
@@ -53,6 +56,9 @@ export function CameraTrackedBlocks({
   const hoistedAtlasReady = hoistedAtlas.isReady;
   useAtlasSync(); // Single sync instead of 71× (each fires 6 React Query fetches)
   const { blocksMap: hoistedBlocksMap, isLoading: hoistedBlockDefsLoading } = useBlocksData();
+  // One cube geometry shared by the global non-tree batches (same one the
+  // per-chunk renderers use).
+  const sharedGeometry = SharedBlockGeometry();
 
   // One-time diagnostic: log rendering pipeline state to confirm blocks flow through
   const debugLogRef = useRef(false);
@@ -413,8 +419,24 @@ export function CameraTrackedBlocks({
           hoistedAtlasReady={hoistedAtlasReady}
           hoistedBlocksMap={hoistedBlocksMap}
           hoistedBlockDefsLoading={hoistedBlockDefsLoading}
+          skipNonTree
         />
       ))}
+
+      {/* Non-tree blocks, batched ONCE for the whole visible world instead of
+          per chunk. They are 0.7% of blocks but were ~3 of every 4 draw calls,
+          and draw-call count is what actually tracks frame rate here. */}
+      <GlobalNonTreeBlocks
+        entries={progressiveEntries}
+        geometry={sharedGeometry}
+        blocksMap={hoistedBlocksMap}
+        defaultBlockDef={DEFAULT_BLOCK_FALLBACK}
+        treeFallbackDef={TREE_BLOCK_FALLBACK}
+        showOwnershipOutline={performanceMode ? false : showOwnershipOutline}
+        currentUserId={currentUserId}
+        hoveredBlockId={performanceMode ? null : hoveredBlockId}
+        performanceMode={performanceMode}
+      />
       {/* Water/Lava blocks - rendered after opaque blocks for transparency */}
       {waterBlocks.length > 0 && (
         <WaterBlocks

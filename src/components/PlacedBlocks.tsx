@@ -24,7 +24,7 @@ import { getSoundUrl } from '@/hooks/useGameSounds';
 
 // Fallback block definition for tree blocks that might not have entries in the blocks table
 // Use white color so textures render at full brightness without tinting
-const TREE_BLOCK_FALLBACK: BlockType = {
+export const TREE_BLOCK_FALLBACK: BlockType = {
   id: -1,
   key: 'tree_block',
   name: 'Tree Block',
@@ -44,7 +44,7 @@ const TREE_BLOCK_FALLBACK: BlockType = {
 
 // Fallback block definition for user-placed blocks without database entries
 // Uses the default cliff texture from InstancedBlockGroup
-const DEFAULT_BLOCK_FALLBACK: BlockType = {
+export const DEFAULT_BLOCK_FALLBACK: BlockType = {
   id: -2,
   key: 'default_block',
   name: 'Block',
@@ -71,7 +71,7 @@ let _loggedAtlasRendering = false;
 let _loggedNonTreeBlocks = false;
 
 // Shared geometry for performance
-const SharedBlockGeometry = () => {
+export const SharedBlockGeometry = () => {
   return useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
 };
 
@@ -151,12 +151,17 @@ interface PlacedBlocksProps {
   hoistedAtlasReady?: boolean;
   hoistedBlocksMap?: Map<string, BlockType>;
   hoistedBlockDefsLoading?: boolean;
+  /** Skip the per-chunk non-tree batches — they are drawn once, world-wide, by
+   *  GlobalNonTreeBlocks instead. Grouping still runs, because shrine
+   *  detection and the variant caches hang off the same pass. */
+  skipNonTree?: boolean;
 }
 
 // F2.1: Wrap in React.memo with custom comparison to prevent cascade re-renders
 // Only re-render when blocks array ref changes or hover/outline state changes
 const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
   blocks,
+  skipNonTree,
   showOwnershipOutline = false,
   currentUserId,
   hoveredBlockId = null,
@@ -571,8 +576,11 @@ const PlacedBlocksInner: React.FC<PlacedBlocksProps> = ({
         />
       )}
 
-      {/* Render non-tree blocks with individual textures */}
-      {Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
+      {/* Render non-tree blocks with individual textures.
+          Drawn globally instead when skipNonTree is set: one batch PER CHUNK
+          PER TYPE was ~3/chunk and three quarters of all draw calls, for 0.7%
+          of the world's blocks. See GlobalNonTreeBlocks. */}
+      {!skipNonTree && Array.from(groupedBlocks.entries()).map(([groupKey, { blocks: blocksOfType, textureOverride }]) => {
         // C2: Extract block_type from new groupKey format (blockType:default or blockType:tx:hash)
         const blockType = groupKey.split(':')[0];
 
@@ -624,6 +632,7 @@ export const PlacedBlocks = React.memo(PlacedBlocksInner, (prev, next) => {
     prev.hoistedAtlasTexture === next.hoistedAtlasTexture &&
     prev.hoistedAtlasReady === next.hoistedAtlasReady &&
     prev.hoistedBlocksMap === next.hoistedBlocksMap &&
-    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading
+    prev.hoistedBlockDefsLoading === next.hoistedBlockDefsLoading &&
+    prev.skipNonTree === next.skipNonTree
   );
 });
