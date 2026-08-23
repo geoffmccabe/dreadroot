@@ -162,6 +162,7 @@ import { useBurnSystem } from './useBurnSystem';
 import { useEnemySpawnerIntegration } from '@/features/enemies/hooks/useEnemySpawnerIntegration';
 import { useServerMonsters } from '@/features/enemies/hooks/useServerMonsters';
 import { WebGLContextWatch } from './WebGLContextWatch';
+import { GpuProbe } from '@/features/look/GpuProbe';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -1856,6 +1857,8 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
     <>
       {/* Reports when the browser takes the GPU away (the silent grey screen). */}
       <WebGLContextWatch />
+      {/* Diagnostics only: __gpu.scale(n) to separate fill-rate from geometry cost. */}
+      <GpuProbe />
       <FirstPersonControls
         onShoot={handleShoot}
         showCrosshairs={crosshairsEnabled}
