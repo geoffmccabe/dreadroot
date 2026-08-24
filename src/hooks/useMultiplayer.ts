@@ -6,6 +6,7 @@ import { RealtimeChannel } from '@supabase/supabase-js';
 import * as THREE from 'three';
 import { playerState as pose } from '@/components/siege/playerState';
 import { getSelectedCharacter } from '@/features/characters/characterSelection';
+import { triggerAction, onLocalAction, reviveActor, type ActionId } from '@/features/characters/animation/characterActions';
 
 export interface PlayerState {
   userId: string;
@@ -25,6 +26,10 @@ export interface PlayerState {
   run?: boolean;
   grounded?: boolean;
   vy?: number;
+  /** Weapon out — picks the armed clip set, so a remote player is not posed
+   *  around an invisible rifle (or holding nothing while aiming). */
+  gun?: boolean;
+  gliding?: boolean;
   // Fire effect state
   isOnFire?: boolean;
   fireStartTime?: number;
@@ -66,6 +71,11 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
   const isSettingUpRef = useRef(false);
   const currentWorldIdRef = useRef(worldId);
   const userRef = useRef<{ id: string; email?: string | null } | null>(null);
+  /** Last action sequence seen per remote player, so a redelivered message does
+   *  not replay the animation. Cleared with the player when they leave. */
+  const actionSeqRef = useRef(new Map<string, number>());
+  /** Our own outgoing action counter. */
+  const localActionSeqRef = useRef(0);
 
   // Track world changes
   useEffect(() => {
@@ -158,6 +168,7 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
               // Drop their interpolation history too, or a rejoin would
               // interpolate from wherever they were standing when they left.
               remotePlayerBuffer.remove(leftUserId);
+              actionSeqRef.current.delete(leftUserId);
               setPlayers(prev => {
                 const next = new Map(prev);
                 next.delete(leftUserId);
@@ -173,7 +184,7 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         if (!payload) return;
 
         const { user_id, position, rotation, username, color,
-                character, mf, mr, run, grounded, vy } = payload;
+                character, mf, mr, run, grounded, vy, gun, gliding } = payload;
         if (!user_id || user_id === user?.id) return;
 
         // Feed the interpolation buffer at ARRIVAL time, not at React render
@@ -202,6 +213,8 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
             existing.run = !!run;
             existing.grounded = grounded !== false;
             existing.vy = vy ?? 0;
+            existing.gun = !!gun;
+            existing.gliding = !!gliding;
             next.set(user_id, existing);
           } else {
             next.set(user_id, {
@@ -211,6 +224,7 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
               character,
               mf: mf ?? 0, mr: mr ?? 0, run: !!run,
               grounded: grounded !== false, vy: vy ?? 0,
+              gun: !!gun, gliding: !!gliding,
               position: { x: position.x, y: position.y, z: position.z },
               rotation: { yaw: rotation.yaw, pitch: rotation.pitch },
             });
@@ -218,6 +232,33 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
 
           return next;
         });
+      });
+
+      /**
+       * One-shot actions — shoot, reload, throw, hit, death.
+       *
+       * A separate message, not a field on the transform, for two reasons.
+       * Transforms are rate-limited and skipped entirely when nothing moved, so
+       * firing while standing still could go unsent for a whole keepalive
+       * interval. And an action is an EVENT: a flag riding along on a repeated
+       * transform would re-fire the animation on every resend.
+       *
+       * `seq` makes the receiver idempotent — a duplicate delivery carries a
+       * seq it has already seen and is ignored, while a genuinely new action
+       * always differs.
+       */
+      multiplayerChannel.on('broadcast', { event: 'player_action' }, (msg: any) => {
+        const p = msg?.payload;
+        if (!p || typeof p.user_id !== 'string' || typeof p.action !== 'string') return;
+        if (p.user_id === userRef.current?.id) return;   // never echo to ourselves
+        const seen = actionSeqRef.current.get(p.user_id);
+        if (seen !== undefined && seen === p.seq) return;
+        actionSeqRef.current.set(p.user_id, p.seq);
+        // 'revive' is not an animation — it releases the held death pose. A
+        // remote player who respawned would otherwise stay collapsed here
+        // forever, since death deliberately holds its final frame.
+        if (p.action === 'revive') reviveActor(p.user_id);
+        else triggerAction(p.action as ActionId, p.user_id);
       });
 
       // Shared kills: a monster killed by one player is dead for everyone.
@@ -378,7 +419,30 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         mf: pose.mf, mr: pose.mr, run: pose.run,
         grounded: pose.grounded,
         vy: Math.round(pose.vy * 10) / 10,
+        gun: pose.gun, gliding: pose.gliding,
       },
+    });
+  }, [isConnected]);
+
+  /**
+   * Relay the local player's one-shot actions to everyone else.
+   *
+   * Hooked to the action bus rather than to each trigger site: the triggers
+   * live in the shooting hook, the reload timer, two grenade handlers and the
+   * death effect, and asking every one of them to also broadcast is how a
+   * feature ends up working for four actions out of five.
+   */
+  useEffect(() => {
+    return onLocalAction((id) => {
+      const ch = channelRef.current;
+      const user = userRef.current;
+      if (!ch || !user || !isConnected) return;
+      localActionSeqRef.current += 1;
+      ch.send({
+        type: 'broadcast',
+        event: 'player_action',
+        payload: { user_id: user.id, action: id, seq: localActionSeqRef.current },
+      });
     });
   }, [isConnected]);
 

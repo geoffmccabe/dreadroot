@@ -130,6 +130,35 @@ not loop.
 **Done when:** two browser windows show each other running, jumping, shooting
 and dying correctly.
 
+### Built 2026-Aug-24 — on the LIVE path, shaped for the binary one
+
+Implemented against the Supabase broadcast channel that actually carries
+players today, because the Durable Object is not serving them yet. The shape is
+deliberately the one the binary format wants, so moving it later is a
+re-encoding rather than a redesign:
+
+- **Continuous state** rides the transform message, which is already sent:
+  `mf`, `mr`, `run`, `grounded`, `vy`, `gun`, `gliding`. In the binary format
+  these are 3 bits of direction, plus 4 flags, plus a quantised vertical speed
+  — call it two bytes on a packet already being sent per player per tick.
+- **One-shot actions get their own message.** Two reasons, and both survive the
+  move to binary: transforms are rate-limited and skipped entirely when nothing
+  moved, so firing while standing still could go unsent for a whole keepalive
+  interval; and an action is an EVENT, so a flag riding a repeated transform
+  would re-fire the animation on every resend.
+- **A sequence number makes the receiver idempotent.** A duplicate delivery
+  carries a seq already seen and is ignored; a genuinely new action always
+  differs. This is the piece that matters most on an unreliable transport and
+  is why the plan called out "a death that arrives once must not be missed, and
+  a fire flag that persists must not loop".
+- **'revive' travels the same path.** It is not an animation — it releases the
+  held death pose. Without it a remote player who respawned would stay a corpse
+  on everyone else's screen, because death holds its final frame on purpose.
+
+Not sent, deliberately: jet-boost. It is a local visual (boot flames) and only
+selects the neutral airborne pose, which the receiver already picks from
+`grounded` and `vy`.
+
 ---
 
 ## Phase 4 — RESEARCH SPIKE: traversal and parkour

@@ -67,7 +67,9 @@ function OtherPlayer({ player }: { player: PlayerState }) {
       run: !!p.run,
       grounded: p.grounded !== false,
       vy: p.vy ?? 0,
-      gliding: false,   // not on the wire yet — plan phase 3
+      gliding: !!p.gliding,
+      // Jet-boost is a visual on the owner's client (boot flames) and only
+      // changes the airborne pose, so it is not worth a wire field.
       boosting: false,
     };
   }, []);
@@ -81,6 +83,10 @@ function OtherPlayer({ player }: { player: PlayerState }) {
         getInput={getInput}
         getPosition={getPosition}
         getYaw={getYaw}
+        armed={!!player.gun}
+        // Their user id is the actor key, so the one-shot actions their client
+        // broadcasts play on THIS body and not on anyone else's.
+        actor={player.userId}
       />
       <NamePlate player={player} offset={namePos} />
     </group>

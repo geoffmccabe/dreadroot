@@ -82,12 +82,39 @@ const pending = new Map<string, Pending>();
 /** The local player's key. Remote players use their user id. */
 export const LOCAL_ACTOR = '__local';
 
+/**
+ * Anyone who wants to know when the LOCAL player performs an action — in
+ * practice, the netcode, so other players see it too.
+ *
+ * A subscription rather than a call at each trigger site: the triggers are
+ * scattered across the shooting hook, the reload timer, the grenade handlers
+ * and the death effect, and making every one of them also remember to
+ * broadcast is precisely how a feature ends up working for four of five
+ * actions.
+ */
+/** 'revive' is not an animation — it is the signal that RELEASES the death
+ *  pose. It travels the same path because a remote player who respawns would
+ *  otherwise stay collapsed on everyone else's screen forever. */
+export type ActionSignal = ActionId | 'revive';
+type LocalActionListener = (id: ActionSignal) => void;
+const localListeners = new Set<LocalActionListener>();
+
+export function onLocalAction(fn: LocalActionListener): () => void {
+  localListeners.add(fn);
+  return () => { localListeners.delete(fn); };
+}
+
 export function triggerAction(id: ActionId, actor: string = LOCAL_ACTOR): void {
   const now = performance.now();
   const cur = pending.get(actor);
   // Keep the more important of two requests in the same frame.
   if (cur && ACTION_PRIORITY[cur.id] > ACTION_PRIORITY[id] && now - cur.at < 50) return;
   pending.set(actor, { id, at: now });
+  if (actor === LOCAL_ACTOR) {
+    for (const fn of localListeners) {
+      try { fn(id); } catch { /* a broken listener must never stop the animation */ }
+    }
+  }
 }
 
 /** Consume the queued action, if any. Returns null when there is nothing new. */
@@ -116,6 +143,11 @@ const revivals = new Map<string, number>();
 export function reviveActor(actor: string = LOCAL_ACTOR): void {
   revivals.set(actor, (revivals.get(actor) ?? 0) + 1);
   pending.delete(actor);
+  if (actor === LOCAL_ACTOR) {
+    for (const fn of localListeners) {
+      try { fn('revive'); } catch { /* never let a listener block a respawn */ }
+    }
+  }
 }
 
 export function revivalCount(actor: string = LOCAL_ACTOR): number {
