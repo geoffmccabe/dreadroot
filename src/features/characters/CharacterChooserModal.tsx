@@ -38,7 +38,35 @@ function CharModel({ c }: { c: DreadrootCharacter }) {
     return g;
   }, [scene]);
 
-  const { actions, names } = useAnimations(animations, root);
+  /**
+   * FLAMMA WAS BEING TORN APART by the shared idle, and the file layout says
+   * exactly why:
+   *
+   *   flamma    Root(1) under Armature(0.01)   — Root IS a skin joint
+   *   shiyang   Hips(1) under Root(1) under Player_Export_ShiYang(0.01)
+   *   jeanette  Root(1) under Armature(1)      — Root IS a skin joint
+   *
+   * The clips come from Shi Yang, where 'Root' is a plain node ABOVE the
+   * skeleton: animating its position just slides the whole rig. In Flamma and
+   * Jeanette, 'Root' is a SKINNED JOINT, so the same track deforms every vertex
+   * weighted to it. Flamma's armature is scaled 0.01 exactly like Shi Yang's,
+   * so the track lands at full strength and rips her apart. Jeanette's armature
+   * is scaled 1, so the same values arrive 100x too small to notice — which is
+   * why she looked fine and Flamma did not.
+   *
+   * Dropping position/scale on Root leaves the pose (all rotation) intact. It
+   * also stops root motion walking a character out of frame, which is what you
+   * want in a preview regardless.
+   */
+  const clips = useMemo(() => animations.map((clip) => {
+    const kept = clip.tracks.filter((t) => !/(^|\.)Root\.(position|scale)$/.test(t.name));
+    if (kept.length === clip.tracks.length) return clip;
+    const c2 = clip.clone();
+    c2.tracks = kept;
+    return c2;
+  }), [animations]);
+
+  const { actions, names } = useAnimations(clips, root);
 
   useEffect(() => {
     const found = names.find((n) => n === c.idleClip)
@@ -134,7 +162,10 @@ function Preview({ c }: { c: DreadrootCharacter }) {
       <directionalLight position={[3, 5, 4]} intensity={1.5} />
       <directionalLight position={[-3, 2, -2]} intensity={0.6} />
       <Suspense fallback={null}>
-        <CharModel c={c} />
+        {/* Keyed by name so switching character REMOUNTS the model. Without
+            this the mixer stays bound to the previous skeleton, the new one is
+            never driven, and it renders in its bind pose — the T-pose. */}
+        <CharModel key={c.name} c={c} />
       </Suspense>
     </Canvas>
   );
@@ -179,11 +210,10 @@ export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; o
       // Down 8% of the viewport so it never lands on the FPS / info readout
       // that lives at the top of the screen.
       initialStyle={{ top: '8vh', left: '50%', marginLeft: -440 }}
-      // The shared surface is too dark to read this much text against a bright
-      // 3D world. Lighter here only; the panel theme is untouched elsewhere.
-      surfaceBg="hsla(220 22% 20% / 0.90)"
     >
-      <div className="flex flex-col md:flex-row h-full">
+      {/* user-panel-dialog maps the shadcn tokens onto the HUD theme, which is
+          what gives this the User Panel look rather than the darker admin one. */}
+      <div className="user-panel-dialog flex flex-col md:flex-row h-full">
         {/* LEFT — name above the character, then the character itself */}
         <div className="md:w-[46%] flex flex-col border-b md:border-b-0 md:border-r"
              style={{ borderColor: 'var(--hud-border)' }}>
