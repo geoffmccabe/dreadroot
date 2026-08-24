@@ -4,6 +4,8 @@ import { enemyKillBus } from '@/features/enemies/kill/enemyKillBus';
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import * as THREE from 'three';
+import { playerState as pose } from '@/components/siege/playerState';
+import { getSelectedCharacter } from '@/features/characters/characterSelection';
 
 export interface PlayerState {
   userId: string;
@@ -11,6 +13,18 @@ export interface PlayerState {
   rotation: { yaw: number; pitch: number };
   username?: string;
   color?: string;
+  /** Which character they picked, so they render as themselves rather than as
+   *  the shared grey test dummy everyone used to be. */
+  character?: string;
+  /** Live movement bits, so a remote body can run, jump and fall instead of
+   *  guessing "moving or not" from position deltas. Cheap: four small numbers
+   *  on a message that is already being sent. Phase 3 of the animation plan
+   *  moves these onto the binary wire format properly. */
+  mf?: number;
+  mr?: number;
+  run?: boolean;
+  grounded?: boolean;
+  vy?: number;
   // Fire effect state
   isOnFire?: boolean;
   fireStartTime?: number;
@@ -158,7 +172,8 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
         const payload = msg?.payload;
         if (!payload) return;
 
-        const { user_id, position, rotation, username, color } = payload;
+        const { user_id, position, rotation, username, color,
+                character, mf, mr, run, grounded, vy } = payload;
         if (!user_id || user_id === user?.id) return;
 
         // Feed the interpolation buffer at ARRIVAL time, not at React render
@@ -182,12 +197,20 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
             existing.rotation.pitch = rotation.pitch;
             if (username) existing.username = username;
             if (color) existing.color = color;
+            if (character) existing.character = character;
+            existing.mf = mf ?? 0; existing.mr = mr ?? 0;
+            existing.run = !!run;
+            existing.grounded = grounded !== false;
+            existing.vy = vy ?? 0;
             next.set(user_id, existing);
           } else {
             next.set(user_id, {
               userId: user_id,
               username: username ?? 'Player',
               color: color ?? '#ffffff',
+              character,
+              mf: mf ?? 0, mr: mr ?? 0, run: !!run,
+              grounded: grounded !== false, vy: vy ?? 0,
               position: { x: position.x, y: position.y, z: position.z },
               rotation: { yaw: rotation.yaw, pitch: rotation.pitch },
             });
@@ -348,6 +371,13 @@ export function useMultiplayer(worldId: string | null): MultiplayerState {
           yaw: Math.round(yaw * 100) / 100,
           pitch: Math.round(pitch * 100) / 100
         },
+        // Who you are and what you are doing. Read straight off the same
+        // published state the local avatar animates from, so a remote body is
+        // driven by exactly the numbers the owner sees.
+        character: getSelectedCharacter(),
+        mf: pose.mf, mr: pose.mr, run: pose.run,
+        grounded: pose.grounded,
+        vy: Math.round(pose.vy * 10) / 10,
       },
     });
   }, [isConnected]);

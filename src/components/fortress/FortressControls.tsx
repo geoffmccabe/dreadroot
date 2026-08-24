@@ -3515,8 +3515,12 @@ export function FirstPersonControls({
         }
       }
 
-      // Publish the true player eye + facing (BEFORE the pull-back) for the siege self-avatar + HUD.
-      if (isSiege) {
+      // Publish the true player eye + facing (BEFORE the pull-back) for the
+      // self-avatar + HUD. NO LONGER siege-only: DreadRoot now renders a player
+      // body too and needs the identical numbers. These are plain writes to a
+      // module object, so publishing them in both games costs nothing and
+      // changes nothing for Siege Worlds.
+      {
         siegePlayerPose.x = camera.position.x; siegePlayerPose.y = camera.position.y; siegePlayerPose.z = camera.position.z;
         siegePlayerPose.fx = -Math.sin(yaw.current); siegePlayerPose.fz = -Math.cos(yaw.current);
         // Movement state → drives the self-avatar's locomotion animation.

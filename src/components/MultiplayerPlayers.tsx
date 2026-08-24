@@ -1,199 +1,118 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+/**
+ * Everyone else, rendered as the character THEY picked.
+ *
+ * This used to load y-bot.fbx — the default Mixamo test dummy — for every
+ * player, ignore their chosen character entirely, and animate two states: walk
+ * and idle, inferred from whether their position had changed. So multiplayer
+ * meant a field of identical grey mannequins that could stand or shuffle.
+ *
+ * Now each remote player is their real character, driven by the SAME animator
+ * and the SAME clip sets as your own body, off the movement bits their client
+ * publishes. A remote player is not a poorer kind of thing than you are.
+ *
+ * Interpolation is unchanged: positions still come from the shared transform
+ * buffer, which holds rather than extrapolates when packets are late.
+ */
+import React, { useCallback, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
-import { Text, useFBX } from '@react-three/drei';
-import { SkeletonUtils } from 'three-stdlib';
-import { frameLoop } from '@/lib/frameLoop';
+import { Text } from '@react-three/drei';
 import { remotePlayerBuffer, type SampledTransform } from '@/features/netcode/transformBuffer';
-import { mpStats } from '@/features/netcode/multiplayerStats';
+import { CharacterAvatar } from '@/features/characters/animation/CharacterAvatar';
+import type { MoveInput } from '@/features/characters/animation/movementState';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
 }
 
-// Shared assets loaded once
-function SharedAssetsLoader({ children }: { children: (assets: { fbx: THREE.Group; walkClip: THREE.AnimationClip }) => React.ReactNode }) {
-  const fbx = useFBX('/y-bot.fbx');
-  const walkAnim = useFBX('/Unarmed_Walk_Forward.fbx');
-  
-  if (!fbx || !walkAnim || !walkAnim.animations[0]) return null;
-  
-  return <>{children({ fbx, walkClip: walkAnim.animations[0] })}</>;
-}
+/** Camera height above the feet — the published position is the eye. */
+const EYE_HEIGHT = 1.6;
+const NAME_HEIGHT = 2.1;
 
-// Single controller for all players - uses centralized frame loop
-function PlayersController({ 
-  players, 
-  fbx, 
-  walkClip 
-}: { 
-  players: Map<string, PlayerState>; 
-  fbx: THREE.Group;
-  walkClip: THREE.AnimationClip;
-}) {
-  const playersRefs = useRef<Map<string, {
-    mesh: THREE.Group;
-    mixer: THREE.AnimationMixer;
-    walkAction: THREE.AnimationAction;
-    targetPosition: THREE.Vector3;
-    targetRotation: number;
-    currentAction: string;
-  }>>(new Map());
-  
-  /** Reused sample target — one object for all players, never per-frame alloc. */
-  const sampleRef = useRef<SampledTransform>({ x: 0, y: 0, z: 0, yaw: 0, speed: 0 });
+function OtherPlayer({ player }: { player: PlayerState }) {
+  // Held in a ref and read inside the frame callback: the player object is
+  // replaced on every network update, and re-creating the callbacks each time
+  // would restart the animator's frame work for no reason.
+  const latest = useRef(player);
+  latest.current = player;
 
-  // Register with centralized frame loop instead of useFrame
-  useEffect(() => {
-    const unregister = frameLoop.register('multiplayer-players', (delta) => {
-      const now = performance.now();
-      const sample = sampleRef.current;
-      mpStats.remotePlayers = playersRefs.current.size;
+  const sample = useRef<SampledTransform>({ x: 0, y: 0, z: 0, yaw: 0, speed: 0 });
 
-      playersRefs.current.forEach((playerData, userId) => {
-        const { mesh, mixer, walkAction, targetPosition, targetRotation } = playerData;
-
-        // TIME-BASED INTERPOLATION. Render ~100 ms in the past and interpolate
-        // between the two transforms that bracket that moment. Replaces the
-        // old per-frame `lerp(target, 0.3)`, which ran at a speed that
-        // depended on the viewer's frame rate and lerped yaw numerically (so
-        // crossing the ±PI seam span the long way round).
-        let isMoving: boolean;
-        if (remotePlayerBuffer.sample(userId, now, sample)) {
-          mesh.position.set(sample.x, sample.y, sample.z);
-          mesh.rotation.y = sample.yaw;
-          // Speed comes from the samples themselves, which is far steadier
-          // than measuring how far a smoothed mesh drifted this frame.
-          isMoving = sample.speed > 0.1;
-        } else {
-          // No network history yet (just joined): sit on the last known state
-          // rather than sliding in from the world origin.
-          mesh.position.copy(targetPosition);
-          mesh.rotation.y = targetRotation;
-          isMoving = false;
-          mpStats.interpStarvations++;
-        }
-
-        // Update animation mixer
-        mixer.update(delta);
-
-        const desiredAction = isMoving ? 'walk' : 'idle';
-        if (desiredAction !== playerData.currentAction) {
-          if (desiredAction === 'walk') {
-            walkAction.reset().fadeIn(0.2).play();
-          } else {
-            walkAction.fadeOut(0.2);
-          }
-          playerData.currentAction = desiredAction;
-        }
-      });
-    }, 55); // Medium-low priority
-    
-    return unregister;
+  const getPosition = useCallback((out: THREE.Vector3) => {
+    const p = latest.current;
+    // sample() writes into the caller-owned object and returns whether it had
+    // anything — it does NOT return the transform. Interpolated when available,
+    // otherwise the raw update.
+    const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
+    const s = sample.current;
+    if (ok) out.set(s.x, s.y - EYE_HEIGHT, s.z);
+    else out.set(p.position.x, p.position.y - EYE_HEIGHT, p.position.z);
   }, []);
-  
+
+  const getYaw = useCallback(() => {
+    const p = latest.current;
+    const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
+    return (ok ? sample.current.yaw : p.rotation.yaw) + Math.PI;
+  }, []);
+
+  const getInput = useCallback((): MoveInput => {
+    const p = latest.current;
+    return {
+      mf: p.mf ?? 0,
+      mr: p.mr ?? 0,
+      run: !!p.run,
+      grounded: p.grounded !== false,
+      vy: p.vy ?? 0,
+      gliding: false,   // not on the wire yet — plan phase 3
+      boosting: false,
+    };
+  }, []);
+
+  const namePos = useMemo<[number, number, number]>(() => [0, NAME_HEIGHT, 0], []);
+
   return (
-    <>
-      {Array.from(players.values()).map((player) => (
-        <OtherPlayer 
-          key={player.userId} 
-          player={player} 
-          fbx={fbx}
-          walkClip={walkClip}
-          playersRefs={playersRefs}
-        />
-      ))}
-    </>
+    <group>
+      <CharacterAvatar
+        character={player.character ?? 'Ash'}
+        getInput={getInput}
+        getPosition={getPosition}
+        getYaw={getYaw}
+      />
+      <NamePlate player={player} offset={namePos} />
+    </group>
   );
 }
 
-function OtherPlayer({ 
-  player, 
-  fbx, 
-  walkClip,
-  playersRefs
-}: { 
-  player: PlayerState; 
-  fbx: THREE.Group;
-  walkClip: THREE.AnimationClip;
-  playersRefs: React.MutableRefObject<Map<string, any>>;
-}) {
-  const meshRef = useRef<THREE.Group>(null);
-  
-  // SkeletonUtils.clone — NOT plain fbx.clone(). A SkinnedMesh's
-  // skeleton has internal references between bones and bind matrices
-  // that the default Object3D.clone() doesn't deep-copy, so the
-  // visible mesh stays bound to the ORIGINAL skeleton. The AnimationMixer
-  // then animates the original (invisible) bones and the rendered
-  // clones never move — they end up rendered as collapsed/invisible
-  // meshes. SkeletonUtils.clone() properly clones skeleton + bind
-  // matrix so each clone animates independently.
-  const avatarClone = useMemo(() => SkeletonUtils.clone(fbx), [fbx]);
+/** The name floats above the player and tracks them each frame. */
+function NamePlate({ player, offset }: { player: PlayerState; offset: [number, number, number] }) {
+  const ref = useRef<THREE.Group>(null);
+  const sample = useRef<SampledTransform>({ x: 0, y: 0, z: 0, yaw: 0, speed: 0 });
+  const latest = useRef(player);
+  latest.current = player;
 
-  // Setup mixer and register with controller
-  useEffect(() => {
-    if (!meshRef.current || !avatarClone) return;
-    
-    const color = player.color || '#ff6b6b';
-    avatarClone.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material) {
-          const material = child.material as THREE.MeshStandardMaterial;
-          material.color.set(color);
-        }
+  React.useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const g = ref.current;
+      if (g) {
+        const p = latest.current;
+        const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
+        const s = sample.current;
+        const x = ok ? s.x : p.position.x;
+        const y = ok ? s.y : p.position.y;
+        const z = ok ? s.z : p.position.z;
+        g.position.set(x + offset[0], y - EYE_HEIGHT + offset[1], z + offset[2]);
       }
-    });
-
-    const mixer = new THREE.AnimationMixer(avatarClone);
-    const walkAction = mixer.clipAction(walkClip);
-    walkAction.play();
-    
-    // Register with controller
-    playersRefs.current.set(player.userId, {
-      mesh: meshRef.current,
-      mixer,
-      walkAction,
-      targetPosition: new THREE.Vector3(player.position.x, player.position.y, player.position.z),
-      targetRotation: player.rotation.yaw,
-      currentAction: 'idle'
-    });
-
-    return () => {
-      mixer.stopAllAction();
-      playersRefs.current.delete(player.userId);
+      raf = requestAnimationFrame(tick);
     };
-  }, [avatarClone, player.userId, player.color, walkClip, playersRefs]);
-  
-  // Update target position/rotation when player state changes
-  useEffect(() => {
-    const playerData = playersRefs.current.get(player.userId);
-    if (playerData) {
-      playerData.targetPosition.set(player.position.x, player.position.y, player.position.z);
-      playerData.targetRotation = player.rotation.yaw;
-    }
-  }, [player.position.x, player.position.y, player.position.z, player.rotation.yaw, player.userId, playersRefs]);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [offset]);
 
   return (
-    <group ref={meshRef} position={[player.position.x, player.position.y, player.position.z]}>
-      {avatarClone && (
-        <primitive 
-          object={avatarClone} 
-          scale={0.01}
-          position={[0, -0.9, 0]}
-        />
-      )}
-
-      <Text
-        position={[0, 1.3, 0]}
-        fontSize={0.15}
-        color="white"
-        anchorX="center"
-        anchorY="bottom"
-        outlineWidth={0.02}
-        outlineColor="black"
-      >
+    <group ref={ref}>
+      <Text fontSize={0.28} color="white" anchorX="center" anchorY="middle"
+            outlineWidth={0.02} outlineColor="black">
         {player.username || 'Player'}
       </Text>
     </group>
@@ -202,14 +121,11 @@ function OtherPlayer({
 
 export function MultiplayerPlayers({ players }: MultiplayerPlayersProps) {
   if (players.size === 0) return null;
-
-  // Removed console.log spam - was causing main thread contention
-
   return (
-    <SharedAssetsLoader>
-      {(assets) => (
-        <PlayersController players={players} fbx={assets.fbx} walkClip={assets.walkClip} />
-      )}
-    </SharedAssetsLoader>
+    <>
+      {Array.from(players.values()).map((p) => (
+        <OtherPlayer key={p.userId} player={p} />
+      ))}
+    </>
   );
 }

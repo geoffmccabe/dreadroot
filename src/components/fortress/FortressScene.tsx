@@ -164,6 +164,7 @@ import { useServerMonsters } from '@/features/enemies/hooks/useServerMonsters';
 import { WebGLContextWatch } from './WebGLContextWatch';
 import { GpuProbe } from '@/features/look/GpuProbe';
 import { markBeginnerDrop } from '@/features/loot/beginnerDropBadges';
+import { DreadrootSelfAvatar } from '@/features/characters/animation/DreadrootSelfAvatar';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -1970,8 +1971,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <FortressBuilderPreview />
       <LightsPreview />
       <FortressPostFX />
-      {/* Local player avatar hidden for now (the visible blue body) — re-enable by flipping this. */}
-      {false && <LocalPlayerAvatar isGunEquipped={crosshairsEnabled} />}
+      {/* YOUR OWN BODY. DreadRoot rendered none at all until now — the old
+          LocalPlayerAvatar sat behind a hard-coded false, so you were a
+          floating camera. This is the new shared animator, and it starts at
+          25% opacity ON PURPOSE: a body pinned to a first-person camera is
+          likely to sit wrong or block the view before it is tuned, and a ghost
+          is easy to see past meanwhile. Adjust live with __avatar.opacity(n). */}
+      {!isSiege && <DreadrootSelfAvatar />}
       {/* FirstPersonArms DISABLED: it renders the y-bot SKINNED mesh, and a skinned
           mesh ignores node scale (its bones drive vertices at native ~180m size), so
           the 0.012 scale didn't shrink it — it showed as the giant blue avatar at the
