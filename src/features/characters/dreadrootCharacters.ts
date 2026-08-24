@@ -145,12 +145,14 @@ export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
     rig: 'root', idleClip: ROOT_IDLE,
     stats: { maxHealth: 3000, reloadSpeedMultiplier: 1.2, damageReduction: 1.2, moveSpeedMultiplier: 1.2, damageMultiplier: 0.8 },
     special: { header: "Locked 'n Loaded", description: 'Increase reserve ammo by 50.' } },
-  // Jeanette's glb is authored ~20x oversized (33.7 units). targetH scales her
-  // to the same 1.7 m as everyone else.
-  { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 33.7349, targetH: STANDARD_H,
+  // Jeanette is authored LYING DOWN and ~100x oversized. Her bind pose measures
+  // X 178 (arm span) x Y 33.7 (body depth) x Z 173 (head to toe) — so 33.7 was
+  // never her height, it was her thickness, which is why scaling by it left her
+  // wrong. rotXDeg stands her up; the preview then measures the rotated box, so
+  // her height reads as the 173 axis and no hand-set scale is needed.
+  { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 173.0249, targetH: STANDARD_H,
     rig: 'root', idleClip: ROOT_IDLE,
-    // Her export is missing the root rotation + scale the others have.
-    rootFix: { rotXDeg: 90, scale: 0.01 },
+    rootFix: { rotXDeg: 90 },
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 },
     special: { header: 'Defenders Might', description: 'Potions heal extra 200HP.' } },
   { name: 'Shi Yang', file: '/siege/characters/shiyang.glb', rawH: 1.9247, targetH: STANDARD_H,

@@ -11,7 +11,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { charGlbUrl } from '@/components/siege/charadmin/characterStats';
 import {
   DREADROOT_CHARACTERS, SW_STAT_SCHEMA, SW_BASELINE, statDelta,
@@ -19,6 +18,7 @@ import {
   type DreadrootCharacter, type SwStats,
 } from './dreadrootCharacters';
 import { useSelectedCharacter, setSelectedCharacter } from './characterSelection';
+import { GamePanel } from '@/components/ui/GamePanel';
 
 
 
@@ -52,39 +52,70 @@ function CharModel({ c }: { c: DreadrootCharacter }) {
   useFrame((_, dt) => { if (root.current) root.current.rotation.y += dt * 0.35; });
 
   /**
-   * Size and stand the model from its ACTUAL rendered bounds, not from a
-   * number in the roster.
+   * Size and stand the model from the bounds the renderer ACTUALLY uses.
    *
-   * The roster's rawH came from reading raw mesh data, which ignores the node
-   * transforms above the mesh — so it was wrong for any model whose exporter
-   * put the scale on the root (Jeanette read as 33.7 units). Measuring the
-   * real world-space box after loading is correct for every character and
-   * needs no per-model number.
+   * THE BUG THIS FIXES, measured rather than guessed. Every pilot model is a
+   * SKINNED mesh sitting under an armature node scaled by 0.01. glTF says a
+   * skinned mesh's own node transform is IGNORED — the mesh is posed by joint
+   * matrices in bind space — and three.js honours that. But Box3.setFromObject
+   * does NOT: it multiplies by matrixWorld like any other object. So measuring
+   * Ash returned 0.0038 units tall when he actually renders at 1.79, and
+   * targetH / 0.0038 scaled him up about 450x. Hence a screen full of boot.
    *
-   * The rotation still has to be declared: a bounding box cannot tell you
-   * whether a character is lying down or simply wide.
+   * So: take a skinned mesh's geometry bounds in BIND SPACE and skip its world
+   * matrix, exactly as the renderer does. Non-skinned children still get their
+   * transform, since for those it is real.
+   *
+   * Doing it from the live geometry rather than a number in the roster also
+   * means a re-exported model needs no bookkeeping — and it is what tells
+   * Jeanette apart, whose bind pose is lying down, so her HEIGHT is her Z
+   * extent (173) and not her Y extent (33.7). Rotating the box before
+   * measuring is what picks the right axis.
    */
   const fitted = useMemo(() => {
     const holder = new THREE.Group();
     if (c.rootFix?.rotXDeg) holder.rotation.x = (c.rootFix.rotXDeg * Math.PI) / 180;
-    if (c.rootFix?.scale) holder.scale.setScalar(c.rootFix.scale);
     holder.add(cloned);
     holder.updateWorldMatrix(true, true);
 
-    const box = new THREE.Box3().setFromObject(holder);
+    const box = new THREE.Box3();
+    const tmp = new THREE.Box3();
+    cloned.updateWorldMatrix(true, true);
+    cloned.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!(m as unknown as { isMesh?: boolean }).isMesh || !m.geometry) return;
+      if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+      const bb = m.geometry.boundingBox;
+      if (!bb) return;
+      tmp.copy(bb);
+      // The one line that matters: a skinned mesh renders in bind space, so
+      // its world matrix must NOT be applied here.
+      if (!(m as unknown as { isSkinnedMesh?: boolean }).isSkinnedMesh) {
+        tmp.applyMatrix4(m.matrixWorld);
+      }
+      box.union(tmp);
+    });
+
+    // Rotate the box the same way the model is rotated, so "height" means the
+    // axis that ends up vertical rather than the one it was authored on.
+    if (c.rootFix?.rotXDeg) {
+      box.applyMatrix4(new THREE.Matrix4().makeRotationX((c.rootFix.rotXDeg * Math.PI) / 180));
+    }
+
     const size = new THREE.Vector3();
     const centre = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(centre);
 
-    // Height is the tallest axis only AFTER the root fix has stood it up.
-    const h = size.y > 1e-6 ? size.y : Math.max(size.x, size.z, 1);
-    const k = c.targetH / h;
+    // Fall back to the roster height if the geometry told us nothing, so a
+    // bad model can never produce another 450x.
+    const h = size.y > 1e-4 ? size.y : c.rawH;
+    const k = c.targetH / (h > 1e-4 ? h : 1);
 
     const outer = new THREE.Group();
     outer.add(holder);
     outer.scale.setScalar(k);
-    // Sit its feet on the origin, then drop by half so it is centred in view.
+    // Feet on the origin, then drop by half so the body is centred in frame.
     holder.position.set(-centre.x, -box.min.y, -centre.z);
     return outer;
   }, [cloned, c]);
@@ -135,90 +166,102 @@ export function CharacterChooserModal({ open, onOpenChange }: { open: boolean; o
   const idx = DREADROOT_CHARACTERS.indexOf(c);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="user-panel-dialog max-w-[880px] w-[92vw] p-0 overflow-hidden">
-        <div className="flex flex-col md:flex-row" style={{ minHeight: 460 }}>
-          {/* LEFT — name above the character, then the character itself */}
-          <div className="md:w-[46%] flex flex-col border-b md:border-b-0 md:border-r"
-               style={{ borderColor: 'var(--hud-border)' }}>
-            <div className="px-5 pt-4 pb-1">
-              <div className="text-3xl font-bold leading-tight">{c.name}</div>
-              <div className="text-xs opacity-70">
-                Opt+Cmd+{idx + 1}
-
-              </div>
-            </div>
-            <div className="flex-1 min-h-[300px]">
-              <Preview c={c} />
-            </div>
+    <GamePanel
+      open={open}
+      onClose={() => onOpenChange(false)}
+      title="Choose Character"
+      defaultWidth={880}
+      defaultHeight={560}
+      minWidth={520}
+      maxWidth={1200}
+      minHeight={380}
+      maxHeight={900}
+      // Down 8% of the viewport so it never lands on the FPS / info readout
+      // that lives at the top of the screen.
+      initialStyle={{ top: '8vh', left: '50%', marginLeft: -440 }}
+      // The shared surface is too dark to read this much text against a bright
+      // 3D world. Lighter here only; the panel theme is untouched elsewhere.
+      surfaceBg="hsla(220 22% 20% / 0.90)"
+    >
+      <div className="flex flex-col md:flex-row h-full">
+        {/* LEFT — name above the character, then the character itself */}
+        <div className="md:w-[46%] flex flex-col border-b md:border-b-0 md:border-r"
+             style={{ borderColor: 'var(--hud-border)' }}>
+          <div className="px-2 pt-1 pb-1">
+            <div className="text-3xl font-bold leading-tight">{c.name}</div>
+            <div className="text-xs opacity-70">Opt+Cmd+{idx + 1}</div>
           </div>
-
-          {/* RIGHT — everything known about the character */}
-          <div className="md:w-[54%] p-5 overflow-y-auto" style={{ maxHeight: '70vh' }}>
-            <div className="text-sm font-semibold mb-2 opacity-80">
-              Stats <span className="font-normal opacity-60">· vs standard</span>
-            </div>
-            <div className="space-y-1.5 mb-5">
-              {SW_STAT_SCHEMA.map((f) => {
-                const v = c.stats[f.key as keyof SwStats];
-                return (
-                  <StatRow
-                    key={f.key}
-                    label={f.label}
-                    value={v}
-                    unit={f.unit}
-                    lowerIsBetter={f.lowerIsBetter}
-                    delta={statDelta(f.key as keyof SwStats, v)}
-                    hint={f.hint}
-                  />
-                );
-              })}
-            </div>
-            <div className="text-xs opacity-70 mb-4 font-mono">
-              Siege Worlds speed: {swSpeeds(c).walk} walk / {swSpeeds(c).run} run m/s
-            </div>
-            {c.statsAreDefault && (
-              <div className="text-xs opacity-60 mb-4">
-                Not in the Siege Worlds balance table yet — showing the server default.
-              </div>
-            )}
-
-            <div className="text-sm font-semibold mb-1 opacity-80">Special Ability</div>
-            {c.special ? (
-              <div className="text-sm mb-5">
-                <div className="font-semibold">{c.special.header}</div>
-                <div className="opacity-80">{c.special.description}</div>
-              </div>
-            ) : (
-              <div className="text-sm opacity-60 mb-5">None defined yet.</div>
-            )}
-
-            <div className="text-xs opacity-60 mb-4 leading-relaxed">
-              Stats are the live Siege Worlds balance values, relative to a 1.0 standard — so 1.2x
-              move speed is 20% faster than normal. Damage Taken multiplies incoming damage, so
-              lower is better.
-            </div>
-
-            <div className="text-sm font-semibold mb-2 opacity-80">Choose Character</div>
-            <div className="grid grid-cols-3 gap-2">
-              {DREADROOT_CHARACTERS.map((x, i) => (
-                <button
-                  key={x.name}
-                  onClick={() => setSelectedCharacter(x.name)}
-                  className="text-sm rounded px-2 py-2 border text-left"
-                  style={{
-                    borderColor: x.name === c.name ? 'hsl(200 85% 55%)' : 'var(--hud-border)',
-                    background: x.name === c.name ? 'hsla(200,85%,55%,0.18)' : 'transparent',
-                  }}
-                >
-                  <div className="font-medium truncate">{x.name}</div>
-                  <div className="text-[10px] opacity-60">⌥⌘{i + 1}</div>
-                </button>
-              ))}
-            </div>
+          <div className="flex-1 min-h-[260px]">
+            <Preview c={c} />
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        {/* RIGHT — everything known about the character */}
+        <div className="md:w-[54%] p-3 overflow-y-auto">
+          <div className="text-sm font-semibold mb-2 opacity-80">
+            Stats <span className="font-normal opacity-60">· vs standard</span>
+          </div>
+          <div className="space-y-1.5 mb-5">
+            {SW_STAT_SCHEMA.map((f) => {
+              const v = c.stats[f.key as keyof SwStats];
+              return (
+                <StatRow
+                  key={f.key}
+                  label={f.label}
+                  value={v}
+                  unit={f.unit}
+                  lowerIsBetter={f.lowerIsBetter}
+                  delta={statDelta(f.key as keyof SwStats, v)}
+                  hint={f.hint}
+                />
+              );
+            })}
+          </div>
+          <div className="text-xs opacity-70 mb-4 font-mono">
+            Siege Worlds speed: {swSpeeds(c).walk} walk / {swSpeeds(c).run} run m/s
+          </div>
+          {c.statsAreDefault && (
+            <div className="text-xs opacity-60 mb-4">
+              Not in the Siege Worlds balance table yet — showing the server default.
+            </div>
+          )}
+
+          <div className="text-sm font-semibold mb-1 opacity-80">Special Ability</div>
+          {c.special ? (
+            <div className="text-sm mb-5">
+              <div className="font-semibold">{c.special.header}</div>
+              <div className="opacity-80">{c.special.description}</div>
+            </div>
+          ) : (
+            <div className="text-sm opacity-60 mb-5">None defined yet.</div>
+          )}
+
+          <div className="text-xs opacity-60 mb-4 leading-relaxed">
+            Stats are the live Siege Worlds balance values, relative to a 1.0 standard — so 1.2x
+            move speed is 20% faster than normal. Damage Taken multiplies incoming damage, so
+            lower is better.
+          </div>
+
+          <div className="text-sm font-semibold mb-2 opacity-80">Choose Character</div>
+          <div className="grid grid-cols-3 gap-2">
+            {DREADROOT_CHARACTERS.map((x, i) => (
+              <button
+                key={x.name}
+                data-no-drag
+                onClick={() => setSelectedCharacter(x.name)}
+                className="text-sm rounded px-2 py-2 border text-left"
+                style={{
+                  borderColor: x.name === c.name ? 'hsl(200 85% 55%)' : 'var(--hud-border)',
+                  background: x.name === c.name ? 'hsla(200,85%,55%,0.18)' : 'transparent',
+                }}
+              >
+                <div className="font-medium truncate">{x.name}</div>
+                <div className="text-[10px] opacity-60">⌥⌘{i + 1}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </GamePanel>
   );
 }

@@ -22,6 +22,10 @@ interface GamePanelProps {
   initialStyle?: CSSProperties;
   /** 'hud' = User/Admin look (default). 'debug' = Siege-Debug dark-green look. */
   variant?: 'hud' | 'debug';
+  /** Override just this panel's background. For content that has to stay
+   *  readable over a busy 3D scene, where the shared surface is too dark.
+   *  Leave unset to follow the panel theme like everything else. */
+  surfaceBg?: string;
 }
 
 // Surface tokens per variant — keeps GamePanel driven by the panel-theme vars.
@@ -42,9 +46,10 @@ export function GamePanel({
   open, onClose, title, children,
   defaultWidth = 380, defaultHeight = 560,
   minWidth = 300, maxWidth = 900, minHeight = 280, maxHeight = 900,
-  initialStyle, variant = 'hud',
+  initialStyle, variant = 'hud', surfaceBg,
 }: GamePanelProps) {
-  const surf = SURFACES[variant];
+  const base = SURFACES[variant];
+  const surf = surfaceBg ? { ...base, bg: surfaceBg } : base;
   const [size, setSize] = useState({ width: defaultWidth, height: defaultHeight });
   const [isResizing, setIsResizing] = useState(false);
   const glow = useGlowPanel();
