@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { MarketplaceListing, MarketplaceFilters, MarketplaceSortOption } from '../types';
 import { SORT_CONFIG, LISTINGS_PER_PAGE } from '../constants';
+import { enrichListings } from './enrichListings';
 
 interface UseMarketplaceDataOptions {
   filters?: MarketplaceFilters;
@@ -117,25 +118,8 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
 
       let newListings = data as MarketplaceListing[];
 
-      // Fetch block definitions for block listings (no FK relationship)
-      const blockListings = newListings.filter(l => l.item_category === 'block' && l.item_type);
-      if (blockListings.length > 0) {
-        const blockKeys = [...new Set(blockListings.map(l => l.item_type!))];
-        const { data: blockDefs } = await supabase
-          .from('blocks')
-          .select('key, name, category, rarity, texture_url')
-          .in('key', blockKeys);
-
-        if (blockDefs) {
-          const blockDefMap = new Map(blockDefs.map(b => [b.key, b]));
-          newListings = newListings.map(l => {
-            if (l.item_category === 'block' && l.item_type && blockDefMap.has(l.item_type)) {
-              return { ...l, block_definition: blockDefMap.get(l.item_type) };
-            }
-            return l;
-          });
-        }
-      }
+      // Pictures and names for every category, from one shared helper.
+      newListings = await enrichListings(newListings);
 
       // Apply text search filter (client-side since it spans multiple fields)
       if (filters.search) {
@@ -150,6 +134,7 @@ export function useMarketplaceData(options: UseMarketplaceDataOptions = {}): Use
           if (l.block_definition?.category?.toLowerCase().includes(searchLower)) return true;
           // Search in seed name
           if (l.seed_definition?.name?.toLowerCase().includes(searchLower)) return true;
+          if (l.item_definition?.name?.toLowerCase().includes(searchLower)) return true;
           // Search in category
           if (l.item_category.toLowerCase().includes(searchLower)) return true;
           // Search in store name

@@ -63,6 +63,17 @@ export interface MarketplaceListing {
     rarity: string;
     texture_url: string | null;
   } | null;
+  /** Weapons and gear (item_category === 'item'). item_number is what resolves
+   *  the shared sprite library, and is the only image source for the ~250 of
+   *  283 items that have no uploaded texture_url of their own. */
+  item_definition?: {
+    id: string;
+    name: string;
+    rarity: string | null;
+    tier: number | null;
+    item_number: number | null;
+    texture_url: string | null;
+  } | null;
 }
 
 export interface MarketplaceTransaction {
@@ -210,7 +221,10 @@ export function getItemDisplayName(listing: MarketplaceListing): string {
     case 'fruit':
       return `Tier ${listing.fruit_tier} Fruit`;
     case 'item':
-      return 'Item'; // TODO: When items table exists
+      // Was hard-coded to the literal string 'Item' behind a "when the items
+      // table exists" note. It has existed all along — every weapon listing
+      // was simply labelled "Item".
+      return listing.item_definition?.name || 'Unknown Item';
     default:
       return 'Unknown Item';
   }
@@ -222,6 +236,8 @@ export function getItemTier(listing: MarketplaceListing): number | null {
       return listing.seed_tier;
     case 'fruit':
       return listing.fruit_tier;
+    case 'item':
+      return listing.item_definition?.tier ?? null;
     default:
       return null;
   }

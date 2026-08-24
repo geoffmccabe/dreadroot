@@ -8,6 +8,7 @@ import { Heart } from 'lucide-react';
 import type { MarketplaceListing } from '../types';
 import { getItemDisplayName, getItemTier, isListingExpiringSoon, formatDivi, formatTimeRemaining } from '../types';
 import { RARITY_COLORS, CATEGORY_LABELS, getFruitTierName } from '../constants';
+import { getItemSpriteUrl } from '@/lib/itemSprite';
 
 interface ListingCardProps {
   listing: MarketplaceListing;
@@ -36,13 +37,26 @@ export function ListingCard({
   const displayName = getItemDisplayName(listing);
   const expiringSoon = isListingExpiringSoon(listing);
 
-  // Get texture URL for icon
+  /**
+   * The image for this listing.
+   *
+   * Items (weapons and gear) were missing entirely: there was no branch for
+   * them here and the query never fetched their definition, so every weapon
+   * listing drew a plain gradient. They also cannot rely on texture_url —
+   * only 33 of 283 items have one — so they must go through the shared sprite
+   * resolver, which falls back to the item_number sprite library that the
+   * inventory and world drops already use. Same picture in the shop as in your
+   * bag, from one source of truth.
+   */
   const getTextureUrl = (): string | null => {
     if (listing.item_category === 'seed' && listing.seed_definition?.trunk_texture_url) {
       return listing.seed_definition.trunk_texture_url;
     }
     if (listing.item_category === 'block' && listing.block_definition?.texture_url) {
       return listing.block_definition.texture_url;
+    }
+    if (listing.item_category === 'item') {
+      return getItemSpriteUrl(listing.item_definition ?? null);
     }
     return null;
   };
@@ -51,7 +65,9 @@ export function ListingCard({
   const getIconBackground = (): string => {
     const textureUrl = getTextureUrl();
     if (textureUrl) {
-      return `url(${textureUrl}) center/cover`;
+      // contain, not cover: item sprites are transparent art on a square
+      // canvas, so cropping them to fill cuts the weapon in half.
+      return `url(${textureUrl}) center/contain no-repeat`;
     }
 
     if (listing.item_category === 'fruit' && tier) {

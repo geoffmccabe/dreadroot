@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { WatchlistItem, MarketplaceListing } from '../types';
+import { enrichListings } from './enrichListings';
 
 interface UseWatchlistReturn {
   watchlist: WatchlistItem[];
@@ -49,7 +50,19 @@ export function useWatchlist(userId: string | null): UseWatchlistReturn {
           item.listing !== null
       );
 
-      setWatchlist(validItems);
+      // The nested listing rows arrive bare — no block, seed or item
+      // definition — so without this a watched listing rendered with neither a
+      // picture nor a name, for every category.
+      // Cast: the generated Supabase types do not describe the marketplace
+      // tables, so a nested select comes back as an error-shaped union. The
+      // rest of this file already works around that the same way.
+      const rows = validItems as unknown as Array<{ listing: MarketplaceListing }>;
+      const enriched = await enrichListings(rows.map(i => i.listing));
+      const byId = new Map(enriched.map(l => [l.id, l]));
+      setWatchlist(rows.map(i => ({
+        ...(i as unknown as WatchlistItem),
+        listing: byId.get(i.listing.id) ?? i.listing,
+      })) as unknown as WatchlistItem[]);
       setError(null);
     } catch (err) {
       console.error('[useWatchlist] Error:', err);
