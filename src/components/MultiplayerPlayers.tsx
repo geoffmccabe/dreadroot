@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text } from '@react-three/drei';
 import { remotePlayerBuffer, type SampledTransform } from '@/features/netcode/transformBuffer';
+import { frameLoop } from '@/lib/frameLoop';
 import { CharacterAvatar } from '@/features/characters/animation/CharacterAvatar';
 import type { MoveInput } from '@/features/characters/animation/movementState';
 
@@ -52,7 +53,10 @@ function OtherPlayer({ player }: { player: PlayerState }) {
   const getYaw = useCallback(() => {
     const p = latest.current;
     const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
-    return (ok ? sample.current.yaw : p.rotation.yaw) + Math.PI;
+    // NO half-turn here. The broadcast yaw is the sender's camera yaw, and the
+    // model's own forward already matches it — the previous renderer set
+    // rotation.y = yaw with no offset. Adding one faced everybody backwards.
+    return ok ? sample.current.yaw : p.rotation.yaw;
   }, []);
 
   const getInput = useCallback((): MoveInput => {
@@ -91,22 +95,17 @@ function NamePlate({ player, offset }: { player: PlayerState; offset: [number, n
   latest.current = player;
 
   React.useEffect(() => {
-    let raf = 0;
-    const tick = () => {
+    return frameLoop.register(`nameplate-${latest.current.userId}`, () => {
       const g = ref.current;
-      if (g) {
-        const p = latest.current;
-        const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
-        const s = sample.current;
-        const x = ok ? s.x : p.position.x;
-        const y = ok ? s.y : p.position.y;
-        const z = ok ? s.z : p.position.z;
-        g.position.set(x + offset[0], y - EYE_HEIGHT + offset[1], z + offset[2]);
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+      if (!g) return;
+      const p = latest.current;
+      const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
+      const s = sample.current;
+      const x = ok ? s.x : p.position.x;
+      const y = ok ? s.y : p.position.y;
+      const z = ok ? s.z : p.position.z;
+      g.position.set(x + offset[0], y - EYE_HEIGHT + offset[1], z + offset[2]);
+    }, 60);   // low priority: a name a frame late is invisible
   }, [offset]);
 
   return (

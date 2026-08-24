@@ -101,6 +101,7 @@ import { getDefaultBulletTier } from '@/lib/bulletScaling';
 // out of the production bundle and the handles would not exist.
 import '@/features/netcode/shadowSession';
 import '@/features/netcode/multiplayerStats';
+import { triggerAction, clearActions, reviveActor } from '@/features/characters/animation/characterActions';
 
 
 // Main Fortress orchestrator component
@@ -639,7 +640,7 @@ export function Fortress() {
       const armed = armedHandsRightFirst();
       if (!armed.length) return false;
       if (handKind(getHandGrenades()[armed[0]]) === 'egg') eggThrowRef.current?.();
-      else grenadeThrowRef.current?.();
+      else { triggerAction('throw'); grenadeThrowRef.current?.(); }
       return true;
     };
 
@@ -695,7 +696,7 @@ export function Fortress() {
     // ── RIFLE: legacy QA flow (grenade only — a rifle fills both hands, so eggs can't apply).
     //    Armed → throw; else arm a QA grenade (stage from INV if needed). ──
     if (leftRifle) {
-      if (grenadeReadySlot !== null) { grenadeThrowRef.current?.(); return; }
+      if (grenadeReadySlot !== null) { triggerAction('throw'); grenadeThrowRef.current?.(); return; }
       const { data: rows } = await supabase.from('user_slots' as any).select('region, slot, item_id').eq('user_id', user.id).in('region', ['inventory', 'quick_select']);
       const allRows = ((rows as any[]) ?? []);
       const qsGren = allRows.filter(r => r.region === 'quick_select' && grenadeDefsRef.current.has(r.item_id)).sort((a, b) => a.slot - b.slot);
@@ -1372,6 +1373,11 @@ export function Fortress() {
     // Siege worlds handle death via SiegeDeathOverlay (no auto-respawn/teleport — keeps the world up).
     if (isDead && respawnTimer === 0 && !isSiegePlayerDead() && getActiveGame() !== 'siege-worlds') {
       setRespawnTimer(3);
+      // Death outranks everything and holds its last frame, so a corpse does
+      // not stand back up. Clear the queue first: a shot fired in the same
+      // frame must not be picked up afterwards.
+      clearActions();
+      triggerAction('death');
       // Big centered death message — same overlay/style as the wave announcements.
       setChallengeState({ announce: { title: 'YOU DIED', subtitle: 'Respawning…', faint: false, until: performance.now() + 3000 } });
     }
@@ -1385,6 +1391,9 @@ export function Fortress() {
       return () => clearTimeout(timer);
     } else if (respawnTimer === 0 && isDead && !isSiegePlayerDead() && getActiveGame() !== 'siege-worlds') {
       respawn();   // restore health
+      // Let go of the death pose — it holds its final frame on purpose, so
+      // without this the body would stay collapsed after respawning.
+      reviveActor();
       // Siege Worlds: respawn back at the Bleakrock start point (not where you died).
       if (getActiveGame() === 'siege-worlds') {
         setRespawnPosition(new THREE.Vector3(...SIEGE_SPAWN_POINT));

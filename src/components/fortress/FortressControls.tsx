@@ -58,6 +58,7 @@ import { getVaultInRange, getMarketInRange } from '@/components/siege/siegeLobby
 import { dlog } from '@/lib/debugLog';
 import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharacters';
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
+import { triggerAction } from '@/features/characters/animation/characterActions';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -611,6 +612,7 @@ export function FirstPersonControls({
         if (showCrosshairs && canReload()) {
           const awR = getActiveWeapon();
           beginReload();
+          triggerAction('reload');
           playSpatialSound(getSoundUrl(awR?.reloadSound ?? 'rifle_reload', '/rifle_reload.mp3'), 0, { baseVolume: 0.5 });
           setTimeout(() => finishReload(), (awR?.reloadTime ?? 2) * 1000);
           break;
@@ -1175,6 +1177,10 @@ export function FirstPersonControls({
     // Safety: cap the tangent offset so a stray/huge DB value can never send a
     // bullet sideways or backwards (~0.3 tan ≈ 17°).
     const MAX_TAN = 0.3;
+
+    // Recoil plays ONCE per trigger pull. Firing it per pellet would queue
+    // eight overlapping recoils for a shotgun.
+    triggerAction('shoot');
 
     if (pellets === 1 && hSpreadPx === 0 && vSpreadPx === 0) {
       onShoot(shootOriginRef.current, shootDirectionRef.current);

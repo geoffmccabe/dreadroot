@@ -143,6 +143,46 @@ export const JUMP_OFFSET: Record<string, number> = {
   'Anim_Rifle_Jump_Up_NoSkin': 0.12,
 };
 
+/**
+ * One-shot ACTION clips per rig.
+ *
+ * A null here is a real gap, not laziness — the clip does not exist for that
+ * skeleton. Notably neither the rifle nor the misc library has a grenade throw
+ * for the Mixamo rig, while the root rig has one baked in; and the root rig has
+ * no landing clip at all.
+ *
+ * 'Fall Over' is NOT used as the root rig's hit reaction. It is a full collapse
+ * and would read as dying every time you were grazed.
+ */
+export type ActionClipSet = Partial<Record<
+  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land', string | null
+>>;
+
+export const MIXAMO_ACTIONS: ActionClipSet = {
+  shoot:  'Anim_Rifle_Firing_NoSkin',
+  reload: 'Anim_Rifle_Reload_Standing_NoSkin',
+  throw:  null,   // no throw clip exists for this rig
+  hit:    'Anim_Hit_Knocked_Backwards_NoSkin',
+  death:  'Anim_Death_Slow_Fall_Back_NoSkin',
+  land:   'Anim_Hit_Falling_To_Landing_NoSkin',
+};
+
+/** Only used when the fall was fast enough to warrant it. */
+export const MIXAMO_HARD_LAND = 'Anim_Hit_Falling_To_Hard_Landing_NoSkin';
+
+export const ROOT_ACTIONS: ActionClipSet = {
+  shoot:  R('3D_Pistol_Shoot'),
+  reload: R('3D_Reload'),
+  throw:  R('3D_ThrowNade'),
+  hit:    null,   // only 'Fall Over' exists, which is a collapse, not a flinch
+  death:  R('dead'),
+  land:   null,
+};
+
+export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {
+  return rig === 'root' ? ROOT_ACTIONS : MIXAMO_ACTIONS;
+}
+
 export function clipSetFor(rig: 'mixamo' | 'root', armed: boolean): { set: ClipSet; name: string } {
   if (rig === 'root') return { set: ROOT_SET, name: 'root' };
   return armed
