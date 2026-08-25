@@ -241,7 +241,7 @@ export function FortressHUD(props: FortressHUDProps) {
     if (allItemIds.length === 0) { setItemDefs(new Map()); return; }
     const { data } = await supabase
       .from('items')
-      .select('id, key, name, item_number, texture_url, tier, stackable, item_category')
+      .select('id, key, name, item_number, texture_url, tier, stackable, item_category, properties')
       .in('id', allItemIds);
     const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null }>();
     // Default stackable=true if the column is missing (older row).
@@ -431,6 +431,7 @@ export function FortressHUD(props: FortressHUDProps) {
         spriteUrl: getSpriteUrl(def),
         nonStackable: nonStack,
         category: (def as any)?.item_category ?? null,
+        hands: Number((def as any)?.properties?.sw?.hands) || null,
         rowId: inv.id,
       });
     }
@@ -586,11 +587,25 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
-    // A double-click now equips directly, so cancel any triple-click tally on
-    // the same tile. Without this a triple-click would equip to the right hand
-    // on the second click and then the old triple-click path would move it to
-    // the left on the third — one gesture, two different outcomes.
-    if (input.doubleClick) invTapRef.current = null;
+    // DOUBLE-CLICK → equip. Routed to the SAME quick-equip the triple-click
+    // path uses, which already does the whole job: grenade to the left hand,
+    // pistol to the right, glove to whichever is free, rifle centred — and if a
+    // two-handed weapon holds the hands, the pistol takes the right hand and
+    // the rifle is evicted back to the slot the pistol came from, leaving the
+    // left hand free. Triple-click was simply undiscoverable.
+    //
+    // The tally is cleared too, or a triple-click would equip on the second
+    // click and then run the whole thing again on the third.
+    if (input.doubleClick) {
+      invTapRef.current = null;
+      const occ = input.occupant;
+      if (occ && (input.location.region === 'inventory' || input.location.region === 'hotbar')) {
+        const region = input.location.region === 'inventory' ? 'inventory' : 'quick_select';
+        const slotNo = input.location.region === 'inventory' ? input.location.gridSlot : input.location.slot;
+        resolveAndEquipRef.current(region, slotNo, occ.itemId);
+        return;
+      }
+    }
     // INVENTORY plain TAP → only counts toward triple-click-to-equip (3rd tap equips to
     // E1). A tap NEVER picks an item up — moving is drag-only — so we ALWAYS return here
     // for a tap, never falling through to the pickup reducer. (Drags carry intent='drag'.)

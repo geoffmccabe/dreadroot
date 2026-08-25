@@ -25,6 +25,9 @@ export interface SlotOccupant {
   /** items.item_category — 'weapon', 'gear', 'boots', 'consumable'… Needed to
    *  decide whether double-clicking something should try to equip it. */
   category?: string | null;
+  /** How many hands the weapon takes, from Siege Worlds' own weaponType.
+   *  2 = both hands (long guns, bats); 1 = anything held in one. */
+  hands?: number | null;
   /** For inventory: the user_inventory row id (each stack is one row).
    *  For hotbar: the user_equipped row id (or the underlying inv row id
    *    that's currently equipped, depending on implementation).
