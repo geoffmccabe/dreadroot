@@ -199,8 +199,38 @@ export async function slotClick(
   }
 
   // ── DOUBLE-CLICK ───────────────────────────────────────────────
-  // Vault tile → send first unit to inventory (preserves legacy UX).
   if (doubleClick) {
+    // Weapon in the bag or the hotbar → straight into a hand.
+    //
+    // Equipping used to require DRAGGING onto the hand slot, which is slow in a
+    // fight and was the only route there: double-click did nothing outside the
+    // vault, and shift-click has no equip path either.
+    //
+    // SWAPS rather than refusing when the hand is full — equipTransfer already
+    // swaps, so whatever was held goes back to the slot the new weapon came
+    // from. That is the behaviour that makes this quick: one action, no
+    // unequip step first.
+    //
+    // Guns and grenades go to the RIGHT hand, gloves to the LEFT, matching the
+    // starter loadout everyone begins with.
+    if (!cursor && occupant && (location.region === 'inventory' || location.region === 'hotbar')) {
+      const cat = (occupant.category ?? '').toLowerCase();
+      const isGlove = /glove/i.test(occupant.name ?? '') || /glove/i.test(occupant.itemKey ?? '');
+      if (cat !== 'weapon') {
+        return { cursorAfter: cursor, status: 'dblclick: not a weapon' };
+      }
+      const target = isGlove ? EQUIP_LEFT_HAND : EQUIP_RIGHT_HAND;
+      const fromSlot = location.region === 'inventory' ? location.gridSlot : location.slot;
+      const ok = await handlers.equipTransfer(
+        { region: regionOf(location), page: 0, slot: fromSlot },
+        { region: 'equip', page: 0, slot: target },
+      );
+      return {
+        cursorAfter: null,
+        status: ok ? `dblclick equipped → ${isGlove ? 'left' : 'right'} hand` : 'dblclick equip FAIL',
+      };
+    }
+    // Vault tile → send first unit to inventory (preserves legacy UX).
     if (!cursor && occupant && location.region === 'vault') {
       const dstSlot = handlers.findFirstEmptyInventorySlot();
       if (dstSlot == null) return { cursorAfter: cursor, status: 'dblclick: inv full' };
@@ -216,6 +246,10 @@ export async function slotClick(
 
   return { cursorAfter: cursor, status: '' };
 }
+
+/** Equip slot numbers. Left is 1, right is 5 — see equipSlotRole in gridModel. */
+const EQUIP_LEFT_HAND = 1;
+const EQUIP_RIGHT_HAND = 5;
 
 // ── Region/slot helpers shared by performDrop and performSwap ─────────
 function regionOf(

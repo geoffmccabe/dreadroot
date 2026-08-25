@@ -22,6 +22,9 @@ export interface SlotOccupant {
   tier: number | null;
   spriteUrl: string | null;
   nonStackable: boolean;
+  /** items.item_category — 'weapon', 'gear', 'boots', 'consumable'… Needed to
+   *  decide whether double-clicking something should try to equip it. */
+  category?: string | null;
   /** For inventory: the user_inventory row id (each stack is one row).
    *  For hotbar: the user_equipped row id (or the underlying inv row id
    *    that's currently equipped, depending on implementation).

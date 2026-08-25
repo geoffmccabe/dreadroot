@@ -52,7 +52,15 @@ interface VaultPanelProps {
   addItem: (itemId: string, quantity: number) => Promise<boolean>;
   removeInventoryRow: (rowId: string) => Promise<boolean>;
   updateEquippedSlot: (slot: number, itemId: string | null) => Promise<void>;
-  preloadedDefs?: Map<string, { id: string; key: string | null; name: string; tier: number | null; item_number: number | null; texture_url: string | null }>;
+  /** `id` is optional and the shape is open-ended: the HUD's def cache is keyed
+   *  BY id, so the value never carried one, and it grows fields (item_category,
+   *  stackable) as other features need them. Requiring an exact shape here just
+   *  breaks the caller every time that map gains a property. */
+  preloadedDefs?: Map<string, {
+    id?: string; key: string | null; name: string;
+    tier: number | null; item_number: number | null; texture_url: string | null;
+    [k: string]: unknown;
+  }>;
   /** Unified slot-click handler from the HUD. Wraps the slotClick
    *  reducer with the full handler bag. Vault tile clicks dispatch
    *  through this so a single state machine handles vault, inventory,

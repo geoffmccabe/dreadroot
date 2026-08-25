@@ -235,15 +235,15 @@ export function FortressHUD(props: FortressHUDProps) {
     return Array.from(ids);
   }, [equippedItems, inventory]);
 
-  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean }>>(new Map());
+  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null }>>(new Map());
 
   const loadItemDefs = useCallback(async () => {
     if (allItemIds.length === 0) { setItemDefs(new Map()); return; }
     const { data } = await supabase
       .from('items')
-      .select('id, key, name, item_number, texture_url, tier, stackable')
+      .select('id, key, name, item_number, texture_url, tier, stackable, item_category')
       .in('id', allItemIds);
-    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean }>();
+    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null }>();
     // Default stackable=true if the column is missing (older row).
     for (const d of data || []) map.set(d.id, { ...d, stackable: d.stackable ?? true });
     setItemDefs(map);
@@ -430,6 +430,7 @@ export function FortressHUD(props: FortressHUDProps) {
         tier: def?.tier ?? null,
         spriteUrl: getSpriteUrl(def),
         nonStackable: nonStack,
+        category: (def as any)?.item_category ?? null,
         rowId: inv.id,
       });
     }
@@ -585,6 +586,11 @@ export function FortressHUD(props: FortressHUDProps) {
   // why a transfer failed (e.g. "transferInvToQs rejected — RPC not
   // deployed") instead of staring at a silently-stuck cursor.
   const handleSlotClick = useCallback(async (input: SlotClickInput) => {
+    // A double-click now equips directly, so cancel any triple-click tally on
+    // the same tile. Without this a triple-click would equip to the right hand
+    // on the second click and then the old triple-click path would move it to
+    // the left on the third — one gesture, two different outcomes.
+    if (input.doubleClick) invTapRef.current = null;
     // INVENTORY plain TAP → only counts toward triple-click-to-equip (3rd tap equips to
     // E1). A tap NEVER picks an item up — moving is drag-only — so we ALWAYS return here
     // for a tap, never falling through to the pickup reducer. (Drags carry intent='drag'.)
@@ -1434,6 +1440,22 @@ export function FortressHUD(props: FortressHUDProps) {
                       document.addEventListener('pointermove', onMove);
                       document.addEventListener('pointerup', onUp);
                       document.addEventListener('pointercancel', onCancel);
+                    }}
+                    onDoubleClick={(e) => {
+                      // Equip straight to a hand. The hotbar tiles are hand-rolled
+                      // pointer handlers rather than the shared SlotGrid, so they
+                      // reported doubleClick:false unconditionally and this never
+                      // reached the click logic at all.
+                      if (!slotOccupant) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSlotClick({
+                        location: { region: 'hotbar', slot: slot.slot },
+                        occupant: slotOccupant,
+                        button: 'left',
+                        shift: e.shiftKey,
+                        doubleClick: true,
+                      });
                     }}
                     onPointerUp={(e) => {
                       // Drop the cursor when it's released over a tile. Read the LIVE cursor
