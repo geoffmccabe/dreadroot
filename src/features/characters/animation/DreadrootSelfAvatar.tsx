@@ -61,9 +61,18 @@ export const DreadrootSelfAvatar: React.FC = () => {
     out.set(playerState.x, playerState.y - EYE_HEIGHT, playerState.z);
   }, []);
 
-  // playerState carries facing as a direction vector, not an angle.
+  /**
+   * Facing. NO extra half-turn.
+   *
+   * These models' forward is +Z, so atan2(fx, fz) ALREADY turns them to face
+   * the look direction — it returns cameraYaw + PI. Adding another PI put the
+   * body back-to-front, which only showed when knockback separated you from it
+   * and you saw your own avatar looking at you. The Siege self-avatar has
+   * always used exactly this line; I should have copied it rather than
+   * re-deriving it.
+   */
   const getYaw = useCallback(
-    () => Math.atan2(playerState.fx, playerState.fz) + Math.PI,
+    () => Math.atan2(playerState.fx, playerState.fz),
     [],
   );
 

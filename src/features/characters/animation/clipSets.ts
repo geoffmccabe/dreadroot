@@ -16,6 +16,7 @@
  * motion and says so ONCE per missing slot, so a gap shows up in the console as
  * a fact rather than as a character freezing with no explanation.
  */
+import * as THREE from 'three';
 import type { MoveState } from './movementState';
 
 export type ClipSet = Record<MoveState, string | null>;
@@ -134,6 +135,41 @@ export function resolveClip(
     console.warn(`[charAnim] ${setName} has nothing for "${state}" and no fallback loaded.`);
   }
   return null;
+}
+
+/**
+ * Make the shared root-rig clips safe to play on Flamma and Jeanette.
+ *
+ * WHY THIS IS NEEDED, from the files themselves. The clips come from Shi Yang,
+ * and his skeleton uses a DIFFERENT BONE AXIS from the models that borrow them:
+ *
+ *   shiyang   Spine_01 rest = [10.39, 0, 0]   bones run along X
+ *   flamma    Spine_01 rest = [0, 10.39, 0]   bones run along Y
+ *   jeanette  Spine_01 rest = [0, 10.39, 0]   bones run along Y
+ *
+ * Same proportions, different convention. The clip animates POSITION for all
+ * 49 bones, so playing it on Flamma drives every bone's offset down the wrong
+ * axis at once and tears the model apart. My earlier attempt only stripped the
+ * Root track, which is why it barely helped: the problem is every bone, not one.
+ *
+ * The fix is the standard one for two rigs that share bone NAMES but not rest
+ * poses — retarget on ROTATION ONLY. Each model then keeps its own bone
+ * offsets, authored for its own axis, and the clip supplies just the joint
+ * angles, which are convention-independent.
+ *
+ * Losing the position tracks also loses root motion, which is what we want:
+ * these are in-place animations and the game's physics owns where the body is.
+ * The Siege self-avatar drops Hips.position from its loose FBX clips for the
+ * same reason.
+ */
+export function prepareRootRigClips(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+  return clips.map((clip) => {
+    const rot = clip.tracks.filter((t) => /\.quaternion$/.test(t.name));
+    if (rot.length === clip.tracks.length) return clip;
+    const c = clip.clone();
+    c.tracks = rot;
+    return c;
+  });
 }
 
 /** Jump clips open with a crouch wind-up; the physics jump is instant, so we

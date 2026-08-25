@@ -53,10 +53,13 @@ function OtherPlayer({ player }: { player: PlayerState }) {
   const getYaw = useCallback(() => {
     const p = latest.current;
     const ok = remotePlayerBuffer.sample(p.userId, performance.now(), sample.current);
-    // NO half-turn here. The broadcast yaw is the sender's camera yaw, and the
-    // model's own forward already matches it — the previous renderer set
-    // rotation.y = yaw with no offset. Adding one faced everybody backwards.
-    return ok ? sample.current.yaw : p.rotation.yaw;
+    // The half-turn DOES belong here. The wire carries the sender's raw camera
+    // yaw, and these models face +Z, so they need cameraYaw + PI to look the
+    // way the player is looking — the same value atan2(fx, fz) produces for the
+    // local body. The previous renderer used no offset because it drew y-bot,
+    // whose forward is the other way round; I took that as the rule and got it
+    // backwards for the real characters.
+    return (ok ? sample.current.yaw : p.rotation.yaw) + Math.PI;
   }, []);
 
   const getInput = useCallback((): MoveInput => {

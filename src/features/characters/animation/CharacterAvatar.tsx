@@ -17,7 +17,7 @@ import {
   AirborneTracker, pickMovementState, type MoveInput, type MoveState,
 } from './movementState';
 import {
-  clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND,
+  clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, prepareRootRigClips,
   RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY,
 } from './clipSets';
 import {
@@ -141,7 +141,10 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
 
   const clips = useMemo(() => (
     c.rig === 'root'
-      ? [...root.animations]
+      // Rotation-only: Shi Yang's clips are authored on an X-axis bone
+      // convention and Flamma/Jeanette use Y, so the position tracks drive
+      // every bone down the wrong axis and shred the model.
+      ? prepareRootRigClips(root.animations)
       : [...rifle.animations, ...loco.animations, ...misc.animations]
   ), [c.rig, root.animations, rifle.animations, loco.animations, misc.animations]);
 
@@ -155,7 +158,9 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
    * the same mixer without one shadowing the other.
    */
   const additiveClips = useMemo(() => {
-    const src = c.rig === 'root' ? root.animations : [...rifle.animations, ...loco.animations, ...misc.animations];
+    const src = c.rig === 'root'
+      ? prepareRootRigClips(root.animations)
+      : [...rifle.animations, ...loco.animations, ...misc.animations];
     const wanted = new Set(
       Object.entries(actionClipSetFor(c.rig))
         .filter(([id, clip]) => clip && ACTION_MODE[id as ActionId] === 'additive')

@@ -19,6 +19,7 @@ import {
 } from './dreadrootCharacters';
 import { useSelectedCharacter, setSelectedCharacter } from './characterSelection';
 import { GamePanel } from '@/components/ui/GamePanel';
+import { prepareRootRigClips } from '@/features/characters/animation/clipSets';
 
 
 
@@ -39,32 +40,29 @@ function CharModel({ c }: { c: DreadrootCharacter }) {
   }, [scene]);
 
   /**
-   * FLAMMA WAS BEING TORN APART by the shared idle, and the file layout says
-   * exactly why:
+   * FLAMMA WAS BEING TORN APART, and the earlier fix here was aimed at the
+   * wrong thing.
    *
-   *   flamma    Root(1) under Armature(0.01)   — Root IS a skin joint
-   *   shiyang   Hips(1) under Root(1) under Player_Export_ShiYang(0.01)
-   *   jeanette  Root(1) under Armature(1)      — Root IS a skin joint
+   * The clips come from Shi Yang, whose skeleton uses a DIFFERENT BONE AXIS
+   * from the models that borrow them — straight from the files:
    *
-   * The clips come from Shi Yang, where 'Root' is a plain node ABOVE the
-   * skeleton: animating its position just slides the whole rig. In Flamma and
-   * Jeanette, 'Root' is a SKINNED JOINT, so the same track deforms every vertex
-   * weighted to it. Flamma's armature is scaled 0.01 exactly like Shi Yang's,
-   * so the track lands at full strength and rips her apart. Jeanette's armature
-   * is scaled 1, so the same values arrive 100x too small to notice — which is
-   * why she looked fine and Flamma did not.
+   *   shiyang   Spine_01 rest = [10.39, 0, 0]   bones run along X
+   *   flamma    Spine_01 rest = [0, 10.39, 0]   bones run along Y
+   *   jeanette  Spine_01 rest = [0, 10.39, 0]   bones run along Y
    *
-   * Dropping position/scale on Root leaves the pose (all rotation) intact. It
-   * also stops root motion walking a character out of frame, which is what you
-   * want in a preview regardless.
+   * Same proportions, different convention — and the clip animates POSITION
+   * for all 49 bones. So every bone gets driven down the wrong axis at once.
+   * Stripping only the Root track, as I did before, fixed 1 bone out of 49,
+   * which is why she still came apart.
+   *
+   * Rotation-only retargeting is the standard answer when two rigs share bone
+   * NAMES but not rest poses: each model keeps its own bone offsets and the
+   * clip supplies just the joint angles, which are convention-independent.
    */
-  const clips = useMemo(() => animations.map((clip) => {
-    const kept = clip.tracks.filter((t) => !/(^|\.)Root\.(position|scale)$/.test(t.name));
-    if (kept.length === clip.tracks.length) return clip;
-    const c2 = clip.clone();
-    c2.tracks = kept;
-    return c2;
-  }), [animations]);
+  const clips = useMemo(
+    () => (c.rig === 'root' ? prepareRootRigClips(animations) : animations),
+    [animations, c.rig],
+  );
 
   const { actions, names } = useAnimations(clips, root);
 
