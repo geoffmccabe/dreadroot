@@ -103,6 +103,11 @@ import '@/features/netcode/shadowSession';
 import '@/features/netcode/multiplayerStats';
 import { triggerAction, clearActions, reviveActor } from '@/features/characters/animation/characterActions';
 
+/** Where a DreadRoot player comes back: the world origin, at standing eye
+ *  height. Matches the initial camera height, so a respawn puts you in the same
+ *  stance a fresh session does. */
+const DREADROOT_RESPAWN_EYE_Y = 1.8;
+
 
 // Main Fortress orchestrator component
 export function Fortress() {
@@ -1394,9 +1399,19 @@ export function Fortress() {
       // Let go of the death pose — it holds its final frame on purpose, so
       // without this the body would stay collapsed after respawning.
       reviveActor();
-      // Siege Worlds: respawn back at the Bleakrock start point (not where you died).
+      // Respawn at the world ORIGIN, not where you died. Dying used to leave
+      // you standing exactly where whatever killed you still is, which usually
+      // meant dying again immediately.
+      //
+      // Y is the standing EYE height rather than a literal 0: the controller
+      // publishes and consumes the camera position, so respawning the eye at
+      // ground level would bury the player's head in the floor. Gravity settles
+      // them onto whatever is actually at the origin from there.
       if (getActiveGame() === 'siege-worlds') {
+        // Siege Worlds keeps its own start point (Bleakrock).
         setRespawnPosition(new THREE.Vector3(...SIEGE_SPAWN_POINT));
+      } else {
+        setRespawnPosition(new THREE.Vector3(0, DREADROOT_RESPAWN_EYE_Y, 0));
       }
 
       // Reset all enemy AI states (clears revenge, stun, etc.)
