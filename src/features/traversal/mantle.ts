@@ -89,7 +89,11 @@ export function tryStartMantle(
     // were standing — half a metre back, in the reported case — and rising
     // straight up from there is literally climbing the air beside the wall.
     // Stop just short of the surface so the body is against it, not inside it.
-    const toFace = Math.max(0, reading.distance - 0.25);
+    // Conservative: never closer than the player's own radius, so the reach
+    // cannot push the body INTO the block. Being inside geometry is how a
+    // collision step launches you upward, which is the opposite of a fix for
+    // "it ends up too high".
+    const toFace = Math.max(0, reading.distance - 0.45);
     const run: MantleRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
@@ -99,7 +103,8 @@ export function tryStartMantle(
       peakY: reading.topY + LIFT_CLEARANCE,
       durationMs: MANTLE_MS,
     };
-    traversalStats.record({ probeKind: probe.kind, reading, move: 'mantle', started: true, refusedBecause: null });
+    traversalStats.record({ probeKind: probe.kind, reading, move: 'mantle', started: true,
+      refusedBecause: null, path: { fromY: run.fromY, peakY: run.peakY, toY: run.toY } });
     return run;
   }
 
@@ -122,7 +127,8 @@ export function tryStartMantle(
       peakY: reading.topY + 0.45,
       durationMs: VAULT_MS,
     };
-    traversalStats.record({ probeKind: probe.kind, reading, move: choice.move, started: true, refusedBecause: null });
+    traversalStats.record({ probeKind: probe.kind, reading, move: choice.move, started: true,
+      refusedBecause: null, path: { fromY: run.fromY, peakY: run.peakY, toY: run.toY } });
     return run;
   }
 
@@ -152,6 +158,7 @@ export function mantlePosition(
   const t = (now - run.startedAt) / run.durationMs;
   if (t >= 1) {
     out.x = run.toX; out.y = run.toY; out.z = run.toZ;
+    traversalStats.finished(run.toY);
     return false;
   }
 
