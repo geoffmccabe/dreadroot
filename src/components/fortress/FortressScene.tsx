@@ -165,6 +165,7 @@ import { WebGLContextWatch } from './WebGLContextWatch';
 import { GpuProbe } from '@/features/look/GpuProbe';
 import { markBeginnerDrop } from '@/features/loot/beginnerDropBadges';
 import { DreadrootSelfAvatar } from '@/features/characters/animation/DreadrootSelfAvatar';
+import { ObstacleProbeInstaller } from '@/features/traversal/ObstacleProbeInstaller';
 
 // Override Three.js fog to use radial distance instead of planar z-depth.
 // Default THREE.Fog uses -mvPosition.z (z-depth from camera plane), which
@@ -1971,6 +1972,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       <FortressBuilderPreview />
       <LightsPreview />
       <FortressPostFX />
+      {/* Traversal probe for THIS world: voxel here, mesh in Siege Worlds.
+          Installing it by game keeps every move written against a measurement
+          rather than against blocks — see src/features/traversal. */}
+      <ObstacleProbeInstaller />
       {/* YOUR OWN BODY. DreadRoot rendered none at all until now — the old
           LocalPlayerAvatar sat behind a hard-coded false, so you were a
           floating camera. This is the new shared animator, and it starts at
