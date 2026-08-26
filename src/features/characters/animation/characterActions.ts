@@ -24,7 +24,7 @@
  * player respawns, so a corpse does not stand back up.
  */
 
-export type ActionId = 'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land';
+export type ActionId = 'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb';
 
 export type ActionMode = 'additive' | 'override';
 
@@ -35,17 +35,20 @@ export const ACTION_MODE: Record<ActionId, ActionMode> = {
   hit: 'override',
   death: 'override',
   land: 'override',
+  // A climb owns the whole body — the legs are doing the work, so an additive
+  // upper-body version would be nonsense.
+  climb: 'override',
 };
 
 /** Actions that hold their final pose instead of releasing back to locomotion. */
 export const ACTION_HOLDS: Record<ActionId, boolean> = {
-  shoot: false, reload: false, throw: false, hit: false, land: false,
+  shoot: false, reload: false, throw: false, hit: false, land: false, climb: false,
   death: true,
 };
 
 /** Higher wins when two actions land in the same frame. */
 export const ACTION_PRIORITY: Record<ActionId, number> = {
-  death: 100, hit: 60, land: 40, throw: 30, reload: 20, shoot: 10,
+  death: 100, hit: 60, climb: 50, land: 40, throw: 30, reload: 20, shoot: 10,
 };
 
 /**

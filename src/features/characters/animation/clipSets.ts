@@ -191,7 +191,7 @@ export const JUMP_OFFSET: Record<string, number> = {
  * and would read as dying every time you were grazed.
  */
 export type ActionClipSet = Partial<Record<
-  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land', string | null
+  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb', string | null
 >>;
 
 export const MIXAMO_ACTIONS: ActionClipSet = {
@@ -201,6 +201,7 @@ export const MIXAMO_ACTIONS: ActionClipSet = {
   hit:    'Anim_Hit_Knocked_Backwards_NoSkin',
   death:  'Anim_Death_Slow_Fall_Back_NoSkin',
   land:   'Anim_Hit_Falling_To_Landing_NoSkin',
+  climb:  'Climbing Up Wall',
 };
 
 /** Only used when the fall was fast enough to warrant it. */
@@ -213,6 +214,7 @@ export const ROOT_ACTIONS: ActionClipSet = {
   hit:    null,   // only 'Fall Over' exists, which is a collapse, not a flinch
   death:  R('dead'),
   land:   null,
+  climb:  null,   // no climb clip on this rig — these three do not mantle
 };
 
 export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {

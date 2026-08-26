@@ -59,6 +59,7 @@ import { dlog } from '@/lib/debugLog';
 import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharacters';
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 import { triggerAction } from '@/features/characters/animation/characterActions';
+import { tryStartMantle, mantlePosition, type MantleRun } from '@/features/traversal/mantle';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -276,6 +277,10 @@ export function FirstPersonControls({
   // (God Mode toggle, Shift+E super-sprint) mid-play.
   const adminEverRef = useRef(false);
   const onGround = useRef(true);
+  /** An in-progress ledge climb. While set, the climb owns the player's
+   *  position and normal movement stands down. */
+  const mantleRef = useRef<MantleRun | null>(null);
+  const mantlePosRef = useRef({ x: 0, y: 0, z: 0 });
   const lastSiegeGround = useRef<{ x: number; z: number; y: number } | null>(null); // prev-frame terrain pos for the slope limit
   const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
@@ -3192,16 +3197,54 @@ export function FirstPersonControls({
         // Reduce horizontal movement in water (60% speed)
         deltaMovement.x *= 0.6;
         deltaMovement.z *= 0.6;
+      } else if (mantleRef.current) {
+        // A CLIMB IS RUNNING and owns the player outright — position is driven
+        // along the climb path and every normal force is suspended. Gravity in
+        // particular would drag the body back down the face it is climbing.
+        const done = !mantlePosition(mantleRef.current, performance.now(), mantlePosRef.current);
+        camera.position.set(
+          mantlePosRef.current.x,
+          mantlePosRef.current.y + playerHeight,
+          mantlePosRef.current.z,
+        );
+        velocity.current.set(0, 0, 0);
+        if (done) {
+          mantleRef.current = null;
+          onGround.current = true;
+          lastGroundedAtRef.current = performance.now();
+        }
+        return;   // skip all movement + collision this frame
       } else {
         // Normal ground-based jump logic. coyoteGrounded (not the raw flag) so a bump/downhill frame
         // never eats the jump — the press reliably jumps instead of being read as an airborne boost.
         const canJump = coyoteGrounded && !keys.current.ctrl;
 
         if (keys.current.space && canJump) {
-          const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump
-          velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
-          onGround.current = false;
-          lastGroundedAtRef.current = 0;   // consume the grace: no mid-air re-jump; a further press boosts
+          // JUMPING AT A LEDGE CLIMBS IT. Checked before the jump rather than
+          // after, because a jump tuned to feel right in the open will not
+          // reliably clear a ledge, and "I jumped and bounced off the wall" is
+          // the exact feeling this is meant to remove. Only when actually
+          // moving forward, so a stationary hop is still just a hop.
+          const wantsForward = keys.current.w && !keys.current.s;
+          if (wantsForward && !mantleRef.current) {
+            const run = tryStartMantle(
+              camera.position.x, camera.position.y - playerHeight, camera.position.z,
+              -Math.sin(yaw.current), -Math.cos(yaw.current),
+              !!keys.current.shift,
+              performance.now(),
+            );
+            if (run) {
+              mantleRef.current = run;
+              triggerAction('climb');
+              velocity.current.y = 0;
+            }
+          }
+          if (!mantleRef.current) {
+            const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump
+            velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
+            onGround.current = false;
+            lastGroundedAtRef.current = 0;   // consume the grace: no mid-air re-jump; a further press boosts
+          }
         }
       }
       // Use moveDt for vertical integration (consistent timestep)
