@@ -43,8 +43,11 @@ const store = {
    */
   back: 0.22,
   eyeTrim: 0,
+  /** Show the body in FIRST person too. Off by default — see the note at the
+   *  render below for why that costs so much. __avatar.on() enables it. */
+  forceFirstPerson: false,
   listeners: new Set<() => void>(),
-  set(patch: Partial<{ opacity: number; enabled: boolean; back: number; eyeTrim: number }>) {
+  set(patch: Partial<{ opacity: number; enabled: boolean; back: number; eyeTrim: number; forceFirstPerson: boolean }>) {
     Object.assign(store, patch);
     store.listeners.forEach((l) => l());
   },
@@ -61,8 +64,13 @@ export const DreadrootSelfAvatar: React.FC = () => {
     const w = window as unknown as { __avatar?: unknown };
     w.__avatar = {
       opacity: (v: number) => store.set({ opacity: Math.max(0, Math.min(1, v)) }),
-      on: () => store.set({ enabled: true }),
-      off: () => store.set({ enabled: false }),
+      /** Force the body visible in FIRST person, for tuning the offsets.
+       *  Expect a heavy frame-rate cost while it is on: the body sits at the
+       *  camera and fills the screen. */
+      on: () => store.set({ enabled: true, forceFirstPerson: true }),
+      off: () => store.set({ forceFirstPerson: false }),
+      /** Hide it everywhere, third person included. */
+      hide: () => store.set({ enabled: false }),
       /** Metres the head sits BEHIND the camera. Bigger = camera further in
        *  front of the face. */
       back: (v: number) => store.set({ back: v }),
@@ -72,6 +80,7 @@ export const DreadrootSelfAvatar: React.FC = () => {
       get: () => ({
         character, opacity: store.opacity, enabled: store.enabled,
         back: store.back, eyeTrim: store.eyeTrim,
+        forceFirstPerson: store.forceFirstPerson,
       }),
     };
     return () => { store.listeners.delete(l); };
@@ -123,9 +132,25 @@ export const DreadrootSelfAvatar: React.FC = () => {
 
   if (!store.enabled) return null;
 
-  // In THIRD person the body is the thing you are looking at, so it goes solid.
-  // The 25% ghost exists only to stop it blocking a first-person view.
   const thirdPerson = tpDist > 0.05;
+
+  /**
+   * HIDDEN IN FIRST PERSON unless explicitly forced on.
+   *
+   * This is what every first-person game does, and skipping it was my mistake.
+   * The 25% ghost was meant to stop the body blocking the view while the camera
+   * offset was tuned — but a translucent SKINNED mesh sitting at the camera
+   * fills the entire screen at zero distance, alpha-blended, with depth writes
+   * off so not one pixel is ever rejected. That is full-screen overdraw on a
+   * frame that was already geometry-bound, and it took the game from ~27fps to
+   * 2. The wrong camera offset and the frame rate collapse were the SAME bug:
+   * being inside the head is what made the head fill the screen.
+   *
+   * Third person is the honest way to look at your own character, and it is
+   * what the parkour testing wanted anyway. __avatar.on() forces it visible in
+   * first person for offset tuning.
+   */
+  if (!thirdPerson && !store.forceFirstPerson) return null;
 
   return (
     <CharacterAvatar
