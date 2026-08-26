@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { playerState } from '@/components/siege/playerState';
 import { useTPDist } from '@/components/siege/siegeThirdPerson';
 import { useSelectedCharacter } from '../characterSelection';
-import { DREADROOT_CHARACTERS, HEAD_BEHIND_CAMERA } from '../dreadrootCharacters';
+import { DREADROOT_CHARACTERS } from '../dreadrootCharacters';
 import { CharacterAvatar } from './CharacterAvatar';
 import type { MoveInput } from './movementState';
 
@@ -25,8 +25,26 @@ const DEFAULT_OPACITY = 0.25;
 const store = {
   opacity: DEFAULT_OPACITY,
   enabled: true,
+  /**
+   * How far BEHIND the camera the head sits, and how far BELOW the camera the
+   * eye line is trimmed. Both live, because these are the numbers I keep
+   * getting wrong by reasoning about them instead of looking at them.
+   *
+   * `back` had to grow when the frame-order fix landed: the body used to be
+   * drawn at last frame's position — i.e. BEHIND you when moving — so part of
+   * the offset was accidental lag. Removing the lag removed that, and the
+   * tuned number was suddenly too small, which put the camera back inside the
+   * face. Tuning it by hand from a fresh guess is how that repeats, so it is
+   * adjustable at runtime instead:
+   *
+   *     __avatar.back(0.3)    push the body further behind the camera
+   *     __avatar.eye(-0.05)   nudge the eye line down (negative) or up
+   *     __avatar.get()        read the current values back to me
+   */
+  back: 0.22,
+  eyeTrim: 0,
   listeners: new Set<() => void>(),
-  set(patch: Partial<{ opacity: number; enabled: boolean }>) {
+  set(patch: Partial<{ opacity: number; enabled: boolean; back: number; eyeTrim: number }>) {
     Object.assign(store, patch);
     store.listeners.forEach((l) => l());
   },
@@ -45,7 +63,16 @@ export const DreadrootSelfAvatar: React.FC = () => {
       opacity: (v: number) => store.set({ opacity: Math.max(0, Math.min(1, v)) }),
       on: () => store.set({ enabled: true }),
       off: () => store.set({ enabled: false }),
-      get: () => ({ opacity: store.opacity, enabled: store.enabled, character }),
+      /** Metres the head sits BEHIND the camera. Bigger = camera further in
+       *  front of the face. */
+      back: (v: number) => store.set({ back: v }),
+      /** Metres to shift the eye line. NEGATIVE lowers the camera relative to
+       *  the head; positive raises it. */
+      eye: (v: number) => store.set({ eyeTrim: v }),
+      get: () => ({
+        character, opacity: store.opacity, enabled: store.enabled,
+        back: store.back, eyeTrim: store.eyeTrim,
+      }),
     };
     return () => { store.listeners.delete(l); };
   }, [character]);
@@ -70,10 +97,12 @@ export const DreadrootSelfAvatar: React.FC = () => {
    */
   const getPosition = useCallback((out: THREE.Vector3) => {
     const c = DREADROOT_CHARACTERS.find((x) => x.name === character) ?? DREADROOT_CHARACTERS[0];
+    // fx/fz point FORWARD, so subtracting moves the body BACK — the camera
+    // ends up in front of the face.
     out.set(
-      playerState.x - playerState.fx * HEAD_BEHIND_CAMERA,
-      playerState.y - c.eyeH,
-      playerState.z - playerState.fz * HEAD_BEHIND_CAMERA,
+      playerState.x - playerState.fx * store.back,
+      playerState.y - (c.eyeH + store.eyeTrim),
+      playerState.z - playerState.fz * store.back,
     );
   }, [character]);
 

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { APP_VERSION } from '@/version';
@@ -42,6 +43,34 @@ function ytApiReady(): Promise<void> {
 // enters the world; otherwise it's the LOGIN gate.
 export default function Auth({ onStart }: { onStart?: () => void }) {
   const { signInWithSSO, signInAsGuest } = useAuth();
+  const navigate = useNavigate();
+  const [guestBusy, setGuestBusy] = useState(false);
+
+  /**
+   * Play without an account.
+   *
+   * NAVIGATES EXPLICITLY on success, and that is the whole fix: the guest sign
+   * in was already working, but nothing moved them off this screen afterwards.
+   * AuthRoute only redirects users who have an EMAIL — deliberately, so a guest
+   * can come back here later to convert — and a guest has none. So the account
+   * was created, the session was live, and the login page just sat there, which
+   * from the outside is indistinguishable from a dead button.
+   *
+   * The busy flag matters too: anonymous sign-in is a network round trip, and
+   * without it an impatient second click creates a SECOND throwaway account and
+   * abandons the first.
+   */
+  const startGuest = async () => {
+    if (guestBusy) return;
+    setGuestBusy(true);
+    try {
+      const { error } = await signInAsGuest();
+      if (!error) navigate('/', { replace: true });
+      else setGuestBusy(false);
+    } catch {
+      setGuestBusy(false);
+    }
+  };
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -204,10 +233,11 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
           {!onStart && (
             <button
               type="button"
-              onClick={() => { void signInAsGuest(); }}
-              className="mt-1 text-sm font-semibold tracking-wide text-white/70 hover:text-white underline underline-offset-4 transition-colors"
+              onClick={() => { void startGuest(); }}
+              disabled={guestBusy}
+              className="mt-1 text-sm font-semibold tracking-wide text-white/70 hover:text-white underline underline-offset-4 transition-colors disabled:opacity-60"
             >
-              PLAY WITHOUT ACCT
+              {guestBusy ? 'STARTING…' : 'PLAY WITHOUT ACCT'}
             </button>
           )}
           {/* Build version, small, right under the button. */}
