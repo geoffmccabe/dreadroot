@@ -60,6 +60,7 @@ import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharac
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 import { triggerAction } from '@/features/characters/animation/characterActions';
 import { tryStartMantle, mantlePosition, type MantleRun } from '@/features/traversal/mantle';
+import { clearBehind } from '@/features/traversal/cameraClearance';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -2060,7 +2061,10 @@ export function FirstPersonControls({
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('keyup', handleKeyUp);
     document.addEventListener('mousemove', stableMouseMoveListener);
-    document.addEventListener('wheel', stableWheelListener);
+    // NOT passive: `wheel` on document defaults to passive in Chrome, which
+    // makes preventDefault a no-op and lets the browser act on the same
+    // gesture the game is using.
+    document.addEventListener('wheel', stableWheelListener, { passive: false });
     document.addEventListener('pointerlockchange', stablePointerLockChangeListener);
     gl.domElement.addEventListener('click', stableClickListener);
     gl.domElement.addEventListener('contextmenu', stableRightClickListener);
@@ -3209,6 +3213,18 @@ export function FirstPersonControls({
           mantlePosRef.current.z,
         );
         velocity.current.set(0, 0, 0);
+        // Apply the third-person offset here as well: this branch returns
+        // before the pull-back at the end of the loop, and snapping to first
+        // person for the duration of a climb would hide the very move the
+        // player zoomed out to watch.
+        if (tpCurrent.current > 0) {
+          tpEye.current.copy(camera.position); tpEyeSet.current = true;
+          tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
+          const safe = clearBehind(camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid);
+          camera.position.addScaledVector(tpFwd.current, -safe);
+          camera.position.y += 0.45 * safe;
+          tpRender.current.copy(camera.position);
+        }
         if (done) {
           const wasVault = mantleRef.current.move !== 'mantle';
           mantleRef.current = null;
@@ -3597,9 +3613,18 @@ export function FirstPersonControls({
       if (tpCurrent.current > 0) {
         tpEye.current.copy(camera.position); tpEyeSet.current = true;
         tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-        camera.position.addScaledVector(tpFwd.current, -tpCurrent.current);
-        camera.position.y += 0.45 * tpCurrent.current;   // raise the camera → character sits LOW in the
-                                                          // frame so it never blocks the centre reticle
+        // CLAMP THE PULL-BACK TO CLEAR SPACE. Siege Worlds is open terrain, so
+        // its camera could always just slide back. DreadRoot is dense blocks —
+        // pulling straight back puts the camera inside a tree and the player
+        // sees the inside of a block, which reads as "third person is broken"
+        // rather than "the camera is in a wall". Walk backwards in small steps
+        // and stop at the last clear one.
+        const safe = clearBehind(
+          camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid,
+        );
+        camera.position.addScaledVector(tpFwd.current, -safe);
+        camera.position.y += 0.45 * safe;   // raise the camera → character sits LOW in the
+                                            // frame so it never blocks the centre reticle
         tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
       } else {
         tpEyeSet.current = false;

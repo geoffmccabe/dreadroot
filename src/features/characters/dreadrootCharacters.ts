@@ -117,14 +117,19 @@ const ROOT_IDLE = 'Root|3D_Pistol_Idle|Animation Base Layer';
  */
 const STANDARD_H = 1.7;   // legacy; per-character targetH below is what is used
 /** Head bone to eye line. The bone sits at the base of the skull. */
-export const EYE_ABOVE_HEAD_BONE = 0.11;
+export const EYE_ABOVE_HEAD_BONE = 0.065;
 /**
- * How far BEHIND the camera the head sits, so you look out from in front of
- * the face instead of from inside the skull. First person with a visible body
+ * How far BEHIND the camera the head sits, so you look out from in front of the
+ * face instead of from inside the skull. First person with a visible body
  * always has this problem; most games solve it by hiding the head, but the
  * whole point of the ghost avatar is to see yourself.
+ *
+ * 0.14 from testing: 0.08 still left the view inside Ash's hat, and Geoff
+ * called for another 6cm forward. Every eyeH below dropped 6cm in the same
+ * pass, because the miss came from one shared estimate of how far the eyes sit
+ * above the head BONE, so it was the same amount wrong for everybody.
  */
-export const HEAD_BEHIND_CAMERA = 0.08;
+export const HEAD_BEHIND_CAMERA = 0.14;
 
 /**
  * Siege Worlds base movement, from FirstPersonController.cs:
@@ -152,25 +157,25 @@ export function swSpeeds(c: { stats: SwStats }): { walk: number; run: number } {
 /** Geoff's chosen order — this IS the Opt+Cmd+1..9 order. */
 export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
   { name: 'Ash', file: '/siege/characters/pilot_ash.glb', rawH: 1.7906, targetH: 1.95,
-    eyeH: 1.72, rig: 'mixamo', idleClip: 'idle_ash',
+    eyeH: 1.66, rig: 'mixamo', idleClip: 'idle_ash',
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 } },
   { name: 'Dago', file: '/siege/characters/pilot_dago.glb', rawH: 1.6946, targetH: 1.85,
-    eyeH: 1.69, rig: 'mixamo', idleClip: 'idle_dago',
+    eyeH: 1.63, rig: 'mixamo', idleClip: 'idle_dago',
     stats: { maxHealth: 3000, reloadSpeedMultiplier: 1.1, damageReduction: 1.0, moveSpeedMultiplier: 1.1, damageMultiplier: 0.95 } },
   { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', rawH: 2.0355, targetH: 2.22,
-    eyeH: 2.06, rig: 'mixamo', idleClip: 'idle_fluffer',
+    eyeH: 2.00, rig: 'mixamo', idleClip: 'idle_fluffer',
     stats: { ...SW_BASELINE }, statsAreDefault: true },
   { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', rawH: 1.7106, targetH: 1.86,
-    eyeH: 1.74, rig: 'mixamo', idleClip: 'idle_jankz',
+    eyeH: 1.68, rig: 'mixamo', idleClip: 'idle_jankz',
     stats: { maxHealth: 1400, reloadSpeedMultiplier: 1.35, damageReduction: 0.9, moveSpeedMultiplier: 1.3, damageMultiplier: 0.85 } },
   { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', rawH: 1.9260, targetH: 2.10,
-    eyeH: 1.97, rig: 'mixamo', idleClip: 'idle_rajax',
+    eyeH: 1.91, rig: 'mixamo', idleClip: 'idle_rajax',
     stats: { ...SW_BASELINE }, statsAreDefault: true },
   { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', rawH: 1.7598, targetH: 1.92,
-    eyeH: 1.80, rig: 'mixamo', idleClip: 'idle_thorn',
+    eyeH: 1.74, rig: 'mixamo', idleClip: 'idle_thorn',
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 } },
   { name: 'Flamma', file: '/siege/characters/flamma.glb', rawH: 1.7943, targetH: 1.95,
-    eyeH: 1.83, rig: 'root', idleClip: ROOT_IDLE,
+    eyeH: 1.77, rig: 'root', idleClip: ROOT_IDLE,
     stats: { maxHealth: 3000, reloadSpeedMultiplier: 1.2, damageReduction: 1.2, moveSpeedMultiplier: 1.2, damageMultiplier: 0.8 },
     special: { header: "Locked 'n Loaded", description: 'Increase reserve ammo by 50.' } },
   // Jeanette is authored LYING DOWN and ~100x oversized. Her bind pose measures
@@ -179,12 +184,12 @@ export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
   // wrong. rotXDeg stands her up; the preview then measures the rotated box, so
   // her height reads as the 173 axis and no hand-set scale is needed.
   { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 173.0249, targetH: 1.75,
-    eyeH: 1.65, rig: 'root', idleClip: ROOT_IDLE,
+    eyeH: 1.59, rig: 'root', idleClip: ROOT_IDLE,
     rootFix: { rotXDeg: 90 },
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 },
     special: { header: 'Defenders Might', description: 'Potions heal extra 200HP.' } },
   { name: 'Shi Yang', file: '/siege/characters/shiyang.glb', rawH: 1.9247, targetH: 2.10,
-    eyeH: 1.80, rig: 'root', idleClip: ROOT_IDLE,
+    eyeH: 1.74, rig: 'root', idleClip: ROOT_IDLE,
     stats: { maxHealth: 1400, reloadSpeedMultiplier: 1.5, damageReduction: 0.9, moveSpeedMultiplier: 1.3, damageMultiplier: 0.8 },
     special: { header: 'Full Metal Jacket', description: 'First shot on enemy deals double damage. (Max +100).' } },
 ];
