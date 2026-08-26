@@ -40,6 +40,9 @@ export interface MantleRun {
   fromX: number; fromY: number; fromZ: number;
   /** Feet position where the move ends. */
   toX: number; toY: number; toZ: number;
+  /** Feet position AT THE WALL FACE, where the rise happens. Climbing from
+   *  wherever you happened to be standing looks like climbing thin air. */
+  faceX: number; faceZ: number;
   /** Which move this is — decides the arc and how long it takes. */
   move: 'mantle' | 'vaultLow' | 'vaultHigh';
   /** How high the body rises above the higher of the two ends, mid-move. A
@@ -82,9 +85,15 @@ export function tryStartMantle(
     // than balanced on its edge, where the next collision step would push them
     // off.
     const over = reading.distance + 0.6;
+    // Hug the face on the way up. The player triggers this from wherever they
+    // were standing — half a metre back, in the reported case — and rising
+    // straight up from there is literally climbing the air beside the wall.
+    // Stop just short of the surface so the body is against it, not inside it.
+    const toFace = Math.max(0, reading.distance - 0.25);
     const run: MantleRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
+      faceX: x + fx * toFace, faceZ: z + fz * toFace,
       toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
       move: 'mantle',
       peakY: reading.topY + LIFT_CLEARANCE,
@@ -103,6 +112,8 @@ export function tryStartMantle(
     const run: MantleRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
+      // A vault is one continuous arc, so it never pauses at the face.
+      faceX: x, faceZ: z,
       toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
       move: choice.move,
       // Clear the obstacle's top by a margin — the body swings over it, and
@@ -145,16 +156,27 @@ export function mantlePosition(
   }
 
   if (run.move === 'mantle') {
-    // Up the face FIRST, then over the top. Doing both at once cuts the corner
-    // and drags the body through the ledge.
-    if (t < 0.55) {
-      const k = t / 0.55;
-      out.x = run.fromX; out.z = run.fromZ;
+    // REACH the wall, RISE against it, then step over the top.
+    //
+    // The rise used to happen at the position the player triggered from, which
+    // could be half a metre back — so the character went straight up through
+    // open air beside the block instead of climbing its face. Closing that gap
+    // first is what makes it read as a climb at all.
+    const REACH_END = 0.18;
+    const RISE_END = 0.62;
+    if (t < REACH_END) {
+      const k = t / REACH_END;
+      out.x = run.fromX + (run.faceX - run.fromX) * k;
+      out.z = run.fromZ + (run.faceZ - run.fromZ) * k;
+      out.y = run.fromY;
+    } else if (t < RISE_END) {
+      const k = (t - REACH_END) / (RISE_END - REACH_END);
+      out.x = run.faceX; out.z = run.faceZ;
       out.y = run.fromY + (run.peakY - run.fromY) * k;
     } else {
-      const k = (t - 0.55) / 0.45;
-      out.x = run.fromX + (run.toX - run.fromX) * k;
-      out.z = run.fromZ + (run.toZ - run.fromZ) * k;
+      const k = (t - RISE_END) / (1 - RISE_END);
+      out.x = run.faceX + (run.toX - run.faceX) * k;
+      out.z = run.faceZ + (run.toZ - run.faceZ) * k;
       out.y = run.peakY + (run.toY - run.peakY) * k;
     }
     return true;

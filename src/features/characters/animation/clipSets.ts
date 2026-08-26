@@ -162,6 +162,31 @@ export function resolveClip(
  * The Siege self-avatar drops Hips.position from its loose FBX clips for the
  * same reason.
  */
+/**
+ * Remove the HEAD bone's scale tracks.
+ *
+ * Collapsing the head bone is how the local first-person body loses its head
+ * without hiding the whole mesh (on most of these models the head, torso and
+ * legs are ONE skinned mesh). That only works if nothing puts the head back —
+ * and every clip in these libraries animates Head.scale: 40 tracks in the
+ * locomotion pack, 22 in the rifle pack, 12 in the misc pack. The mixer was
+ * resetting the head to full size every single frame, which is why it kept
+ * rendering over the view no matter what was assigned.
+ *
+ * Nothing is lost: these are baked constant-scale tracks, an export artefact
+ * rather than animation. Remote players keep their heads, because they simply
+ * never get collapsed.
+ */
+export function stripHeadScaleTracks(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
+  return clips.map((clip) => {
+    const kept = clip.tracks.filter((t) => !/(^|:|_)Head\.scale$/i.test(t.name));
+    if (kept.length === clip.tracks.length) return clip;
+    const c = clip.clone();
+    c.tracks = kept;
+    return c;
+  });
+}
+
 export function prepareRootRigClips(clips: THREE.AnimationClip[]): THREE.AnimationClip[] {
   return clips.map((clip) => {
     const rot = clip.tracks.filter((t) => /\.quaternion$/.test(t.name));

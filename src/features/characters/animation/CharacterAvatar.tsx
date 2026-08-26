@@ -18,7 +18,7 @@ import {
 } from './movementState';
 import {
   clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, MIXAMO_DROP_ROLL,
-  prepareRootRigClips,
+  prepareRootRigClips, stripHeadScaleTracks,
   RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY,
 } from './clipSets';
 import {
@@ -148,7 +148,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     };
   }, [cloned, opacity]);
 
-  const clips = useMemo(() => (
+  const clips = useMemo(() => stripHeadScaleTracks(
     c.rig === 'root'
       // Rotation-only: Shi Yang's clips are authored on an X-axis bone
       // convention and Flamma/Jeanette use Y, so the position tracks drive
