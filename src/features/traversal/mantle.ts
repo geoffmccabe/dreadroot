@@ -27,6 +27,8 @@ const MAX_RISE = 3.5;
 /** Climb duration. Long enough to read as effort, short enough not to feel
  *  like a loss of control. */
 export const MANTLE_MS = 700;
+/** A vault is a single committed movement — faster than pulling yourself up. */
+export const VAULT_MS = 520;
 /** Clearance above the ledge before moving forward, so the feet do not scuff
  *  through the top block on the way over. */
 const LIFT_CLEARANCE = 0.15;
@@ -35,8 +37,14 @@ export interface MantleRun {
   startedAt: number;
   /** Feet position at the start. */
   fromX: number; fromY: number; fromZ: number;
-  /** Feet position on top of the ledge. */
+  /** Feet position where the move ends. */
   toX: number; toY: number; toZ: number;
+  /** Which move this is — decides the arc and how long it takes. */
+  move: 'mantle' | 'vaultLow' | 'vaultHigh';
+  /** How high the body rises above the higher of the two ends, mid-move. A
+   *  vault arcs OVER the obstacle; a mantle only needs to clear its own top. */
+  peakY: number;
+  durationMs: number;
 }
 
 /**
@@ -58,16 +66,43 @@ export function tryStartMantle(
   if (!reading) return null;
 
   const choice = chooseTraversal(reading, running);
-  if (choice.move !== 'mantle' || choice.landY === null) return null;
 
-  // Land just past the near face so the player ends up ON the ledge rather than
-  // balanced on its edge, where the next collision step would push them off.
-  const over = reading.distance + 0.6;
-  return {
-    startedAt: now,
-    fromX: x, fromY: footY, fromZ: z,
-    toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
-  };
+  // ONTO the obstacle.
+  if (choice.move === 'mantle' && choice.landY !== null) {
+    // Land just past the near face so the player ends up ON the ledge rather
+    // than balanced on its edge, where the next collision step would push them
+    // off.
+    const over = reading.distance + 0.6;
+    return {
+      startedAt: now,
+      fromX: x, fromY: footY, fromZ: z,
+      toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
+      move: 'mantle',
+      peakY: reading.topY + LIFT_CLEARANCE,
+      durationMs: MANTLE_MS,
+    };
+  }
+
+  // OVER it, landing on the far side. Refused outright when the probe could not
+  // find far-side ground: vaulting a wall into an unmeasured drop is how a
+  // character ends up inside the world.
+  if ((choice.move === 'vaultLow' || choice.move === 'vaultHigh')
+      && reading.farSideY !== null && Number.isFinite(reading.depth)) {
+    const clear = reading.distance + reading.depth + 0.7;
+    return {
+      startedAt: now,
+      fromX: x, fromY: footY, fromZ: z,
+      toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
+      move: choice.move,
+      // Clear the obstacle's top by a margin — the body swings over it, and
+      // scuffing through the block it is vaulting is the tell that gives a
+      // fake vault away.
+      peakY: reading.topY + 0.45,
+      durationMs: VAULT_MS,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -81,23 +116,36 @@ export function mantlePosition(
   run: MantleRun, now: number,
   out: { x: number; y: number; z: number },
 ): boolean {
-  const t = (now - run.startedAt) / MANTLE_MS;
+  const t = (now - run.startedAt) / run.durationMs;
   if (t >= 1) {
     out.x = run.toX; out.y = run.toY; out.z = run.toZ;
     return false;
   }
-  const peak = run.toY + LIFT_CLEARANCE;
-  if (t < 0.55) {
-    // Up the face, still at the starting footprint.
-    const k = t / 0.55;
-    out.x = run.fromX; out.z = run.fromZ;
-    out.y = run.fromY + (peak - run.fromY) * k;
-  } else {
-    // Over the top.
-    const k = (t - 0.55) / 0.45;
-    out.x = run.fromX + (run.toX - run.fromX) * k;
-    out.z = run.fromZ + (run.toZ - run.fromZ) * k;
-    out.y = peak + (run.toY - peak) * k;
+
+  if (run.move === 'mantle') {
+    // Up the face FIRST, then over the top. Doing both at once cuts the corner
+    // and drags the body through the ledge.
+    if (t < 0.55) {
+      const k = t / 0.55;
+      out.x = run.fromX; out.z = run.fromZ;
+      out.y = run.fromY + (run.peakY - run.fromY) * k;
+    } else {
+      const k = (t - 0.55) / 0.45;
+      out.x = run.fromX + (run.toX - run.fromX) * k;
+      out.z = run.fromZ + (run.toZ - run.fromZ) * k;
+      out.y = run.peakY + (run.toY - run.peakY) * k;
+    }
+    return true;
   }
+
+  // A VAULT is one continuous arc: forward at a steady rate the whole way,
+  // height following a parabola that peaks over the obstacle. Splitting it into
+  // up-then-across would read as climbing, which is the move it is meant to be
+  // faster and more fluid than.
+  out.x = run.fromX + (run.toX - run.fromX) * t;
+  out.z = run.fromZ + (run.toZ - run.fromZ) * t;
+  const ground = run.fromY + (run.toY - run.fromY) * t;
+  const arc = 4 * t * (1 - t);   // 0 at both ends, 1 at the middle
+  out.y = ground + (run.peakY - Math.max(run.fromY, run.toY)) * arc;
   return true;
 }

@@ -22,6 +22,9 @@ import type { ObstacleProbe, ObstacleReading } from './obstacleProbe';
 const STEP = 0.5;
 /** How far above the sampled foot level to look for a ceiling. */
 const CEILING_SCAN = 4;
+/** How far below the player to look for far-side ground before giving up. A
+ *  vault into an unmeasured drop is how a character ends up in a pit. */
+const MAX_DROP = 4;
 
 /** Is the cube containing this point solid? Asked of the movement grid itself. */
 function solidAt(x: number, y: number, z: number): boolean {
@@ -86,6 +89,19 @@ export class VoxelObstacleProbe implements ObstacleProbe {
         far += STEP;
       }
 
+      // Ground on the far side, for vaults. Looked up only when the obstacle
+      // is thin enough to clear — a wall has no far side worth knowing.
+      let farSideY: number | null = null;
+      if (depth <= DEPTH_LIMIT) {
+        const bx = x + fx * (d + depth + 0.5);
+        const bz = z + fz * (d + depth + 0.5);
+        // Search DOWN from the obstacle's top for the first solid surface, so a
+        // vault onto lower ground lands on the ground rather than in mid-air.
+        for (let yy = top; yy >= y - MAX_DROP; yy -= 1) {
+          if (solidAt(bx, yy - 0.5, bz)) { farSideY = yy; break; }
+        }
+      }
+
       return {
         height,
         headroom,
@@ -94,6 +110,7 @@ export class VoxelObstacleProbe implements ObstacleProbe {
         distance: d,
         // Standable when a body could actually fit above the surface.
         standable: headroom >= 1.5,
+        farSideY,
       };
     }
     return null;

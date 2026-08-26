@@ -37,6 +37,10 @@ export interface ObstacleReading {
   /** True when the top is a surface the player could actually stand on, rather
    *  than the underside of something. */
   standable: boolean;
+  /** Ground height on the FAR side, for moves that go over rather than onto.
+   *  Null when the far side was not reachable within the probe's look-ahead —
+   *  vaulting into an unknown drop is how a character ends up in a pit. */
+  farSideY: number | null;
 }
 
 export interface ObstacleProbe {

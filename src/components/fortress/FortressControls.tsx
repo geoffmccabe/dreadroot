@@ -1108,9 +1108,10 @@ export function FirstPersonControls({
 
   const handleWheel = useCallback((event: WheelEvent) => {
     if (!isLocked.current) return;
-    // Alt+wheel = third-person camera zoom (siege only). Wheel down = pull back, up = zoom in to first
-    // person. Handled first so it never fights block/seed cycling.
-    if (isSiege && event.altKey) { event.preventDefault(); nudgeTPDist(event.deltaY > 0 ? 1 : -1); return; }
+    // Alt+wheel = third-person camera zoom, in BOTH games now. Wheel down =
+    // pull back, up = zoom in to first person. Alt rather than plain wheel so
+    // it never fights block/seed cycling, which owns the bare wheel here.
+    if (event.altKey) { event.preventDefault(); nudgeTPDist(event.deltaY > 0 ? 1 : -1); return; }
     if (blockPlacementMode) {
       event.preventDefault();
       onCycleBlock(event.deltaY > 0 ? 'next' : 'prev');
@@ -2143,7 +2144,7 @@ export function FirstPersonControls({
       // Third-person (siege): smoothly track the target pull-back distance, then RESTORE the true eye
       // (undoing last frame's render offset) so all movement/collision/aim below use the real player
       // position. The pull-back is re-applied at the very END of this loop. First-person (0) = no-op.
-      if (isSiege) {
+      {
         // Snap straight to first person when the target is 0 (a map jump / full zoom-in) so the camera
         // never lingers pulled-back inside walls at the new spawn; otherwise ease toward the target.
         if (getTPDist() === 0) tpCurrent.current = 0;
@@ -3209,9 +3210,14 @@ export function FirstPersonControls({
         );
         velocity.current.set(0, 0, 0);
         if (done) {
+          const wasVault = mantleRef.current.move !== 'mantle';
           mantleRef.current = null;
-          onGround.current = true;
-          lastGroundedAtRef.current = performance.now();
+          // A mantle finishes standing on the ledge. A VAULT finishes wherever
+          // the far side was, which may be a drop — so it hands back to the
+          // normal falling code instead of claiming to be on the ground, or
+          // the player would hover after clearing a wall onto lower terrain.
+          onGround.current = !wasVault;
+          if (!wasVault) lastGroundedAtRef.current = performance.now();
         }
         return;   // skip all movement + collision this frame
       } else {
@@ -3235,7 +3241,8 @@ export function FirstPersonControls({
             );
             if (run) {
               mantleRef.current = run;
-              triggerAction('climb');
+              // Climbing onto it and clearing it are different animations.
+              triggerAction(run.move === 'mantle' ? 'climb' : 'vault');
               velocity.current.y = 0;
             }
           }
@@ -3583,18 +3590,18 @@ export function FirstPersonControls({
         siegePlayerPose.boosting = performance.now() < boostFlameUntilRef.current;
       }
 
-      // Third-person RENDER pull-back (siege, zoomed out): everything above used the true eye
+      // Third-person RENDER pull-back (BOTH games now, when zoomed out): everything above used the true eye
       // (movement, collision, aim, multiplayer broadcast, chunk-load); now move ONLY the rendered
       // camera back along the look direction. Saved eye is restored at the top of next frame. When
       // first-person (distance 0) this whole block is skipped → identical to today.
-      if (isSiege && tpCurrent.current > 0) {
+      if (tpCurrent.current > 0) {
         tpEye.current.copy(camera.position); tpEyeSet.current = true;
         tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
         camera.position.addScaledVector(tpFwd.current, -tpCurrent.current);
         camera.position.y += 0.45 * tpCurrent.current;   // raise the camera → character sits LOW in the
                                                           // frame so it never blocks the centre reticle
         tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
-      } else if (isSiege) {
+      } else {
         tpEyeSet.current = false;
       }
     }, 20); // High priority - controls run early

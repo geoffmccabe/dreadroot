@@ -191,7 +191,7 @@ export const JUMP_OFFSET: Record<string, number> = {
  * and would read as dying every time you were grazed.
  */
 export type ActionClipSet = Partial<Record<
-  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb', string | null
+  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb' | 'vault', string | null
 >>;
 
 export const MIXAMO_ACTIONS: ActionClipSet = {
@@ -202,10 +202,16 @@ export const MIXAMO_ACTIONS: ActionClipSet = {
   death:  'Anim_Death_Slow_Fall_Back_NoSkin',
   land:   'Anim_Hit_Falling_To_Landing_NoSkin',
   climb:  'Climbing Up Wall',
+  vault:  'Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object',
 };
 
 /** Only used when the fall was fast enough to warrant it. */
 export const MIXAMO_HARD_LAND = 'Anim_Hit_Falling_To_Hard_Landing_NoSkin';
+/** A hard landing WHILE RUNNING rolls out of it instead of absorbing it on the
+ *  spot. Requires forward momentum — rolling from a standing drop looks silly,
+ *  and the clip carries the body forward, so playing it without matching
+ *  movement would slide the character. */
+export const MIXAMO_DROP_ROLL = 'Anim_Parkour_Jump_Down_To_Roll_NoSkin';
 
 export const ROOT_ACTIONS: ActionClipSet = {
   shoot:  R('3D_Pistol_Shoot'),
@@ -215,6 +221,7 @@ export const ROOT_ACTIONS: ActionClipSet = {
   death:  R('dead'),
   land:   null,
   climb:  null,   // no climb clip on this rig — these three do not mantle
+  vault:  null,   // nor vault
 };
 
 export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {

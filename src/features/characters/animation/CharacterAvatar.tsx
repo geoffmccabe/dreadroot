@@ -17,7 +17,8 @@ import {
   AirborneTracker, pickMovementState, type MoveInput, type MoveState,
 } from './movementState';
 import {
-  clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, prepareRootRigClips,
+  clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, MIXAMO_DROP_ROLL,
+  prepareRootRigClips,
   RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY,
 } from './clipSets';
 import {
@@ -277,7 +278,12 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     if (!input.grounded && input.vy < 0) fallSpeed.current = input.vy;
     if (input.grounded && !wasGrounded.current) {
       const hard = fallSpeed.current < -12;
-      const clip = hard && c.rig !== 'root' ? MIXAMO_HARD_LAND : actionSet.land;
+      // Coming down hard WHILE RUNNING rolls out of it. Needs real forward
+      // momentum: the roll clip carries the body forward, so playing it from a
+      // standing drop would slide the character across the ground.
+      const rolling = hard && input.run && input.mf > 0 && c.rig !== 'root';
+      const clip = rolling ? MIXAMO_DROP_ROLL
+        : (hard && c.rig !== 'root' ? MIXAMO_HARD_LAND : actionSet.land);
       if (clip && actions[clip] && fallSpeed.current < -6) {
         playAction('land', clip, 'override');
       }

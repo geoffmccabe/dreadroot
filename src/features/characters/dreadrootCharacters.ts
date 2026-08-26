@@ -76,6 +76,16 @@ export interface DreadrootCharacter {
    * artist exported it.
    */
   rootFix?: { rotXDeg?: number; scale?: number };
+  /**
+   * Where this character's EYES sit above their feet, after scaling to
+   * targetH. Measured from each model's own Head bone rather than guessed: a
+   * single shared 1.6 put the camera inside Ash's hat, because his head sits
+   * lower in his silhouette than Rajax's does.
+   *
+   * The Head bone is at the base of the skull, so the eyes are a little above
+   * it — EYE_ABOVE_HEAD_BONE covers that.
+   */
+  eyeH: number;
   /** True when the numbers are the server default because the character does
    *  not exist in the Siege Worlds balance table yet. */
   statsAreDefault?: boolean;
@@ -96,7 +106,25 @@ export const MIXAMO_IDLE_LIBRARY = '/siege/characters/character_idles.glb';
 const ROOT_IDLE = 'Root|3D_Pistol_Idle|Animation Base Layer';
 
 /** Everyone stands the same height in-world. */
-const STANDARD_H = 1.7;
+/**
+ * Reference size, from Geoff: ASH is 1.8m to the top of his head and about
+ * 1.95m to the top of his HAT, with his eyes 0.23m below the hat.
+ *
+ * Everyone is scaled by the SAME factor from their real model height rather
+ * than all being forced to one number, so the roster keeps its actual
+ * proportions — Fluffer really is bigger than Dago, and flattening that was
+ * hiding it.
+ */
+const STANDARD_H = 1.7;   // legacy; per-character targetH below is what is used
+/** Head bone to eye line. The bone sits at the base of the skull. */
+export const EYE_ABOVE_HEAD_BONE = 0.11;
+/**
+ * How far BEHIND the camera the head sits, so you look out from in front of
+ * the face instead of from inside the skull. First person with a visible body
+ * always has this problem; most games solve it by hiding the head, but the
+ * whole point of the ghost avatar is to see yourself.
+ */
+export const HEAD_BEHIND_CAMERA = 0.08;
 
 /**
  * Siege Worlds base movement, from FirstPersonController.cs:
@@ -123,26 +151,26 @@ export function swSpeeds(c: { stats: SwStats }): { walk: number; run: number } {
 
 /** Geoff's chosen order — this IS the Opt+Cmd+1..9 order. */
 export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
-  { name: 'Ash', file: '/siege/characters/pilot_ash.glb', rawH: 1.7906, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_ash',
+  { name: 'Ash', file: '/siege/characters/pilot_ash.glb', rawH: 1.7906, targetH: 1.95,
+    eyeH: 1.72, rig: 'mixamo', idleClip: 'idle_ash',
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 } },
-  { name: 'Dago', file: '/siege/characters/pilot_dago.glb', rawH: 1.6946, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_dago',
+  { name: 'Dago', file: '/siege/characters/pilot_dago.glb', rawH: 1.6946, targetH: 1.85,
+    eyeH: 1.69, rig: 'mixamo', idleClip: 'idle_dago',
     stats: { maxHealth: 3000, reloadSpeedMultiplier: 1.1, damageReduction: 1.0, moveSpeedMultiplier: 1.1, damageMultiplier: 0.95 } },
-  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', rawH: 2.0355, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_fluffer',
+  { name: 'Fluffer', file: '/siege/characters/pilot_fluffer.glb', rawH: 2.0355, targetH: 2.22,
+    eyeH: 2.06, rig: 'mixamo', idleClip: 'idle_fluffer',
     stats: { ...SW_BASELINE }, statsAreDefault: true },
-  { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', rawH: 1.7106, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_jankz',
+  { name: 'Jankz', file: '/siege/characters/pilot_jankz.glb', rawH: 1.7106, targetH: 1.86,
+    eyeH: 1.74, rig: 'mixamo', idleClip: 'idle_jankz',
     stats: { maxHealth: 1400, reloadSpeedMultiplier: 1.35, damageReduction: 0.9, moveSpeedMultiplier: 1.3, damageMultiplier: 0.85 } },
-  { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', rawH: 1.9260, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_rajax',
+  { name: 'Rajax', file: '/siege/characters/pilot_rajax.glb', rawH: 1.9260, targetH: 2.10,
+    eyeH: 1.97, rig: 'mixamo', idleClip: 'idle_rajax',
     stats: { ...SW_BASELINE }, statsAreDefault: true },
-  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', rawH: 1.7598, targetH: STANDARD_H,
-    rig: 'mixamo', idleClip: 'idle_thorn',
+  { name: 'Thorn', file: '/siege/characters/pilot_thorn.glb', rawH: 1.7598, targetH: 1.92,
+    eyeH: 1.80, rig: 'mixamo', idleClip: 'idle_thorn',
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 } },
-  { name: 'Flamma', file: '/siege/characters/flamma.glb', rawH: 1.7943, targetH: STANDARD_H,
-    rig: 'root', idleClip: ROOT_IDLE,
+  { name: 'Flamma', file: '/siege/characters/flamma.glb', rawH: 1.7943, targetH: 1.95,
+    eyeH: 1.83, rig: 'root', idleClip: ROOT_IDLE,
     stats: { maxHealth: 3000, reloadSpeedMultiplier: 1.2, damageReduction: 1.2, moveSpeedMultiplier: 1.2, damageMultiplier: 0.8 },
     special: { header: "Locked 'n Loaded", description: 'Increase reserve ammo by 50.' } },
   // Jeanette is authored LYING DOWN and ~100x oversized. Her bind pose measures
@@ -150,13 +178,13 @@ export const DREADROOT_CHARACTERS: DreadrootCharacter[] = [
   // never her height, it was her thickness, which is why scaling by it left her
   // wrong. rotXDeg stands her up; the preview then measures the rotated box, so
   // her height reads as the 173 axis and no hand-set scale is needed.
-  { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 173.0249, targetH: STANDARD_H,
-    rig: 'root', idleClip: ROOT_IDLE,
+  { name: 'Jeanette', file: '/siege/characters/jeanette.glb', rawH: 173.0249, targetH: 1.75,
+    eyeH: 1.65, rig: 'root', idleClip: ROOT_IDLE,
     rootFix: { rotXDeg: 90 },
     stats: { maxHealth: 1500, reloadSpeedMultiplier: 1.3, damageReduction: 0.9, moveSpeedMultiplier: 1.2, damageMultiplier: 0.85 },
     special: { header: 'Defenders Might', description: 'Potions heal extra 200HP.' } },
-  { name: 'Shi Yang', file: '/siege/characters/shiyang.glb', rawH: 1.9247, targetH: STANDARD_H,
-    rig: 'root', idleClip: ROOT_IDLE,
+  { name: 'Shi Yang', file: '/siege/characters/shiyang.glb', rawH: 1.9247, targetH: 2.10,
+    eyeH: 1.80, rig: 'root', idleClip: ROOT_IDLE,
     stats: { maxHealth: 1400, reloadSpeedMultiplier: 1.5, damageReduction: 0.9, moveSpeedMultiplier: 1.3, damageMultiplier: 0.8 },
     special: { header: 'Full Metal Jacket', description: 'First shot on enemy deals double damage. (Max +100).' } },
 ];
