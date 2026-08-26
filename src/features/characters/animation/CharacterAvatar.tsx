@@ -7,7 +7,7 @@
  * remote ones follow the network). This only owns the body and its animation.
  */
 import React, { useEffect, useMemo, useRef } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { frameLoop } from '@/lib/frameLoop';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
@@ -248,7 +248,19 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     else overrideUntil.current = performance.now() + dur;
   };
 
-  useFrame(() => {
+  /**
+   * Driven from the SHARED frame loop at a priority AFTER the controls, not
+   * from useFrame.
+   *
+   * WHY: the controls publish the player's position and facing once per frame,
+   * and R3F gave no guarantee this ran after them — so the body was drawing
+   * last frame's pose. At walking speed that lag is invisible. At a run it is
+   * around 13cm at 30fps, which is more than the 14cm the head sits behind the
+   * camera, so the camera ended up back inside the head exactly when holding
+   * shift. Same for a fast turn. Ordering it after the controls removes the
+   * lag rather than compensating for it.
+   */
+  useEffect(() => frameLoop.register(`avatar-${actor}`, () => {
     const g = group.current;
     if (!g) return;
 
@@ -325,7 +337,10 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     next.timeScale = 1;
     next.fadeIn(fade).play();
     current.current = want;
-  });
+  }, 40),
+  // Re-registered when any of these change: the callback closes over them, and
+  // a stale closure here means the body keeps animating the PREVIOUS character.
+  [actor, actions, available, actionSet, armed, c, getInput, getPosition, getYaw]);
 
   return (
     <group ref={group} visible={visible}>

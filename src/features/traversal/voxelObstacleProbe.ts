@@ -43,13 +43,22 @@ function solidAt(x: number, y: number, z: number): boolean {
 /** Height of the top solid surface in this column, searching up from the feet.
  *  Returns null when the column is clear at every level checked. */
 function columnTop(x: number, z: number, footY: number, maxRise: number): number | null {
-  let top: number | null = null;
   // Sample cube CENTRES: a point exactly on a block boundary belongs to both
   // neighbours and reads inconsistently.
+  //
+  // THE FIRST STANDABLE SURFACE, not the highest block. The previous version
+  // kept overwriting as it scanned upward and returned the TOP of the whole
+  // stack within reach, so climbing a wall of blocks targeted a point two or
+  // three blocks above the ledge you were standing at — the player rose far
+  // too high, and the climb took correspondingly too long. A surface only
+  // counts if the space directly above it is clear, or the "ledge" is just a
+  // block with more wall on top of it.
   for (let h = 0.5; h <= maxRise + 0.5; h += 1) {
-    if (solidAt(x, footY + h, z)) top = Math.floor(footY + h) + 1;
+    if (!solidAt(x, footY + h, z)) continue;
+    const surface = Math.floor(footY + h) + 1;
+    if (!solidAt(x, surface + 0.5, z)) return surface;
   }
-  return top;
+  return null;
 }
 
 export class VoxelObstacleProbe implements ObstacleProbe {

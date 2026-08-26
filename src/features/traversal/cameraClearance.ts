@@ -18,6 +18,9 @@ import * as THREE from 'three';
  *  near plane clips into the surface it is resting against. */
 const SKIN = 0.25;
 const STEP = 0.2;
+/** Must match the rise the caller applies, or this tests a different point
+ *  from the one the camera actually lands on. */
+export const TP_RISE = 0.30;
 
 interface Grid {
   getNearbyFiltered(x: number, z: number, radius: number, minY: number, maxY: number): number;
@@ -50,7 +53,7 @@ export function clearBehind(
     // Match the pull-back's own rise, or the check tests a different point
     // from the one the camera lands on.
     const x = eye.x - forward.x * d;
-    const y = eye.y - forward.y * d + 0.45 * d;
+    const y = eye.y - forward.y * d + TP_RISE * d;
     const z = eye.z - forward.z * d;
     if (occupied(grid, x, y, z)) return Math.max(0, last - SKIN);
     last = d;

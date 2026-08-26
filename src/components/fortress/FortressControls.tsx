@@ -60,7 +60,7 @@ import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharac
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 import { triggerAction } from '@/features/characters/animation/characterActions';
 import { tryStartMantle, mantlePosition, type MantleRun } from '@/features/traversal/mantle';
-import { clearBehind } from '@/features/traversal/cameraClearance';
+import { clearBehind, TP_RISE } from '@/features/traversal/cameraClearance';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -3222,7 +3222,7 @@ export function FirstPersonControls({
           tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
           const safe = clearBehind(camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid);
           camera.position.addScaledVector(tpFwd.current, -safe);
-          camera.position.y += 0.45 * safe;
+          camera.position.y += TP_RISE * safe;
           tpRender.current.copy(camera.position);
         }
         if (done) {
@@ -3623,8 +3623,8 @@ export function FirstPersonControls({
           camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid,
         );
         camera.position.addScaledVector(tpFwd.current, -safe);
-        camera.position.y += 0.45 * safe;   // raise the camera → character sits LOW in the
-                                            // frame so it never blocks the centre reticle
+        camera.position.y += TP_RISE * safe;   // raise the camera so the character sits
+                                               // low in frame, clear of the reticle
         tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
       } else {
         tpEyeSet.current = false;
