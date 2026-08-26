@@ -1,6 +1,6 @@
 # Character Animation — Phased Plan
 
-Status: proposed, 2026-Aug-24. Nothing here is built yet.
+Status: phases 0-4 DONE (2026-Aug-25). Phases 5-7 remain.
 
 ## The situation this plan starts from
 
@@ -206,6 +206,86 @@ and what we defer, with the licence and provenance of anything proposed.
 
 ---
 
+### RESULT 2026-Aug-25 — recommendation
+
+**Adopt nothing wholesale. Adopt one pattern. Skip motion warping entirely.**
+
+#### 1. `pmndrs/ecctrl` — evaluated, do NOT adopt
+
+Checked against its own repository rather than assumed:
+
+- **It has no traversal at all.** Vaulting, mantling, wall-climb and swimming
+  are on its roadmap, not in it. The thing we wanted it for does not exist.
+- **Its animation states are a SUBSET of what we already shipped in phase 1.**
+  It has seven — idle, walk, run, jump start, jump idle, jump fall, jump land.
+  We have eleven movement states plus six actions, armed and unarmed variants,
+  and two rigs. Swapping to it would be a downgrade.
+- **It requires Rapier as a peer dependency.** DreadRoot has its own voxel
+  physics. Taking on a physics engine we do not use, to gain nothing, is the
+  clearest possible no.
+
+MIT licensed, well maintained, genuinely good — and simply not for this.
+
+#### 2. The pattern worth taking: ONE probe, many moves
+
+The consistent finding across engine implementations is that climb, vault,
+jump-over and slide-under are not separate systems. They share **one ledge
+detector**, and only the chosen animation differs. Build the probe once, and
+each new move is a threshold plus a clip rather than a new subsystem.
+
+So the shape is: probe returns a measurement, a small table maps the
+measurement to a move, and the existing action layer plays it. That table is
+the whole of the "parkour system" — everything else already exists.
+
+#### 3. MOTION WARPING IS NOT NEEDED HERE, and this is the finding that matters
+
+Warping exists because ledge heights in a normal game are arbitrary: a mantle
+authored for a 1.2m ledge looks broken on a 0.9m or a 1.5m one, so the clip's
+root motion has to be stretched to fit at runtime. It is the hardest part of
+any traversal system and the part most home-grown attempts get wrong.
+
+**A voxel world does not have that problem.** Obstacles are whole blocks, so
+there are only ever a handful of heights — 1 block, 2 blocks, 3 blocks. Not a
+continuum. And the clips we already own were authored at exactly that
+granularity:
+
+    Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object      1 block
+    Anim_Parkour_Side_Jump_Over_1m_Object             1 block
+    Anim_Parkour_SideFlip_Jump_Over_1m_Object         1 block
+    Anim_Parkour_Run_To_Dive_Over_2m_Object           2 blocks
+    Anim_Parkour_Run_To_Backslide_Under_1m_Object     1 block of headroom
+    Climbing Up Wall                                  mantle
+    Anim_Parkour_Jump_Down_To_Roll                    any drop
+
+One DreadRoot block is one unit and the player's eye sits at 1.6-1.8, so a
+"1m object" clip fits a one-block obstacle as authored. **The animator's
+assumptions and the world's geometry already agree.** Match the clip to the
+block count and it lands correctly with no runtime adjustment at all.
+
+That removes the single largest and riskiest piece of work in this phase.
+
+Deferred honestly, not ignored: IK foot and hand planting would still improve
+contact on partial-block surfaces (slabs, stairs) if those ever exist. Nothing
+in DreadRoot has them today.
+
+#### 4. What we must write ourselves — and it is small
+
+The probe, because it reads voxel columns rather than arbitrary colliders. In a
+voxel world that is not a physics query at all: sample the column directly
+ahead of the player and read the height of the top solid block, then the
+headroom above it. Two lookups against the chunk data we already hold in
+memory, no raycasts.
+
+That is the part nobody else's library could have given us anyway, and it is
+easier here than in the general case.
+
+#### 5. Recommended build order for phase 5
+
+Unchanged from the plan, and now justified: mantle first. It is the most
+useful in a world made of stacked blocks, `Climbing Up Wall` already exists and
+is already mapped in the slot table, and it exercises the probe end to end —
+so the second move costs a threshold and a clip, not a rewrite.
+
 ## Phase 5 — Traversal implementation
 
 Built to whatever Phase 4 concluded. Expected order, easiest and most valuable
@@ -255,16 +335,16 @@ walking beyond the four directions already added.
 
 ## Sequencing summary
 
-| Phase | Nature | Depends on |
-|---|---|---|
-| 0 Visible characters | wiring | — |
-| 1 One state machine, two sets | port | 0 |
-| 2 Combat states | small spike + build | 1 |
-| 3 Network the state | netcode | 1, CDO wire format |
-| 4 Traversal research | **research only** | 1 |
-| 5 Traversal build | build | 4 |
-| 6 Melee, crawl, emotes | wiring + design | 2 |
-| 7 Root-rig decision | decision | 5 |
+| Phase | Nature | Depends on | Status |
+|---|---|---|---|
+| 0 Visible characters | wiring | — | DONE 4.352.22
+| 1 One state machine, two sets | port | 0 | DONE 4.352.22
+| 2 Combat states | small spike + build | 1 | DONE 4.352.23
+| 3 Network the state | netcode | 1, CDO wire format | DONE 4.352.24
+| 4 Traversal research | **research only** | 1 | DONE 2026-Aug-25
+| 5 Traversal build | build | 4 | next
+| 6 Melee, crawl, emotes | wiring + design | 2 | todo
+| 7 Root-rig decision | decision | 5 | todo
 
 Phases 0-2 are the ones that change how the game looks and feels. 4 is the one
 that saves the most wasted effort.
