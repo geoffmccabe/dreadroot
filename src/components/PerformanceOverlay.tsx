@@ -8,6 +8,7 @@ import { charAnimExport, charAnimLine } from '@/components/siege/charAnimDebug';
 import { useDraggablePanel } from '@/components/siege/useDraggablePanel';
 import { mpStats } from '@/features/netcode/multiplayerStats';
 import { gpuVerdict } from '@/features/look/GpuProbe';
+import { traversalStats } from '@/features/traversal/traversalStats';
 
 interface PerformanceData {
   fps: number;
@@ -378,6 +379,7 @@ CHUNK RENDERING
     text += `
 
 ${mpStats.report()}
+${traversalStats.report()}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CHUNK PIPELINE (current)

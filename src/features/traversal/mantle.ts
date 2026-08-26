@@ -19,6 +19,7 @@
  */
 import { getObstacleProbe } from './obstacleProbe';
 import { chooseTraversal } from './traversalMoves';
+import { traversalStats } from './traversalStats';
 
 /** How far ahead a ledge counts as reachable. */
 const REACH = 1.1;
@@ -60,10 +61,18 @@ export function tryStartMantle(
   now: number,
 ): MantleRun | null {
   const probe = getObstacleProbe();
-  if (!probe) return null;                    // world has no probe — do nothing
+  if (!probe) {
+    traversalStats.record({ probeKind: 'none', reading: null, move: null, started: false,
+      refusedBecause: 'this world has no obstacle probe installed' });
+    return null;
+  }
 
   const reading = probe.probe(x, footY, z, fx, fz, REACH, MAX_RISE);
-  if (!reading) return null;
+  if (!reading) {
+    traversalStats.record({ probeKind: probe.kind, reading: null, move: null, started: false,
+      refusedBecause: 'nothing within reach' });
+    return null;
+  }
 
   const choice = chooseTraversal(reading, running);
 
@@ -73,7 +82,7 @@ export function tryStartMantle(
     // than balanced on its edge, where the next collision step would push them
     // off.
     const over = reading.distance + 0.6;
-    return {
+    const run: MantleRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
@@ -81,6 +90,8 @@ export function tryStartMantle(
       peakY: reading.topY + LIFT_CLEARANCE,
       durationMs: MANTLE_MS,
     };
+    traversalStats.record({ probeKind: probe.kind, reading, move: 'mantle', started: true, refusedBecause: null });
+    return run;
   }
 
   // OVER it, landing on the far side. Refused outright when the probe could not
@@ -89,7 +100,7 @@ export function tryStartMantle(
   if ((choice.move === 'vaultLow' || choice.move === 'vaultHigh')
       && reading.farSideY !== null && Number.isFinite(reading.depth)) {
     const clear = reading.distance + reading.depth + 0.7;
-    return {
+    const run: MantleRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
@@ -100,8 +111,19 @@ export function tryStartMantle(
       peakY: reading.topY + 0.45,
       durationMs: VAULT_MS,
     };
+    traversalStats.record({ probeKind: probe.kind, reading, move: choice.move, started: true, refusedBecause: null });
+    return run;
   }
 
+  traversalStats.record({
+    probeKind: probe.kind, reading, move: choice.move, started: false,
+    refusedBecause:
+      choice.move === 'stepUp' ? 'low enough to just walk over'
+      : choice.move === 'blocked' ? 'too tall, or not moving fast enough'
+      : (choice.move === 'vaultLow' || choice.move === 'vaultHigh')
+        ? 'no measurable ground on the far side — refused rather than vault into a drop'
+      : `no path built for "${choice.move}" yet`,
+  });
   return null;
 }
 
