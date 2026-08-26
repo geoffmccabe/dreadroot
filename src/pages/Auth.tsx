@@ -42,7 +42,8 @@ function ytApiReady(): Promise<void> {
 // player, world initializing in the background), the button reads START GAME and
 // enters the world; otherwise it's the LOGIN gate.
 export default function Auth({ onStart }: { onStart?: () => void }) {
-  const { signInWithSSO, signInAsGuest } = useAuth();
+  const { signInWithSSO, signInAsGuest, user } = useAuth();
+  const isGuest = user?.is_anonymous === true;
   const navigate = useNavigate();
   const [guestBusy, setGuestBusy] = useState(false);
 
@@ -231,6 +232,19 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
           >
             {onStart ? 'START GAME' : 'LOGIN'}
           </Button>
+          {/* Playing as a guest: offer the way OUT. Signing in converts the
+              account and carries the progress over — and without this a guest
+              session, which persists across visits, leaves the player looking
+              at START GAME forever with no route to a real account. */}
+          {onStart && isGuest && (
+            <button
+              type="button"
+              onClick={signInWithSSO}
+              className="mt-1 text-sm font-semibold tracking-wide text-white/70 hover:text-white underline underline-offset-4 transition-colors"
+            >
+              SIGN IN TO SAVE YOUR PROGRESS
+            </button>
+          )}
           {/* Guest entry. Only on the LOGIN gate — once you are in, the
               button above is START GAME and this would make no sense. */}
           {!onStart && (

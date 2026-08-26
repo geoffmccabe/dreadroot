@@ -34,13 +34,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [started, setStarted] = useState(false);
   const isGuest = user?.is_anonymous === true;
 
-  // Guests never see START GAME, so nothing else would ever flip this — and
-  // the loading overlay is gated on it. Without this a guest would stare at a
-  // blank screen with no sign the world was streaming in.
-  useEffect(() => {
-    if (isGuest) { setGameStarted(true); setStarted(true); }
-  }, [isGuest, setGameStarted]);
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -61,10 +54,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Logged in: show the homescreen with START GAME until the player clicks it.
   // Flip gameStarted too, so the init overlay only appears after START (it may
   // have been initializing in the background meanwhile).
-  // Guests just clicked PLAY WITHOUT ACCT, which IS the start action — making
-  // them click START GAME straight after would be a second gate for the group
-  // we are trying to get in fastest.
-  if (!started && !isGuest) {
+  //
+  // GUESTS SEE THIS TOO. They used to skip it, on the reasoning that clicking
+  // PLAY WITHOUT ACCT already IS the start action — but a guest session
+  // PERSISTS, so from the second visit onward that skipped the branded screen
+  // on every single load and dropped straight into the world with no way back
+  // to sign in. The fast path belongs to the button that was just pressed, not
+  // to the account type forever; the button navigates on its own.
+  if (!started) {
     return <Auth onStart={() => { setGameStarted(true); setStarted(true); }} />;
   }
 
