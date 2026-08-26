@@ -148,6 +148,21 @@ export const DreadrootSelfAvatar: React.FC = () => {
    */
   if (!store.enabled) return null;
 
+  /**
+   * NOT DRAWN IN FIRST PERSON. One line, and it is the only change here.
+   *
+   * The headless version needs the head BONE collapsed, and every clip in these
+   * libraries animates Head.scale — so the mixer restores the head every frame
+   * and it ends up filling the view. Stripping those tracks is the real fix and
+   * it is going to be re-landed on its own and actually loaded before pushing,
+   * because the last attempt shipped on a green typecheck and white-screened.
+   *
+   * Until then this is the version that is KNOWN to work: your body simply is
+   * not drawn while you are looking through its eyes. Third person (Alt+wheel)
+   * still shows the whole character, which is what watching parkour needs.
+   */
+  if (!thirdPerson) return null;
+
   return (
     <CharacterAvatar
       character={character}
