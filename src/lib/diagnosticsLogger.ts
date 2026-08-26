@@ -524,7 +524,12 @@ class DiagnosticsLogger {
   captureSceneGeometry(scene: THREE.Scene | null | undefined): void {
     if (!this.enabled || !scene) return;
     const now = performance.now();
-    if (now - this.lastGeoScanMs < 1000) return;
+    // First scan runs IMMEDIATELY, then once a second. Waiting a full second
+    // for the first one meant a short recording came back with this section
+    // missing entirely — which is exactly the case where you most want to know
+    // what is on screen, and it made a report look like the feature was not
+    // there rather than not yet run.
+    if (this.lastGeoScanMs !== 0 && now - this.lastGeoScanMs < 1000) return;
     this.lastGeoScanMs = now;
 
     const buckets = new Map<string, { tris: number; draws: number; instances: number }>();
