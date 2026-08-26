@@ -130,27 +130,23 @@ export const DreadrootSelfAvatar: React.FC = () => {
     [],
   );
 
-  if (!store.enabled) return null;
-
   const thirdPerson = tpDist > 0.05;
 
   /**
-   * HIDDEN IN FIRST PERSON unless explicitly forced on.
+   * YOUR OWN BODY, with the HEAD REMOVED in first person.
    *
-   * This is what every first-person game does, and skipping it was my mistake.
-   * The 25% ghost was meant to stop the body blocking the view while the camera
-   * offset was tuned — but a translucent SKINNED mesh sitting at the camera
-   * fills the entire screen at zero distance, alpha-blended, with depth writes
-   * off so not one pixel is ever rejected. That is full-screen overdraw on a
-   * frame that was already geometry-bound, and it took the game from ~27fps to
-   * 2. The wrong camera offset and the frame rate collapse were the SAME bug:
-   * being inside the head is what made the head fill the screen.
+   * You can never see your own head, so drawing it only ever caused harm: it
+   * sat at the camera, filled the entire viewport at zero distance, and — while
+   * it was translucent to "stay out of the way" — alpha-blended every pixel of
+   * the screen with depth writes off. That took the game from ~27fps to 2. The
+   * camera being inside the face and the frame rate collapsing were one bug.
    *
-   * Third person is the honest way to look at your own character, and it is
-   * what the parkour testing wanted anyway. __avatar.on() forces it visible in
-   * first person for offset tuning.
+   * Collapsing the head instead of hiding the whole body means the parts you
+   * CAN legitimately see — arms, torso, legs, the weapon in your hands — stay
+   * visible, and it needs no transparency at all. Solid materials, no
+   * overdraw, and nothing to tune.
    */
-  if (!thirdPerson && !store.forceFirstPerson) return null;
+  if (!store.enabled) return null;
 
   return (
     <CharacterAvatar
@@ -158,7 +154,8 @@ export const DreadrootSelfAvatar: React.FC = () => {
       getInput={getInput}
       getPosition={getPosition}
       getYaw={getYaw}
-      opacity={thirdPerson ? 1 : store.opacity}
+      hideHead={!thirdPerson}
+      opacity={1}
       armed={playerState.gun}
     />
   );

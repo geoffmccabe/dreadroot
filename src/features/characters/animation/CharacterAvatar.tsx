@@ -42,6 +42,13 @@ export interface CharacterAvatarProps {
   armed?: boolean;
   /** Which actor's one-shot actions this body plays. Local player by default. */
   actor?: string;
+  /**
+   * Collapse the head (and whatever rides on it — hair, hat) so it cannot fill
+   * the view. For YOUR OWN body in first person: you can never see your own
+   * head anyway, and leaving it there put a skinned mesh across the whole
+   * screen at zero distance.
+   */
+  hideHead?: boolean;
 }
 
 const CROSSFADE = 0.2;
@@ -66,6 +73,7 @@ function findCharacter(name: string): DreadrootCharacter {
 export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   character, getInput, getPosition, getYaw,
   opacity = 1, visible = true, armed = false, actor = LOCAL_ACTOR,
+  hideHead = false,
 }) => {
   const c = findCharacter(character);
   const group = useRef<THREE.Group>(null);
@@ -209,6 +217,28 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const wasGrounded = useRef(true);
   const fallSpeed = useRef(0);
 
+  /**
+   * The head bone, so it can be collapsed for the local first-person body.
+   *
+   * Scaling the BONE rather than hiding a mesh, because on most of these models
+   * the head is not its own mesh — Ash's head, torso and legs are one skinned
+   * mesh, so hiding it would hide him entirely. Everything weighted to this
+   * bone collapses with it, which is exactly what we want: the hat and hair
+   * ride the head bone too, so they go with it and nothing has to know their
+   * names.
+   *
+   * HeadTop_End is excluded — it is a Mixamo leaf marker, not the head.
+   */
+  const headBone = useMemo(() => {
+    let found: THREE.Object3D | null = null;
+    cloned.traverse((o) => {
+      if (found) return;
+      const n = o.name ?? '';
+      if (/(^|:|_)head$/i.test(n)) found = o;
+    });
+    return found;
+  }, [cloned]);
+
   const air = useRef(new AirborneTracker());
   const current = useRef<string>('');
   const pos = useRef(new THREE.Vector3());
@@ -278,6 +308,15 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
       current.current = '';
     }
 
+    // Re-asserted every frame rather than set once: most of these clips carry
+    // no scale track, but a stray one would otherwise restore the head
+    // mid-animation and put it back across the screen. One assignment is
+    // cheaper than being wrong about every clip in the library.
+    if (headBone) {
+      const k = hideHead ? 0.0001 : 1;
+      if (headBone.scale.x !== k) headBone.scale.setScalar(k);
+    }
+
     const input = getInput();
     const now = performance.now();
     const airborne = air.current.update(input, performance.now());
@@ -340,7 +379,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   }, 40),
   // Re-registered when any of these change: the callback closes over them, and
   // a stale closure here means the body keeps animating the PREVIOUS character.
-  [actor, actions, available, actionSet, armed, c, getInput, getPosition, getYaw]);
+  [actor, actions, available, actionSet, armed, c, getInput, getPosition, getYaw, headBone, hideHead]);
 
   return (
     <group ref={group} visible={visible}>
