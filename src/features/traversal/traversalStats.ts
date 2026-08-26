@@ -23,13 +23,6 @@ interface Attempt {
   started: boolean;
   /** Why nothing happened, when nothing happened. */
   refusedBecause: string | null;
-  /** The MOVEMENT the run was told to perform, in absolute world Y. The probe
-   *  reporting the right height does not prove the body went there — those are
-   *  separate things, and reading one as proof of the other cost two wrong
-   *  fixes. */
-  path?: { fromY: number; peakY: number; toY: number };
-  /** Where the player's feet ACTUALLY ended up, filled in when the run ends. */
-  endedY?: number;
 }
 
 class TraversalStats {
@@ -37,11 +30,6 @@ class TraversalStats {
   private attempts = 0;
   private started = 0;
   private byMove = new Map<string, number>();
-
-  /** Called when a run finishes, with the real final foot height. */
-  finished(endedY: number): void {
-    if (this.last) this.last.endedY = endedY;
-  }
 
   record(a: Omit<Attempt, 'at'>): void {
     this.last = { ...a, at: performance.now() };
@@ -78,12 +66,6 @@ class TraversalStats {
       L.push(`    standable ${r.standable}  far-side ground ${r.farSideY === null ? 'UNKNOWN' : r.farSideY.toFixed(1)}`);
     }
     L.push(`    chose: ${a.move ?? '—'}   ${a.started ? 'STARTED' : `no move: ${a.refusedBecause ?? 'n/a'}`}`);
-    if (a.path) {
-      const p = a.path;
-      L.push(`    path: feet ${p.fromY.toFixed(2)} -> peak ${p.peakY.toFixed(2)} -> land ${p.toY.toFixed(2)}`);
-      L.push(`          rise ${(p.toY - p.fromY).toFixed(2)}m` +
-        (a.endedY === undefined ? '  (still running)' : `, feet ACTUALLY ended at ${a.endedY.toFixed(2)} (${(a.endedY - p.fromY).toFixed(2)}m)`));
-    }
     return L.join('\n');
   }
 }
