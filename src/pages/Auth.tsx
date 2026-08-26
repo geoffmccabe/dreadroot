@@ -65,9 +65,12 @@ export default function Auth({ onStart }: { onStart?: () => void }) {
     setGuestBusy(true);
     try {
       const { error } = await signInAsGuest();
-      if (!error) navigate('/', { replace: true });
-      else setGuestBusy(false);
-    } catch {
+      if (!error) { navigate('/', { replace: true }); return; }
+      setGuestBusy(false);
+    } catch (err) {
+      // Logged, not swallowed. A silent catch here is precisely why the only
+      // report possible was "clicking does nothing".
+      console.error('[guest] start failed', err);
       setGuestBusy(false);
     }
   };

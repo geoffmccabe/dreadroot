@@ -6,6 +6,16 @@ import { useIndexedDB } from '@/hooks/useIndexedDB';
 import { initLogStep } from '@/contexts/InitializationContext';
 import { getOrCreateDeviceId, loadGuestIdentity, saveGuestIdentity } from '@/features/guest/guestIdentity';
 
+/** Resolve to `fallback` if a promise has not settled in time. Browser storage
+ *  can hang rather than fail, and a hang is indistinguishable from a dead
+ *  button. */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 // Dedupe guard for init log - prevents duplicate "User: email" rows
 let lastInitLoggedEmail: string | null = null;
 
@@ -169,39 +179,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    * one is simply abandoned, which the design accepts.
    */
   const signInAsGuest = async () => {
-    const deviceId = await getOrCreateDeviceId();
-    const saved = await loadGuestIdentity();
-
-    if (saved?.refreshToken) {
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: saved.refreshToken,
-      });
-      if (!error && data.session) {
-        await saveGuestIdentity({
-          deviceId,
-          guestUserId: data.session.user.id,
-          refreshToken: data.session.refresh_token,
+    /**
+     * SIGN IN FIRST. Storage bookkeeping comes AFTER, and never blocks.
+     *
+     * This used to await getOrCreateDeviceId() before touching Supabase, which
+     * put IndexedDB on the critical path of "let me play". In a private window
+     * that is exactly the wrong order: storage there is restricted, fresh, and
+     * in some configurations opening a database hangs or throws — so the one
+     * flow whose entire promise is "start instantly, no account" was gated on
+     * the slowest, least reliable thing in the browser.
+     *
+     * The device id only exists so a guest can be RESUMED on a later visit.
+     * Failing to record it costs a future resume; failing to sign in costs the
+     * whole feature. So the ordering follows the stakes.
+     */
+    try {
+      // A returning guest, if this browser still holds their token. Wrapped
+      // and time-boxed so unavailable storage cannot stall the button.
+      const saved = await withTimeout(loadGuestIdentity(), 1500, null);
+      if (saved?.refreshToken) {
+        const { data, error } = await supabase.auth.refreshSession({
+          refresh_token: saved.refreshToken,
         });
-        void registerDevice(deviceId);
-        return { error: null };
+        if (!error && data.session) {
+          void rememberGuest(data.session.user.id, data.session.refresh_token);
+          return { error: null };
+        }
+        // Expired or revoked — fall through and start a fresh guest.
       }
-      // Expired or revoked — fall through and start a new guest.
-    }
 
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (error) {
-      toast.error('Could not start a guest session', { description: error.message });
-      return { error };
-    }
-    if (data.session) {
-      await saveGuestIdentity({
-        deviceId,
-        guestUserId: data.session.user.id,
-        refreshToken: data.session.refresh_token,
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) {
+        console.error('[guest] signInAnonymously failed', error);
+        toast.error('Could not start a guest session', { description: error.message });
+        return { error };
+      }
+      if (!data.session) {
+        const msg = 'no session returned';
+        console.error('[guest] ' + msg, data);
+        toast.error('Could not start a guest session', { description: msg });
+        return { error: new Error(msg) };
+      }
+
+      // Bookkeeping, deliberately NOT awaited: the player is already in.
+      void rememberGuest(data.session.user.id, data.session.refresh_token);
+      return { error: null };
+    } catch (err) {
+      // Never swallow this. A silent catch here is why "clicking does nothing"
+      // was all anyone could report.
+      console.error('[guest] unexpected failure', err);
+      toast.error('Could not start a guest session', {
+        description: (err as Error)?.message ?? String(err),
       });
-      void registerDevice(deviceId);
+      return { error: err };
     }
-    return { error: null };
+  };
+
+  /** Record the guest for a future resume. Best-effort by design — every step
+   *  here is optional, and none of it should ever stop someone playing. */
+  const rememberGuest = async (userId: string, refreshToken: string) => {
+    try {
+      const deviceId = await withTimeout(getOrCreateDeviceId(), 2000, null);
+      if (!deviceId) return;
+      await saveGuestIdentity({ deviceId, guestUserId: userId, refreshToken });
+      await registerDevice(deviceId);
+    } catch (err) {
+      console.warn('[guest] could not record this device — resume may not work later', err);
+    }
   };
 
   /** Bind this device to the signed-in guest. Never blocks entering the game:
