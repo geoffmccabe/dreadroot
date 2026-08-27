@@ -235,7 +235,7 @@ export function FortressHUD(props: FortressHUDProps) {
     return Array.from(ids);
   }, [equippedItems, inventory]);
 
-  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null }>>(new Map());
+  const [itemDefs, setItemDefs] = useState<Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null; properties?: unknown }>>(new Map());
 
   const loadItemDefs = useCallback(async () => {
     if (allItemIds.length === 0) { setItemDefs(new Map()); return; }
@@ -243,7 +243,7 @@ export function FortressHUD(props: FortressHUDProps) {
       .from('items')
       .select('id, key, name, item_number, texture_url, tier, stackable, item_category, properties')
       .in('id', allItemIds);
-    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null }>();
+    const map = new Map<string, { name: string; key: string | null; item_number: number | null; texture_url: string | null; tier: number | null; stackable: boolean; item_category?: string | null; properties?: unknown }>();
     // Default stackable=true if the column is missing (older row).
     for (const d of data || []) map.set(d.id, { ...d, stackable: d.stackable ?? true });
     setItemDefs(map);
@@ -648,12 +648,22 @@ export function FortressHUD(props: FortressHUDProps) {
       const key = def.key ?? '';
       const isGlove = key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
       const isGrenade = key === 'grenade' || key.startsWith('grenade_t');
-      // Classify a gun: one-handed (pistol) vs two-handed (rifle).
-      let isGun = false, isTwoHanded = false;
-      if (!isGlove && !isGrenade && def.item_number != null) {
-        const { data } = await supabase.from('weapon_stats').select('is_gun, is_two_handed').eq('item_number', def.item_number).maybeSingle();
-        isGun = !!data?.is_gun; isTwoHanded = isGun && !!(data as { is_two_handed?: boolean } | null)?.is_two_handed;
-      }
+      /**
+       * How many hands, read LOCALLY.
+       *
+       * This used to query weapon_stats on every double-click. A network round
+       * trip inside a click handler is a failure mode for no benefit: the same
+       * answer is already loaded with the item definitions, in
+       * properties.sw.hands, which is the value the Unity import wrote and the
+       * one weapon_stats was corrected to match.
+       */
+      const handsOf = (d: { properties?: unknown } | undefined): number | null => {
+        const h = (d as { properties?: { sw?: { hands?: number } } } | undefined)?.properties?.sw?.hands;
+        return typeof h === 'number' ? h : null;
+      };
+      const hands = handsOf(def);
+      const isGun = !isGlove && !isGrenade && hands != null;
+      const isTwoHanded = hands === 2;
       const gear = (equippedGear as Array<{ slot: number; itemId: string }>);
       const slot1Occ = gear.some((e) => e.slot === 1);
       const slot5Occ = gear.some((e) => e.slot === 5);
@@ -667,17 +677,20 @@ export function FortressHUD(props: FortressHUDProps) {
       // If a CENTERED two-handed item (rifle/pickaxe) owns the hands and a pistol is headed RIGHT
       // (slot 5), keep the pistol in the RIGHT hand and EVICT the rifle afterward: move the pistol
       // to slot 5, then send the rifle (slot 1) back to the pistol's now-empty source slot.
-      let evictRifleAfter = false;
-      if (target === 5 && slot1Occ) {
-        const d1 = itemDefs.get(gear.find((e) => e.slot === 1)!.itemId);
-        if (d1) {
-          if ((d1.name ?? '').toLowerCase().includes('pickaxe')) evictRifleAfter = true;
-          else if (d1.item_number != null) {
-            const { data: w1 } = await supabase.from('weapon_stats').select('is_two_handed').eq('item_number', d1.item_number).maybeSingle();
-            evictRifleAfter = !!(w1 as { is_two_handed?: boolean } | null)?.is_two_handed;
-          }
-        }
-      }
+      /**
+       * Is a TWO-HANDED weapon currently holding the hands? If so it has to
+       * leave BEFORE the new weapon arrives, not after.
+       *
+       * The old order put the pistol in the right hand and evicted the rifle
+       * afterwards, which meant a moment where a two-handed weapon and a
+       * one-handed weapon were both equipped — an impossible state that the UI
+       * showed exactly as reported: something in both hand slots, then one
+       * vanishing. Clearing first removes the intermediate state rather than
+       * racing it.
+       */
+      const slot1Item = gear.find((e) => e.slot === 1);
+      const d1 = slot1Item ? itemDefs.get(slot1Item.itemId) : undefined;
+      const twoHanderHeld = !!d1 && handsOf(d1) === 2;
       /**
        * A TWO-HANDED WEAPON HAS TO EMPTY THE OTHER HAND FIRST.
        *
@@ -719,38 +732,32 @@ export function FortressHUD(props: FortressHUDProps) {
           if (!moved) { setDebugStatus('quick-equip: could not free the off hand — refused'); return; }
         }
 
+        // A two-hander leaves BEFORE the new weapon arrives. Its destination is
+        // found now, and if there is nowhere the whole equip is refused rather
+        // than leaving an impossible pair equipped.
+        if (twoHanderHeld && !(isGun && isTwoHanded)) {
+          const invSlot = findFirstEmptyInventorySlot();
+          const qsSlot = invSlot == null ? findFirstEmptyHotbarSlot() : null;
+          if (invSlot == null && qsSlot == null) {
+            const r = (window as unknown as { __rejectionSound?: HTMLAudioElement }).__rejectionSound;
+            if (r) { try { r.currentTime = 0; void r.play(); } catch { /* ignore */ } }
+            setDebugStatus('quick-equip: nowhere to put the two-hander — refused');
+            return;
+          }
+          const dest = invSlot != null
+            ? { region: 'inventory' as const, slot: invSlot }
+            : { region: 'quick_select' as const, slot: qsSlot as number };
+          const cleared = await slotClickHandlers.equipTransfer(
+            { region: 'equip', page: 0, slot: 1 },
+            { region: dest.region, page: 0, slot: dest.slot },
+          );
+          if (!cleared) { setDebugStatus('quick-equip: could not unequip the two-hander — refused'); return; }
+        }
+
         const ok = await slotClickHandlers.equipTransfer(
           { region, page: 0, slot },
           { region: 'equip', page: 0, slot: target },
         );
-        if (ok && evictRifleAfter) {
-          /**
-           * Send the displaced two-hander somewhere REAL.
-           *
-           * This used to assume the pistol's source slot was now free. It
-           * often is not: moving the pistol into an OCCUPIED hand SWAPS, so
-           * whatever was in that hand lands in the source slot. The rifle was
-           * then moved onto an occupied slot, which either failed silently or
-           * left both weapons showing before one vanished.
-           *
-           * So the destination is looked up FRESH, after the pistol has moved,
-           * and the whole eviction is skipped if there is genuinely nowhere —
-           * leaving the rifle equipped, which is visible and recoverable,
-           * rather than pushing it into a slot that is taken.
-           */
-          const invSlot = findFirstEmptyInventorySlot();
-          const dest = invSlot != null
-            ? { region: 'inventory' as const, slot: invSlot }
-            : (() => { const q = findFirstEmptyHotbarSlot(); return q != null ? { region: 'quick_select' as const, slot: q } : null; })();
-          if (dest) {
-            await slotClickHandlers.equipTransfer(
-              { region: 'equip', page: 0, slot: 1 },
-              { region: dest.region, page: 0, slot: dest.slot },
-            );
-          } else {
-            setDebugStatus('quick-equip: nowhere to put the two-hander — left equipped');
-          }
-        }
         setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
       } catch (e) {
         setDebugStatus('quick-equip: ' + ((e as Error)?.message ?? String(e)));
