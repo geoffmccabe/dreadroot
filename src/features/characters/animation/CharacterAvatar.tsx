@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { SkeletonUtils } from 'three-stdlib';
 import { DREADROOT_CHARACTERS, type DreadrootCharacter } from '../dreadrootCharacters';
 import { charGlbUrl } from '@/components/siege/charadmin/characterStats';
+import { attachWeapon, weaponForItem, type AttachedWeapon } from './attachWeapon';
 import {
   AirborneTracker, pickMovementState, type MoveInput, type MoveState,
 } from './movementState';
@@ -42,6 +43,8 @@ export interface CharacterAvatarProps {
   armed?: boolean;
   /** Which actor's one-shot actions this body plays. Local player by default. */
   actor?: string;
+  /** item_number of the weapon in hand, or null for empty-handed. */
+  weaponItemNumber?: number | null;
   /**
    * Collapse the head (and whatever rides on it — hair, hat) so it cannot fill
    * the view. For YOUR OWN body in first person: you can never see your own
@@ -73,7 +76,7 @@ function findCharacter(name: string): DreadrootCharacter {
 export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   character, getInput, getPosition, getYaw,
   opacity = 1, visible = true, armed = false, actor = LOCAL_ACTOR,
-  hideHead = false,
+  hideHead = false, weaponItemNumber = null,
 }) => {
   const c = findCharacter(character);
   const group = useRef<THREE.Group>(null);
@@ -89,6 +92,12 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const loco  = useGLTF(charGlbUrl(LOCO_LIBRARY), '/draco/');
   const misc  = useGLTF(charGlbUrl(MISC_LIBRARY), '/draco/');
   const root  = useGLTF(charGlbUrl(ROOT_LIBRARY), '/draco/');
+
+  const heldWeapon = useMemo(() => weaponForItem(weaponItemNumber), [weaponItemNumber]);
+  // useGLTF cannot be called conditionally, so when there is no weapon it loads
+  // the character's own file — already in cache, so it costs nothing.
+  const gunUrl = heldWeapon ? charGlbUrl(heldWeapon.url) : charGlbUrl(c.file);
+  const { scene: gunScene } = useGLTF(gunUrl, '/draco/');
 
   const cloned = useMemo(() => {
     const g = SkeletonUtils.clone(scene) as THREE.Group;
@@ -239,6 +248,10 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     return found;
   }, [cloned]);
 
+  /** The weapon parented to the hand, once the bones are live. */
+  const attached = useRef<AttachedWeapon | null>(null);
+  const attachedFor = useRef<number | null>(null);
+
   const air = useRef(new AirborneTracker());
   const current = useRef<string>('');
   const pos = useRef(new THREE.Vector3());
@@ -317,6 +330,25 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
       if (headBone.scale.x !== k) headBone.scale.setScalar(k);
     }
 
+    // ATTACH / SWAP THE WEAPON. Retried each frame until the hand bone's world
+    // matrices are live — they are not on the first frame after a model loads,
+    // which is why this is not a one-shot effect.
+    if (attachedFor.current !== weaponItemNumber) {
+      if (attached.current) {
+        attached.current.wrap.removeFromParent();
+        attached.current = null;
+      }
+      attachedFor.current = weaponItemNumber;
+    }
+    if (heldWeapon && !attached.current) {
+      let hand: THREE.Object3D | undefined;
+      cloned.traverse((o) => { if (o.name.endsWith('RightHand') || /(^|:|_)Hand_R$/i.test(o.name)) hand = o; });
+      if (hand) {
+        attached.current = attachWeapon(g, hand, gunScene, heldWeapon, c.name);
+      }
+    }
+    if (attached.current) attached.current.wrap.visible = armed;
+
     const input = getInput();
     const now = performance.now();
     const airborne = air.current.update(input, performance.now());
@@ -379,7 +411,8 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   }, 40),
   // Re-registered when any of these change: the callback closes over them, and
   // a stale closure here means the body keeps animating the PREVIOUS character.
-  [actor, actions, available, actionSet, armed, c, getInput, getPosition, getYaw, headBone, hideHead]);
+  [actor, actions, available, actionSet, armed, c, getInput, getPosition, getYaw, headBone, hideHead,
+   heldWeapon, gunScene, cloned, weaponItemNumber]);
 
   return (
     <group ref={group} visible={visible}>

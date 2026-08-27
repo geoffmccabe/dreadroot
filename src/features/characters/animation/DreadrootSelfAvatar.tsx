@@ -15,12 +15,18 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { playerState } from '@/components/siege/playerState';
 import { useTPDist } from '@/components/siege/siegeThirdPerson';
+import { useActiveWeapon } from '@/config/activeWeapon';
 import { useSelectedCharacter } from '../characterSelection';
 import { DREADROOT_CHARACTERS } from '../dreadrootCharacters';
 import { CharacterAvatar } from './CharacterAvatar';
 import type { MoveInput } from './movementState';
 
 const DEFAULT_OPACITY = 0.25;
+
+/** The weapon the model should be holding. */
+function useFireWeaponOrActive() {
+  return useActiveWeapon();
+}
 
 const store = {
   opacity: DEFAULT_OPACITY,
@@ -131,6 +137,11 @@ export const DreadrootSelfAvatar: React.FC = () => {
   );
 
   const thirdPerson = tpDist > 0.05;
+  // Whatever is actually in the player's hand right now. The fire weapon is
+  // the one that matters — with dual wield the right hand and the firing hand
+  // can differ, and the model should show what you are shooting with.
+  const activeWeapon = useFireWeaponOrActive();
+  const weaponItem = activeWeapon?.itemNumber ?? null;
 
   /**
    * YOUR OWN BODY, with the HEAD REMOVED in first person.
@@ -170,6 +181,7 @@ export const DreadrootSelfAvatar: React.FC = () => {
       getPosition={getPosition}
       getYaw={getYaw}
       hideHead={!thirdPerson}
+      weaponItemNumber={weaponItem}
       opacity={1}
       armed={playerState.gun}
     />
