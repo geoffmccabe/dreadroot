@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useBlocks } from '@/contexts/BlocksContext';
@@ -1982,7 +1982,15 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           25% opacity ON PURPOSE: a body pinned to a first-person camera is
           likely to sit wrong or block the view before it is tuned, and a ghost
           is easy to see past meanwhile. Adjust live with __avatar.opacity(n). */}
-      {!isSiege && <DreadrootSelfAvatar />}
+      {/* Suspense boundary so a model load can never blank the Canvas. Without
+          one, ANY suspending child takes the whole 3D view down with it — which
+          is what turned the view switch into a grey screen. The fallback is
+          null: no body for a moment is fine, no world is not. */}
+      {!isSiege && (
+        <Suspense fallback={null}>
+          <DreadrootSelfAvatar />
+        </Suspense>
+      )}
       {/* FirstPersonArms DISABLED: it renders the y-bot SKINNED mesh, and a skinned
           mesh ignores node scale (its bones drive vertices at native ~180m size), so
           the 0.012 scale didn't shrink it — it showed as the giant blue avatar at the

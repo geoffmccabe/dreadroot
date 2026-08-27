@@ -13,7 +13,7 @@
  * Interpolation is unchanged: positions still come from the shared transform
  * buffer, which holds rather than extrapolates when packets are late.
  */
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo, useRef, Suspense } from 'react';
 import * as THREE from 'three';
 import { PlayerState } from '@/hooks/useMultiplayer';
 import { Text } from '@react-three/drei';
@@ -132,7 +132,13 @@ export function MultiplayerPlayers({ players }: MultiplayerPlayersProps) {
   return (
     <>
       {Array.from(players.values()).map((p) => (
-        <OtherPlayer key={p.userId} player={p} />
+        // Per-player Suspense: a joining player loads their character model,
+        // and without a boundary that load would blank the Canvas for everyone
+        // already in the world. One boundary EACH, so one slow model cannot
+        // hold up the rest.
+        <Suspense key={p.userId} fallback={null}>
+          <OtherPlayer player={p} />
+        </Suspense>
       ))}
     </>
   );
