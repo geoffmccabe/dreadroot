@@ -72,7 +72,8 @@
     "smoke:l2-live": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/smoke-l2-live.ts",
     "check:server-enemies": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-server-enemies.ts",
     "check:pathfind-throttle": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfind-throttle.ts",
-    "check:edge-culling": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-edge-culling.ts"
+    "check:edge-culling": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-edge-culling.ts",
+    "check:boot": "node scripts/check-boot.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -5,6 +5,7 @@ import { decodeBlockType, getBaseTreeBlockType, isTreeBlockType } from '@/featur
 import { entityCollisionGrid, numPosKey } from '@/lib/spatialHashGrid';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import type { ShnakeDefinition, ShnakeInstance, ShnakeSegment } from '../types';
+import { unpackPosKey } from '@/lib/voxelKey';
 
 // Debug flag - disable in production for FPS
 const DEBUG_SHNAKE = false;
@@ -266,7 +267,10 @@ export function useShnakeSystem({
     // Filter to positions within tree bounds
     const treeBlockPositions: Array<{ x: number; y: number; z: number }> = [];
     for (const posKey of tierPositions) {
-      const [x, y, z] = posKey.split(',').map(Number);
+      // numPosKey packs to a NUMBER. This called .split(',') on it — the old
+      // string format — and threw "split is not a function" every time a
+      // shnake looked for a tree to spawn on.
+      const { x, y, z } = unpackPosKey(posKey);
       if (insideBounds(b, x, y, z)) {
         treeBlockPositions.push({ x, y, z });
       }

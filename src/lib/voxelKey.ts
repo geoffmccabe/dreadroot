@@ -19,3 +19,21 @@ export const numPosKey = (x: number, y: number, z: number): number =>
   (Math.floor(x) + COORD_OFFSET) * NUMPOSKEY_X_STRIDE +
   (Math.floor(y) + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE +
   (Math.floor(z) + COORD_OFFSET);
+
+/**
+ * Unpack a numPosKey back to coordinates.
+ *
+ * This did not exist, and its absence was a live crash: a caller still treated
+ * the key as the old "x,y,z" STRING and called .split(',') on a number —
+ * "TypeError: Z.split is not a function". Packing gained a numeric form and the
+ * matching decode was never written, so every site that unpacks had to
+ * improvise, and one of them improvised the old format.
+ */
+export function unpackPosKey(k: number, out?: { x: number; y: number; z: number }) {
+  const o = out ?? { x: 0, y: 0, z: 0 };
+  o.x = Math.floor(k / NUMPOSKEY_X_STRIDE) - COORD_OFFSET;
+  const rem = k - (o.x + COORD_OFFSET) * NUMPOSKEY_X_STRIDE;
+  o.y = Math.floor(rem / NUMPOSKEY_Y_STRIDE) - COORD_OFFSET;
+  o.z = rem - (o.y + COORD_OFFSET) * NUMPOSKEY_Y_STRIDE - COORD_OFFSET;
+  return o;
+}

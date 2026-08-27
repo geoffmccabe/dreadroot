@@ -228,9 +228,33 @@ export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {
   return rig === 'root' ? ROOT_ACTIONS : MIXAMO_ACTIONS;
 }
 
-export function clipSetFor(rig: 'mixamo' | 'root', armed: boolean): { set: ClipSet; name: string } {
+/**
+ * Holding a PISTOL is not holding a rifle.
+ *
+ * Pressing R with a pistol and a glove put the character in a two-handed rifle
+ * stance, because "armed" was a boolean and every armed pose came from the
+ * rifle set. The weapon table already distinguishes them — `animSet` is
+ * 'rifle' or 'pistol' — and that is the same field the hand counts came from.
+ *
+ * The library only has two genuine pistol clips ('Pistol Idle', 'Pistol Walk'),
+ * so the rest of the locomotion comes from the UNARMED set rather than the
+ * rifle set. A character jogging normally with a pistol reads correctly; the
+ * same character jogging in a rifle stance while holding a pistol does not.
+ */
+export const MIXAMO_PISTOL: ClipSet = {
+  ...MIXAMO_UNARMED,
+  idle:  'Pistol Idle',
+  walkF: 'Pistol Walk',
+};
+
+export type WeaponStance = 'rifle' | 'pistol' | null;
+
+export function clipSetFor(
+  rig: 'mixamo' | 'root', armed: boolean, stance: WeaponStance = 'rifle',
+): { set: ClipSet; name: string } {
   if (rig === 'root') return { set: ROOT_SET, name: 'root' };
-  return armed
-    ? { set: MIXAMO_ARMED, name: 'mixamo/armed' }
-    : { set: MIXAMO_UNARMED, name: 'mixamo/unarmed' };
+  if (!armed) return { set: MIXAMO_UNARMED, name: 'mixamo/unarmed' };
+  return stance === 'pistol'
+    ? { set: MIXAMO_PISTOL, name: 'mixamo/pistol' }
+    : { set: MIXAMO_ARMED, name: 'mixamo/armed' };
 }

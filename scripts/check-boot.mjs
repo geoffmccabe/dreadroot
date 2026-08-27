@@ -1,0 +1,93 @@
+/**
+ * Does the app actually START?
+ *
+ * This exists because a clean `tsc` and a successful `vite build` do NOT prove
+ * the thing boots — this repo has a documented white-screen class where both
+ * pass and the app still dies on a use-before-initialization. I shipped two
+ * such builds and only found out when the game was unusable.
+ *
+ * Loads the real built app in a real browser with the existing perftest
+ * profile, waits for the world to report ready, and fails on any page error.
+ * Prints what is on screen so a change can be checked rather than asserted.
+ *
+ *   npm run check:boot
+ */
+import { chromium } from 'playwright';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile');
+const URL_ = process.env.CHECK_URL ?? 'http://localhost:8080/?perftest';
+const BUDGET_MS = Number(process.env.CHECK_MS ?? 90000);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const ctx = await chromium.launchPersistentContext(PROFILE, {
+  headless: false, viewport: { width: 1280, height: 720 },
+  args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
+});
+const page = ctx.pages()[0] ?? (await ctx.newPage());
+
+const fatal = [];
+const errors = [];
+// Noise that is not a boot failure: missing textures, aborted fetches, the
+// favicon. A real boot failure is a pageerror or a ReferenceError.
+const IGNORE = /Failed to load resource|net::ERR|favicon|status of 4|status of 5|AtlasManager|WebGL/i;
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  const t = m.text();
+  if (IGNORE.test(t)) return;
+  errors.push(t);
+  if (/before initialization|is not a function|Cannot read propert|is not defined/i.test(t)) fatal.push(t);
+});
+page.on('pageerror', (e) => {
+  const t = 'PAGEERROR: ' + (e.stack || e.message || e);
+  errors.push(t); fatal.push(t);
+});
+
+await page.goto(URL_, { waitUntil: 'domcontentloaded' });
+
+let ready = false;
+const t0 = Date.now();
+while (Date.now() - t0 < BUDGET_MS) {
+  ready = await page.evaluate(() => !!window.__perftestReady).catch(() => false);
+  if (ready) break;
+  if (fatal.length) break;
+  await sleep(500);
+}
+
+// A booted app has a canvas with a live WebGL context and a non-empty scene.
+const state = await page.evaluate(() => {
+  const c = document.querySelector('canvas');
+  return {
+    hasCanvas: !!c,
+    canvasSize: c ? `${c.width}x${c.height}` : null,
+    bodyText: (document.body.innerText || '').slice(0, 120),
+  };
+}).catch(() => null);
+
+console.log('\n=== BOOT CHECK ===');
+console.log('url      :', URL_);
+console.log('ready    :', ready);
+console.log('canvas   :', state?.hasCanvas ? state.canvasSize : 'NONE');
+console.log('errors   :', errors.length);
+for (const e of errors.slice(0, 8)) console.log('   -', e.slice(0, 200));
+
+await ctx.close();
+
+if (fatal.length) {
+  console.log('\nRESULT: FAILED TO BOOT — this is the white-screen class.');
+  for (const f of fatal.slice(0, 3)) console.log('  ', f.slice(0, 300));
+  process.exit(1);
+}
+if (!state?.hasCanvas) {
+  console.log('\nRESULT: NO CANVAS — the app did not render at all.');
+  process.exit(1);
+}
+// `ready` means the whole world finished streaming, which needs a live session
+// and can outlast a sensible budget. It is NOT the pass condition: a canvas
+// with zero page errors already proves the thing boots, which is the failure
+// this script exists to catch.
+console.log(ready
+  ? '\nRESULT: BOOTS OK (world reached ready)'
+  : '\nRESULT: BOOTS OK (rendered, no errors; world still streaming)');

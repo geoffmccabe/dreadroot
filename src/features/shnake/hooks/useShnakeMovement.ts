@@ -4,6 +4,7 @@ import type { PlantedTree } from '@/features/trees/types';
 import { worldCollisionGrid, entityCollisionGrid, numPosKey } from '@/lib/spatialHashGrid';
 import { getLocalPlayerSnapshot } from '@/hooks/usePlayerSnapshot';
 import type { ShnakeInstance } from '../types';
+import { unpackPosKey } from '@/lib/voxelKey';
 
 // Debug flag - disable in production for FPS
 const DEBUG_SHNAKE = false;
@@ -170,7 +171,8 @@ export function useShnakeMovement({
       // Pick a random tree block position as destination
       const keys = [...tierMap.keys()];
       const randomKey = keys[Math.floor(Math.random() * keys.length)];
-      const [x, y, z] = randomKey.split(',').map(Number);
+      // Same numeric-key decode bug as useShnakeSystem: these are numbers.
+      const { x, y, z } = unpackPosKey(randomKey);
       return { x, y, z };
     }
     

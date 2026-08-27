@@ -388,7 +388,9 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     // down — otherwise a death would be interrupted by the idle it fades into.
     if (held.current || now < overrideUntil.current) return;
 
-    const { set, name } = clipSetFor(c.rig, armed);
+    // The stance comes from the WEAPON, not from a boolean. Unregistered
+    // weapons have no entry, and default to the rifle stance as before.
+    const { set, name } = clipSetFor(c.rig, armed, heldWeapon?.animSet ?? 'rifle');
     const want = resolveClip(set, state, available, name);
     if (!want || want === current.current) return;
 
