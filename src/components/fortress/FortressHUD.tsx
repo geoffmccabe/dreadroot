@@ -678,7 +678,47 @@ export function FortressHUD(props: FortressHUDProps) {
           }
         }
       }
+      /**
+       * A TWO-HANDED WEAPON HAS TO EMPTY THE OTHER HAND FIRST.
+       *
+       * It targets the LEFT hand and swaps with whatever is there, which is
+       * correct — but the RIGHT hand was never touched. Equipping a rifle over
+       * a pistol and a glove left the glove still equipped in a slot the UI no
+       * longer shows, so it was invisible but still firing. Nothing was lost,
+       * but it was unreachable, which is worse than losing it visibly.
+       *
+       * So: find somewhere for the off-hand item BEFORE moving anything, and if
+       * there is nowhere, refuse the whole thing rather than half-do it.
+       */
+      let offHandTo: { region: 'inventory' | 'quick_select'; slot: number } | null = null;
+      if (isGun && isTwoHanded && slot5Occ) {
+        const inv = findFirstEmptyInventorySlot();
+        if (inv != null) offHandTo = { region: 'inventory', slot: inv };
+        else {
+          const qs = findFirstEmptyHotbarSlot();
+          if (qs != null) offHandTo = { region: 'quick_select', slot: qs };
+        }
+        if (!offHandTo) {
+          // Nowhere to put it — do NOTHING, and say so audibly. Silently
+          // dropping a hand's worth of gear is how items vanish.
+          const r = (window as unknown as { __rejectionSound?: HTMLAudioElement }).__rejectionSound;
+          if (r) { try { r.currentTime = 0; void r.play(); } catch { /* ignore */ } }
+          setDebugStatus('quick-equip: both hands full and no free slot — refused');
+          return;
+        }
+      }
+
       try {
+        // Clear the off hand first. If this fails, nothing else has happened
+        // yet, so the player keeps exactly what they had.
+        if (offHandTo) {
+          const moved = await slotClickHandlers.equipTransfer(
+            { region: 'equip', page: 0, slot: 5 },
+            { region: offHandTo.region, page: 0, slot: offHandTo.slot },
+          );
+          if (!moved) { setDebugStatus('quick-equip: could not free the off hand — refused'); return; }
+        }
+
         const ok = await slotClickHandlers.equipTransfer(
           { region, page: 0, slot },
           { region: 'equip', page: 0, slot: target },

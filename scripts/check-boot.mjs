@@ -47,12 +47,33 @@ page.on('pageerror', (e) => {
 
 await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 
+/**
+ * Press START GAME.
+ *
+ * The app boots to a branded homescreen and waits for a click, so a check that
+ * only loads the page sees no canvas and reports failure — a false alarm that
+ * would train me to ignore it. Getting past the gate is part of "does it
+ * start".
+ */
+for (let i = 0; i < 20; i++) {
+  const btn = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
+  if (await btn.count().catch(() => 0)) {
+    await btn.click({ timeout: 5000 }).catch(() => {});
+    break;
+  }
+  await sleep(500);
+}
+
 let ready = false;
 const t0 = Date.now();
 while (Date.now() - t0 < BUDGET_MS) {
   ready = await page.evaluate(() => !!window.__perftestReady).catch(() => false);
   if (ready) break;
   if (fatal.length) break;
+  // A canvas appearing is enough to prove it started; the world can keep
+  // streaming after that.
+  const gotCanvas = await page.evaluate(() => !!document.querySelector('canvas')).catch(() => false);
+  if (gotCanvas && Date.now() - t0 > 8000) break;
   await sleep(500);
 }
 
@@ -70,6 +91,7 @@ console.log('\n=== BOOT CHECK ===');
 console.log('url      :', URL_);
 console.log('ready    :', ready);
 console.log('canvas   :', state?.hasCanvas ? state.canvasSize : 'NONE');
+console.log('onscreen :', JSON.stringify(state?.bodyText ?? ''));
 console.log('errors   :', errors.length);
 for (const e of errors.slice(0, 8)) console.log('   -', e.slice(0, 200));
 
