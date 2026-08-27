@@ -130,6 +130,31 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: { Rajax: [0.12, 0.02, 0.04] },
     sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91, Flamma: 0.94, Jeanette: 0.91, 'Shi Yang': 1.00 },
     leftHand: { point: [0.078, -0.025, -0.425], wrist: 0 } },
+
+  // ── Converted from the Siege Worlds Unity project, 2026-Aug-27 ──────────
+  // Assets/Content/_weapon/Weapons/Item_models/<id>_<name>/*.fbx, run through
+  // Blender to GLB. These models existed all along; DreadRoot simply never had
+  // them, which is why the starter loadout — Basic Pistol and Flame Glove —
+  // rendered as empty hands.
+  //
+  // Orientation and grip start from the tuned AK74 baseline, exactly as the
+  // earlier batch did. They need a per-weapon pass in the lineup editor, but a
+  // weapon in roughly the right place beats no weapon at all.
+  //
+  // animSet follows Unity's weaponType, the same field that settled the hand
+  // counts: pistols/revolvers/gloves are 'pistol', long guns are 'rifle'.
+  { key: 'basic_pistol',  name: 'Basic Pistol',        itemNumbers: [15],  url: '/siege/weapons/item_15.glb',  lengthM: 0.28, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'plasma_pistol', name: 'Plasma Pistol',       itemNumbers: [0],   url: '/siege/weapons/item_0.glb',   lengthM: 0.32, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'shiyang_pistol',name: "Shi Yang's Pistol",   itemNumbers: [25],  url: '/siege/weapons/item_25.glb',  lengthM: 0.30, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'flame_glove',   name: 'Flame Glove',         itemNumbers: [193], url: '/siege/weapons/item_193.glb', lengthM: 0.26, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'bonnies_rifle', name: "Bonnie's Rifle",      itemNumbers: [24],  url: '/siege/weapons/item_24.glb',  lengthM: 1.10, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'zk5',           name: 'ZK-5',                itemNumbers: [168], url: '/siege/weapons/item_168.glb', lengthM: 0.90, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'flamethrower',  name: 'Flamethrower',        itemNumbers: [180], url: '/siege/weapons/item_180.glb', lengthM: 1.00, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'crossbow_cn',   name: 'Chinese Repeating Crossbow!', itemNumbers: [26], url: '/siege/weapons/item_26.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'baseball_bat',  name: 'Baseball Bat',        itemNumbers: [215], url: '/siege/weapons/item_215.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'golf_club',     name: 'GolfClub',            itemNumbers: [222], url: '/siege/weapons/item_222.glb', lengthM: 1.00, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'pickaxe',       name: 'Pickaxe',             itemNumbers: [153], url: '/siege/weapons/item_153.glb', lengthM: 0.80, rotDeg: R, gripPos: G, animSet: 'rifle' },
 ];
 
 const byItem = new Map<number, HeldWeapon>();
