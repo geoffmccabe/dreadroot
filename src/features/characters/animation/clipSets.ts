@@ -231,6 +231,27 @@ export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {
 }
 
 /**
+ * How strongly the recoil is added, by stance.
+ *
+ * The Mixamo rig has no pistol firing clip, so a pistol borrows the RIFLE
+ * recoil. That works at all because the action layer plays it ADDITIVELY: what
+ * gets added is the DELTA from the clip's own first frame — the kick — not the
+ * rifle stance. So the arms stay where the pistol pose put them and simply
+ * jolt.
+ *
+ * What does not carry over is the SIZE. A rifle drives back into the shoulder
+ * with the whole upper body behind it; a handgun flicks the wrist and forearm.
+ * Adding the rifle's full motion to a pistol reads as the character being
+ * punched. Scaling the same clip down is not a fudge — an additive layer's
+ * weight is exactly the dial for "how much of this motion", and it is the one
+ * knob that makes a borrowed clip fit.
+ */
+export const RECOIL_WEIGHT: Record<'rifle' | 'pistol', number> = {
+  rifle: 1.0,
+  pistol: 0.45,
+};
+
+/**
  * Holding a PISTOL is not holding a rifle.
  *
  * Pressing R with a pistol and a glove put the character in a two-handed rifle

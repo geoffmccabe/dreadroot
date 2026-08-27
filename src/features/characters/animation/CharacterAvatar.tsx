@@ -19,6 +19,7 @@ import {
 } from './movementState';
 import {
   clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, MIXAMO_DROP_ROLL,
+  RECOIL_WEIGHT,
   prepareRootRigClips,
   RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY, PISTOL_LIBRARY,
 } from './clipSets';
@@ -278,7 +279,10 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     a.timeScale = 1;
     if (useMode === 'additive') {
       a.blendMode = THREE.AdditiveAnimationBlendMode;
-      a.setEffectiveWeight(1);
+      // A borrowed rifle recoil is far too big for a handgun. The additive
+      // weight is the dial for exactly that.
+      const stance = heldWeapon?.animSet === 'pistol' ? 'pistol' : 'rifle';
+      a.setEffectiveWeight(id === 'shoot' ? RECOIL_WEIGHT[stance] : 1);
       a.fadeIn(0.05).play();
       return;
     }
