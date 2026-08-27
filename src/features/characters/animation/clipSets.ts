@@ -27,6 +27,8 @@ export const LOCO_LIBRARY  = '/siege/characters/siege_loco_anims.glb';
 export const MISC_LIBRARY  = '/siege/characters/siege_anims.glb';
 /** The root rig's clips live inside Shi Yang's own file. */
 export const ROOT_LIBRARY  = '/siege/characters/shiyang.glb';
+/** Mixamo pistol locomotion, merged from the pack Geoff downloaded. */
+export const PISTOL_LIBRARY = '/siege/characters/siege_pistol_anims.glb';
 
 /** Root-rig clips carry their Blender export names. */
 const R = (n: string) => `Root|${n}|Animation Base Layer`;
@@ -242,10 +244,42 @@ export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {
  * same character jogging in a rifle stance while holding a pistol does not.
  */
 export const MIXAMO_PISTOL: ClipSet = {
-  ...MIXAMO_UNARMED,
-  idle:  'Pistol Idle',
-  walkF: 'Pistol Walk',
+  idle:    'pistol_idle',
+  walkF:   'pistol_walk',
+  walkB:   'pistol_walk_backward',
+  runF:    'pistol_run',
+  runL:    'pistol_strafe',
+  runR:    'pistol_strafe_2',
+  strafeL: 'pistol_strafe',
+  strafeR: 'pistol_strafe_2',
+  jump:    'pistol_jump',
+  // No pistol falling or gliding clip in the pack — the fallback chain drops
+  // these to the jump pose, which is the closest thing that exists.
+  fall:    null,
+  glide:   null,
 };
+
+/**
+ * WHICH STRAFE IS WHICH.
+ *
+ * Measured, not guessed: before the root motion was stripped, 'pistol strafe'
+ * drifted +121.8 on X and 'pistol strafe (2)' drifted -144.8. So they are
+ * opposites and one of them is left. Which one depends on the model's facing
+ * convention, and I have got that backwards before on this project, so it is
+ * a single flag here rather than a claim:
+ *
+ *   set STRAFE_SWAPPED to true if the character side-steps the wrong way.
+ *
+ * Nothing else needs to change — the two names swap together.
+ */
+export const STRAFE_SWAPPED = false;
+if (STRAFE_SWAPPED) {
+  const l = MIXAMO_PISTOL.strafeL;
+  MIXAMO_PISTOL.strafeL = MIXAMO_PISTOL.strafeR;
+  MIXAMO_PISTOL.strafeR = l;
+  MIXAMO_PISTOL.runL = MIXAMO_PISTOL.strafeL;
+  MIXAMO_PISTOL.runR = MIXAMO_PISTOL.strafeR;
+}
 
 export type WeaponStance = 'rifle' | 'pistol' | null;
 

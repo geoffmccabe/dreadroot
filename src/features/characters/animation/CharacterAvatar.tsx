@@ -20,7 +20,7 @@ import {
 import {
   clipSetFor, resolveClip, JUMP_OFFSET, actionClipSetFor, MIXAMO_HARD_LAND, MIXAMO_DROP_ROLL,
   prepareRootRigClips,
-  RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY,
+  RIFLE_LIBRARY, LOCO_LIBRARY, MISC_LIBRARY, ROOT_LIBRARY, PISTOL_LIBRARY,
 } from './clipSets';
 import {
   ACTION_HOLDS, ACTION_MODE, LOCAL_ACTOR, isUpperBodyTrack, takeAction,
@@ -92,6 +92,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const loco  = useGLTF(charGlbUrl(LOCO_LIBRARY), '/draco/');
   const misc  = useGLTF(charGlbUrl(MISC_LIBRARY), '/draco/');
   const root  = useGLTF(charGlbUrl(ROOT_LIBRARY), '/draco/');
+  const pistol = useGLTF(charGlbUrl(PISTOL_LIBRARY), '/draco/');
 
   const heldWeapon = useMemo(() => weaponForItem(weaponItemNumber), [weaponItemNumber]);
   // useGLTF cannot be called conditionally, so when there is no weapon it loads
@@ -163,8 +164,8 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
       // convention and Flamma/Jeanette use Y, so the position tracks drive
       // every bone down the wrong axis and shred the model.
       ? prepareRootRigClips(root.animations)
-      : [...rifle.animations, ...loco.animations, ...misc.animations]
-  ), [c.rig, root.animations, rifle.animations, loco.animations, misc.animations]);
+      : [...rifle.animations, ...loco.animations, ...misc.animations, ...pistol.animations]
+  ), [c.rig, root.animations, rifle.animations, loco.animations, misc.animations, pistol.animations]);
 
   /**
    * Additive variants of the upper-body action clips.
@@ -178,7 +179,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const additiveClips = useMemo(() => {
     const src = c.rig === 'root'
       ? prepareRootRigClips(root.animations)
-      : [...rifle.animations, ...loco.animations, ...misc.animations];
+      : [...rifle.animations, ...loco.animations, ...misc.animations, ...pistol.animations];
     const wanted = new Set(
       Object.entries(actionClipSetFor(c.rig))
         .filter(([id, clip]) => clip && ACTION_MODE[id as ActionId] === 'additive')
