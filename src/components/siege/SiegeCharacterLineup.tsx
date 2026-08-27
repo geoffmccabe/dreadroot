@@ -326,7 +326,7 @@ export function SiegeCharacterLineup() {
       else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
       // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
       // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
-      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 45 : 2); }
+      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 90 : 2); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);

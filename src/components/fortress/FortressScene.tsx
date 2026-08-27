@@ -2037,7 +2037,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           spawn enemies and fight them for testing/demos, not just the SWW review map. */}
       {isSiege && <SiegeNewMonsterLineup />}
       {/* "&&&" lineup of the rigged Starblind characters — on the ground in front of you, M/N cycle anims. */}
-      {isSiege && <SiegeCharacterLineup />}
+      {/* The weapon-tuning lineup, in BOTH games now. It was gated to Siege,
+          which is why the only way to place a weapon in DreadRoot was for me to
+          guess at Euler angles — badly. The editor already cycles every
+          registered weapon (all 32, including the newly converted pistols) and
+          exports the numbers to the clipboard. Open it with & */}
+      <SiegeCharacterLineup />
       {isSiege ? (
         <SiegeWorldLayers world={activeWorld} />
       ) : (
