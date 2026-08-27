@@ -18,6 +18,7 @@
  */
 import * as THREE from 'three';
 import type { MoveState } from './movementState';
+import { FAKE_RELOAD_CLIP } from './fakeReload';
 
 export type ClipSet = Record<MoveState, string | null>;
 
@@ -226,8 +227,21 @@ export const ROOT_ACTIONS: ActionClipSet = {
   vault:  null,   // nor vault
 };
 
-export function actionClipSetFor(rig: 'mixamo' | 'root'): ActionClipSet {
-  return rig === 'root' ? ROOT_ACTIONS : MIXAMO_ACTIONS;
+/**
+ * Pistol actions. Only reload differs: the Mixamo rig has no pistol reload, so
+ * it uses the generated one. Firing still borrows the rifle recoil, which works
+ * because it is added rather than replacing the pose — see RECOIL_WEIGHT.
+ */
+export const MIXAMO_PISTOL_ACTIONS: ActionClipSet = {
+  ...MIXAMO_ACTIONS,
+  reload: FAKE_RELOAD_CLIP,
+};
+
+export function actionClipSetFor(
+  rig: 'mixamo' | 'root', stance: 'rifle' | 'pistol' = 'rifle',
+): ActionClipSet {
+  if (rig === 'root') return ROOT_ACTIONS;   // has a real pistol set already
+  return stance === 'pistol' ? MIXAMO_PISTOL_ACTIONS : MIXAMO_ACTIONS;
 }
 
 /**

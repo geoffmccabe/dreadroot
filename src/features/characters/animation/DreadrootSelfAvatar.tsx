@@ -187,6 +187,7 @@ export const DreadrootSelfAvatar: React.FC = () => {
       visible={thirdPerson}
       hideHead={!thirdPerson}
       weaponItemNumber={weaponItem}
+      reloadSeconds={activeWeapon?.reloadTime ?? null}
       opacity={1}
       armed={playerState.gun}
     />

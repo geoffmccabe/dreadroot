@@ -14,6 +14,7 @@ import { SkeletonUtils } from 'three-stdlib';
 import { DREADROOT_CHARACTERS, type DreadrootCharacter } from '../dreadrootCharacters';
 import { charGlbUrl } from '@/components/siege/charadmin/characterStats';
 import { attachWeapon, weaponForItem, type AttachedWeapon } from './attachWeapon';
+import { buildFakeReloadClip, FAKE_RELOAD_CLIP, FAKE_RELOAD_SECONDS } from './fakeReload';
 import {
   AirborneTracker, pickMovementState, type MoveInput, type MoveState,
 } from './movementState';
@@ -46,6 +47,9 @@ export interface CharacterAvatarProps {
   actor?: string;
   /** item_number of the weapon in hand, or null for empty-handed. */
   weaponItemNumber?: number | null;
+  /** The weapon's real reload time in seconds, so a generated reload can be
+   *  matched to it rather than running at a fixed length. */
+  reloadSeconds?: number | null;
   /**
    * Collapse the head (and whatever rides on it — hair, hat) so it cannot fill
    * the view. For YOUR OWN body in first person: you can never see your own
@@ -77,7 +81,7 @@ function findCharacter(name: string): DreadrootCharacter {
 export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   character, getInput, getPosition, getYaw,
   opacity = 1, visible = true, armed = false, actor = LOCAL_ACTOR,
-  hideHead = false, weaponItemNumber = null,
+  hideHead = false, weaponItemNumber = null, reloadSeconds = null,
 }) => {
   const c = findCharacter(character);
   const group = useRef<THREE.Group>(null);
@@ -165,7 +169,10 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
       // convention and Flamma/Jeanette use Y, so the position tracks drive
       // every bone down the wrong axis and shred the model.
       ? prepareRootRigClips(root.animations)
-      : [...rifle.animations, ...loco.animations, ...misc.animations, ...pistol.animations]
+      // The generated pistol reload rides along with the loaded clips so the
+      // action layer treats it exactly like any other.
+      : [...rifle.animations, ...loco.animations, ...misc.animations,
+         ...pistol.animations, buildFakeReloadClip()]
   ), [c.rig, root.animations, rifle.animations, loco.animations, misc.animations, pistol.animations]);
 
   /**
@@ -218,7 +225,8 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     rotX: ((c.rootFix?.rotXDeg ?? 0) * Math.PI) / 180,
   }), [c]);
   const available = useMemo(() => new Set(clips.map((a) => a.name)), [clips]);
-  const actionSet = useMemo(() => actionClipSetFor(c.rig), [c.rig]);
+  const stance: 'rifle' | 'pistol' = heldWeapon?.animSet === 'pistol' ? 'pistol' : 'rifle';
+  const actionSet = useMemo(() => actionClipSetFor(c.rig, stance), [c.rig, stance]);
   /** An override action owns the whole body until this time. */
   const overrideUntil = useRef(0);
   /** Death holds forever; nothing releases it but a respawn. */
@@ -276,12 +284,21 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     a.reset();
     a.setLoop(THREE.LoopOnce, 1);
     a.clampWhenFinished = ACTION_HOLDS[id];
+    /**
+     * Match the generated reload to the WEAPON's own reload time. The weapons
+     * carry real values (a Basic Pistol is 1.15s), so a fixed-length animation
+     * would either still be swinging after the gun is loaded or finish early
+     * and stand idle. One number fixes it.
+     */
     a.timeScale = 1;
+    if (id === 'reload' && clip === FAKE_RELOAD_CLIP) {
+      const secs = reloadSeconds ?? FAKE_RELOAD_SECONDS;
+      a.timeScale = FAKE_RELOAD_SECONDS / Math.max(0.3, secs);
+    }
     if (useMode === 'additive') {
       a.blendMode = THREE.AdditiveAnimationBlendMode;
       // A borrowed rifle recoil is far too big for a handgun. The additive
       // weight is the dial for exactly that.
-      const stance = heldWeapon?.animSet === 'pistol' ? 'pistol' : 'rifle';
       a.setEffectiveWeight(id === 'shoot' ? RECOIL_WEIGHT[stance] : 1);
       a.fadeIn(0.05).play();
       return;
@@ -395,7 +412,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
 
     // The stance comes from the WEAPON, not from a boolean. Unregistered
     // weapons have no entry, and default to the rifle stance as before.
-    const { set, name } = clipSetFor(c.rig, armed, heldWeapon?.animSet ?? 'rifle');
+    const { set, name } = clipSetFor(c.rig, armed, stance);
     const want = resolveClip(set, state, available, name);
     if (!want || want === current.current) return;
 
