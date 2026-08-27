@@ -17,6 +17,10 @@ export const ANIM_LIBRARY = '/siege/characters/siege_anims.glb';
 export const RIFLE_LIBRARY = '/siege/characters/siege_rifle_anims.glb';
 // Unarmed ground locomotion, gender-prefixed (Loco_M_* / Loco_F_*): idle/walk/run/strafe/turn/jump.
 export const LOCO_LIBRARY = '/siege/characters/siege_loco_anims.glb';
+// Mixamo one-handed PISTOL clips (idle/walk/run/strafe/jump/turn). Needed by the lineup as well as
+// the game: tuning a pistol against a RIFLE pose is meaningless, since the rifle set puts the left
+// hand on a forestock that a pistol does not have.
+export const PISTOL_LIBRARY = '/siege/characters/siege_pistol_anims.glb';
 
 // scale brings each model to its real height; minY (glb-space feet) lets the renderer keep the
 // scaled feet on the ground.  Ash → 2.0 m incl. hat (raw 1.783), Thorn → 1.4 m (raw 2.010).
@@ -51,6 +55,14 @@ export const getCharLineupEnabled = (): boolean => enabled;
 export function toggleCharLineup(): void { enabled = !enabled; emit(); }
 export function setCharAnchor(a: LineupAnchor): void { anchor = a; emit(); }
 export function setCharAnimNames(n: string[]): void { if (n.length && n.length !== animNames.length) { animNames = n; emit(); } }
+export function setCharAnimIndex(i: number): void { if (animIndex !== i) { animIndex = i; emit(); } }
+/** Jump straight to a clip by name (e.g. 'pistol_idle'). No-op if it isn't loaded yet. */
+export function setCharAnimByName(name: string): boolean {
+  const i = animNames.indexOf(name);
+  if (i < 0) return false;
+  if (animIndex !== i) { animIndex = i; emit(); }
+  return true;
+}
 export function cycleCharAnim(dir: number): void {
   if (!animNames.length) return;
   animIndex = (animIndex + dir + animNames.length) % animNames.length; emit();
@@ -74,6 +86,7 @@ export function triggerParkour(): void { parkourSeq++; emit(); }
 // lives in the component; this just tracks the index. count is passed so wrap-around fits the list.
 let weaponIndex = 0;
 export const getWeaponIndex = (): number => weaponIndex;
+export function setWeaponIndex(i: number): void { if (weaponIndex !== i) { weaponIndex = i; emit(); } }
 export function cycleWeapon(dir: number, count: number): void {
   if (count <= 0) return;
   weaponIndex = (weaponIndex + dir + count) % count; emit();

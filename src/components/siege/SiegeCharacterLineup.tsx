@@ -11,12 +11,12 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { sampleHeight } from './terrainHeight';
+import { lineupGroundY } from './charlineup/lineupGround';
 import {
-  LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
+  LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, PISTOL_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon, getTuneCharIndex, setTuneCharIndex,
-  getArmJoint, cycleArmJoint,
+  getArmJoint, cycleArmJoint, setCharAnimByName, setCharAnimIndex, setWeaponIndex,
 } from './charlineup/siegeCharLineupState';
 import { getArmFK, hasArmFK, nudgeArmFK, applyArmFK, ARM_JOINTS } from './charlineup/armFK';
 import { AnimFSM } from './charlineup/animFSM';
@@ -57,6 +57,7 @@ const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
 useGLTF.preload(glbUrl(ANIM_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(RIFLE_LIBRARY), '/draco/');
 useGLTF.preload(glbUrl(LOCO_LIBRARY), '/draco/');
+useGLTF.preload(glbUrl(PISTOL_LIBRARY), '/draco/');
 // The 6 lineup character meshes + the first gun are NOT visible on spawn (the lineup is a dev-only
 // '&&&' overlay; the spawn character loads on-demand via the intro avatar). Warm them on idle AFTER
 // the lobby is up so they don't fight the lobby's load for bandwidth.
@@ -73,13 +74,16 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   const { animations: baseAnims } = useGLTF(glbUrl(ANIM_LIBRARY), '/draco/');
   const { animations: rifleAnims } = useGLTF(glbUrl(RIFLE_LIBRARY), '/draco/');
   const { animations: locoAnims } = useGLTF(glbUrl(LOCO_LIBRARY), '/draco/');
+  // The one-handed set. Without it a pistol is posed on a two-handed rifle stance, which is the
+  // wrong shape to tune a grip against.
+  const { animations: pistolAnims } = useGLTF(glbUrl(PISTOL_LIBRARY), '/draco/');
   // Bind the rifle clips UNMODIFIED. (An earlier band-aid stripped the Spine/Spine1 tracks thinking
   // the clips had a bad lower-spine curve — but the user had confirmed they look good; stripping the
   // spine while the hips still tilt forward folded every character 90° at the waist. Reverted.)
   // Bind all clips UNMODIFIED. (Runtime clip-surgery on the rifle clips — spine-strip and Hips-yaw —
   // both caused worse distortion; the rifle clips' curved lower back is an ASSET flaw, fixed by
   // rebuilding the rifle library, not by patching tracks at load.)
-  const animations = useMemo(() => [...baseAnims, ...rifleAnims, ...locoAnims], [baseAnims, rifleAnims, locoAnims]);
+  const animations = useMemo(() => [...baseAnims, ...rifleAnims, ...locoAnims, ...pistolAnims], [baseAnims, rifleAnims, locoAnims, pistolAnims]);
   const cloned = useMemo(() => SkeletonUtils.clone(scene) as THREE.Group, [scene]);
   const group = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(animations, group);
@@ -101,7 +105,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
 
   // Feet on the terrain; if the row's cell isn't sampled yet, fall back to the player's ground Y.
   // Offset by the scaled feet (minY) so scaling doesn't sink/float the model.
-  const groundY = useMemo(() => (sampleHeight(x, z) ?? fallbackY) - minY * scale, [x, z, fallbackY, minY, scale]);
+  const groundY = useMemo(() => lineupGroundY(x, z, fallbackY + 3) - minY * scale, [x, z, fallbackY, minY, scale]);
 
   useEffect(() => {
     if (!names.length) return;
@@ -251,9 +255,31 @@ function ObstacleBox({ x, z, yaw, groundY, preset }: { x: number; z: number; yaw
   );
 }
 
+/** The gun the tool opens on. Pistols are what needs tuning, and a pistol tuned against a rifle
+ *  stance is tuned against the wrong pose entirely. */
+const START_GUN = 'basic_pistol';
+/** Rifle Idle-Aiming — a still two-handed pose, the one the rifle tuning was done against. */
+const RIFLE_IDLE_INDEX = 18;
+
 export function SiegeCharacterLineup() {
-  const { enabled, animIndex, anchor, parkourSeq, weaponIndex, tuneCharIndex } = useCharLineup();
+  const { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex } = useCharLineup();
   const gun = GUNS[weaponIndex % GUNS.length];
+  const animSet = HELD_WEAPONS[weaponIndex % HELD_WEAPONS.length].animSet;
+
+  // Open on a pistol rather than on whatever was last selected (index 0 = the AK74).
+  useEffect(() => {
+    if (!enabled) return;
+    const i = HELD_WEAPONS.findIndex((g) => g.key === START_GUN);
+    if (i >= 0) setWeaponIndex(i);
+  }, [enabled]);
+
+  // Pose follows the weapon. Only fires when the SET changes, so M/N still cycle freely within a set.
+  useEffect(() => {
+    if (!enabled || !animNames.length) return;
+    if (animSet === 'pistol') setCharAnimByName('pistol_idle');
+    else setCharAnimIndex(RIFLE_IDLE_INDEX);
+  }, [enabled, animSet, animNames.length]);
+
   const gunRef = useRef(gun); gunRef.current = gun;   // current gun for the '[]'-deps key handler
   const { camera } = useThree();
 
@@ -324,9 +350,17 @@ export function SiegeCharacterLineup() {
       }
       else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
       else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
-      // Gun orientation: x/y/z rotate the gun 2° about that LOCAL axis (Red=X, Green=Y, Blue=Z on the
-      // gizmo); Shift+x/y/z rotates 45° for fast moves. Resulting rotDeg is logged to bake.
-      else if (/^[xyz]$/i.test(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); rotateWeaponLocal(tuneTarget(), e.key.toLowerCase() as 'x' | 'y' | 'z', e.shiftKey ? 90 : 2); }
+      // Gun orientation about its LOCAL axes (Red=X, Green=Y, Blue=Z on the gizmo).
+      //   Shift + X/Y/Z = 90° quarter turn   |   Alt + X/Y/Z = 2° fine nudge
+      // A MODIFIER IS REQUIRED, deliberately. Plain Z and X are god-mode-down and holster in
+      // DreadRoot; stealing them left the camera unable to descend, so the bare letters now pass
+      // straight through to the game. Read from e.code, because Alt rewrites e.key on macOS.
+      else if (e.code === 'KeyX' || e.code === 'KeyY' || e.code === 'KeyZ') {
+        if (!e.shiftKey && !e.altKey) return;   // bare letter → let the game have it
+        e.preventDefault(); e.stopImmediatePropagation();
+        const axis = e.code.slice(3).toLowerCase() as 'x' | 'y' | 'z';
+        rotateWeaponLocal(tuneTarget(), axis, e.shiftKey ? 90 : 2);
+      }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
@@ -342,8 +376,9 @@ export function SiegeCharacterLineup() {
     const cz = p.z + f.z * AHEAD;
     // Characters' +Z faces back toward the player.
     const yaw = Math.atan2(-f.x, -f.z);
-    // Ground under the player is loaded now → a safe fallback height for any row cell not yet sampled.
-    const groundY = sampleHeight(p.x, p.z) ?? sampleHeight(cx, cz) ?? p.y;
+    // Ground under the ROW, not under the camera: in god mode the camera can be a hundred metres up,
+    // and using its Y put the whole lineup in the sky.
+    const groundY = lineupGroundY(cx, cz, p.y);
     setCharAnchor({ x: cx, z: cz, yaw, groundY });
   }, [enabled, camera]);
 
