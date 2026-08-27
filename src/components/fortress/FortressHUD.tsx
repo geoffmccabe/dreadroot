@@ -724,11 +724,32 @@ export function FortressHUD(props: FortressHUDProps) {
           { region: 'equip', page: 0, slot: target },
         );
         if (ok && evictRifleAfter) {
-          // Pistol is now in slot 5; the source slot is free → send the centered rifle there.
-          await slotClickHandlers.equipTransfer(
-            { region: 'equip', page: 0, slot: 1 },
-            { region, page: 0, slot },
-          );
+          /**
+           * Send the displaced two-hander somewhere REAL.
+           *
+           * This used to assume the pistol's source slot was now free. It
+           * often is not: moving the pistol into an OCCUPIED hand SWAPS, so
+           * whatever was in that hand lands in the source slot. The rifle was
+           * then moved onto an occupied slot, which either failed silently or
+           * left both weapons showing before one vanished.
+           *
+           * So the destination is looked up FRESH, after the pistol has moved,
+           * and the whole eviction is skipped if there is genuinely nowhere —
+           * leaving the rifle equipped, which is visible and recoverable,
+           * rather than pushing it into a slot that is taken.
+           */
+          const invSlot = findFirstEmptyInventorySlot();
+          const dest = invSlot != null
+            ? { region: 'inventory' as const, slot: invSlot }
+            : (() => { const q = findFirstEmptyHotbarSlot(); return q != null ? { region: 'quick_select' as const, slot: q } : null; })();
+          if (dest) {
+            await slotClickHandlers.equipTransfer(
+              { region: 'equip', page: 0, slot: 1 },
+              { region: dest.region, page: 0, slot: dest.slot },
+            );
+          } else {
+            setDebugStatus('quick-equip: nowhere to put the two-hander — left equipped');
+          }
         }
         setDebugStatus(ok ? `quick-equip ${region}${slot}→E${target}` : 'quick-equip FAIL');
       } catch (e) {
