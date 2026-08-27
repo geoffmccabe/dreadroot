@@ -11,7 +11,7 @@ import { useGLTF, useAnimations } from '@react-three/drei';
 import { useThree, useFrame } from '@react-three/fiber';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
-import { lineupGroundY } from './charlineup/lineupGround';
+import { lineupGroundY, voxelGroundY } from './charlineup/lineupGround';
 import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, PISTOL_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
@@ -105,7 +105,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
 
   // Feet on the terrain; if the row's cell isn't sampled yet, fall back to the player's ground Y.
   // Offset by the scaled feet (minY) so scaling doesn't sink/float the model.
-  const groundY = useMemo(() => lineupGroundY(x, z, fallbackY + 3) - minY * scale, [x, z, fallbackY, minY, scale]);
+  const groundY = useMemo(() => (voxelGroundY(x, z, fallbackY + 3) ?? fallbackY) - minY * scale, [x, z, fallbackY, minY, scale]);
 
   useEffect(() => {
     if (!names.length) return;
@@ -378,7 +378,7 @@ export function SiegeCharacterLineup() {
     const yaw = Math.atan2(-f.x, -f.z);
     // Ground under the ROW, not under the camera: in god mode the camera can be a hundred metres up,
     // and using its Y put the whole lineup in the sky.
-    const groundY = lineupGroundY(cx, cz, p.y);
+    const groundY = lineupGroundY(cx, cz, p.y, { x: p.x, z: p.z });
     setCharAnchor({ x: cx, z: cz, yaw, groundY });
   }, [enabled, camera]);
 

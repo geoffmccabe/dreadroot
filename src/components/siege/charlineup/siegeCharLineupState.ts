@@ -3,6 +3,7 @@
 // animation (same Mixamo skeleton + clips on every character, so one index drives all). Each
 // animation has a 1-based number for reference.
 import { useSyncExternalStore } from 'react';
+import { lastGroundSource, gridSize } from './lineupGround';
 
 // Bump ONLY when the character/anim glbs are rebuilt — it's the cache key for those assets, kept
 // separate from APP_VERSION so ordinary deploys don't force a re-download (they cache in the
@@ -103,6 +104,17 @@ export function setTuneCharIndex(i: number): void { tuneCharIndex = i; emit(); }
 let armJoint = -1;
 export const getArmJoint = (): number => armJoint;
 export function cycleArmJoint(dir: number): void { armJoint = (((armJoint + 1) + dir + 4) % 4) - 1; emit(); }
+
+// Dev introspection for scripts/check-lineup.mjs. The lineup is keyboard-only and lives inside the
+// Canvas, so there is no other way for an automated check to answer "what is it actually holding?" —
+// and guessing at that is exactly how this tool shipped in the wrong pose twice.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __lineup?: () => unknown }).__lineup = () => ({
+    enabled, weaponIndex, animIndex, clip: animNames[animIndex] ?? null, clipCount: animNames.length,
+    anchorY: anchor?.groundY ?? null, anchorX: anchor?.x ?? null, anchorZ: anchor?.z ?? null,
+    groundSource: lastGroundSource, gridSize: gridSize(),
+  });
+}
 
 export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);

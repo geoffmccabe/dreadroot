@@ -18,33 +18,80 @@ import { sampleHeight } from '../terrainHeight';
 /** How far down to look before giving up. Deeper than any tree/fortress drop. */
 const MAX_SCAN = 256;
 
-/** True if the cube containing this point is solid, per the movement grid. */
-function solidAt(x: number, y: number, z: number): boolean {
-  const n = worldCollisionGrid.getNearbyFiltered(x, z, 1.0, y, y + 0.01);
-  if (n === 0) return false;
-  const boxes = worldCollisionGrid.nearbyResult;
-  for (let i = 0; i < n; i++) {
-    const b = boxes[i];
-    if (x >= b.min.x && x <= b.max.x &&
-        y >= b.min.y && y <= b.max.y &&
-        z >= b.min.z && z <= b.max.z) return true;
+/** Which source answered the last call — read by scripts/check-lineup.mjs so a
+ *  wrong height can be traced to the sampler that produced it. */
+export let lastGroundSource: 'voxel' | 'player-column' | 'heightfield' | 'world-floor' = 'world-floor';
+
+/** DreadRoot's hard floor — the same constant the shpider AI and death fragments
+ *  use. Everything in the world sits on or above it. */
+const WORLD_FLOOR_Y = 0;
+
+/** Number of things in the block collision grid — so a check can tell "the scan
+ *  is broken" apart from "there are genuinely no blocks here". */
+export const gridSize = (): number => worldCollisionGrid.size;
+
+/**
+ * Top of the block column at (x, z), searching down from `startY`.
+ * Null when the column is empty all the way down.
+ */
+export function voxelGroundY(x: number, z: number, startY: number): number | null {
+  const bx = Math.floor(x), bz = Math.floor(z);
+  const top = Math.ceil(startY);
+  for (let y = top; y >= top - MAX_SCAN; y--) {
+    if (worldCollisionGrid.hasVoxel(bx, y, bz)) return y + 1;
   }
-  return false;
+  return null;
 }
 
 /**
- * Ground height at (x, z), searching downward from `startY`.
- * Falls back to `startY - 1.7` (roughly the player's feet) if nothing is found,
- * so an unloaded chunk still puts the row somewhere sane rather than in orbit.
+ * Where the row's feet go at (x, z), searching down from `startY`.
+ *
+ * VOXELS FIRST. DreadRoot has a heightfield sampler registered, but it answers
+ * with a flat plane near y=0 — a false floor nowhere near the terrain once you
+ * are on a hill or up a tree (measured: it said 0.1 with the player at y=2).
+ *
+ * `playerXZ` is the escape hatch that actually fixes the reported bug: in god
+ * mode the camera can be a hundred metres up over an unloaded column, and
+ * anything camera-relative puts the whole lineup in the sky. The player is
+ * standing on something, so that column is a far better guess than the camera.
  */
-export function lineupGroundY(x: number, z: number, startY: number): number {
-  const h = sampleHeight(x, z);
-  if (h !== null && h !== undefined) return h;
-  // Sample cube CENTRES — a point exactly on a boundary belongs to both
-  // neighbours and reads inconsistently.
-  for (let d = 0; d <= MAX_SCAN; d += 1) {
-    const y = Math.floor(startY - d) + 0.5;
-    if (solidAt(x, y, z)) return Math.floor(y) + 1;
+export function lineupGroundY(
+  x: number, z: number, startY: number, playerXZ?: { x: number; z: number },
+): number {
+  const v = voxelGroundY(x, z, startY);
+  if (v !== null) { lastGroundSource = 'voxel'; return v; }
+  if (playerXZ) {
+    const p = voxelGroundY(playerXZ.x, playerXZ.z, startY);
+    if (p !== null) { lastGroundSource = 'player-column'; return p; }
   }
-  return startY - 1.7;
+  const h = sampleHeight(x, z);
+  if (h !== null && h !== undefined) { lastGroundSource = 'heightfield'; return h; }
+  // NEVER camera-relative. The old fallback was the camera's own height, which is
+  // why "&&&" in god mode put the whole lineup a hundred metres up. DreadRoot has
+  // a hard floor under everything, so falling back to it is always on the ground
+  // and never in the sky.
+  lastGroundSource = 'world-floor';
+  return WORLD_FLOOR_Y;
+}
+
+// Dev probe for scripts/check-lineup.mjs: "what does the block grid actually say
+// under this column?". The lineup's feet come straight off this, and a wrong
+// height is otherwise indistinguishable from a wrong sampler.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __lineupProbe?: (x: number, z: number, top: number) => unknown }).__lineupProbe =
+    (x, z, top) => {
+      const bx = Math.floor(x), bz = Math.floor(z);
+      const hits: number[] = [];
+      for (let y = Math.ceil(top); y >= Math.ceil(top) - 40; y--) {
+        if (worldCollisionGrid.hasVoxel(bx, y, bz)) hits.push(y);
+      }
+      // Both storage paths at once: getNearbyFiltered collects Box3 colliders AND voxels.
+      const n = worldCollisionGrid.getNearbyFiltered(x, z, 2, -60, 60);
+      const boxes: string[] = [];
+      for (let i = 0; i < Math.min(n, 6); i++) {
+        const b = worldCollisionGrid.nearbyResult[i];
+        boxes.push(`${b.min.x},${b.min.y},${b.min.z}..${b.max.x},${b.max.y},${b.max.z}`);
+      }
+      return { bx, bz, hits: hits.slice(0, 8), near: n, boxes, gridSize: worldCollisionGrid.size };
+    };
 }
