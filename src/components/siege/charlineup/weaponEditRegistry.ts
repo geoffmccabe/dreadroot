@@ -62,7 +62,8 @@ if (typeof window !== 'undefined') {
       const e = new THREE.Euler().setFromQuaternion(r.wrap.quaternion);
       const deg = (v: number) => Math.round(v * 180 / Math.PI);
       return { weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
-        rot: [deg(e.x), deg(e.y), deg(e.z)] };
+        rot: [deg(e.x), deg(e.y), deg(e.z)],
+        pos: [+r.wrap.position.x.toFixed(3), +r.wrap.position.y.toFixed(3), +r.wrap.position.z.toFixed(3)] };
     });
   };
 }
@@ -73,8 +74,17 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '11';  // v11: also baked Rocket Launcher (item_14) — clear its saved tweaks
-const BAKED_URLS = new Set(['/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb', '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb', '/siege/weapons/item_12.glb', '/siege/weapons/item_1.glb', '/siege/weapons/item_5.glb', '/siege/weapons/item_6.glb', '/siege/weapons/item_14.glb']);
+const BAKE_VERSION = '12';  // v12: baked the eye-tuned pistol baseline onto every one-handed weapon
+const BAKED_URLS = new Set([
+  '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
+  '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
+  '/siege/weapons/item_12.glb', '/siege/weapons/item_1.glb', '/siege/weapons/item_5.glb',
+  '/siege/weapons/item_6.glb', '/siege/weapons/item_14.glb',
+  // v12 — the one-handed weapons, all now carrying the eye-tuned PISTOL_ROT/PISTOL_GRIP baseline.
+  '/siege/weapons/item_15.glb', '/siege/weapons/item_0.glb', '/siege/weapons/item_201.glb',
+  '/siege/weapons/item_25.glb', '/siege/weapons/item_193.glb', '/siege/weapons/item_2.glb',
+  '/siege/weapons/item_3.glb', '/siege/weapons/item_153.glb',
+]);
 try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
     for (let i = localStorage.length - 1; i >= 0; i--) {
@@ -238,6 +248,14 @@ export function exportTuning(): void {
   if (atl.length) { lines.push('--- texture atlas (;) ---'); lines.push(...atl); }
   const spr = spreadExportLines();
   if (spr.length) { lines.push('--- shoulder spread ([ ]) ---'); lines.push(...spr); }
+  // The step that is easy to forget and silently wrecks the result: baking a value into code
+  // while the browser still holds the SAME value as a tune makes the wrap apply it twice
+  // (rotation composes, position adds). Naming the urls here means the bake instruction travels
+  // WITH the numbers instead of living only in a comment further up this file.
+  if (byWeapon.size) {
+    lines.push('--- WHEN BAKING THESE: bump BAKE_VERSION and add to BAKED_URLS ---');
+    for (const weaponKey of byWeapon.keys()) lines.push(`  '${weaponKey}',`);
+  }
   const text = lines.join('\n');
   try { navigator.clipboard?.writeText(text); } catch { /* clipboard blocked — console only */ }
   console.log(text + '\n(copied to clipboard)');

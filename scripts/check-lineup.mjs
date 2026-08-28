@@ -68,6 +68,12 @@ console.log('in hands  :', JSON.stringify(held));
 // in the hand (gizmo included, so compare weapons against each other, not against lengthM) and
 // whether its material ended up with a texture. A weapon whose registry length is wrong shows
 // up here in the wrong size cluster, which is otherwise only visible by eye.
+// The wrap's rotation as loaded, BEFORE any key is pressed. It must equal the baked rotDeg
+// exactly. Anything else means a saved browser tune is composing on top of the baked value —
+// the doubling that BAKE_VERSION / BAKED_URLS exist to prevent.
+const asLoaded = await page.evaluate(() => (window.__lineupWeaponSizes() || [])[0] ?? null);
+console.log('as loaded :', JSON.stringify(asLoaded));
+
 // Do the rotation keys fire? Alt/Shift + X/Y/Z are the tuning nudges; a modifier the browser
 // or OS eats is indistinguishable from a broken handler without measuring the result.
 const rotTest = await page.evaluate(async () => {
