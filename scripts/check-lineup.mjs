@@ -64,6 +64,23 @@ const probe = await page.evaluate((s) => {
 if (probe) console.log('probe     :', JSON.stringify(probe));
 const held = await page.evaluate(() => (window.__lineupWeapons ? window.__lineupWeapons() : null));
 console.log('in hands  :', JSON.stringify(held));
+// Walk every weapon by INDEX and report what actually got rendered: world size of the model
+// in the hand (gizmo included, so compare weapons against each other, not against lengthM) and
+// whether its material ended up with a texture. A weapon whose registry length is wrong shows
+// up here in the wrong size cluster, which is otherwise only visible by eye.
+const sizes = await page.evaluate(async (n) => {
+  const out = [];
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < n; i++) {
+    window.__lineupSetWeapon(i);
+    await wait(400);
+    const w = window.__lineupWeaponSizes ? window.__lineupWeaponSizes() : null;
+    out.push(w && w.length ? { i, ...w[0] } : { i, missing: true });
+  }
+  return out;
+}, 26);
+console.log('per weapon:');
+for (const w of sizes || []) console.log('   ', JSON.stringify(w));
 console.log('\n=== LINEUP CHECK ===');
 console.log(st ? JSON.stringify(st, null, 2) : 'window.__lineup MISSING — state module never loaded');
 if (errors.length) { console.log('page errors:'); for (const e of errors.slice(0, 5)) console.log('  -', e.slice(0, 200)); }

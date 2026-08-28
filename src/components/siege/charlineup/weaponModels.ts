@@ -52,6 +52,14 @@ export interface HeldWeapon {
   gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
   leftHand?: { point: [number, number, number]; wrist: number };  // baked support-hand grip (gun-local) + wrist°
   animSet: 'rifle' | 'pistol';
+  /**
+   * Which shared texture atlas to paint on, for models exported WITHOUT their
+   * texture. Several SWU weapons ship with UVs and a bare white material — the
+   * atlas they were authored against lives in a sibling model's glb, so it is
+   * extracted once to /siege/weapons/atlas_*.png and applied at load. Omit for
+   * models that already carry their own texture or per-material colours.
+   */
+  atlas?: 'military' | 'scifi';
 }
 
 // AK74 (keyed 'ak47' in the DB), tiers 1–7 = item_numbers 20 + 111–116. All two-handed automatics →
@@ -112,15 +120,20 @@ export const HELD_WEAPONS: HeldWeapon[] = [
   // PISTOLS (one-handed) — animSet 'pistol'; no leftHand grip. These need pulling out of the two-handed
   // `*` cycle + their own animations (future). Tuning captured from the in-lineup export.
   { key: 'plasma_shotgun',name: 'Plasma Shotgun',       itemNumbers: [5],   url: '/siege/weapons/item_5.glb',   lengthM: 1.0,
-    rotDeg: [-87, -11, -94], gripPos: G, animSet: 'pistol',
+    rotDeg: [-87, -11, -94], gripPos: G, animSet: 'rifle',
     gripByChar: { Rajax: [0.06, 0.3, 0.04] },
     sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91, Flamma: 0.94, Jeanette: 0.91, 'Shi Yang': 1.00 } },
   { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: G, sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04, Flamma: 1.08, Jeanette: 1.04, 'Shi Yang': 1.15 },
+    animSet: 'rifle' },
+  // "Musket" is the in-game NAME, not the size: weapon_stats says both are ONE-HANDED, and the models
+  // are flintlock PISTOLS (raw model 0.57 m on its longest axis). They were carrying lengthM 1.4 —
+  // a full-length long gun — plus a sizeByChar column copied from the Dragunov, which is why they
+  // rendered several times oversized. The old size column is dropped: it was derived for a rifle and
+  // means nothing here, so auto-fit governs until these are tuned by eye.
+  { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 0.40, rotDeg: R, gripPos: G,
     animSet: 'pistol' },
-  { key: 'musket',        name: 'Musket',               itemNumbers: [2],   url: '/siege/weapons/item_2.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, sizeByChar: { Ash: 1.02, Dago: 1.24, Fluffer: 1.43, Jankz: 1.24, Rajax: 1.08, Thorn: 0.98, Flamma: 1.02, Jeanette: 0.98, 'Shi Yang': 1.08 },
-    animSet: 'rifle' },
-  { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 1.4, rotDeg: R, gripPos: G, sizeByChar: { Ash: 1.02, Dago: 1.24, Fluffer: 1.43, Jankz: 1.24, Rajax: 1.08, Thorn: 0.98, Flamma: 1.02, Jeanette: 0.98, 'Shi Yang': 1.08 },
-    animSet: 'rifle' },
+  { key: 'db_musket',     name: 'Double Barrel Musket', itemNumbers: [3],   url: '/siege/weapons/item_3.glb',   lengthM: 0.42, rotDeg: R, gripPos: G,
+    animSet: 'pistol' },
   { key: 'raygun',        name: 'Raygun',               itemNumbers: [6],   url: '/siege/weapons/item_6.glb',   lengthM: 0.7,
     rotDeg: [-88, -9, -87], gripPos: G, animSet: 'pistol',
     gripByChar: { Rajax: [0.06, 0.2, 0.04] },
@@ -143,10 +156,16 @@ export const HELD_WEAPONS: HeldWeapon[] = [
   //
   // animSet follows Unity's weaponType, the same field that settled the hand
   // counts: pistols/revolvers/gloves are 'pistol', long guns are 'rifle'.
+  // atlas: only assigned where the model's UVs PROVE it. Shi Yang's Pistol unwraps to exactly the
+  // same island as the Musket's (u 0.073-0.162, v 0.861-0.989), which is a known-good region of the
+  // PolygonMilitary atlas, so it is certain. The Basic Pistol, Revolver and Plasma Pistol unwrap
+  // across the FULL 0-1 square — a dedicated texture layout — so pasting an atlas on them would
+  // smear unrelated swatches over the model. Their real colours come from Unity's uv1..uv8 material
+  // slots (see docs/WEAPON_TEXTURES.md); ';' cycles an atlas by hand for experimenting.
   { key: 'basic_pistol',  name: 'Basic Pistol',        itemNumbers: [15],  url: '/siege/weapons/item_15.glb',  lengthM: 0.28, rotDeg: R, gripPos: G, animSet: 'pistol' },
   { key: 'plasma_pistol', name: 'Plasma Pistol',       itemNumbers: [0],   url: '/siege/weapons/item_0.glb',   lengthM: 0.32, rotDeg: R, gripPos: G, animSet: 'pistol' },
   { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34, rotDeg: R, gripPos: G, animSet: 'pistol' },
-  { key: 'shiyang_pistol',name: "Shi Yang's Pistol",   itemNumbers: [25],  url: '/siege/weapons/item_25.glb',  lengthM: 0.30, rotDeg: R, gripPos: G, animSet: 'pistol' },
+  { key: 'shiyang_pistol',name: "Shi Yang's Pistol",   itemNumbers: [25],  url: '/siege/weapons/item_25.glb',  lengthM: 0.30, rotDeg: R, gripPos: G, animSet: 'pistol', atlas: 'military' },
   { key: 'flame_glove',   name: 'Flame Glove',         itemNumbers: [193], url: '/siege/weapons/item_193.glb', lengthM: 0.26, rotDeg: R, gripPos: G, animSet: 'pistol' },
   { key: 'bonnies_rifle', name: "Bonnie's Rifle",      itemNumbers: [24],  url: '/siege/weapons/item_24.glb',  lengthM: 1.10, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'zk5',           name: 'ZK-5',                itemNumbers: [168], url: '/siege/weapons/item_168.glb', lengthM: 0.90, rotDeg: R, gripPos: G, animSet: 'rifle' },
@@ -154,7 +173,7 @@ export const HELD_WEAPONS: HeldWeapon[] = [
   { key: 'crossbow_cn',   name: 'Chinese Repeating Crossbow!', itemNumbers: [26], url: '/siege/weapons/item_26.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'baseball_bat',  name: 'Baseball Bat',        itemNumbers: [215], url: '/siege/weapons/item_215.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle' },
   { key: 'golf_club',     name: 'GolfClub',            itemNumbers: [222], url: '/siege/weapons/item_222.glb', lengthM: 1.00, rotDeg: R, gripPos: G, animSet: 'rifle' },
-  { key: 'pickaxe',       name: 'Pickaxe',             itemNumbers: [153], url: '/siege/weapons/item_153.glb', lengthM: 0.80, rotDeg: R, gripPos: G, animSet: 'rifle' },
+  { key: 'pickaxe',       name: 'Pickaxe',             itemNumbers: [153], url: '/siege/weapons/item_153.glb', lengthM: 0.55, rotDeg: R, gripPos: G, animSet: 'pistol' },
 ];
 
 const byItem = new Map<number, HeldWeapon>();

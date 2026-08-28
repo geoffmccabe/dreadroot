@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { leftHandExportLines } from './leftHandIK';
 import { armFKExportLines } from './armFK';
+import { atlasExportLines } from './weaponAtlas';
 
 export interface WeaponWrapReg {
   wrap: THREE.Group;        // group whose local rotation/scale we drive
@@ -39,6 +40,23 @@ export function weaponWraps(): WeaponWrapReg[] { return [...regs.values()]; }
 if (typeof window !== 'undefined') {
   (window as unknown as { __lineupWeapons?: () => unknown }).__lineupWeapons = () =>
     weaponWraps().map((r) => ({ char: r.charName, weapon: r.weaponKey }));
+  // Rendered size + whether a texture landed, per weapon in hand. A registry lengthM that is
+  // wrong shows up here as a world size far off target — the Muskets were rendering at rifle
+  // length because they were listed as 1.4 m long guns.
+  (window as unknown as { __lineupWeaponSizes?: () => unknown }).__lineupWeaponSizes = () => {
+    const THREEB = new THREE.Box3();
+    return weaponWraps().filter((r) => r.charName === 'Ash').map((r) => {
+      THREEB.setFromObject(r.wrap);
+      const s = THREEB.getSize(new THREE.Vector3());
+      let textured = false, mats = 0;
+      r.wrap.traverse((o) => {
+        const m = (o as THREE.Mesh).material;
+        if (!m) return;
+        for (const mm of Array.isArray(m) ? m : [m]) { mats++; if ((mm as THREE.MeshStandardMaterial).map) textured = true; }
+      });
+      return { weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured };
+    });
+  };
 }
 
 // The editor-object id every gun wrap tags itself with, so the crosshair/L selects them all as one.
@@ -208,6 +226,8 @@ export function exportTuning(): void {
   if (lh.length) { lines.push('--- left hand ---'); lines.push(...lh); }
   const afk = armFKExportLines();
   if (afk.length) { lines.push('--- left arm (FK) ---'); lines.push(...afk); }
+  const atl = atlasExportLines();
+  if (atl.length) { lines.push('--- texture atlas (;) ---'); lines.push(...atl); }
   const text = lines.join('\n');
   try { navigator.clipboard?.writeText(text); } catch { /* clipboard blocked — console only */ }
   console.log(text + '\n(copied to clipboard)');

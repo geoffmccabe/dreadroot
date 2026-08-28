@@ -2151,25 +2151,11 @@ export function Fortress() {
       }
       
       
-      // World switching with < and > (Shift+comma / Shift+period)
-      if (event.key === '<') {
-        event.preventDefault();
-        navigateWorld('prev');
-        toast({
-          title: `World ${worldIndex.current > 1 ? worldIndex.current - 1 : worldIndex.total}/${worldIndex.total}`,
-          description: "Switching world...",
-        });
-        return;
-      }
-      if (event.key === '>') {
-        event.preventDefault();
-        navigateWorld('next');
-        toast({
-          title: `World ${worldIndex.current < worldIndex.total ? worldIndex.current + 1 : 1}/${worldIndex.total}`,
-          description: "Switching world...",
-        });
-        return;
-      }
+      // NO KEYBOARD WORLD SWITCHING. '<' and '>' (Shift+comma / Shift+period) used to jump
+      // to the previous/next world. Comma and period are position-nudge keys in the weapon
+      // tuning tool, so a stray Shift threw the player into a different world mid-session and
+      // lost the work in progress. Switching worlds is a deliberate action and belongs in the
+      // admin panel, not on a shortcut that is one modifier away from an editing key.
       
       if ((event.metaKey || event.ctrlKey) && event.key === 'p') {
         event.preventDefault();

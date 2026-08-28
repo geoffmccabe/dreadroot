@@ -28,6 +28,7 @@ import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
 import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
+import { cycleAtlas } from './charlineup/weaponAtlas';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -293,8 +294,9 @@ export function SiegeCharacterLineup() {
   // lineup's M/N win over any other M handler when the lineup is up.
   useEffect(() => {
     let amp: number[] = [];
-    const POS = 0.02;        // position-nudge step, metres
-    const GROW = 1.02;       // size step (2%); shrink is the exact inverse
+    const POS = 0.01;        // position-nudge step, metres (1 cm — 2 cm was too coarse to seat a grip)
+    const GROW = 1.02;       // fine size step (2%); shrink is the exact inverse
+    const COARSE = 1.20;     // coarse size step (20%), on the shifted keys
     // Every adjuster (rotate/size/position) targets the SELECTED character only (null = ALL when 0).
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
@@ -325,8 +327,20 @@ export function SiegeCharacterLineup() {
       // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
       else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(Number(e.key) - 1); }
       else if (e.key === '0') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(-1); }
-      else if (e.key === '-' || e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), 1 / GROW); } // 2% smaller
-      else if (e.key === '=' || e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), GROW); }     // 2% bigger
+      // Size: -/= step 2% for fine work, _/+ (i.e. shifted) step 20%. The coarse pair exists because
+      // a model whose registry length was wrong lands several times oversized, and closing a 4x gap
+      // 2% at a time takes about seventy keypresses.
+      else if (e.key === '-') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), 1 / GROW); }
+      else if (e.key === '=') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), GROW); }
+      else if (e.key === '_') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), 1 / COARSE); }
+      else if (e.key === '+') { e.preventDefault(); e.stopImmediatePropagation(); bumpWeaponSize(tuneTarget(), COARSE); }
+      // ';' cycles this weapon's shared texture atlas: none -> military -> scifi. Several models
+      // exported with UVs but no texture and render bare white; this is how the right one is found.
+      else if (e.key === ';') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        const g = gunRef.current;
+        console.log('[atlas]', g.name, '->', cycleAtlas(g.url, g.atlas));
+      }
       // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
       // { } cycle the left-arm joint (off → shoulder → elbow → wrist → off). While a joint is active,
       // arrows + ,/. rotate THAT joint on its 3 local axes; otherwise they move the gun as before.

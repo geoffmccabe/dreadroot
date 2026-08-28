@@ -109,6 +109,8 @@ export function cycleArmJoint(dir: number): void { armJoint = (((armJoint + 1) +
 // Canvas, so there is no other way for an automated check to answer "what is it actually holding?" —
 // and guessing at that is exactly how this tool shipped in the wrong pose twice.
 if (typeof window !== 'undefined') {
+  // Deterministic weapon selection for the check — cycling with '*' drops presses.
+  (window as unknown as { __lineupSetWeapon?: (i: number) => void }).__lineupSetWeapon = (i) => setWeaponIndex(i);
   (window as unknown as { __lineup?: () => unknown }).__lineup = () => ({
     enabled, weaponIndex, animIndex, clip: animNames[animIndex] ?? null, clipCount: animNames.length,
     anchorY: anchor?.groundY ?? null, anchorX: anchor?.x ?? null, anchorZ: anchor?.z ?? null,
