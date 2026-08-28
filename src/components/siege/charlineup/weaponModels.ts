@@ -91,17 +91,17 @@ const G: [number, number, number] = [0.02, 0.3, 0.04];
  * model has its own pivot, so each still wants a pass in the lineup. They are much
  * closer than the old generic guess, which pointed the barrel the wrong way.
  */
-const PISTOL_ROT: [number, number, number] = [-83, -9, -86];
-const PISTOL_GRIP: [number, number, number] = [0, 0.16, 0.02];
+const PISTOL_ROT: [number, number, number] = [-84, 6, -86];
+const PISTOL_GRIP: [number, number, number] = [0.01, 0.16, 0.02];
 // Flamma / Jeanette / Shi Yang are not in the lineup; they inherit from their nearest
 // analogue by height, the rule used throughout this file.
 const PISTOL_GRIP_BY_CHAR: Record<string, [number, number, number]> = {
-  Ash: [0, 0.16, 0.02], Dago: [0, 0.16, 0.02], Fluffer: [0.02, 0.18, 0.04],
-  Jankz: [0, 0.1, 0.02], Rajax: [0, 0.14, 0.02], Thorn: [0, 0.1, 0],
-  Flamma: [0, 0.16, 0.02], Jeanette: [0, 0.1, 0], 'Shi Yang': [0, 0.14, 0.02],
+  Ash: [0.01, 0.16, 0.02], Dago: [0.02, 0.16, 0.02], Fluffer: [0.02, 0.18, 0.04],
+  Jankz: [0, 0.1, 0.02], Rajax: [0, 0.14, 0.02], Thorn: [0.02, 0.11, 0.04],
+  Flamma: [0.01, 0.16, 0.02], Jeanette: [0.02, 0.11, 0.04], 'Shi Yang': [0, 0.14, 0.02],
 };
 const PISTOL_SIZE_BY_CHAR: Record<string, number> = {
-  Ash: 1.00, Dago: 1.17, Fluffer: 1.37, Jankz: 0.82, Rajax: 1.08, Thorn: 0.76,
+  Ash: 1.00, Dago: 1.22, Fluffer: 1.55, Jankz: 0.82, Rajax: 1.08, Thorn: 0.76,
   Flamma: 1.00, Jeanette: 0.76, 'Shi Yang': 1.08,
 };
 export const HELD_WEAPONS: HeldWeapon[] = [
@@ -200,12 +200,12 @@ export const HELD_WEAPONS: HeldWeapon[] = [
   // by height, the same rule the rest of this file uses: Flamma<-Ash, Jeanette<-Thorn, Shi Yang<-Rajax.
   { key: 'basic_pistol',  name: 'Basic Pistol',        itemNumbers: [15],  url: '/siege/weapons/item_15.glb',  lengthM: 0.28,
     rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, animSet: 'pistol', atlas: 'military',
-    // Second pass, 2026-Aug-28: rotation is no longer identical for everyone. Dago and Rajax want
-    // the muzzle ~5° higher than the rest — they are the two tallest on the taller rig scale, so
-    // the same wrist angle reads differently. The other four share one value.
-    rotByChar: { Ash: [-83, -9, -86], Thorn: [-83, -9, -86], Fluffer: [-83, -9, -86], Jankz: [-83, -9, -86],
-                 Dago: [-78, -8, -85], Rajax: [-78, -8, -85],
-                 Flamma: [-83, -9, -86], Jeanette: [-83, -9, -86], 'Shi Yang': [-78, -8, -85] },
+    // Third pass, 2026-Aug-28. Ash and Thorn converged on one value; Dago, Fluffer and Rajax each
+    // want their own. Jankz was not re-adjusted in this pass, so her second-pass value stands —
+    // an omitted character means "unchanged", not "reset".
+    rotByChar: { Ash: [-84, 6, -86], Thorn: [-84, 6, -86], Fluffer: [-84, 11, -86],
+                 Dago: [-82, 12, -82], Rajax: [-78, -3, -85], Jankz: [-83, -9, -86],
+                 Flamma: [-84, 6, -86], Jeanette: [-84, 6, -86], 'Shi Yang': [-78, -3, -85] },
     gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR },
   { key: 'plasma_pistol', name: 'Plasma Pistol',       itemNumbers: [0],   url: '/siege/weapons/item_0.glb',   lengthM: 0.32, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'scifi' },
   { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'military' },

@@ -71,15 +71,20 @@ console.log('in hands  :', JSON.stringify(held));
 // The wrap's rotation as loaded, BEFORE any key is pressed. It must equal the baked rotDeg
 // exactly. Anything else means a saved browser tune is composing on top of the baked value —
 // the doubling that BAKE_VERSION / BAKED_URLS exist to prevent.
-const asLoaded = await page.evaluate(() => (window.__lineupWeaponSizes() || [])[0] ?? null);
-console.log('as loaded :', JSON.stringify(asLoaded));
+const asLoaded = await page.evaluate(() => ({
+  guns: (window.__lineupWeaponSizes() || []).map((w) => `${w.char}: rot[${w.rot}] tex=${w.textured}`),
+  arms: window.__lineupHands(),
+}));
+console.log('as loaded :');
+for (const g of asLoaded.guns.sort()) console.log('    ', g);
+for (const [k, v] of Object.entries(asLoaded.arms).sort()) console.log('    ', k, JSON.stringify(v));
 
 // Do the SHOULDER keys move anything? The tuning state recorded the presses last time while the
 // pose visibly did not change, so recording the value proves nothing — measure the hands.
 const shoulders = await page.evaluate(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
-  const gap = () => window.__lineupHands()['Rajax'];
+  const gap = () => window.__lineupHands()['Ash'];
   fire('0');                       // target ALL characters
   await wait(200);
   const before = gap();

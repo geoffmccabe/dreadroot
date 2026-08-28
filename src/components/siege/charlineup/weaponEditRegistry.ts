@@ -50,7 +50,7 @@ if (typeof window !== 'undefined') {
   // length because they were listed as 1.4 m long guns.
   (window as unknown as { __lineupWeaponSizes?: () => unknown }).__lineupWeaponSizes = () => {
     const THREEB = new THREE.Box3();
-    return weaponWraps().filter((r) => r.charName === 'Rajax').map((r) => {
+    return weaponWraps().map((r) => {
       THREEB.setFromObject(r.wrap);
       const s = THREEB.getSize(new THREE.Vector3());
       let textured = false, mats = 0;
@@ -61,7 +61,7 @@ if (typeof window !== 'undefined') {
       });
       const e = new THREE.Euler().setFromQuaternion(r.wrap.quaternion);
       const deg = (v: number) => Math.round(v * 180 / Math.PI);
-      return { weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
+      return { char: r.charName, weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
         rot: [deg(e.x), deg(e.y), deg(e.z)],
         pos: [+r.wrap.position.x.toFixed(3), +r.wrap.position.y.toFixed(3), +r.wrap.position.z.toFixed(3)] };
     });
@@ -74,7 +74,7 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '13';  // v13: second Basic Pistol pass — per-character rotByChar baked
+const BAKE_VERSION = '14';  // v14: third Basic Pistol pass + per-character shoulder pitch
 const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',

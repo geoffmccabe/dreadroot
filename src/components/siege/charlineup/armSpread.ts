@@ -38,8 +38,19 @@ const pose = new Map<string, ArmPose>();
 const DEFAULT_PITCH = 5;
 
 const BAKED: Record<string, ArmPose> = {
-  // Jankz reads narrowest through the shoulders and her palms intersect worst.
+  // Eye-tuned 2026-Aug-28. Pitch varies a lot more than expected: Dago and Fluffer, the two
+  // tallest, need roughly three times the drop the others do to get the eye down onto the sights.
+  Ash: { spread: 0, pitch: 5 },
+  Dago: { spread: 0, pitch: 17 },
+  Fluffer: { spread: 0, pitch: 14 },
+  Thorn: { spread: -3, pitch: 5 },
+  // Not re-adjusted in the last pass, so these stand.
   Jankz: { spread: 4, pitch: DEFAULT_PITCH },
+  Rajax: { spread: 0, pitch: DEFAULT_PITCH },
+  // Not in the lineup — inherit from the nearest analogue by height, as elsewhere.
+  Flamma: { spread: 0, pitch: 5 },
+  Jeanette: { spread: -3, pitch: 5 },
+  'Shi Yang': { spread: 0, pitch: DEFAULT_PITCH },
 };
 
 const ZERO: ArmPose = { spread: 0, pitch: DEFAULT_PITCH };
