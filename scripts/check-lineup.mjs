@@ -62,6 +62,8 @@ const probe = await page.evaluate((s) => {
   return { row: window.__lineupProbe(s.anchorX, s.anchorZ, s.anchorY + 5) };
 }, st);
 if (probe) console.log('probe     :', JSON.stringify(probe));
+const held = await page.evaluate(() => (window.__lineupWeapons ? window.__lineupWeapons() : null));
+console.log('in hands  :', JSON.stringify(held));
 console.log('\n=== LINEUP CHECK ===');
 console.log(st ? JSON.stringify(st, null, 2) : 'window.__lineup MISSING — state module never loaded');
 if (errors.length) { console.log('page errors:'); for (const e of errors.slice(0, 5)) console.log('  -', e.slice(0, 200)); }
@@ -70,6 +72,12 @@ console.log('screenshot :', process.env.SHOT ?? '/tmp/lineup.png');
 await ctx.close();
 
 if (!st?.enabled) { console.log('\nRESULT: the lineup did NOT open.'); process.exit(1); }
-console.log(st.clip && st.clip.startsWith('pistol_')
-  ? '\nRESULT: opened in a PISTOL pose.'
-  : `\nRESULT: WRONG POSE — clip is "${st.clip}".`);
+if (!st.clip || !st.clip.startsWith('pistol_')) {
+  console.log(`\nRESULT: WRONG POSE — clip is "${st.clip}".`);
+  process.exit(1);
+}
+if (!held || held.length === 0) {
+  console.log('\nRESULT: PISTOL POSE but EMPTY HANDS — no weapon model attached.');
+  process.exit(1);
+}
+console.log(`\nRESULT: pistol pose, ${held.length} weapon(s) in hand.`);

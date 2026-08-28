@@ -221,20 +221,26 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
     else if (armGizmo.parent) { armGizmo.parent.remove(armGizmo); }
   });
 
-  // Show the held gun only during the rifle clips (hidden during dance/climb/flight, where a gun
-  // stuck to the hand would look broken). Clip names from the rifle library all contain 'Rifle'.
+  // Show the held gun during any ARMED clip — hidden during dance/climb/flight, where a gun stuck to
+  // the hand would look broken. Rifle-library clips all contain 'Rifle'; pistol-library clips are all
+  // prefixed 'pistol_'. That pistol half was missing, which is why selecting a pistol produced empty
+  // hands: the pose switched to pistol_idle and the weapon stopped rendering with it.
   const currentName = names.length ? names[animIndex % names.length] : '';
-  const showWeapon = currentName.includes('Rifle');
+  const isRifleClip = currentName.includes('Rifle');
+  const isPistolClip = currentName.startsWith('pistol_');
+  const showWeapon = isRifleClip || isPistolClip;
   // Left hand belongs on the gun's foregrip EXCEPT when the clip deliberately moves it away (reload,
   // holster/put-away, crawl, dives, falls, jumps, backward-run) — IK is disabled on those.
-  const leftHandActive = !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(currentName);
+  // A PISTOL is one-handed and has no foregrip, so the support-hand IK is off for it entirely;
+  // dragging the free hand onto a pistol is what the fake-reload work is for, not the idle pose.
+  const leftHandActive = isRifleClip && !/Reload|Put_Away|Crawl|Dive|Fall|Jump|Backward/i.test(currentName);
 
   return (
     <group ref={group} position={[x, groundY, z]} rotation={[0, yaw, 0]} scale={scale}>
       <primitive object={cloned} />
       {/* Ash's cigarette glow + smoke (no-op for other characters) */}
       <AshCigaretteFx group={cloned} />
-      {/* Two-handed gun in the right hand during rifle animations (auto-sized per character) */}
+      {/* Held gun in the right hand during rifle OR pistol animations (auto-sized per character) */}
       {showWeapon && <Suspense fallback={null}><LineupWeapon key={weapon.url} root={cloned} weapon={weapon} charHeight={heightM} charName={charName} showGizmo={showGizmo} leftHandActive={leftHandActive} /></Suspense>}
     </group>
   );

@@ -33,6 +33,14 @@ export function registerWeaponWrap(id: string, reg: WeaponWrapReg): void {
 export function unregisterWeaponWrap(id: string): void { regs.delete(id); }
 export function weaponWraps(): WeaponWrapReg[] { return [...regs.values()]; }
 
+// Dev probe for scripts/check-lineup.mjs. "Is a weapon model actually IN the hand?"
+// is the one question a screenshot answers and nothing else does — the lineup once
+// posed a pistol correctly while rendering no gun at all.
+if (typeof window !== 'undefined') {
+  (window as unknown as { __lineupWeapons?: () => unknown }).__lineupWeapons = () =>
+    weaponWraps().map((r) => ({ char: r.charName, weapon: r.weaponKey }));
+}
+
 // The editor-object id every gun wrap tags itself with, so the crosshair/L selects them all as one.
 export const WEAPON_EDIT_ID = 'weapon:held';
 
