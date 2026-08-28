@@ -29,7 +29,7 @@ import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
 import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
 import { cycleAtlas } from './charlineup/weaponAtlas';
-import { findUpperArms, applySpread, getSpread, nudgeSpread } from './charlineup/armSpread';
+import { findUpperArms, applyArmPose, getPose, nudgePose, registerArmRoot } from './charlineup/armSpread';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -96,7 +96,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   // only Rajax has Tail bones, so this is a no-op for everyone else.
   // Upper arms, for the per-character shoulder spread (two-handed pistol grips intersect on
   // narrow-shouldered characters).
-  const upperArms = useMemo(() => findUpperArms(cloned), [cloned]);
+  const upperArms = useMemo(() => { registerArmRoot(charName, cloned); return findUpperArms(cloned); }, [cloned, charName]);
   const tailBones = useMemo(() => {
     const bs: THREE.Object3D[] = [];
     cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
@@ -200,8 +200,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
     }
     // Shoulder spread — must run after the mixer, like the IK below, or the clip overwrites it.
     // Forward for a yaw-rotated group is (sin yaw, 0, cos yaw).
-    const sp = getSpread(charName);
-    if (sp) applySpread(upperArms, _fwd.set(Math.sin(yaw), 0, Math.cos(yaw)), sp);
+    applyArmPose(upperArms, yaw, getPose(charName));
     // Left-hand IK — this useFrame is registered AFTER useAnimations, so it runs after the animation
     // mixer and its result isn't overwritten. Bend the left arm to the captured grip point on the gun.
     const cn = names.length ? names[animIndex % names.length] : '';
@@ -307,6 +306,14 @@ export function SiegeCharacterLineup() {
     const GROW = 1.02;       // fine size step (2%); shrink is the exact inverse
     const COARSE = 1.20;     // coarse size step (20%), on the shifted keys
     const FINE_ROT = 5;      // degrees per Option+x/y/z tap
+    // 3°, not 1°. A single degree of shoulder rotation is invisible at lineup distance, which is
+    // indistinguishable from a key that never fired — and that is exactly how it was reported.
+    const ARM_STEP_DEG = 3;
+    const logPose = (what: string) => {
+      const t = tuneTarget();
+      const p = getPose(t ?? CHAR_NAMES[0]);
+      console.log(`[arms] ${what} ${t ?? 'ALL'} -> spread ${p.spread}° pitch ${p.pitch}°`);
+    };
     // Every adjuster (rotate/size/position) targets the SELECTED character only (null = ALL when 0).
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
@@ -352,10 +359,12 @@ export function SiegeCharacterLineup() {
         console.log('[atlas]', g.name, '->', cycleAtlas(g.url, g.atlas));
       }
       // Position: arrows move the gun in the hand's X (left/right) & Y (up/down); ,/. move Z (in/out).
-      // { } cycle the left-arm joint (off → shoulder → elbow → wrist → off). While a joint is active,
+      // < > cycle the left-arm joint (off → shoulder → elbow → wrist → off). While a joint is active,
       // arrows + ,/. rotate THAT joint on its 3 local axes; otherwise they move the gun as before.
-      else if (e.key === '{') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint(-1); logJoint(); }
-      else if (e.key === '}') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint( 1); logJoint(); }
+      // The left-arm FK joint cycler moved off { } (now shoulder pitch) onto < >, which came free
+      // when keyboard world switching was removed.
+      else if (e.key === '<') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint(-1); logJoint(); }
+      else if (e.key === '>') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint( 1); logJoint(); }
       else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); armK(0, -ARM_STEP, 'x', -POS); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); armK(0,  ARM_STEP, 'x',  POS); }
       else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); armK(1,  ARM_STEP, 'y',  POS); }
@@ -364,15 +373,17 @@ export function SiegeCharacterLineup() {
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2,  ARM_STEP, 'z',  POS); }
       // [ / ] pull the selected character's arms apart / together by 1°. The two-handed pistol
       // clips were captured on one actor's proportions, so narrower characters' palms intersect.
-      else if (e.key === '[') {
+      else if (e.key === '[' || e.key === ']') {
         e.preventDefault(); e.stopImmediatePropagation();
-        nudgeSpread(tuneTarget(), CHAR_NAMES, -1);
-        console.log('[arms] spread', tuneTarget() ?? 'ALL', '->', getSpread(tuneTarget() ?? CHAR_NAMES[0]).toFixed(0) + '°');
+        nudgePose(tuneTarget(), CHAR_NAMES, 'spread', e.key === ']' ? ARM_STEP_DEG : -ARM_STEP_DEG);
+        logPose('spread');
       }
-      else if (e.key === ']') {
+      // { } lower / raise BOTH shoulders. The pistol clips sit the whole arm assembly too high, so
+      // the character's eye does not line up down the sights.
+      else if (e.key === '{' || e.key === '}') {
         e.preventDefault(); e.stopImmediatePropagation();
-        nudgeSpread(tuneTarget(), CHAR_NAMES, 1);
-        console.log('[arms] spread', tuneTarget() ?? 'ALL', '->', getSpread(tuneTarget() ?? CHAR_NAMES[0]).toFixed(0) + '°');
+        nudgePose(tuneTarget(), CHAR_NAMES, 'pitch', e.key === '{' ? ARM_STEP_DEG : -ARM_STEP_DEG);
+        logPose('pitch');
       }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.

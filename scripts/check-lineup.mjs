@@ -74,6 +74,25 @@ console.log('in hands  :', JSON.stringify(held));
 const asLoaded = await page.evaluate(() => (window.__lineupWeaponSizes() || [])[0] ?? null);
 console.log('as loaded :', JSON.stringify(asLoaded));
 
+// Do the SHOULDER keys move anything? The tuning state recorded the presses last time while the
+// pose visibly did not change, so recording the value proves nothing — measure the hands.
+const shoulders = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  const gap = () => window.__lineupHands()['Rajax'];
+  fire('0');                       // target ALL characters
+  await wait(200);
+  const before = gap();
+  for (let i = 0; i < 4; i++) { fire(']'); await wait(80); }   // spread +12°
+  await wait(300);
+  const afterSpread = gap();
+  for (let i = 0; i < 4; i++) { fire('{'); await wait(80); }   // pitch down 12°
+  await wait(300);
+  const afterPitch = gap();
+  return { before, afterSpread, afterPitch };
+});
+console.log('shoulders :', JSON.stringify(shoulders));
+
 // Do the rotation keys fire? Alt/Shift + X/Y/Z are the tuning nudges; a modifier the browser
 // or OS eats is indistinguishable from a broken handler without measuring the result.
 const rotTest = await page.evaluate(async () => {
@@ -108,6 +127,14 @@ for (const w of sizes || []) console.log('   ', JSON.stringify(w));
 console.log('\n=== LINEUP CHECK ===');
 console.log(st ? JSON.stringify(st, null, 2) : 'window.__lineup MISSING — state module never loaded');
 if (errors.length) { console.log('page errors:'); for (const e of errors.slice(0, 5)) console.log('  -', e.slice(0, 200)); }
+// The key tests above WRITE tunes to localStorage, which would then compose on top of the baked
+// values on the next run and make "as loaded" report a doubling that is this script's own doing.
+await page.evaluate(() => {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const k = localStorage.key(i);
+    if (k && (k.startsWith('siege_weapon_tune::') || k.startsWith('siege_weapon_pos::'))) localStorage.removeItem(k);
+  }
+});
 await page.screenshot({ path: process.env.SHOT ?? '/tmp/lineup.png' });
 console.log('screenshot :', process.env.SHOT ?? '/tmp/lineup.png');
 await ctx.close();

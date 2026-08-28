@@ -91,7 +91,7 @@ const G: [number, number, number] = [0.02, 0.3, 0.04];
  * model has its own pivot, so each still wants a pass in the lineup. They are much
  * closer than the old generic guess, which pointed the barrel the wrong way.
  */
-const PISTOL_ROT: [number, number, number] = [-88, -9, -87];
+const PISTOL_ROT: [number, number, number] = [-83, -9, -86];
 const PISTOL_GRIP: [number, number, number] = [0, 0.16, 0.02];
 // Flamma / Jeanette / Shi Yang are not in the lineup; they inherit from their nearest
 // analogue by height, the rule used throughout this file.
@@ -200,6 +200,12 @@ export const HELD_WEAPONS: HeldWeapon[] = [
   // by height, the same rule the rest of this file uses: Flamma<-Ash, Jeanette<-Thorn, Shi Yang<-Rajax.
   { key: 'basic_pistol',  name: 'Basic Pistol',        itemNumbers: [15],  url: '/siege/weapons/item_15.glb',  lengthM: 0.28,
     rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, animSet: 'pistol', atlas: 'military',
+    // Second pass, 2026-Aug-28: rotation is no longer identical for everyone. Dago and Rajax want
+    // the muzzle ~5° higher than the rest — they are the two tallest on the taller rig scale, so
+    // the same wrist angle reads differently. The other four share one value.
+    rotByChar: { Ash: [-83, -9, -86], Thorn: [-83, -9, -86], Fluffer: [-83, -9, -86], Jankz: [-83, -9, -86],
+                 Dago: [-78, -8, -85], Rajax: [-78, -8, -85],
+                 Flamma: [-83, -9, -86], Jeanette: [-83, -9, -86], 'Shi Yang': [-78, -8, -85] },
     gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR },
   { key: 'plasma_pistol', name: 'Plasma Pistol',       itemNumbers: [0],   url: '/siege/weapons/item_0.glb',   lengthM: 0.32, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'scifi' },
   { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'military' },

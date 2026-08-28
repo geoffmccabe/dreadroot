@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import { leftHandExportLines } from './leftHandIK';
 import { armFKExportLines } from './armFK';
 import { atlasExportLines } from './weaponAtlas';
-import { spreadExportLines } from './armSpread';
+import { poseExportLines } from './armSpread';
 
 export interface WeaponWrapReg {
   wrap: THREE.Group;        // group whose local rotation/scale we drive
@@ -74,7 +74,7 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '12';  // v12: baked the eye-tuned pistol baseline onto every one-handed weapon
+const BAKE_VERSION = '13';  // v13: second Basic Pistol pass — per-character rotByChar baked
 const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
@@ -246,8 +246,8 @@ export function exportTuning(): void {
   if (afk.length) { lines.push('--- left arm (FK) ---'); lines.push(...afk); }
   const atl = atlasExportLines();
   if (atl.length) { lines.push('--- texture atlas (;) ---'); lines.push(...atl); }
-  const spr = spreadExportLines();
-  if (spr.length) { lines.push('--- shoulder spread ([ ]) ---'); lines.push(...spr); }
+  const spr = poseExportLines();
+  if (spr.length) { lines.push('--- shoulders: spread [ ] / pitch { } ---'); lines.push(...spr); }
   // The step that is easy to forget and silently wrecks the result: baking a value into code
   // while the browser still holds the SAME value as a tune makes the wrap apply it twice
   // (rotation composes, position adds). Naming the urls here means the bake instruction travels
