@@ -68,6 +68,24 @@ console.log('in hands  :', JSON.stringify(held));
 // in the hand (gizmo included, so compare weapons against each other, not against lengthM) and
 // whether its material ended up with a texture. A weapon whose registry length is wrong shows
 // up here in the wrong size cluster, which is otherwise only visible by eye.
+// Do the rotation keys fire? Alt/Shift + X/Y/Z are the tuning nudges; a modifier the browser
+// or OS eats is indistinguishable from a broken handler without measuring the result.
+const rotTest = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const rot = () => (window.__lineupWeaponSizes() || [{}])[0]?.rot;
+  const fire = (code, mods) => window.dispatchEvent(new KeyboardEvent('keydown',
+    { key: code.slice(3).toLowerCase(), code, bubbles: true, ...mods }));
+  const before = rot();
+  fire('KeyX', { altKey: true }); await wait(300);
+  const afterAlt = rot();
+  fire('KeyX', { shiftKey: true }); await wait(300);
+  const afterShift = rot();
+  fire('KeyX', {}); await wait(300);
+  const afterBare = rot();
+  return { before, afterAlt, afterShift, afterBare };
+});
+console.log('rot keys  :', JSON.stringify(rotTest));
+
 const sizes = await page.evaluate(async (n) => {
   const out = [];
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -27,19 +27,33 @@ const ATLAS_URL: Record<AtlasKind, string> = {
   scifi: '/siege/weapons/atlas_scifi.png',
 };
 
-const textures = new Map<AtlasKind, THREE.Texture>();
+const textures = new Map<string, THREE.Texture>();
 
-/** The atlas texture, loaded once and shared. TextureLoader hands back a Texture
- *  immediately and fills in the image later, so there is nothing to await. */
-function atlasTexture(kind: AtlasKind): THREE.Texture {
-  let t = textures.get(kind);
+/** A texture by url, loaded once and shared. TextureLoader hands back a Texture
+ *  immediately and fills in the image later, so there is nothing to await.
+ *
+ *  flipY MUST be false. Sampled against the atlas, the flipped read gives sensible
+ *  weapon colours (grey metal 111/114/117, wood 179/148/130) while the unflipped
+ *  read gives one flat grey for every part — which is what "no texture" looks like. */
+function textureAt(url: string): THREE.Texture {
+  let t = textures.get(url);
   if (!t) {
-    t = new THREE.TextureLoader().load(ATLAS_URL[kind]);
+    t = new THREE.TextureLoader().load(url);
     t.flipY = false;                       // glTF UV convention
     t.colorSpace = THREE.SRGBColorSpace;
-    textures.set(kind, t);
+    textures.set(url, t);
   }
   return t;
+}
+
+/** The image a weapon should wear: its own texture file, else a shared atlas, else nothing. */
+export function textureUrlFor(
+  url: string, baked: AtlasKind | undefined, ownTexture: string | undefined,
+): string | null {
+  const o = override.get(url);
+  if (o !== undefined) return o === 'none' ? null : ATLAS_URL[o];
+  if (ownTexture) return ownTexture;
+  return baked ? ATLAS_URL[baked] : null;
 }
 
 /** Live overrides set by the ';' key, keyed by weapon url. */
@@ -67,7 +81,7 @@ export function cycleAtlas(url: string, baked: AtlasKind | undefined): AtlasKind
  * references — mutating them in place would repaint the cached glb and every
  * other character holding the same gun.
  */
-export function applyAtlas(model: THREE.Object3D, kind: AtlasKind | 'none'): void {
+export function applyAtlas(model: THREE.Object3D, texUrl: string | null): void {
   model.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -80,7 +94,7 @@ export function applyAtlas(model: THREE.Object3D, kind: AtlasKind | 'none'): voi
       // This matters: the AK74, Pickaxe and Flame Glove carry hand-authored PER-MATERIAL
       // COLOURS (wood, dark grey, glow) instead of a texture. Forcing them white to make an
       // atlas read correctly would strip exactly the colours that make them look right.
-      if (kind === 'none' && !std.userData.__atlasClone) return std;
+      if (texUrl === null && !std.userData.__atlasClone) return std;
 
       const c = std.userData.__atlasClone ? std : (() => {
         const cl = std.clone();
@@ -92,13 +106,13 @@ export function applyAtlas(model: THREE.Object3D, kind: AtlasKind | 'none'): voi
         return cl;
       })();
 
-      if (kind === 'none') {
+      if (texUrl === null) {
         // Put the model back exactly as it came.
         c.map = null;
         const oc = c.userData.__origColor as THREE.Color | null;
         if (oc && c.color) c.color.copy(oc);
       } else {
-        c.map = atlasTexture(kind);
+        c.map = textureAt(texUrl);
         // The atlas supplies the colour, so the base tint must be neutral or it multiplies through.
         c.color?.setRGB(1, 1, 1);
       }

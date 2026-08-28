@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { leftHandExportLines } from './leftHandIK';
 import { armFKExportLines } from './armFK';
 import { atlasExportLines } from './weaponAtlas';
+import { spreadExportLines } from './armSpread';
 
 export interface WeaponWrapReg {
   wrap: THREE.Group;        // group whose local rotation/scale we drive
@@ -38,6 +39,10 @@ export function weaponWraps(): WeaponWrapReg[] { return [...regs.values()]; }
 // is the one question a screenshot answers and nothing else does — the lineup once
 // posed a pistol correctly while rendering no gun at all.
 if (typeof window !== 'undefined') {
+  // Console fallback for the '\\' export. Tuning lives only in memory until it is exported, and
+  // a mistyped key should never mean redoing an hour of work — __lineupExport() from the console
+  // prints and copies exactly the same thing.
+  (window as unknown as { __lineupExport?: () => void }).__lineupExport = () => exportTuning();
   (window as unknown as { __lineupWeapons?: () => unknown }).__lineupWeapons = () =>
     weaponWraps().map((r) => ({ char: r.charName, weapon: r.weaponKey }));
   // Rendered size + whether a texture landed, per weapon in hand. A registry lengthM that is
@@ -45,7 +50,7 @@ if (typeof window !== 'undefined') {
   // length because they were listed as 1.4 m long guns.
   (window as unknown as { __lineupWeaponSizes?: () => unknown }).__lineupWeaponSizes = () => {
     const THREEB = new THREE.Box3();
-    return weaponWraps().filter((r) => r.charName === 'Ash').map((r) => {
+    return weaponWraps().filter((r) => r.charName === 'Rajax').map((r) => {
       THREEB.setFromObject(r.wrap);
       const s = THREEB.getSize(new THREE.Vector3());
       let textured = false, mats = 0;
@@ -54,7 +59,10 @@ if (typeof window !== 'undefined') {
         if (!m) return;
         for (const mm of Array.isArray(m) ? m : [m]) { mats++; if ((mm as THREE.MeshStandardMaterial).map) textured = true; }
       });
-      return { weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured };
+      const e = new THREE.Euler().setFromQuaternion(r.wrap.quaternion);
+      const deg = (v: number) => Math.round(v * 180 / Math.PI);
+      return { weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
+        rot: [deg(e.x), deg(e.y), deg(e.z)] };
     });
   };
 }
@@ -228,6 +236,8 @@ export function exportTuning(): void {
   if (afk.length) { lines.push('--- left arm (FK) ---'); lines.push(...afk); }
   const atl = atlasExportLines();
   if (atl.length) { lines.push('--- texture atlas (;) ---'); lines.push(...atl); }
+  const spr = spreadExportLines();
+  if (spr.length) { lines.push('--- shoulder spread ([ ]) ---'); lines.push(...spr); }
   const text = lines.join('\n');
   try { navigator.clipboard?.writeText(text); } catch { /* clipboard blocked — console only */ }
   console.log(text + '\n(copied to clipboard)');

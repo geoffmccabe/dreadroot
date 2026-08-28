@@ -17,6 +17,7 @@ export interface LineupWeaponDef {
   gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
   leftHand?: { point: [number, number, number]; wrist: number };  // baked support-hand grip (gun-local) + wrist°
   atlas?: 'military' | 'scifi';       // shared texture to paint on models exported without one
+  texture?: string;                   // this model's OWN texture file, when it has one
 }
 
 // First-pass grip guesses — SIZE is auto-correct; rotation/position need a visual tuning pass.

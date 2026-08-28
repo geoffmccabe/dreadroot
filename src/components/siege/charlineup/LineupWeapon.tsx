@@ -15,7 +15,7 @@ import { CHAR_ASSET_VERSION } from './siegeCharLineupState';
 import type { LineupWeaponDef } from './lineupWeapons';
 import { registerWeaponWrap, unregisterWeaponWrap, WEAPON_EDIT_ID } from './weaponEditRegistry';
 import { findLeftArm, getLeftTarget, getWrist, solveArmIK } from './leftHandIK';
-import { applyAtlas, currentAtlas, atlasVersion } from './weaponAtlas';
+import { applyAtlas, textureUrlFor, atlasVersion } from './weaponAtlas';
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
@@ -54,7 +54,7 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, le
       // Repaint if ';' cycled this weapon's atlas since the last frame.
       if (atlasRef.current !== atlasVersion) {
         atlasRef.current = atlasVersion;
-        applyAtlas(wrapRef.current, currentAtlas(weapon.url, weapon.atlas));
+        applyAtlas(wrapRef.current, textureUrlFor(weapon.url, weapon.atlas, weapon.texture));
       }
       // NOTE: the actual left-arm IK runs in LineupChar's frame loop (AFTER the animation mixer), so it
       // isn't overwritten by the animation each frame. This component only draws the grip marker.
@@ -74,7 +74,7 @@ export function LineupWeapon({ root, weapon, charHeight, charName, showGizmo, le
     const model = scene.clone(true);
     // Several SWU weapons export with UVs but no texture and render bare white; paint the shared
     // atlas on before anything else touches the model.
-    applyAtlas(model, currentAtlas(weapon.url, weapon.atlas));
+    applyAtlas(model, textureUrlFor(weapon.url, weapon.atlas, weapon.texture));
     atlasRef.current = atlasVersion;
     model.updateMatrixWorld(true);
     _box.setFromObject(model); _box.getSize(_size); _box.getCenter(_center);

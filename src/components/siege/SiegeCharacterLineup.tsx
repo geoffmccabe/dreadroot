@@ -29,6 +29,7 @@ import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
 import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
 import { cycleAtlas } from './charlineup/weaponAtlas';
+import { findUpperArms, applySpread, getSpread, nudgeSpread } from './charlineup/armSpread';
 import { classifyObstacle } from './charlineup/obstacleDetector';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
@@ -50,6 +51,7 @@ const _tailEuler = new THREE.Euler();
 const _tailQ = new THREE.Quaternion();
 const _ikTarget = new THREE.Vector3();   // scratch: left-hand grip point in world space
 const _bakedLeft = new THREE.Vector3();  // scratch: baked left-hand point when there's no saved capture
+const _fwd = new THREE.Vector3();        // scratch: the character's forward axis, for arm spread
 const CHAR_NAMES = LINEUP_CHARS.map((c) => c.name);   // for "adjust ALL characters" (tune target = null)
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
@@ -92,6 +94,9 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
   // Procedural tail (Rajax): the shared Mixamo clips don't touch the grafted Tail_01..05 bones, so
   // they'd sit stiff. Drive a slow travelling-wave sway each frame for a cat-like flick. Auto-gated:
   // only Rajax has Tail bones, so this is a no-op for everyone else.
+  // Upper arms, for the per-character shoulder spread (two-handed pistol grips intersect on
+  // narrow-shouldered characters).
+  const upperArms = useMemo(() => findUpperArms(cloned), [cloned]);
   const tailBones = useMemo(() => {
     const bs: THREE.Object3D[] = [];
     cloned.traverse((o) => { if (o.name.startsWith('Tail_')) bs.push(o); });
@@ -193,6 +198,10 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
       g.position.x = x + Math.sin(yaw) * fsm.offsetZ;
       g.position.z = z + Math.cos(yaw) * fsm.offsetZ;
     }
+    // Shoulder spread — must run after the mixer, like the IK below, or the clip overwrites it.
+    // Forward for a yaw-rotated group is (sin yaw, 0, cos yaw).
+    const sp = getSpread(charName);
+    if (sp) applySpread(upperArms, _fwd.set(Math.sin(yaw), 0, Math.cos(yaw)), sp);
     // Left-hand IK — this useFrame is registered AFTER useAnimations, so it runs after the animation
     // mixer and its result isn't overwritten. Bend the left arm to the captured grip point on the gun.
     const cn = names.length ? names[animIndex % names.length] : '';
@@ -297,6 +306,7 @@ export function SiegeCharacterLineup() {
     const POS = 0.01;        // position-nudge step, metres (1 cm — 2 cm was too coarse to seat a grip)
     const GROW = 1.02;       // fine size step (2%); shrink is the exact inverse
     const COARSE = 1.20;     // coarse size step (20%), on the shifted keys
+    const FINE_ROT = 5;      // degrees per Option+x/y/z tap
     // Every adjuster (rotate/size/position) targets the SELECTED character only (null = ALL when 0).
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
@@ -352,6 +362,18 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); armK(1, -ARM_STEP, 'y', -POS); }
       else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2, -ARM_STEP, 'z', -POS); }
       else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2,  ARM_STEP, 'z',  POS); }
+      // [ / ] pull the selected character's arms apart / together by 1°. The two-handed pistol
+      // clips were captured on one actor's proportions, so narrower characters' palms intersect.
+      else if (e.key === '[') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        nudgeSpread(tuneTarget(), CHAR_NAMES, -1);
+        console.log('[arms] spread', tuneTarget() ?? 'ALL', '->', getSpread(tuneTarget() ?? CHAR_NAMES[0]).toFixed(0) + '°');
+      }
+      else if (e.key === ']') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        nudgeSpread(tuneTarget(), CHAR_NAMES, 1);
+        console.log('[arms] spread', tuneTarget() ?? 'ALL', '->', getSpread(tuneTarget() ?? CHAR_NAMES[0]).toFixed(0) + '°');
+      }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
       // (K, not P — the Arrange tool steals P to spawn a box.)
@@ -376,10 +398,18 @@ export function SiegeCharacterLineup() {
       // DreadRoot; stealing them left the camera unable to descend, so the bare letters now pass
       // straight through to the game. Read from e.code, because Alt rewrites e.key on macOS.
       else if (e.code === 'KeyX' || e.code === 'KeyY' || e.code === 'KeyZ') {
-        if (!e.shiftKey && !e.altKey) return;   // bare letter → let the game have it
+        // Option (alt) is the documented fine key; ctrl and cmd are accepted too so a keyboard or
+        // layout that swallows Option still has a way in.
+        const fine = e.altKey || e.ctrlKey || e.metaKey;
+        if (!e.shiftKey && !fine) return;       // bare letter → let the game have it
         e.preventDefault(); e.stopImmediatePropagation();
         const axis = e.code.slice(3).toLowerCase() as 'x' | 'y' | 'z';
-        rotateWeaponLocal(tuneTarget(), axis, e.shiftKey ? 90 : 2);
+        // FINE was 2°, which is invisible on a pistol five metres away — it registered every time
+        // and simply could not be seen, which reads as a dead key. 5° is still fine-grained and
+        // actually shows. The console line is the other half: silent tuning keys are untestable.
+        const step = e.shiftKey ? 90 : FINE_ROT;
+        rotateWeaponLocal(tuneTarget(), axis, step);
+        console.log(`[gun] rotate ${axis.toUpperCase()} ${step > 0 ? '+' : ''}${step}° on ${tuneTarget() ?? 'ALL'}`);
       }
     };
     window.addEventListener('keydown', onKey, true);
