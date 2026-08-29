@@ -23,6 +23,10 @@ export interface CursorStackPayload {
   tier: number | null;
   spriteUrl: string | null;
   nonStackable: boolean;
+  /** A throwable: stacks in the QUICK BAR (and the vault), one unit per slot
+   *  everywhere else. Grenades are the game's lethal count, so the bar holds
+   *  "Grenade x12" rather than eating twelve slots. */
+  throwable?: boolean;
   origin: CursorOrigin;
 }
 

@@ -5,7 +5,7 @@ import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { setActiveWeapon, setRightWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
 import { setRocketBelt } from '@/config/rocketBelt';
 import { rocketBeltTierFromItemNumber } from '@/features/rocketBelt/rocketBelt';
-import { useHandGrenades, handKind, setHandGrenade } from '@/config/handGrenade';
+import { getThrowable, useThrowables } from '@/config/throwables';
 import { setFlameGlove } from '@/config/flameGlove';
 import { setEquippedPickaxe, isPickaxe } from '@/components/siege/mining/equippedPickaxe';
 import { cursorStackApi, useCursorStack, type CursorOrigin } from '@/features/inventory-system/useCursorStack';
@@ -56,9 +56,11 @@ async function resolveDrop(def: SlotDef, itemId: string): Promise<{ ok: boolean;
   // item also happens to carry item_category 'weapon' (which would otherwise early-return).
   if (def.type === 'weapon') {
     const isGlove = it.key === 'flame_glove' || (it.key ?? '').includes('glove');
-    // A shpider EGG is a hand THROWABLE (like a grenade): accept it into a hand slot so it can be
-    // dragged in, then G adopts it into the hand overlay + throws it (hatches a pet).
-    if ((it.key ?? '').startsWith('shpider_egg')) return { ok: true, item, reloadKey: null, isRifle: false };
+    // Throwables (grenades, eggs) are NOT held. They live in the quick bar and
+    // throw with G, so a hand slot refuses them and the item snaps back. They
+    // used to occupy a hand, which is how a grenade came to compete with your
+    // rifle for a hand and why the throw needed a mirrored quick-bar slot.
+    if (getThrowable(itemId)) return { ok: false, item, reloadKey: null, isRifle: false };
     // A PICKAXE is a two-handed mining TOOL (not a gun): it fills BOTH hands and renders centered
     // like a rifle (isRifle), but never fires (loadWeaponStats returns null for non-guns). Detect
     // by name/key so it needs no weapon_stats row — the existing pickaxe items just work.
@@ -127,7 +129,9 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const [leftKind, setLeftKind] = useState<'rifle' | 'pistol' | null>(null);
   const cursor = useCursorStack((s) => s.cursor);
   const cursorHeld = !!cursor;
-  const handGren = useHandGrenades();   // grenades shown in the L/R hand boxes (overlay)
+  // Keeps the hand boxes in step with the throwable catalogue: the drop check
+  // reads it, and it may still be loading on first paint.
+  useThrowables();
 
   // Item defs for the SHARED equip gear (sprite/name/tier/itemNumber), fetched per id-set.
   const [defs, setDefs] = useState<Record<string, EquipItem>>({});
@@ -263,7 +267,10 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
       from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { eq: (k2: string, v2: string) => Promise<{ data: Array<{ slot: number }> | null }> } } };
     }).from('user_slots').select('slot').eq('user_id', user.id).eq('region', 'inventory');
     const used = new Set<number>((data ?? []).map((rr) => rr.slot));
-    for (let i = 0; i < 60; i++) { if (!used.has(i)) return i; }
+    // 1..18 — the slots the inventory grid actually draws. This counted from 0
+    // to 59, and slot 0 is never occupied, so an auto-evicted off-hand weapon
+    // was filed at slot 0 every time: still in the database, never on screen.
+    for (let i = 1; i <= 18; i++) { if (!used.has(i)) return i; }
     return null;
   };
 
@@ -291,7 +298,7 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
         targetNum = 1;   // canonical → centered + fireable (active weapon reads slot 1)
         // AUTO-EVICT both hands so the rifle can take them — no "free both hands" rejection.
         // Slot 1's item is swapped to the rifle's source by the equip_transfer below; the RIGHT
-        // hand (slot 5) item goes back to inventory; any hand grenades are cleared (stay in QA).
+        // hand (slot 5) item goes back to inventory.
         if (!!equip[5] && fromEquipSlot !== 5) {
           const dst = await firstEmptyInventorySlot();
           if (dst != null) {
@@ -299,9 +306,8 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
             catch (e) { console.error('[equip] evict right hand for rifle failed', e); }
           }
         }
-        setHandGrenade('L', null); setHandGrenade('R', null);
       } else if (def.hand && !r.isRifle && (leftKind === 'rifle' || leftIsPickaxe) && fromEquipSlot !== 1) {
-        // A one-handed item (pistol/grenade/glove) dropped while a TWO-HANDED item (rifle/pickaxe)
+        // A one-handed item (pistol/glove) dropped while a TWO-HANDED item (rifle/pickaxe)
         // owns both hands → SWAP it out (give the player what they want), no rejection. The
         // one-hander takes the canonical hand (slot 1); equip_transfer swaps the two-hander back
         // to the dragged item's source slot. Slot 5 is empty here (the two-hander owns both hands).
@@ -367,30 +373,24 @@ export function EquipSlots({ gear, onMoved }: { gear: Array<{ slot: number; item
   const renderSlot = (def: SlotDef, suppressSprite = false) => {
     const g = equip[def.num];
     const ghosted = isGhosted(def.num);   // item is on the cursor → show dimmed, don't clear
-    // A grenade assigned to this hand (stored in QA, shown here). Armed = bright, disarmed = dim.
-    const gren = def.hand && !suppressSprite ? handGren[def.hand] : null;
-    const bootsDefault = def.type === 'boots' && !g && !gren;
-    const sprite = suppressSprite ? null : (gren?.spriteUrl ?? g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
-    const spriteOpacity = ghosted ? 0.2 : gren ? (gren.armed ? 1 : 0.5) : ((!!g || bootsDefault) ? 1 : 0.35);
-    const tierBadge = gren?.tier ?? (!suppressSprite ? g?.tier : null) ?? null;
-    const armed = !!gren?.armed;
-    const grenIsEgg = handKind(gren) === 'egg';
-    const grenLabel = grenIsEgg ? 'Egg' : 'Grenade';
-    const grenKey = 'G';   // eggs + grenades both throw with G now
+    // Hands hold weapons only. The grenade overlay that used to draw here (with
+    // its armed / disarmed pin states and a flashing red border) is gone —
+    // throwables live in the quick bar and throw with G.
+    const bootsDefault = def.type === 'boots' && !g;
+    const sprite = suppressSprite ? null : (g?.spriteUrl ?? (bootsDefault ? T1_BOOTS : null));
+    const spriteOpacity = ghosted ? 0.2 : ((!!g || bootsDefault) ? 1 : 0.35);
+    const tierBadge = (!suppressSprite ? g?.tier : null) ?? null;
     return (
       <div
         key={def.num}
-        className={armed ? 'dr-armed-flash' : undefined}
-        title={gren ? `${grenLabel} T${gren.tier} — ${armed ? `armed: ${grenKey} throws, right-click disarms` : `disarmed: ${grenKey} arms`}` : (g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`)}
+        title={g ? `${g.name} (drag to inventory to unequip)` : `${def.label} — drag a ${def.label.toLowerCase()} here`}
         onPointerDown={(e) => startEquipDrag(def, e)}
         onPointerUp={(e) => { if (e.button === 0) void handlePointerUp(def); }}
         onDragStart={(e) => e.preventDefault()}
         style={{
           width: 60, height: 60, borderRadius: 'var(--hud-radius, 8px)',
           background: cursorHeld ? 'hsl(var(--hud-bg-hover))' : 'hsl(var(--hud-bg))',
-          // Armed → bright-red flashing border via the .dr-armed-flash class (mirrors the green
-          // "ready to drop" outline). Unarmed falls back to the normal/selected border.
-          border: armed ? '2px solid hsla(0, 100%, 58%, 1)' : `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
+          border: `1px solid ${cursorHeld ? 'hsl(var(--hud-border-selected))' : 'hsl(var(--hud-border))'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           position: 'relative', cursor: g || cursorHeld ? 'pointer' : 'default', userSelect: 'none',
         }}

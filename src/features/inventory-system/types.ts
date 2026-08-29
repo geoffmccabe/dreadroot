@@ -22,6 +22,9 @@ export interface SlotOccupant {
   tier: number | null;
   spriteUrl: string | null;
   nonStackable: boolean;
+  /** A throwable (grenade / egg). Stacks in the quick bar — see
+   *  CursorStackPayload.throwable. */
+  throwable?: boolean;
   /** items.item_category — 'weapon', 'gear', 'boots', 'consumable'… Needed to
    *  decide whether double-clicking something should try to equip it. */
   category?: string | null;

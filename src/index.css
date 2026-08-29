@@ -1160,32 +1160,8 @@ All colors MUST be HSL.
 /* Hotbar slot pulse used when a grenade is pin-pulled and waiting on
    a throw click. Alternates a green outer glow with the base style
    so the slot visibly "ticks" without moving / resizing the layout. */
-@keyframes grenade-ready-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(0, 255, 102, 0.0), 0 0 10px 1px rgba(0, 255, 102, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(0, 255, 102, 0.55), 0 0 18px 4px rgba(0, 255, 102, 0.85);
-  }
-}
-.grenade-ready-pulse {
-  animation: grenade-ready-pulse 0.7s ease-in-out infinite;
-}
-
 /* Shpider-egg-armed pulse. Mirrors grenade pacing but in black
    so the player can immediately tell which throwable is ready. */
-@keyframes egg-ready-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.0), 0 0 10px 1px rgba(0, 0, 0, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.9), 0 0 18px 4px rgba(0, 0, 0, 0.95);
-  }
-}
-.egg-ready-pulse {
-  animation: egg-ready-pulse 0.7s ease-in-out infinite;
-}
-
 /* Brief pink-red pulse while a health potion is being drunk.
    ~600ms total (one full ramp-up + fade-out) to overlap the swallow
    SFX. Different keyframe shape from grenade-ready so the two
@@ -1226,12 +1202,3 @@ All colors MUST be HSL.
 
 /* Armed grenade: bright-red FLASHING border (mirrors the green "ready to drop" outline, but
    red + flashing to mean "armed, ready to throw"). Applied to the equip hand tile. */
-@keyframes dr-armed-flash {
-  0%, 49%   { border-color: hsla(0, 100%, 58%, 1);    box-shadow: 0 0 9px 1px hsla(0, 100%, 55%, 0.85); }
-  50%, 100% { border-color: hsla(0, 100%, 58%, 0.22); box-shadow: 0 0 2px 0   hsla(0, 100%, 55%, 0.15); }
-}
-.dr-armed-flash {
-  border-width: 2px !important;
-  border-style: solid !important;
-  animation: dr-armed-flash 0.6s steps(1, end) infinite;
-}

@@ -53,12 +53,37 @@ export interface UserInventoryItem {
   updated_at: string;
 }
 
+type QuickBarSlot = { slot: number; itemId: string; quantity: number };
+
+/** Put one unit into a quick-bar slot, MERGING when that slot already holds the
+ *  same item (a throwable stacks there, so the count goes 11 → 12 rather than
+ *  being overwritten with 1). */
+function addToQuickBar(prev: QuickBarSlot[], slot: number, itemId: string): QuickBarSlot[] {
+  const existing = prev.find(e => e.slot === slot);
+  if (existing && existing.itemId === itemId) {
+    return prev.map(e => (e.slot === slot ? { ...e, quantity: (e.quantity ?? 1) + 1 } : e));
+  }
+  return [...prev.filter(e => e.slot !== slot), { slot, itemId, quantity: 1 }];
+}
+
+/** Undo of addToQuickBar, for reverting a failed optimistic transfer. */
+function removeFromQuickBar(prev: QuickBarSlot[], slot: number, itemId: string): QuickBarSlot[] {
+  const existing = prev.find(e => e.slot === slot);
+  if (!existing || existing.itemId !== itemId) return prev;
+  const left = (existing.quantity ?? 1) - 1;
+  return left > 0
+    ? prev.map(e => (e.slot === slot ? { ...e, quantity: left } : e))
+    : prev.filter(e => e.slot !== slot);
+}
+
 export const useUserData = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [tokenBalance, setTokenBalance] = useState<UserTokenBalance | null>(null);
   const [allTokenBalances, setAllTokenBalances] = useState<UserTokenBalance[]>([]);
   const [inventory, setInventory] = useState<UserInventoryItem[]>([]);
-  const [equippedItems, setEquippedItems] = useState<Array<{ slot: number; itemId: string }>>([]);
+  // Quick-bar slots. `quantity` is 1 for everything except a throwable, which
+  // stacks in the bar ("Grenade x12") the way a shooter's lethal count does.
+  const [equippedItems, setEquippedItems] = useState<Array<{ slot: number; itemId: string; quantity: number }>>([]);
   // Equip region (gear: weapon/armor/boots/potion). Owned HERE so all four regions share one fetch +
   // realtime, instead of EquipSlots keeping its own private query/subscription (which caused drift).
   const [equippedGear, setEquippedGear] = useState<Array<{ slot: number; itemId: string }>>([]);
@@ -266,7 +291,7 @@ export const useUserData = () => {
       // QS equipped state: derive from user_slots region='quick_select'.
       const qsRows = slotRows
         .filter((s: any) => s.region === 'quick_select')
-        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id, quantity: s.quantity ?? 1 }));
       setEquippedItems(qsRows);
       // Equip gear: derive from user_slots region='equip' (slots 1-4).
       const equipRows = slotRows
@@ -441,7 +466,7 @@ export const useUserData = () => {
             } else if (row.region === 'quick_select') {
               setEquippedItems(prev => {
                 const filtered = prev.filter(e => e.slot !== row.slot);
-                return [...filtered, { slot: row.slot, itemId: row.item_id }];
+                return [...filtered, { slot: row.slot, itemId: row.item_id, quantity: row.quantity ?? 1 }];
               });
             } else if (row.region === 'equip') {
               setEquippedGear(prev => {
@@ -898,7 +923,7 @@ export const useUserData = () => {
 
     setEquippedItems(prev => {
       const filtered = prev.filter(e => e.slot !== slot);
-      if (itemId) filtered.push({ slot, itemId });
+      if (itemId) filtered.push({ slot, itemId, quantity: 1 });
       return filtered;
     });
 
@@ -955,12 +980,22 @@ export const useUserData = () => {
   // by grenade throw, egg hatch, potion drink. Atomic single-RPC.
   const consumeQuickSlot = useCallback(async (slot: number) => {
     if (!user?.id) return;
-    // Optimistic remove from local state.
-    setEquippedItems(prev => prev.filter(e => e.slot !== slot));
+    // Optimistic: spend ONE unit. Throwables stack in the bar, so a slot
+    // holding twelve grenades must go to eleven, not vanish — clearing the
+    // whole slot here is what made a stack look like it had been destroyed.
+    setEquippedItems(prev => prev.flatMap(e => {
+      if (e.slot !== slot) return [e];
+      const left = (e.quantity ?? 1) - 1;
+      return left > 0 ? [{ ...e, quantity: left }] : [];
+    }));
     try {
       await worldStore.consumeQuickSlot(slot);
     } catch (err) {
+      // The optimistic spend above already removed it on screen. If the server
+      // refused, the item still exists, so leaving the UI as-is shows a loss
+      // that did not happen. Re-read the truth instead of swallowing it.
       console.error('[consumeQuickSlot] failed:', err);
+      await loadUserData();
     }
   }, [user?.id]);
 
@@ -970,7 +1005,7 @@ export const useUserData = () => {
   const setEquippedSlotOptimistic = useCallback((slot: number, itemId: string | null) => {
     setEquippedItems(prev => {
       const filtered = prev.filter(e => e.slot !== slot);
-      if (itemId) filtered.push({ slot, itemId });
+      if (itemId) filtered.push({ slot, itemId, quantity: 1 });
       return filtered;
     });
   }, []);
@@ -1053,10 +1088,10 @@ export const useUserData = () => {
       if (!row) return () => {};
       const itemId = (row as any).item_id as string;
       setInventory(prev => prev.filter(r => r.id !== row.id));
-      setEquippedItems(prev => [...prev.filter(e => e.slot !== to.slot), { slot: to.slot, itemId }]);
+      setEquippedItems(prev => addToQuickBar(prev, to.slot, itemId));
       return () => {
         setInventory(prev => [...prev, row]);
-        setEquippedItems(prev => prev.filter(e => e.slot !== to.slot));
+        setEquippedItems(prev => removeFromQuickBar(prev, to.slot, itemId));
       };
     }
     // ── QS → INV ─────────────────────────────────────────────────
@@ -1080,12 +1115,14 @@ export const useUserData = () => {
     if (from.region === 'quick_select' && to.region === 'quick_select') {
       const e = eq.find(x => x.slot === from.slot);
       if (!e) return () => {};
+      // Carry the quantity across: dragging a grenade stack from bar slot 5 to
+      // slot 2 must keep all twelve, not reset the count to one.
       setEquippedItems(prev => prev
         .filter(x => x.slot !== from.slot && x.slot !== to.slot)
-        .concat({ slot: to.slot, itemId: e.itemId }));
+        .concat({ slot: to.slot, itemId: e.itemId, quantity: e.quantity ?? 1 }));
       return () => setEquippedItems(prev => prev
         .filter(x => x.slot !== to.slot && x.slot !== from.slot)
-        .concat({ slot: from.slot, itemId: e.itemId }));
+        .concat({ slot: from.slot, itemId: e.itemId, quantity: e.quantity ?? 1 }));
     }
     // ── INV → VAULT ──────────────────────────────────────────────
     // Just clear the inv side; useVaultData's user_slots realtime
@@ -1120,8 +1157,8 @@ export const useUserData = () => {
     }
     if (from.region === 'vault' && to.region === 'quick_select') {
       if (!itemId) return () => {};
-      setEquippedItems(prev => [...prev.filter(e => e.slot !== to.slot), { slot: to.slot, itemId }]);
-      return () => setEquippedItems(prev => prev.filter(e => e.slot !== to.slot));
+      setEquippedItems(prev => addToQuickBar(prev, to.slot, itemId));
+      return () => setEquippedItems(prev => removeFromQuickBar(prev, to.slot, itemId));
     }
     return () => {};
   }, []);
@@ -1215,7 +1252,7 @@ export const useUserData = () => {
       setInventory([...slotItemRows, ...legacyBlocksSeedsRows]);
       const qsRows = (((slotRes as any).data as any[]) ?? [])
         .filter((s: any) => s.region === 'quick_select')
-        .map((s: any) => ({ slot: s.slot, itemId: s.item_id }));
+        .map((s: any) => ({ slot: s.slot, itemId: s.item_id, quantity: s.quantity ?? 1 }));
       setEquippedItems(qsRows);
       const equipRows = (((slotRes as any).data as any[]) ?? [])
         .filter((s: any) => s.region === 'equip')

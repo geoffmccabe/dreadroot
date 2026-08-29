@@ -32,6 +32,15 @@ export interface SlotClickResult {
   status: string;
 }
 
+/** Does `item` stack in `region`? The vault stacks everything — that is its
+ *  purpose. The QUICK BAR stacks throwables only: a grenade slot is the
+ *  player's lethal count ("Grenade x12"), so it fills and empties by unit
+ *  rather than by slot. Inventory never stacks — every unit is its own tile,
+ *  which is the long-standing rule and the DB enforces it. */
+function stacksIn(region: SlotClickInput['location']['region'], throwable?: boolean): boolean {
+  return region === 'vault' || (region === 'hotbar' && !!throwable);
+}
+
 function occupantToCursor(occ: SlotOccupant, location: SlotClickInput['location'], qty: number): CursorStackPayload {
   const origin: CursorStackPayload['origin'] = (() => {
     if (location.region === 'inventory') {
@@ -50,6 +59,7 @@ function occupantToCursor(occ: SlotOccupant, location: SlotClickInput['location'
     tier: occ.tier,
     spriteUrl: occ.spriteUrl,
     nonStackable: occ.nonStackable,
+    throwable: occ.throwable,
     origin,
   };
 }
@@ -145,18 +155,21 @@ export async function slotClick(
     // Both empty: no-op
     if (!cursor && !occupant) return { cursorAfter: null, status: '' };
 
-    // A WHOLE stack carried out of the vault (a non-stackable item, qty > 1) can only be put
-    // back into a vault slot — inv/QA/equip hold one unit each, so they'd lose the rest.
-    if (cursor && cursor.nonStackable && cursor.quantity > 1 && location.region !== 'vault') {
-      return { cursorAfter: cursor, status: 'whole stack → vault only' };
+    // A WHOLE stack on the cursor can only land somewhere that stacks — the
+    // vault, or a quick-bar slot when the item is a throwable. Inventory and
+    // equip hold one unit each and would lose the rest.
+    if (cursor && cursor.quantity > 1 && !stacksIn(location.region, cursor.throwable)) {
+      return { cursorAfter: cursor, status: 'whole stack → vault or quick bar' };
     }
 
-    // Cursor empty, slot has stack → pick up. From a VAULT stack, a plain drag picks up ONE
-    // unit (the rest stays in the vault); SHIFT+drag picks up the WHOLE stack (which can then
-    // only be dropped back into a vault slot, enforced below). Inv/QA are 1-per-slot so the
+    // Cursor empty, slot has stack → pick up. From a stacking slot (vault, or a
+    // quick-bar throwable), a plain drag takes ONE unit and the rest stays put;
+    // SHIFT+drag takes the WHOLE stack, which can then only be dropped
+    // somewhere that stacks (enforced above). Inventory is 1-per-slot so the
     // occupant is already a single unit there.
     if (!cursor && occupant) {
-      const qty = (location.region === 'vault' && occupant.quantity > 1 && !shift) ? 1 : occupant.quantity;
+      const qty = (stacksIn(location.region, occupant.throwable) && occupant.quantity > 1 && !shift)
+        ? 1 : occupant.quantity;
       return { cursorAfter: occupantToCursor(occupant, location, qty), status: `cursor: picked up x${qty}` };
     }
 
@@ -165,7 +178,7 @@ export async function slotClick(
     // exactly one unit, so only ONE unit drops and the cursor keeps the
     // remainder (lets a vault stack be peeled out one slot at a time).
     if (cursor && !occupant) {
-      const dropQty = location.region === 'vault' ? cursor.quantity : 1;
+      const dropQty = stacksIn(location.region, cursor.throwable) ? cursor.quantity : 1;
       const dropped = await performDrop(cursor, dropQty, location, handlers);
       if (!dropped.ok) return { cursorAfter: cursor, status: `drop FAIL: ${dropped.reason}` };
       const remaining = cursor.quantity - dropQty;
@@ -175,13 +188,15 @@ export async function slotClick(
       };
     }
 
-    // Cursor + slot have SAME item → merge cursor into slot when the destination is the VAULT.
-    // The vault stacks EVERYTHING (its whole purpose) — even items that are non-stackable in
-    // inv/QA (weapons, grenades, eggs…). The server (transfer_slot) already sums same-item into
-    // a vault slot regardless of the stackable flag; we just must not block it client-side.
-    // (Inv/QA stay 1-per-slot — enforced by the DB region trigger — so a same-item collision
-    // there falls through to the swap below for tile rearranging.)
-    if (cursor && occupant && occupant.itemId === cursor.itemId && location.region === 'vault') {
+    // Cursor + slot have the SAME item → MERGE when the destination stacks: any
+    // vault slot, or a quick-bar slot holding the same throwable (dropping a
+    // grenade on your grenade tile adds to the count). Without this the drop
+    // fell through to the swap below and simply exchanged the two, so a stack
+    // could never be built by dragging.
+    // Inventory stays 1-per-slot, so a same-item collision there still falls
+    // through to the swap and just rearranges tiles.
+    if (cursor && occupant && occupant.itemId === cursor.itemId
+        && stacksIn(location.region, cursor.throwable ?? occupant.throwable)) {
       const dropped = await performDrop(cursor, cursor.quantity, location, handlers);
       if (!dropped.ok) return { cursorAfter: cursor, status: `merge FAIL: ${dropped.reason}` };
       return { cursorAfter: null, status: `merged x${cursor.quantity} into ${location.region}` };

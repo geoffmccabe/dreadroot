@@ -236,17 +236,11 @@ export interface SceneProps {
   /** Activate a hotbar slot by index (1-6). Used for keyboard digits
    *  consuming health potions, etc. */
   onUseHotbarSlot?: (slot: number) => void;
-  /** Throw a grenade now. Returns true if one was actually thrown
-   *  (false if inventory empty / live cap hit). */
-  onThrowGrenade?: () => boolean;
-  /** Parent-supplied G-key handler. Parent decides whether to arm
-   *  (and which slot) based on inventory + equipped state. */
-  onGrenadeTogglePress?: () => void;
-  /** True while a grenade is pin-pulled. Read by the click handler. */
-  grenadeReady?: boolean;
-  /** Which hotbar slot is currently grenade-armed (1-6 or null).
-   *  HUD flashes only this specific slot. */
-  grenadeReadySlot?: number | null;
+  /** G-key handler — throw one throwable from the quick bar, immediately. The
+   *  parent picks which (lowest-numbered bar slot) and spends it. Returns
+   *  false when there is nothing to throw, so the caller can say so on screen
+   *  instead of doing nothing. */
+  onThrowPress?: () => boolean;
   /** H key handler — drink a potion (auto-equip if needed). */
   onHealthPotionUse?: () => void;
   /** Slot index (1-6) currently flashing red while a potion drink
@@ -257,22 +251,14 @@ export interface SceneProps {
    *  uses this to switch the tree-growth poller between 1s (near)
    *  and 10s (far) cadence. */
   onGrowthProximityChange?: (nearby: boolean) => void;
-  /** Take one grenade out of the user's inventory and return its
-   *  tier. Returns null if no grenade is held. Inventory is owned by
-   *  Fortress.tsx so the throw mechanism delegates here. */
+  /** Spend one grenade from the quick bar and return its tier so the blast
+   *  can scale. Null when the next throwable is an egg, or there is none. */
   consumeGrenade?: () => number | null;
-  /** Filled by FortressScene with its throw fn so Fortress's G state machine can
-   *  trigger a hand-grenade throw (Fortress owns inventory + fill-vs-throw logic). */
+  /** Filled by FortressScene with its throw fn so the G handler in Fortress
+   *  can fire a throw without re-plumbing the scene. */
   grenadeThrowRef?: React.MutableRefObject<(() => boolean) | null>;
-  /** Throw a shpider egg now. Returns true if one was thrown. */
-  onThrowEgg?: () => boolean;
-  /** Y-key handler — parent decides whether to arm. */
-  onEggTogglePress?: () => void;
-  /** True while an egg is armed for throw. */
-  eggReady?: boolean;
-  /** Consume one shpider egg from inventory. Returns the row id + tier
-   *  so the spawned pet can refund the same row (with cooldown) on
-   *  death. Skips cooldown-locked rows. */
+  /** Spend one shpider egg from the quick bar. The row id is vestigial —
+   *  eggs live in the bar now, not as individual inventory rows. */
   consumeEgg?: () => { tier: number; eggInventoryRowId: string } | null;
   /** Admin/superadmin only: grant 1 grenade and auto-equip to hotbar
    *  slot 6 if free. Wired to Cmd+G in FortressControls. */
@@ -360,19 +346,9 @@ export interface FirstPersonControlsProps {
   /** Activate a hotbar slot by index (1-6). Used for keyboard digits
    *  consuming health potions, etc. */
   onUseHotbarSlot?: (slot: number) => void;
-  /** Throw a grenade now. Returns true if one was actually thrown
-   *  (false if inventory empty / live cap hit). */
-  onThrowGrenade?: () => boolean;
-  /** Parent G-press handler. */
-  onGrenadeTogglePress?: () => void;
-  /** True while grenade is armed. */
-  grenadeReady?: boolean;
-  /** Throw a shpider egg now. */
-  onThrowEgg?: () => boolean;
-  /** Parent Y-press handler. */
-  onEggTogglePress?: () => void;
-  /** True while an egg is armed. */
-  eggReady?: boolean;
+  /** G-key handler — throw one throwable from the quick bar. Returns false
+   *  when there is nothing to throw. */
+  onThrowPress?: () => boolean;
   /** H-press handler. */
   onHealthPotionUse?: () => void;
   /** Admin/superadmin only: Cmd+G grants a grenade. */

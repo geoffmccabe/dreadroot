@@ -44,6 +44,8 @@ import { getItemSpriteUrl as itemSpriteUrl } from '@/lib/itemSprite';
 import { EquipSlots } from './EquipSlots';
 import { FlameTierCheat } from './FlameTierCheat';
 import { AmmoCounter } from './AmmoCounter';
+import { ThrowableCounter } from './ThrowableCounter';
+import { getThrowable, loadThrowables } from '@/config/throwables';
 import { useSupporterStatus } from '@/features/supporters/useSupporterStatus';
 import { vipColorVar, vipLabel } from '@/components/admin-users/vipStyle';
 import {
@@ -118,8 +120,6 @@ export function FortressHUD(props: FortressHUDProps) {
     selectedSlot: selectedSlotProp = 1,
     onSelectSlot,
     onDeleteBlock,
-    grenadeReadySlot = null,
-    eggReadySlot = null,
     potionDrinkingSlot = null,
     onUseHotbarSlot,
     playerPositionRef,
@@ -270,6 +270,7 @@ export function FortressHUD(props: FortressHUDProps) {
   }, [itemDefs, isNonStackableKey]);
 
   useEffect(() => { loadItemDefs(); }, [loadItemDefs]);
+  useEffect(() => { void loadThrowables(); }, []);
 
   // Helper: get sprite URL from item def (delegates to the shared
   // resolver so the cache-busting query string stays consistent).
@@ -294,7 +295,7 @@ export function FortressHUD(props: FortressHUDProps) {
   const hotbarSlots = useMemo(() => {
     const slots: Array<{ slot: number; itemId: string | null; sprite: string | null; name: string | null; tier: number | null; quantity: number; isNonStack: boolean }> = [];
     for (let i = 1; i <= 6; i++) {
-      const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find((e: any) => e.slot === i);
+      const eq = (equippedItems as Array<{ slot: number; itemId: string; quantity?: number }>).find((e: any) => e.slot === i);
       if (eq) {
         const def = itemDefs.get(eq.itemId);
         const isNonStack = nonStackableItemIds.has(eq.itemId);
@@ -304,12 +305,11 @@ export function FortressHUD(props: FortressHUDProps) {
           sprite: getSpriteUrl(def),
           name: def?.name || null,
           tier: def?.tier ?? null,
-          // For non-stackable items the count badge would imply "stack",
-          // which contradicts the rule (each grenade / potion is its own
-          // QS-as-storage: each QS slot holds exactly ONE item (never
-          // stacks). Quantity is always 1; the badge is suppressed
-          // (ItemTileVisual hides the badge when qty<=1).
-          quantity: 1,
+          // Every quick-bar slot holds exactly one item EXCEPT a throwable,
+          // which stacks there — that slot is the player's lethal count and
+          // reads "Grenade x12". Everything else stays at 1, so the badge is
+          // suppressed for it (ItemTileVisual hides the badge when qty<=1).
+          quantity: eq.quantity ?? 1,
           isNonStack,
         });
       } else {
@@ -430,6 +430,7 @@ export function FortressHUD(props: FortressHUDProps) {
         tier: def?.tier ?? null,
         spriteUrl: getSpriteUrl(def),
         nonStackable: nonStack,
+        throwable: !!getThrowable(inv.item_id),
         category: (def as any)?.item_category ?? null,
         hands: Number((def as any)?.properties?.sw?.hands) || null,
         rowId: inv.id,
@@ -647,7 +648,30 @@ export function FortressHUD(props: FortressHUDProps) {
       let target: number | null = null;
       const key = def.key ?? '';
       const isGlove = key === 'flame_glove' || (def.name?.toLowerCase().includes('flame glove') ?? false);
-      const isGrenade = key === 'grenade' || key.startsWith('grenade_t');
+      // Throwables are never HELD — they live in the quick bar and throw with G.
+      // So double-click sends one to the bar rather than to a hand: onto the
+      // existing stack of the same throwable if there is one, else the first
+      // free slot. (The old test matched only the key spellings `grenade` and
+      // `grenade_t*`, so Tacticians Grenade fell through it and was reported
+      // "not a weapon".)
+      if (getThrowable(itemId)) {
+        if (region === 'quick_select') { setDebugStatus('already in the quick bar'); return; }
+        const bar = (equippedItems as Array<{ slot: number; itemId: string }>);
+        const merge = bar.find((e) => e.itemId === itemId);
+        const dstSlot = merge ? merge.slot : findFirstEmptyHotbarSlot();
+        if (dstSlot == null) { setDebugStatus('quick bar full — no room for the grenade'); return; }
+        try {
+          const ok = await slotClickHandlers.transferSlot(
+            { region: 'inventory', page: 0, slot },
+            { region: 'quick_select', page: 0, slot: dstSlot },
+            1,
+          );
+          setDebugStatus(ok ? `grenade → quick bar ${dstSlot}` : 'grenade → quick bar FAIL');
+        } catch (e) {
+          setDebugStatus('grenade → quick bar: ' + ((e as Error)?.message ?? String(e)));
+        }
+        return;
+      }
       /**
        * How many hands, read LOCALLY.
        *
@@ -662,15 +686,15 @@ export function FortressHUD(props: FortressHUDProps) {
         return typeof h === 'number' ? h : null;
       };
       const hands = handsOf(def);
-      const isGun = !isGlove && !isGrenade && hands != null;
+      const isGun = !isGlove && hands != null;
       const isTwoHanded = hands === 2;
       const gear = (equippedGear as Array<{ slot: number; itemId: string }>);
       const slot1Occ = gear.some((e) => e.slot === 1);
       const slot5Occ = gear.some((e) => e.slot === 5);
-      // Hand assignment (Geoff's spec): grenade → LEFT(1), pistol → RIGHT(5), glove → first FREE
-      // hand else RIGHT(5), rifle (two-handed) → LEFT(1) centered.
-      if (isGrenade) target = 1;
-      else if (isGlove) target = !slot1Occ ? 1 : 5;
+      // Hand assignment: pistol → RIGHT(5), glove → first FREE hand else
+      // RIGHT(5), rifle (two-handed) → LEFT(1) centered. Grenades are not here
+      // — they are quick-bar items, refused above.
+      if (isGlove) target = !slot1Occ ? 1 : 5;
       else if (isGun && isTwoHanded) target = 1;
       else if (isGun) target = 5;
       if (target == null) { setDebugStatus('quick-equip: not a weapon'); return; }
@@ -1337,6 +1361,7 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Superadmin: "#F<digit>" sets the flame-glove tier live for testing (no-op without a glove). */}
       <FlameTierCheat isSuperadmin={!!(userRoles?.includes?.('superadmin'))} />
       <AmmoCounter />
+      <ThrowableCounter equippedItems={equippedItems as Array<{ slot: number; itemId: string; quantity?: number }>} />
 
       {/* Bottom-center hotbar + inventory grid + vault */}
       <div
@@ -1415,8 +1440,6 @@ export function FortressHUD(props: FortressHUDProps) {
           >
             {hotbarSlots.map((slot) => {
               const isSelected = selectedSlot === slot.slot;
-              const isGrenadeReady = grenadeReadySlot === slot.slot;
-              const isEggReady = eggReadySlot === slot.slot;
               const isDrinking = potionDrinkingSlot === slot.slot;
               const def = slot.itemId ? itemDefs.get(slot.itemId) : undefined;
               const slotOccupant: SlotOccupant | null = slot.itemId ? {
@@ -1427,6 +1450,7 @@ export function FortressHUD(props: FortressHUDProps) {
                 tier: slot.tier,
                 spriteUrl: slot.sprite ?? null,
                 nonStackable: nonStackableItemIds.has(slot.itemId),
+                throwable: !!getThrowable(slot.itemId),
                 rowId: '', // hotbar items don't carry a direct inv rowId here
               } : null;
               // Cursor-stack mode kicks in only when the inventory UI is
@@ -1563,27 +1587,18 @@ export function FortressHUD(props: FortressHUDProps) {
                     onPointerEnter={() => setHoveredHotbarSlot(slot.slot)}
                     onPointerLeave={() => setHoveredHotbarSlot(s => s === slot.slot ? null : s)}
                     onContextMenu={(e) => { e.preventDefault(); }}
-                    className={
-                      isGrenadeReady ? 'grenade-ready-pulse'
-                      : isEggReady ? 'egg-ready-pulse'
-                      : isDrinking ? 'potion-drink-pulse'
-                      : undefined
-                    }
+                    className={isDrinking ? 'potion-drink-pulse' : undefined}
                     style={{
                       width: '60px',
                       height: '60px',
                       borderRadius: 'var(--hud-radius)',
                       border: wouldAcceptDrop
                         ? '2px solid hsla(120, 100%, 60%, 0.95)'
-                        : isGrenadeReady
-                          ? '2px solid #00ff66'
-                          : isEggReady
-                            ? '2px solid #000000'
-                            : isDrinking
-                              ? '2px solid #ff3a6a'
-                              : isSelected
-                                ? '2px solid white'
-                                : '1px solid hsla(var(--hud-border))',
+                        : isDrinking
+                          ? '2px solid #ff3a6a'
+                          : isSelected
+                            ? '2px solid white'
+                            : '1px solid hsla(var(--hud-border))',
                       background: wouldAcceptDrop
                         ? 'hsla(120, 60%, 25%, 0.35)'
                         : isSelected

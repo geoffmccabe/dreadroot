@@ -16,7 +16,6 @@ import { PlacedBlock } from '@/types/blocks';
 import { playSpatialSound, preloadSpatialSounds, play3DPositionalSound } from '@/lib/spatialAudio';
 import { getSoundUrl } from '@/hooks/useGameSounds';
 import { getActiveWeapon, getRightWeapon, getFireWeapon, useActiveWeapon, type ActiveWeaponStats } from '@/config/activeWeapon';
-import { anyArmedHandGrenade, anyHandGrenade, armedHandsRightFirst, getHandGrenades, setHandGrenade } from '@/config/handGrenade';
 import { getFlameGlove } from '@/config/flameGlove';
 import { getRocketBelt, getRocketBeltMax, setRocketBeltAvailable } from '@/config/rocketBelt';
 import { BURST_SEC, BURST_REGEN_SEC } from '@/features/rocketBelt/rocketBelt';
@@ -131,23 +130,11 @@ export function FirstPersonControls({
   onPentabulletChargeChange,
   // Hotbar quick-use (digit 1-6 activates the equipped slot's item)
   onUseHotbarSlot,
-  // Grenade throw — called on click while grenade-ready. Returns true
-  // if a grenade was actually thrown (false if inventory empty etc.).
-  onThrowGrenade,
-  // G key handler — parent decides whether to arm (and which slot)
-  // based on inventory + equipped state. Returns whether arming
-  // happened (controls don't care, the parent will reflect state
-  // via grenadeReady prop).
-  onGrenadeTogglePress,
-  onGrenadeDisarm,
-  // True while a grenade is pin-pulled and waiting for a throw click.
-  // Owned by parent. The click handler reads this to know whether
-  // to throw instead of fire the equipped weapon.
-  grenadeReady: grenadeReadyProp = false,
-  // Shpider Egg throw (Y key + click) — same shape as grenade.
-  onThrowEgg,
-  onEggTogglePress,
-  eggReady: eggReadyProp = false,
+  // G key — throw one throwable from the quick bar, immediately. The parent
+  // picks which one (lowest-numbered bar slot) and spends it. There is no
+  // arming step and no "ready" state for the controls to track, so nothing
+  // here can get out of sync with what the player is actually carrying.
+  onThrowPress,
   // H key handler — parent drinks a potion (auto-equips if needed).
   onHealthPotionUse,
   // Admin/superadmin item grants — Cmd+G grenade, Cmd+H health potion.
@@ -236,10 +223,6 @@ export function FirstPersonControls({
   // click handler can read it without async state. Parent (Fortress)
   // owns the actual flag because it depends on inventory + equipped
   // slot lookups.
-  const grenadeReadyRef = useRef(false);
-  useEffect(() => { grenadeReadyRef.current = grenadeReadyProp; }, [grenadeReadyProp]);
-  const eggReadyRef = useRef(false);
-  useEffect(() => { eggReadyRef.current = eggReadyProp; }, [eggReadyProp]);
 
   // Jet Boost system: 1 boost per 3 levels, recharges every 60 seconds
   const jetBoostMaxRef = useRef(0);
@@ -890,22 +873,11 @@ export function FirstPersonControls({
         if (event.metaKey || event.ctrlKey || event.altKey) break;
         gKeyHeldRef.current = true;
         if (event.repeat) break;
-        // Dual-wield grenades: ON THE GROUND, G runs the parent's full state machine
-        // (fill a free hand → arm → throw RIGHT-first → re-arm; rifle = old QA flow). It
-        // owns inventory + the fill-vs-throw decision and triggers throws via its ref.
-        // AIRBORNE, arming is disallowed (as before) but you can still THROW an armed one.
-        // A tap runs the parent's grenade state machine. Allow it on the ground OR whenever
-        // a grenade is already IN A HAND (arm/throw must work even if the ground check is
-        // momentarily flaky) — only a true airborne glide with no hand grenade falls through.
-        if (onGround.current || godModeRef.current || anyHandGrenade()) {
-          onGrenadeTogglePress?.();
-        } else if (anyArmedHandGrenade() || grenadeReadyRef.current) {
-          onThrowGrenade?.();
-          grenadeReadyRef.current = false;
-          // `onGrenadeReadyChange?.(false)` was here and there is no such prop — it was left behind
-          // by a refactor. The `?.` does NOT save it: optional call guards a null VALUE, not an
-          // undeclared BINDING, so evaluating the name throws ReferenceError and kills whatever was
-          // running. The ref above already carries the state this was announcing.
+        // A TAP throws one throwable from the quick bar. HOLDING G in the air
+        // is still the glide, so a tap only throws with your feet on the ground
+        // (or in god mode). The parent decides which throwable and spends it.
+        if (onGround.current || godModeRef.current) {
+          if (onThrowPress && !onThrowPress()) flashCenter('NO GRENADES — PUT ONE IN YOUR QUICK BAR');
         }
         break;
       case 'KeyX':
@@ -1137,8 +1109,7 @@ export function FirstPersonControls({
     const clock = fireClock ?? lastFireTime;
     // A weapon must be EQUIPPED to shoot — no gun = no fire (no default shot), flash a
     // warning each attempt. (Flame glove = non-gun → flame path, never reaches here.)
-    // Exception: if the LEFT hand legitimately holds a grenade, stay silent (throw with G).
-    if (!aw) { if (!getHandGrenades().L && !getFlameGlove()) flashCenter('NO WEAPON EQUIPPED'); return; }
+    if (!aw) { if (!getFlameGlove()) flashCenter('NO WEAPON EQUIPPED'); return; }
     // No-fire zone (FSZ + 1 chunk buffer) → dry click, no shot. DreadRoot only — no fortress in siege.
     if (!isSiege && isPointInNoFireZone(camera.position.x, camera.position.y, camera.position.z)) {
       playSpatialSound(getSoundUrl('empty_gun_click', '/empty_gun_click.mp3'), 0, { baseVolume: 0.5 });
@@ -1354,15 +1325,10 @@ export function FirstPersonControls({
         );
         onWideTreePlace(position);
       }
-    } else if (eggReadyRef.current && onThrowEgg) {
-      // Egg-ready mode: click throws. Clear ref so the crosshair clears even if
-      // the throw failed. (Grenades are now thrown with G, not click.)
-      onThrowEgg();
-      eggReadyRef.current = false;
     } else if (showCrosshairs && onShoot) {
-      // Grenade armed + a RIFLE (not a pistol) → the click does NOTHING; throw the
-      // grenade with G. A PISTOL fires even with a grenade armed (dual-wield).
-      if (grenadeReadyRef.current && !getFireWeapon()?.isPistol) return;
+      // Throwables never interrupt the gun now: G throws, left-click always
+      // fires. Previously an armed grenade made a rifle's left-click a no-op
+      // until you threw it or right-clicked to put the pin back.
       // A LEFT-hand flame glove uses continuous hold on the left button, not click-to-fire.
       if (getFlameGlove()?.hand === 'L') return;
 
@@ -1512,34 +1478,22 @@ export function FirstPersonControls({
     if (event.button === 2) {
       keys.current.rightMouse = true;
 
-      // ── Dual-wield right-click priority ──
-      // 1. An ARMED grenade → DEACTIVATE it. Wins over firing/aiming/inspect. A grenade shown
-      //    in a HAND (overlay) disarms first; otherwise the rifle/QA-armed grenade (grenadeReady)
-      //    is cancelled. (With a rifle equipped this takes right-click from ADS only WHILE a
-      //    grenade is armed — once disarmed, right-click aims normally again.)
-      const armedHands = armedHandsRightFirst();
-      if (armedHands.length) {
-        const h = armedHands[0];
-        const cur = getHandGrenades()[h];
-        if (cur) setHandGrenade(h, { ...cur, armed: false });
-        event.preventDefault();
-        return;
-      }
-      if (grenadeReadyRef.current) {
-        grenadeReadyRef.current = false;
-        onGrenadeDisarm?.();
-        event.preventDefault();
-        return;
-      }
-      // 2. A RIGHT-hand flame glove → right button starts the flamethrower (held). The left
-      //    hand's pistol/grenade is unaffected.
+      // ── Right-click priority ──
+      // Grenade disarm used to sit at the top of this list, so right-click
+      // meant "put the pin back" instead of "aim" whenever a grenade happened
+      // to be armed — the same button doing a different job depending on
+      // invisible state. There is no armed state any more, so the list starts
+      // at the flame glove and ends at aiming.
+      //
+      // 1. A RIGHT-hand flame glove → right button starts the flamethrower (held). The left
+      //    hand's pistol is unaffected.
       if (getFlameGlove()?.hand === 'R' && showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         onFlameStart?.();
         rmbFlamingRef.current = true;
         event.preventDefault();
         return;
       }
-      // 3. DUAL-WIELD — right-click fires the RIGHT gun (hold-to-zoom + release-2nd-shot)
+      // 2. DUAL-WIELD — right-click fires the RIGHT gun (hold-to-zoom + release-2nd-shot)
       //    when the LEFT hand is occupied (gun OR glove), so left-click is taken by the
       //    left hand. With a lone gun, left-click fires it and right-click stays ADS.
       const rw = (getActiveWeapon() || getFlameGlove()?.hand === 'L') ? getRightWeapon() : null;
@@ -1945,9 +1899,7 @@ export function FirstPersonControls({
       choppingPositionRef.current = null;
 
       // Start flame glove, automatic rapid-fire, or pentabullet charge (shooting mode).
-      // Grenade armed + RIFLE (not a pistol) → mousedown does nothing (throw with G).
-      const grenadeBlocksFire = grenadeReadyRef.current && !getFireWeapon()?.isPistol;
-      if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode && !grenadeBlocksFire) {
+      if (showCrosshairs && !blockPlacementMode && !treePlacementMode && !widePlacementMode) {
         if (getFlameGlove()?.hand === 'L' && onFlameStart) {
           // LEFT-hand flame glove → left button starts the flamethrower
           onFlameStart();

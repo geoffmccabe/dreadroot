@@ -91,7 +91,7 @@ import { PentabulletCrosshair } from './PentabulletCrosshair';
 import { VaultPanel } from '@/features/vault';
 import { playPinPullSound } from '@/features/grenades/lib/explosionSound';
 import { getActiveWeapon } from '@/config/activeWeapon';
-import { getHandGrenades, setHandGrenade, armedHandsOfKindRightFirst, armedHandsRightFirst, handKind, useHandGrenades, type Hand, type ThrowableKind } from '@/config/handGrenade';
+import { getThrowable, loadThrowables, useThrowables, type ThrowableKind } from '@/config/throwables';
 import { getItemSpriteUrl } from '@/lib/itemSprite';
 import { diagnostics } from '@/lib/diagnosticsLogger';
 import { getDefaultBulletTier } from '@/lib/bulletScaling';
@@ -282,19 +282,18 @@ export function Fortress() {
   const [pendingChopPosition, setPendingChopPosition] = useState<{ x: number; y: number; z: number } | null>(null);
   const [chopProgress, setChopProgress] = useState(0);
 
-  // Grenade-ready slot — the specific hotbar slot (1-6) that has a
-  // pin-pulled grenade waiting for a throw click. null means not armed.
-  // HUD reads this to flash ONLY this slot (not every non-stack slot).
-  // The boolean flag is derived for convenience.
-  const [grenadeReadySlot, setGrenadeReadySlot] = useState<number | null>(null);
-  const grenadeReady = grenadeReadySlot !== null;
-  // Dual-wield hand grenades (module store). The throw itself lives in FortressScene
-  // (useGrenadeSystem); Scene populates this ref so the G state machine here can trigger
-  // a throw without re-plumbing. `grenadeReady` (QA arm) OR any armed hand grenade = "armed".
+  // Throwables (grenades, shpider eggs) live in the QUICK BAR and nowhere else.
+  // There is no arming step, no pin, and no hand slot: G throws one unit from
+  // the lowest-numbered quick-bar slot that holds one. The old model put the
+  // grenade in a hand, backed by a mirrored quick-bar slot, and refused to
+  // throw when the bar was full — which is why grenades did nothing at all for
+  // a player carrying six items.
+  //
+  // The throw itself lives in FortressScene (useGrenadeSystem / egg system);
+  // Scene populates these refs so the key handler here can fire one without
+  // re-plumbing the whole scene.
   const grenadeThrowRef = useRef<(() => boolean) | null>(null);
-  // Same idea for shpider eggs — Scene populates it so the Y state machine can throw a hand egg.
   const eggThrowRef = useRef<(() => boolean) | null>(null);
-  const handGren = useHandGrenades();
 
   // God Map (Cmd+M). Open to everyone for viewing; only superadmins
   // can paint/erase no-plant zones; only admins/superadmins see other
@@ -307,10 +306,6 @@ export function Fortress() {
   // FortressScene from camera.getWorldDirection(). Used by the eject-
   // to-world handler to drop items 2m in front of the player's view.
   const playerForwardRef = useRef<THREE.Vector3 | null>(null);
-
-  // Shpider Egg ready slot — same shape as grenadeReadySlot. Armed via
-  // Y, thrown on click. Eggs hatch on rest into a pet shpider.
-  const [eggReadySlot, setEggReadySlot] = useState<number | null>(null);
 
   // Vault state — proximity flag flips when player walks into the
   // back-wall trigger zone, prompt + V keybind become active. Open
@@ -497,11 +492,18 @@ export function Fortress() {
     fetchDef();
   }, [equippedGear]);
 
-  // Resolve grenade item UUIDs → tier. Forged grenades live in
-  // user_inventory as { item_type: 'item', item_id: <items.id> }, so we
-  // need the items table to know which UUIDs are grenades. Refetches
-  // when the inventory id-set changes (covers forging a fresh tier).
-  const grenadeDefsRef = useRef<Map<string, number>>(new Map());
+  // The throwable catalogue (grenades + eggs) comes from ONE server-side
+  // definition, list_throwable_items(), which the database also uses to decide
+  // what may stack in the quick bar. Two hand-written copies of "which items
+  // are grenades" used to live here, and neither matched Tacticians Grenade —
+  // so that item could never be thrown. Refetched when the inventory
+  // composition changes, which covers forging a fresh tier.
+  const throwables = useThrowables();
+  useEffect(() => {
+    void loadThrowables(true);
+  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
+
+  // Health potion + tier-1 grenade item ids, for the H key and the admin grant.
   const healthPotionIdRef = useRef<string | null>(null);
   const grenadeT1IdRef = useRef<string | null>(null);
   useEffect(() => {
@@ -509,320 +511,135 @@ export function Fortress() {
     (async () => {
       const { data } = await supabase
         .from('items')
-        .select('id, key, tier')
-        .or('key.eq.grenade,key.like.grenade_t%,key.eq.health_potion');
+        .select('id, key')
+        .in('key', ['health_potion', 'grenade']);
       if (cancelled || !data) return;
-      const map = new Map<string, number>();
       for (const row of data) {
-        if (row.key === 'health_potion') {
-          healthPotionIdRef.current = row.id;
-          continue;
-        }
-        const tier = row.tier ?? 1;
-        map.set(row.id, tier);
-        // Accept either legacy 'grenade' key OR the tiered 'grenade_t1'
-        // pattern. The Ctrl+G admin grant needs the tier-1 item id so
-        // it can drop one in the user's inventory.
-        if (tier === 1 && (row.key === 'grenade' || row.key === 'grenade_t1')) {
-          grenadeT1IdRef.current = row.id;
-        }
+        if (row.key === 'health_potion') healthPotionIdRef.current = row.id;
+        if (row.key === 'grenade') grenadeT1IdRef.current = row.id;
       }
-      grenadeDefsRef.current = map;
     })();
     return () => { cancelled = true; };
-    // Re-run when inventory composition changes so newly-forged tiers
-    // (which create a fresh items row) show up. Cheap query, rarely hit.
-  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
-
-  // Shpider egg item ids → tier. Feeds the unified G throw handler (a hand can hold a
-  // grenade OR an egg; G throws/adopts/fills either, dispatching by kind).
-  const eggDefsRef = useRef<Map<string, number>>(new Map());
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase
-        .from('items')
-        .select('id, key, tier')
-        .like('key', 'shpider_egg_t%');
-      if (cancelled || !data) return;
-      const map = new Map<string, number>();
-      for (const row of data) {
-        map.set(row.id, row.tier ?? 1);
-      }
-      eggDefsRef.current = map;
-    })();
-    return () => { cancelled = true; };
-  }, [inventory.map(i => i.item_id || i.item_type).join(',')]);
-
-  // QS-as-storage: throw consumes the grenade in the currently-armed
-  // QS slot. Returns its tier so the throw can scale. (The legacy
-  // "best-tier-in-inv" logic doesn't apply — under the new model,
-  // grenades live in QS, not inv; the user explicitly chose which
-  // tier to arm by equipping it.)
-  const consumeGrenade = useCallback((): number | null => {
-    // Dual-wield: an armed HAND grenade is thrown first, RIGHT hand before LEFT. The
-    // grenade item lives in its QA slot (qsSlot) → consume that and clear the hand.
-    // GRENADE-kind only, so a grenade throw never consumes a hand egg.
-    const armed = armedHandsOfKindRightFirst('grenade');
-    if (armed.length) {
-      const hand = armed[0];
-      const hg = getHandGrenades()[hand];
-      setHandGrenade(hand, null);
-      if (hg) { void consumeQuickSlot(hg.qsSlot); return hg.tier; }
-    }
-    // Legacy QA path (rifle equipped → grenades thrown straight from QA).
-    if (grenadeReadySlot === null) return null;
-    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(e => e.slot === grenadeReadySlot);
-    if (!eq) { setGrenadeReadySlot(null); return null; }
-    const tier = grenadeDefsRef.current.get(eq.itemId);
-    if (tier == null) { setGrenadeReadySlot(null); return null; }
-    const slotToConsume = grenadeReadySlot;
-    setGrenadeReadySlot(null);
-    void consumeQuickSlot(slotToConsume);
-    return tier;
-  }, [grenadeReadySlot, equippedItems, consumeQuickSlot]);
-
-  // G key handler — only arms if a grenade is actually available IN
-  // THE DATABASE. v4.12.12 fix: previous version trusted client state
-  // (equippedItems / inventory), which could hold phantom rows from
-  // failed optimistic updates or stale realtime. That let players
-  // press G with nothing and still throw a "free" grenade because
-  // both the arm path and the throw path consulted the same lying
-  // client state. Now we query user_slots fresh and decide the arm
-  // path based on what the server actually has.
-  //
-  //   1. Already armed → second G cancels (disarm).
-  //   2. Real QS grenade exists → arm that slot.
-  //   3. Real inventory grenade + free QS slot → transfer + arm.
-  //   4. No real grenade OR no free QS slot → no-op.
-  // Stage an INVENTORY grenade into a free QA slot (the throw/consume machinery reads
-  // from QA). Returns the QA slot it landed in, or null if none free / move failed.
-  const stageGrenadeToQa = useCallback(async (invSlot: number, usedQa: Set<number>): Promise<number | null> => {
-    let dst: number | null = null;
-    for (let i = 1; i <= 6; i++) { if (!usedQa.has(i)) { dst = i; break; } }
-    if (dst === null) return null;
-    try {
-      await worldStore.transferSlot({ region: 'inventory', page: 0, slot: invSlot }, { region: 'quick_select', page: 0, slot: dst }, 1);
-    } catch (err) { console.error('[grenade] stage to QA failed:', err); return null; }
-    if (refetchInventoryAndQs) void refetchInventoryAndQs();
-    return dst;
-  }, [refetchInventoryAndQs]);
-
-  // Grenade item → its display sprite (for the hand box). One small items lookup.
-  const grenadeSpriteFor = useCallback(async (itemId: string): Promise<string | null> => {
-    const { data } = await supabase.from('items').select('item_number, texture_url').eq('id', itemId).maybeSingle();
-    if (!data) return null;
-    return getItemSpriteUrl({ item_number: data.item_number, texture_url: data.texture_url } as { item_number: number | null; texture_url: string | null });
   }, []);
 
-  // G key — the dual-wield grenade state machine. A RIFLE in the left hand keeps the OLD
-  // straight-from-QA flow (arm, then G again throws). Otherwise grenades go to the HANDS:
-  //   1. A hand is FREE (no weapon, no grenade) + a grenade is available (QA, else INV)
-  //      → put one in a free hand (LEFT first, else RIGHT) and ARM it.
-  //   2. No free hand + an ARMED hand grenade → THROW it (RIGHT first, then LEFT).
-  //   3. A DISARMED hand grenade → re-arm it (RIGHT first).
-  //   4. Otherwise → nothing.
-  // UNIFIED throwable handler (bound to G). A hand can hold a grenade OR a shpider egg; G
-  // throws / adopts / fills EITHER, dispatching by the hand's kind: a grenade explodes
-  // (grenadeThrowRef), an egg hatches a friendly shpider (eggThrowRef). The old separate
-  // Y-key egg flow was removed — eggs equip into a hand exactly like a grenade now.
-  const handleGrenadeTogglePress = useCallback(async () => {
-    if (!user?.id) return;
-    const aw = getActiveWeapon();
-    const leftRifle = !!aw && !aw.isPistol;   // slot 1 holds a two-handed rifle
-
-    // itemId → which throwable it is (grenade or egg) and its tier. null = not throwable.
-    const resolveThrowable = (itemId: string): { kind: ThrowableKind; tier: number } | null => {
-      const g = grenadeDefsRef.current.get(itemId);
-      if (g != null) return { kind: 'grenade', tier: g };
-      const e = eggDefsRef.current.get(itemId);
-      if (e != null) return { kind: 'egg', tier: e };
-      return null;
-    };
-    // Throw the right-first ARMED hand of ANY kind via the matching throw system.
-    const throwArmedHand = (): boolean => {
-      const armed = armedHandsRightFirst();
-      if (!armed.length) return false;
-      if (handKind(getHandGrenades()[armed[0]]) === 'egg') eggThrowRef.current?.();
-      else { triggerAction('throw'); grenadeThrowRef.current?.(); }
-      return true;
-    };
-
-    // A throwable ALREADY in a hand (ANY kind) always responds first — even with a rifle
-    // equipped (a legacy state where a hand throwable outlived the rifle going on). Throw an
-    // armed one, else re-arm a disarmed one (right first).
-    {
-      const hands = (['R', 'L'] as Hand[]).filter((h) => getHandGrenades()[h]);
-      if (hands.length) {
-        if (throwArmedHand()) return;
-        const reArmNow: Hand | null = hands.find((h) => !getHandGrenades()[h]!.armed) ?? null;
-        if (reArmNow) {
-          const cur = getHandGrenades()[reArmNow]!;
-          setHandGrenade(reArmNow, { ...cur, armed: true });
-          playPinPullSound();
-        }
-        return;
-      }
-    }
-
-    // A throwable sitting as a REAL EQUIP ITEM in a hand (dragged there) can't be armed/thrown
-    // by the QA-backed machinery, so G would wrongly "fill another". ADOPT it: bind it to the
-    // hand overlay ARMED (instant red-flash, kind-tagged) and move the item into a backing QA
-    // slot so the existing throw/consume path works. Right hand first.
-    {
-      const hgAdopt = getHandGrenades();
-      const handSlots: Array<[Hand, number]> = [['R', 5], ['L', 1]];
-      for (const [hand, eqSlot] of handSlots) {
-        if (hgAdopt[hand]) continue;   // already an overlay in this hand
-        const eqItem = equippedGear.find((e: { slot: number; itemId: string }) => e.slot === eqSlot);
-        const tdef = eqItem ? resolveThrowable(eqItem.itemId) : null;
-        if (!eqItem || !tdef) continue;
-        // Need a free QA slot to back the overlay (the throw path consumes from QA).
-        const { data: qaRows } = await supabase.from('user_slots' as any).select('slot').eq('user_id', user.id).eq('region', 'quick_select');
-        const usedQa = new Set<number>(((qaRows as any[]) ?? []).map((r) => r.slot));
-        let dst: number | null = null;
-        for (let i = 1; i <= 6; i++) { if (!usedQa.has(i)) { dst = i; break; } }
-        if (dst === null) return;   // QA full → can't adopt right now
-        const sprite = await grenadeSpriteFor(eqItem.itemId);
-        setHandGrenade(hand, { qsSlot: dst, tier: tdef.tier, spriteUrl: sprite, armed: true, kind: tdef.kind });   // ARM
-        playPinPullSound();
-        try {
-          await worldStore.equipTransfer({ region: 'equip', page: 0, slot: eqSlot }, { region: 'quick_select', page: 0, slot: dst });
-          if (refetchInventoryAndQs) void refetchInventoryAndQs();
-        } catch (err) {
-          setHandGrenade(hand, null);   // revert the overlay if the backing move failed
-          console.error('[throwable] adopt equip→QA failed:', err);
-        }
-        return;
-      }
-    }
-
-    // ── RIFLE: legacy QA flow (grenade only — a rifle fills both hands, so eggs can't apply).
-    //    Armed → throw; else arm a QA grenade (stage from INV if needed). ──
-    if (leftRifle) {
-      if (grenadeReadySlot !== null) { triggerAction('throw'); grenadeThrowRef.current?.(); return; }
-      const { data: rows } = await supabase.from('user_slots' as any).select('region, slot, item_id').eq('user_id', user.id).in('region', ['inventory', 'quick_select']);
-      const allRows = ((rows as any[]) ?? []);
-      const qsGren = allRows.filter(r => r.region === 'quick_select' && grenadeDefsRef.current.has(r.item_id)).sort((a, b) => a.slot - b.slot);
-      if (qsGren.length) { setGrenadeReadySlot(qsGren[0].slot); playPinPullSound(); return; }
-      const invGrenade = allRows.find(r => r.region === 'inventory' && grenadeDefsRef.current.has(r.item_id));
-      if (!invGrenade) return;
-      const usedQs = new Set<number>(allRows.filter(r => r.region === 'quick_select').map(r => r.slot));
-      await stageGrenadeToQa(invGrenade.slot, usedQs);   // next G arms it
-      return;
-    }
-
-    // ── DUAL-WIELD HAND flow — fill a free hand from QA/inventory with a throwable (grenade
-    //    OR egg) + ARM. ──
-    const hg = getHandGrenades();
-    const leftFree = !equippedGear.some((e: { slot: number }) => e.slot === 1) && !hg.L;
-    const rightFree = !equippedGear.some((e: { slot: number }) => e.slot === 5) && !hg.R;
-
-    // No free hand → nothing to fill; throw an armed one if present (already handled above).
-    if (!leftFree && !rightFree) { throwArmedHand(); return; }
-
-    const { data: rows } = await supabase.from('user_slots' as any).select('region, slot, item_id').eq('user_id', user.id).in('region', ['inventory', 'quick_select']);
-    const allRows = ((rows as any[]) ?? []);
-    const assignedQa = new Set<number>([hg.L?.qsSlot, hg.R?.qsSlot].filter((v): v is number => v != null));
-    const freeQa = allRows.filter(r => r.region === 'quick_select' && resolveThrowable(r.item_id) && !assignedQa.has(r.slot)).sort((a, b) => a.slot - b.slot);
-    const invThrowable = allRows.find(r => r.region === 'inventory' && resolveThrowable(r.item_id));
-    if (!freeQa.length && !invThrowable) return;
-
-    const hand: Hand = leftFree ? 'L' : 'R';
-    let qsSlot: number, itemId: string;
-    if (freeQa.length) { qsSlot = freeQa[0].slot; itemId = freeQa[0].item_id; }
-    else {
-      const usedQs = new Set<number>(allRows.filter(r => r.region === 'quick_select').map(r => r.slot));
-      const staged = await stageGrenadeToQa(invThrowable!.slot, usedQs);
-      if (staged === null) return;
-      qsSlot = staged; itemId = invThrowable!.item_id;
-    }
-    const tdef = resolveThrowable(itemId)!;
-    const sprite = await grenadeSpriteFor(itemId);
-    setHandGrenade(hand, { qsSlot, tier: tdef.tier, spriteUrl: sprite, armed: true, kind: tdef.kind });
-    playPinPullSound();
-  }, [grenadeReadySlot, user?.id, equippedGear, stageGrenadeToQa, grenadeSpriteFor, refetchInventoryAndQs]);
-
-  // Throw flow needs to clear the armed slot when the click consumes
-  // the grenade. We can't modify onThrowGrenade itself (it lives in
-  // FortressScene), so we listen for inventory shrink after a throw
-  // via a useEffect. Simpler approach: wrap consumeGrenade so it
-  // also clears state. But consumeGrenade is passed to Scene…
+  // ── Throwing ────────────────────────────────────────────────────────
   //
-  // Cleanest: re-use a useEffect that watches inventory + armed slot:
-  // if armed AND the armed slot's item is no longer present, disarm.
-  // QS-as-storage: the grenade IS in the armed QS slot (no longer a
-  // reference into inv). So the only checks needed are: slot still
-  // occupied, and the occupant is still a grenade. The legacy
-  // "stillHaveAnyGrenade" inventory.some(...) check is wrong under
-  // the new model — grenades are in QS, not inv — and would disarm
-  // a valid arm whenever no extra grenades sit in inv.
-  useEffect(() => {
-    if (grenadeReadySlot === null) return;
-    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(e => e.slot === grenadeReadySlot);
-    if (!eq) { setGrenadeReadySlot(null); return; }
-    const defs = grenadeDefsRef.current;
-    if (!defs.has(eq.itemId)) { setGrenadeReadySlot(null); return; }
-  }, [grenadeReadySlot, equippedItems]);
-
-  // Hand grenades are backed by a QA slot. If that slot gets REPURPOSED by a non-grenade
-  // (the user moved things around), drop the stale hand overlay. (Only clears on a
-  // non-grenade occupant — never on an empty slot, so mid-throw / mid-stage doesn't race.)
-  useEffect(() => {
-    const hg = getHandGrenades();
-    (['L', 'R'] as Hand[]).forEach((hand) => {
-      const gr = hg[hand];
-      if (!gr) return;
-      const occ = (equippedItems as Array<{ slot: number; itemId: string }>).find((e) => e.slot === gr.qsSlot);
-      if (occ && !grenadeDefsRef.current.has(occ.itemId)) setHandGrenade(hand, null);
-    });
+  // One rule for every throwable: the next one to leave your hand is the one
+  // in the LOWEST-NUMBERED quick-bar slot, so the player picks the order by
+  // arranging the bar. Grenades stack there, so a slot reads "Grenade x12" and
+  // each throw spends one unit.
+  //
+  // What this replaces: a state machine that assigned a grenade to a hand,
+  // tracked an "armed" pin-pulled flag per hand, mirrored the item into a
+  // backing quick-bar slot, and needed two G presses. It could not throw at
+  // all when the bar was full, blocked a rifle from firing while armed, and
+  // took over right-click to disarm. None of that exists now.
+  const nextThrowable = useCallback((): { slot: number; kind: ThrowableKind; tier: number } | null => {
+    let best: { slot: number; kind: ThrowableKind; tier: number } | null = null;
+    for (const e of (equippedItems as Array<{ slot: number; itemId: string }>)) {
+      const t = getThrowable(e.itemId);
+      if (!t) continue;
+      if (!best || e.slot < best.slot) best = { slot: e.slot, kind: t.kind, tier: t.tier };
+    }
+    return best;
   }, [equippedItems]);
+  // Read through a ref from the key handler and from Scene: both can fire on a
+  // frame where the callback identity is older than the player's actual gear,
+  // and acting on a stale copy is exactly how G came to do nothing at all.
+  const nextThrowableRef = useRef(nextThrowable);
+  useEffect(() => { nextThrowableRef.current = nextThrowable; }, [nextThrowable]);
 
-  // Resolve shpider egg item UUIDs → tier. Same pattern as grenades —
-  // forging a new tier creates a fresh items row, so we refetch when
-  // the inventory id-set changes.
-  // eggDefsRef is defined up beside grenadeDefsRef (both feed the unified G throw handler).
-
-  // Pull one shpider egg out of inventory. Picks HIGHEST tier the user
-  // owns. Skips rows whose cooldown_until is still in the future. Eggs
-  // are non-stackable — consume = delete the specific row. Caller gets
-  // both the tier (for spawn) and the row id (so the pet remembers
-  // which row to refund into when it dies).
-  // QS-as-storage: hatch consumes the egg in the currently-armed QS
-  // slot. Cooldowns are now tracked on the QS row (future work — for
-  // now, no cooldown enforcement when consuming from QS).
-  const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
-    // Throw the armed EGG-kind hand (RIGHT first). The egg item lives in its backing QA slot
-    // (qsSlot) → consume that and clear the hand.
-    const armed = armedHandsOfKindRightFirst('egg');
-    if (!armed.length) return null;
-    const hand = armed[0];
-    const hg = getHandGrenades()[hand];
-    setHandGrenade(hand, null);
-    if (!hg) return null;
-    void consumeQuickSlot(hg.qsSlot);
-    return { tier: hg.tier, eggInventoryRowId: '' };
+  // Spend one grenade from the bar and report its tier so the blast can scale.
+  // Returns null when the next throwable is an egg (or there is none), so a
+  // grenade throw can never eat an egg.
+  const consumeGrenade = useCallback((): number | null => {
+    const next = nextThrowableRef.current();
+    if (!next || next.kind !== 'grenade') return null;
+    void consumeQuickSlot(next.slot);
+    return next.tier;
   }, [consumeQuickSlot]);
 
-  // (Egg throwing is now handled by the unified G handler above — the separate Y-key egg
-  // flow was removed. consumeEgg + eggThrowRef remain as the egg-kind throw path G calls.)
+  // Same for eggs. The row id is no longer carried — eggs live in the quick bar
+  // like everything else, and the pet-refund path re-grants by item rather than
+  // by resurrecting a specific inventory row.
+  const consumeEgg = useCallback((): { tier: number; eggInventoryRowId: string } | null => {
+    const next = nextThrowableRef.current();
+    if (!next || next.kind !== 'egg') return null;
+    void consumeQuickSlot(next.slot);
+    return { tier: next.tier, eggInventoryRowId: '' };
+  }, [consumeQuickSlot]);
 
-  // Auto-disarm if armed egg slot becomes empty or non-egg.
-  // QS-as-storage: the egg IS the QS slot's occupant; no inv check
-  // needed. Cooldown enforcement on QS-stored eggs is currently lost
-  // (cooldown_until lived on user_inventory rows, but the egg has
-  // been moved into user_equipped_items which has no cooldown
-  // column). Adding cooldown to QS is a follow-up.
+  // One-time rescue for saves made under the old model. A throwable sitting in
+  // a HAND slot can no longer be thrown or even seen there, so move it out to
+  // the first FREE quick-bar slot, else the first free inventory slot.
+  //
+  // It deliberately does NOT target an occupied bar slot to merge onto an
+  // existing stack: equip_transfer SWAPS when the destination is occupied, so
+  // aiming at the player's grenade tile would either hand the stack back to the
+  // hand slot or — for a stack of more than one — abort on the one-unit-per-
+  // hand rule, leaving the grenade stranded exactly where it started. A free
+  // slot always moves rather than swaps. The player can merge it afterwards by
+  // dragging, which now works.
+  const handRescueDoneRef = useRef(false);
   useEffect(() => {
-    if (eggReadySlot === null) return;
-    const eq = (equippedItems as Array<{ slot: number; itemId: string }>)
-      .find(e => e.slot === eggReadySlot);
-    if (!eq) { setEggReadySlot(null); return; }
-    const defs = eggDefsRef.current;
-    if (!defs.has(eq.itemId)) { setEggReadySlot(null); return; }
-  }, [eggReadySlot, equippedItems]);
+    if (handRescueDoneRef.current) return;
+    if (!user?.id || throwables.size === 0) return;
+    const gear = equippedGear as Array<{ slot: number; itemId: string }>;
+    const stranded = gear.filter((e) => (e.slot === 1 || e.slot === 5) && getThrowable(e.itemId));
+    if (!stranded.length) return;
+    handRescueDoneRef.current = true;
+    void (async () => {
+      const usedBar = new Set((equippedItems as Array<{ slot: number }>).map((e) => e.slot));
+      const usedInv = new Set(
+        (inventory as Array<{ slot?: number }>).map((r) => r.slot).filter((v): v is number => v != null),
+      );
+      let moved = 0;
+      for (const hand of stranded) {
+        let dest: { region: 'quick_select' | 'inventory'; slot: number } | null = null;
+        for (let i = 1; i <= 6; i++) if (!usedBar.has(i)) { dest = { region: 'quick_select', slot: i }; break; }
+        if (!dest) {
+          for (let i = 1; i <= 18; i++) if (!usedInv.has(i)) { dest = { region: 'inventory', slot: i }; break; }
+        }
+        if (!dest) { console.warn('[throwables] nowhere to move the hand throwable; leaving it in place'); break; }
+        try {
+          await worldStore.equipTransfer(
+            { region: 'equip', page: 0, slot: hand.slot },
+            { region: dest.region, page: 0, slot: dest.slot },
+          );
+          // Claim the slot locally so a second stranded throwable doesn't
+          // target the same one before the refetch lands.
+          if (dest.region === 'quick_select') usedBar.add(dest.slot); else usedInv.add(dest.slot);
+          moved++;
+        } catch (err) {
+          console.error('[throwables] hand rescue failed:', err);
+        }
+      }
+      if (moved) {
+        toast({
+          title: moved > 1 ? 'Throwables moved to your quick bar' : 'Grenade moved to your quick bar',
+          description: 'Throw with G. Grenades no longer take up a hand.',
+        });
+        if (refetchInventoryAndQs) void refetchInventoryAndQs();
+      }
+    })();
+  }, [user?.id, throwables, equippedGear, equippedItems, inventory, refetchInventoryAndQs, toast]);
+
+  // G — throw one, immediately. No arming, no second press, no hand involved.
+  // Returns false when there is nothing to throw, so the caller can SAY so.
+  // Silently doing nothing is what made the old grenade key so hard to
+  // diagnose — the player pressed G and got no sound, no message, no clue.
+  const handleThrowPress = useCallback((): boolean => {
+    const next = nextThrowableRef.current();
+    if (!next) return false;   // nothing in the bar → caller says so on screen
+    // Past this point we DO have one. The throw itself can still decline (too
+    // many already in flight), and that must not read as "you have none", so
+    // this reports true either way. The item is only spent if the throw runs.
+    if (next.kind === 'egg') { eggThrowRef.current?.(); return true; }
+    triggerAction('throw');
+    grenadeThrowRef.current?.();
+    return true;
+  }, []);
+
 
   // Admin: grant 1 of an item (by items.id) and auto-equip to hotbar
   // slot 6 if it's currently empty. Used by Cmd+G (grenade) and
@@ -943,23 +760,10 @@ export function Fortress() {
     const eq = (equippedItems as Array<{ slot: number; itemId: string }>).find(e => e.slot === slot);
     if (!eq?.itemId) return;
 
-    // Grenade in this slot → toggle grenade-ready for THIS specific
-    // slot (digit press = same intent as G). Disarm if already armed
-    // on this slot. Synchronous via grenadeDefsRef so the digit fires
-    // before any DB roundtrip.
-    if (grenadeDefsRef.current.has(eq.itemId)) {
-      // QA# only DEACTIVATES the armed grenade (arming + throwing are via G now), so
-      // selecting a grenade never steals the weapon's fire.
-      if (grenadeReadySlot === slot) setGrenadeReadySlot(null);
-      return;
-    }
-
-    // Shpider egg in this slot → only DEACTIVATE the armed indicator (arming + throwing are
-    // via G now, same as grenades), so selecting an egg never steals the weapon's fire.
-    if (eggDefsRef.current.has(eq.itemId)) {
-      if (eggReadySlot === slot) setEggReadySlot(null);
-      return;
-    }
+    // A throwable in this slot is thrown with G, never with the digit — so a
+    // number key can never steal the weapon's fire or spend a grenade by
+    // accident. Selecting it just highlights the slot (handled in the HUD).
+    if (getThrowable(eq.itemId)) return;
 
     // Anything else: fall back to the per-item-type quick-use behavior.
     const { data: itemDef } = await supabase
@@ -971,7 +775,7 @@ export function Fortress() {
     if (itemDef.key === 'health_potion') {
       await consumePotionInSlot(slot, eq.itemId);
     }
-  }, [equippedItems, consumePotionInSlot, grenadeReadySlot, eggReadySlot]);
+  }, [equippedItems, consumePotionInSlot]);
 
   // H key handler — drinks a potion if one is reachable. Same auto-
   // equip rule as G for grenades:
@@ -2511,11 +2315,8 @@ export function Fortress() {
           consumeGrenade={consumeGrenade}
           grenadeThrowRef={grenadeThrowRef}
           eggThrowRef={eggThrowRef}
-          onGrenadeTogglePress={handleGrenadeTogglePress}
-          onGrenadeDisarm={() => setGrenadeReadySlot(null)}
-          grenadeReady={grenadeReady}
+          onThrowPress={handleThrowPress}
           consumeEgg={consumeEgg}
-          eggReady={eggReadySlot !== null}
           onHealthPotionUse={handleHealthPotionUse}
           onGrowthProximityChange={setGrowingTreeInView}
           onAdminGrantGrenade={grantAdminGrenade}
@@ -2621,8 +2422,6 @@ export function Fortress() {
         selectedSlot={selectedSlot}
         onSelectSlot={setSelectedSlot}
         onDeleteBlock={handleInspectorDeleteBlock}
-        grenadeReadySlot={grenadeReadySlot}
-        eggReadySlot={eggReadySlot}
         potionDrinkingSlot={potionDrinkingSlot}
         playerPositionRef={playerPositionRef}
         playerForwardRef={playerForwardRef}
@@ -2652,8 +2451,6 @@ export function Fortress() {
         treePlacementMode={treePlacementMode}
         crosshairsEnabled={crosshairsEnabled}
         bulletColor={bulletColor}
-        grenadeReady={grenadeReady}
-        eggReady={eggReadySlot !== null}
         isDead={isDead}
         respawnTimer={respawnTimer}
         respawn={respawn}

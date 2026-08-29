@@ -41,7 +41,6 @@ import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { setAiming } from '@/config/aimState';
 import { getRightWeapon } from '@/config/activeWeapon';
-import { anyArmedHandGrenade } from '@/config/handGrenade';
 import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
 import { useFlameTierOverride, setFlameTierOverride } from '@/config/flameTierOverride';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
@@ -113,8 +112,8 @@ import { useWalapaSystem, WalapaRenderer, WalapaRendererHandle, WALAPA_HITBOX_RA
 import { useShtickmanSystem, ShtickmanRenderer, ShtickmanRendererHandle, SHTICKMAN_HITBOX_RADIUS } from '@/features/shtickman';
 import { EMSRenderer } from '@/features/npc/ems/EMSRenderer';
 import { useShpiderSystem, ShpiderRenderer, useShpiderDefinitions } from '@/features/shpider';
-import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer } from '@/features/shpider-eggs';
-import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, type ExplosionFXHandle } from '@/features/grenades';
+import { useShpiderEggSystem, ShpiderEggRenderer, useWorldEggs, WorldEggRenderer, MAX_LIVE_EGGS } from '@/features/shpider-eggs';
+import { useGrenadeSystem, GrenadeRenderer, ExplosionFX, MAX_LIVE_GRENADES, type ExplosionFXHandle } from '@/features/grenades';
 import { VaultProximityWatcher } from '@/features/vault';
 import { enemyCombatRegistry } from '@/features/enemies/combat/EnemyCombatRegistry';
 import { isPointInFlameCone, FLAME_HALF_ANGLE, flameDpsForTier, flameBurnSecondsForTier } from '@/features/combat';
@@ -256,12 +255,8 @@ export function FortressScene({
   consumeGrenade,
   grenadeThrowRef,
   eggThrowRef,
-  onGrenadeTogglePress,
-  onGrenadeDisarm,
-  grenadeReady,
+  onThrowPress,
   consumeEgg,
-  onEggTogglePress,
-  eggReady,
   onHealthPotionUse,
   onGrowthProximityChange,
   onShpiderKilled,
@@ -833,10 +828,13 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   });
   const handleThrowEgg = useCallback((): boolean => {
     if (!consumeEgg) return false;
+    // Same capacity-before-spend rule as grenades: at the cap, refuse rather
+    // than eat the egg.
+    if (eggsRef.current.length >= MAX_LIVE_EGGS) return false;
     const consumed = consumeEgg();
     if (!consumed) return false;
     return throwEgg(consumed.tier, consumed.eggInventoryRowId);
-  }, [consumeEgg, throwEgg]);
+  }, [consumeEgg, throwEgg, eggsRef]);
 
   // Walapa system - floating whale creatures that travel between tall trees
   // Memoized: only recomputes when plantedTrees changes (not on every call)
@@ -1171,12 +1169,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   const [showCrosshairs, setShowCrosshairs] = useState(false);
   const [isAiming, setIsAiming] = useState(false);
   
-  // Track right-click for aiming. When the RIGHT hand holds a pistol (or a grenade is
-  // armed), FortressControls owns the right button — fire / hold-to-zoom / disarm — and
-  // drives ADS via the aimState store, so we DON'T immediately zoom here.
+  // Track right-click for aiming. When the RIGHT hand holds a pistol, or a
+  // right-hand flame glove is worn, FortressControls owns the right button —
+  // fire / hold-to-zoom — and drives ADS via the aimState store, so we DON'T
+  // immediately zoom here. Otherwise right-click simply aims, which is now the
+  // only thing it does (grenade disarm used to pre-empt it).
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 2 && crosshairsEnabled && !getRightWeapon() && !anyArmedHandGrenade() && getFlameGlove()?.hand !== 'R') {
+      if (e.button === 2 && crosshairsEnabled && !getRightWeapon() && getFlameGlove()?.hand !== 'R') {
         setIsAiming(true);
       }
     };
@@ -1269,7 +1269,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   // Grenade system. Owns live grenades + their physics; explosion VFX
   // routes through universalFlameRef. The throw flow goes:
-  //   FortressControls (G + click) → onThrowGrenade()
+  //   FortressControls (G) → Fortress.handleThrowPress() → this ref
   //     → consumeGrenade() (Fortress.tsx, inventory)
   //     → grenadeSystem.throwGrenade(tier) (this hook)
   //
@@ -1286,10 +1286,14 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
   });
   const handleThrowGrenade = useCallback((): boolean => {
     if (!consumeGrenade) return false;
+    // Check capacity BEFORE spending. This consumed the grenade first and then
+    // called throwGrenade, which refuses once MAX_LIVE_GRENADES are already in
+    // flight — so hitting the cap destroyed the grenade and threw nothing.
+    if (grenadesRef.current.length >= MAX_LIVE_GRENADES) return false;
     const tier = consumeGrenade();
     if (tier == null) return false;
     return throwGrenade(tier);
-  }, [consumeGrenade, throwGrenade]);
+  }, [consumeGrenade, throwGrenade, grenadesRef]);
   // Expose the throw up to Fortress's G state machine (which decides fill-vs-throw and
   // owns inventory) so it can trigger a hand-grenade throw without re-plumbing.
   useEffect(() => {
@@ -1928,13 +1932,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
         playerLevel={playerLevel}
         onPentabulletChargeChange={onPentabulletChargeChange}
         onUseHotbarSlot={onUseHotbarSlot}
-        onThrowGrenade={handleThrowGrenade}
-        onGrenadeTogglePress={onGrenadeTogglePress}
-        onGrenadeDisarm={onGrenadeDisarm}
-        grenadeReady={grenadeReady}
-        onThrowEgg={handleThrowEgg}
-        onEggTogglePress={onEggTogglePress}
-        eggReady={eggReady}
+        onThrowPress={onThrowPress}
         onHealthPotionUse={onHealthPotionUse}
         onAdminGrantGrenade={onAdminGrantGrenade}
         onAdminGrantHealthPotion={onAdminGrantHealthPotion}
