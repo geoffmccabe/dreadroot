@@ -1,0 +1,17 @@
+/**
+ * Installs the scanner that matches the running world, and takes it down
+ * again on unmount so a game switch cannot leave the previous world's scanner
+ * answering questions about geometry that is no longer loaded.
+ */
+import { useEffect } from 'react';
+import { getActiveGame } from '@/config/activeGame';
+import { gameUsesVoxels } from '@/config/gameRegistry';
+import { installScanner, setScanner } from './index';
+
+export function ScannerInstaller(): null {
+  useEffect(() => {
+    installScanner(gameUsesVoxels(getActiveGame()));
+    return () => setScanner(null);
+  }, []);
+  return null;
+}

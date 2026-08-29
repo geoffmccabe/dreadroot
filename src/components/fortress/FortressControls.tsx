@@ -58,8 +58,8 @@ import { dlog } from '@/lib/debugLog';
 import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharacters';
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 import { triggerAction } from '@/features/characters/animation/characterActions';
-import { tryStartMantle, mantlePosition, type MantleRun } from '@/features/traversal/mantle';
-import { clearBehind, TP_RISE } from '@/features/traversal/cameraClearance';
+import { useParkour } from '@/features/parkour';
+import { applyThirdPerson } from '@/features/camera/cameraClearance';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
 const _inspectorMatrix = new THREE.Matrix4();
@@ -263,8 +263,8 @@ export function FirstPersonControls({
   const onGround = useRef(true);
   /** An in-progress ledge climb. While set, the climb owns the player's
    *  position and normal movement stands down. */
-  const mantleRef = useRef<MantleRun | null>(null);
-  const mantlePosRef = useRef({ x: 0, y: 0, z: 0 });
+  // Parkour owns its own state — see src/features/parkour/useParkour.ts.
+  const parkour = useParkour();
   const lastSiegeGround = useRef<{ x: number; z: number; y: number } | null>(null); // prev-frame terrain pos for the slope limit
   const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
@@ -3154,38 +3154,24 @@ export function FirstPersonControls({
         // Reduce horizontal movement in water (60% speed)
         deltaMovement.x *= 0.6;
         deltaMovement.z *= 0.6;
-      } else if (mantleRef.current) {
-        // A CLIMB IS RUNNING and owns the player outright — position is driven
-        // along the climb path and every normal force is suspended. Gravity in
+      } else if (parkour.isActive()) {
+        // A PARKOUR MOVE IS RUNNING and owns the player outright — position is
+        // driven along its path and every normal force is suspended. Gravity in
         // particular would drag the body back down the face it is climbing.
-        const done = !mantlePosition(mantleRef.current, performance.now(), mantlePosRef.current);
-        camera.position.set(
-          mantlePosRef.current.x,
-          mantlePosRef.current.y + playerHeight,
-          mantlePosRef.current.z,
-        );
+        const step = parkour.advance(performance.now());
+        camera.position.set(step.x, step.y + playerHeight, step.z);
         velocity.current.set(0, 0, 0);
-        // Apply the third-person offset here as well: this branch returns
-        // before the pull-back at the end of the loop, and snapping to first
-        // person for the duration of a climb would hide the very move the
-        // player zoomed out to watch.
+        // Pull the camera back here as well: this branch returns before the
+        // end-of-loop pull-back, and snapping to first person for the duration
+        // of a climb would hide the very move the player zoomed out to watch.
         if (tpCurrent.current > 0) {
-          tpEye.current.copy(camera.position); tpEyeSet.current = true;
-          tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-          const safe = clearBehind(camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid);
-          camera.position.addScaledVector(tpFwd.current, -safe);
-          camera.position.y += TP_RISE * safe;
-          tpRender.current.copy(camera.position);
+          applyThirdPerson(camera, tpCurrent.current, worldCollisionGrid,
+            tpEye.current, tpFwd.current, tpRender.current);
+          tpEyeSet.current = true;
         }
-        if (done) {
-          const wasVault = mantleRef.current.move !== 'mantle';
-          mantleRef.current = null;
-          // A mantle finishes standing on the ledge. A VAULT finishes wherever
-          // the far side was, which may be a drop — so it hands back to the
-          // normal falling code instead of claiming to be on the ground, or
-          // the player would hover after clearing a wall onto lower terrain.
-          onGround.current = !wasVault;
-          if (!wasVault) lastGroundedAtRef.current = performance.now();
+        if (step.done) {
+          onGround.current = step.landsOnGround;
+          if (step.landsOnGround) lastGroundedAtRef.current = performance.now();
         }
         return;   // skip all movement + collision this frame
       } else {
@@ -3200,21 +3186,16 @@ export function FirstPersonControls({
           // the exact feeling this is meant to remove. Only when actually
           // moving forward, so a stationary hop is still just a hop.
           const wantsForward = keys.current.w && !keys.current.s;
-          if (wantsForward && !mantleRef.current) {
-            const run = tryStartMantle(
+          if (wantsForward) {
+            const action = parkour.tryStart(
               camera.position.x, camera.position.y - playerHeight, camera.position.z,
               -Math.sin(yaw.current), -Math.cos(yaw.current),
               !!keys.current.shift,
               performance.now(),
             );
-            if (run) {
-              mantleRef.current = run;
-              // Climbing onto it and clearing it are different animations.
-              triggerAction(run.move === 'mantle' ? 'climb' : 'vault');
-              velocity.current.y = 0;
-            }
+            if (action) { triggerAction(action); velocity.current.y = 0; }
           }
-          if (!mantleRef.current) {
+          if (!parkour.isActive()) {
             const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump
             velocity.current.y = Math.sqrt(2 * 9.8 * jumpHeight);
             onGround.current = false;
@@ -3563,21 +3544,9 @@ export function FirstPersonControls({
       // camera back along the look direction. Saved eye is restored at the top of next frame. When
       // first-person (distance 0) this whole block is skipped → identical to today.
       if (tpCurrent.current > 0) {
-        tpEye.current.copy(camera.position); tpEyeSet.current = true;
-        tpFwd.current.set(0, 0, -1).applyQuaternion(camera.quaternion);
-        // CLAMP THE PULL-BACK TO CLEAR SPACE. Siege Worlds is open terrain, so
-        // its camera could always just slide back. DreadRoot is dense blocks —
-        // pulling straight back puts the camera inside a tree and the player
-        // sees the inside of a block, which reads as "third person is broken"
-        // rather than "the camera is in a wall". Walk backwards in small steps
-        // and stop at the last clear one.
-        const safe = clearBehind(
-          camera.position, tpFwd.current, tpCurrent.current, worldCollisionGrid,
-        );
-        camera.position.addScaledVector(tpFwd.current, -safe);
-        camera.position.y += TP_RISE * safe;   // raise the camera so the character sits
-                                               // low in frame, clear of the reticle
-        tpRender.current.copy(camera.position);   // remember where we left it, to detect external moves
+        applyThirdPerson(camera, tpCurrent.current, worldCollisionGrid,
+          tpEye.current, tpFwd.current, tpRender.current);
+        tpEyeSet.current = true;
       } else {
         tpEyeSet.current = false;
       }

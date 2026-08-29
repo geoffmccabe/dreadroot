@@ -5,7 +5,7 @@
 // vertical hip motion (the up-and-over arc), so we mostly add forward drift + a vertical nudge.
 import { AnimGraph, AnimStateDef } from './animFSM';
 import { LocomotionClipSet, PARKOUR } from './locomotionClips';
-import { ParkourAction } from './obstacleDetector';
+import type { ParkourMove } from '@/features/parkour';
 
 const RUN = 3.2;          // approach / recover forward speed (m/s)
 const APPROACH = 0.9;     // seconds of run-up before the move
@@ -14,7 +14,7 @@ const RECOVER = 0.8;      // seconds of run-out after
 // fall back to a sibling clip if a slot is empty, so a graph never carries a null clip name
 const pick = (...c: (string | null | undefined)[]) => c.find((x): x is string => !!x) ?? '';
 
-export function parkourGraph(action: ParkourAction, loco: LocomotionClipSet, variant = 0): AnimGraph | null {
+export function parkourGraph(action: ParkourMove, loco: LocomotionClipSet, variant = 0): AnimGraph | null {
   const run = pick(loco.runF, loco.walkF, loco.idle);
   const approach = { clip: run, loop: true, drift: RUN, duration: APPROACH, fade: 0.2, next: 'move' };
   const recover  = { clip: run, loop: true, drift: RUN, duration: RECOVER, fade: 0.25 };

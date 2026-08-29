@@ -34,17 +34,17 @@
  *     care about cost, and probably only run when the player is moving toward
  *     something and not every frame.
  *
- * The MOVE TABLE (traversalMoves.ts) is already world-agnostic: it takes a
+ * The MOVE TABLE (moves.ts) is already world-agnostic: it takes a
  * measurement, not blocks. So when this lands, the moves come with it — except
  * the thresholds there assume clips fit their measured height, which is the
  * voxel-only assumption that warping replaces.
  */
-import type { ObstacleProbe, ObstacleReading } from './obstacleProbe';
+import type { Scanner, Surroundings } from './surroundings';
 
-export class MeshObstacleProbe implements ObstacleProbe {
+export class MeshScanner implements Scanner {
   readonly kind = 'mesh' as const;
 
-  probe(): ObstacleReading | null {
+  scan(): Surroundings | null {
     // Reports "clear" until really implemented. Traversal then does nothing in
     // Siege Worlds, which is exactly the behaviour it has today.
     return null;

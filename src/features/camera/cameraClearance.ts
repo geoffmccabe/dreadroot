@@ -60,3 +60,29 @@ export function clearBehind(
   }
   return wanted;
 }
+
+/**
+ * Move the camera into its third-person position for this frame.
+ *
+ * Extracted because `FortressControls` ran this exact sequence TWICE — once at
+ * the end of the movement loop, and again inside the parkour branch, which
+ * returns early and so misses the first. Two copies of the same six lines is
+ * how the two drift apart, and a third-person camera that behaves differently
+ * during a vault than during a run is a bug nobody would think to look for.
+ *
+ * @param eyeOut    remembers the true eye position before the pull-back.
+ * @param fwdOut    scratch for the look direction, reused to avoid allocating.
+ * @param renderOut remembers where the camera was left, to detect external moves.
+ */
+export function applyThirdPerson(
+  camera: THREE.Camera, wanted: number, grid: Grid,
+  eyeOut: THREE.Vector3, fwdOut: THREE.Vector3, renderOut: THREE.Vector3,
+): void {
+  eyeOut.copy(camera.position);
+  fwdOut.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  const safe = clearBehind(camera.position, fwdOut, wanted, grid);
+  camera.position.addScaledVector(fwdOut, -safe);
+  // Raise the camera so the character sits low in frame, clear of the reticle.
+  camera.position.y += TP_RISE * safe;
+  renderOut.copy(camera.position);
+}

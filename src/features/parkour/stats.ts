@@ -12,20 +12,20 @@
  * discrete event and "what happened the last time I jumped at that wall" is the
  * actual question being asked.
  */
-import type { ObstacleReading } from './obstacleProbe';
-import type { TraversalMove } from './traversalMoves';
+import type { Surroundings } from './surroundings';
+import type { ParkourMove } from './moves';
 
 interface Attempt {
   at: number;
-  probeKind: string;
-  reading: ObstacleReading | null;
-  move: TraversalMove | null;
+  scannerKind: string;
+  reading: Surroundings | null;
+  move: ParkourMove | null;
   started: boolean;
   /** Why nothing happened, when nothing happened. */
   refusedBecause: string | null;
 }
 
-class TraversalStats {
+class ParkourStats {
   private last: Attempt | null = null;
   private attempts = 0;
   private started = 0;
@@ -43,7 +43,7 @@ class TraversalStats {
   report(): string {
     const L: string[] = [];
     L.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    L.push('TRAVERSAL (parkour)');
+    L.push('PARKOUR');
     L.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     if (this.last === null) {
       L.push('  No attempt yet. Walk INTO a ledge and press jump —');
@@ -55,7 +55,7 @@ class TraversalStats {
     if (this.byMove.size > 0) {
       L.push(`  Moves: ${[...this.byMove].map(([m, n]) => `${m} x${n}`).join(', ')}`);
     }
-    L.push(`  Probe: ${a.probeKind}`);
+    L.push(`  Scanner: ${a.scannerKind}`);
     L.push(`  Last attempt ${((performance.now() - a.at) / 1000).toFixed(1)}s ago:`);
     if (!a.reading) {
       L.push('    nothing ahead — clear ground within reach');
@@ -70,4 +70,4 @@ class TraversalStats {
   }
 }
 
-export const traversalStats = new TraversalStats();
+export const parkourStats = new ParkourStats();

@@ -1,7 +1,7 @@
 /**
  * Pulling yourself onto a ledge.
  *
- * The first move built on the probe, and the one that proves the whole shape:
+ * The first move built on the scanner, and the one that proves the whole shape:
  * measure, choose, play, move. Everything after this costs a threshold and a
  * clip name rather than new machinery.
  *
@@ -17,9 +17,9 @@
  * same reason the plan concluded motion warping is unnecessary here. A mesh
  * world would need the clip's own root motion, warped.
  */
-import { getObstacleProbe } from './obstacleProbe';
-import { chooseTraversal } from './traversalMoves';
-import { traversalStats } from './traversalStats';
+import { getScanner } from './surroundings';
+import { chooseMove } from './moves';
+import { parkourStats } from './stats';
 
 /** How far ahead a ledge counts as reachable. */
 const REACH = 1.1;
@@ -34,7 +34,7 @@ export const VAULT_MS = 520;
  *  through the top block on the way over. */
 const LIFT_CLEARANCE = 0.15;
 
-export interface MantleRun {
+export interface ParkourRun {
   startedAt: number;
   /** Feet position at the start. */
   fromX: number; fromY: number; fromZ: number;
@@ -54,27 +54,27 @@ export interface MantleRun {
  *
  * @param footY the player's FEET, not the camera.
  */
-export function tryStartMantle(
+export function tryStartMove(
   x: number, footY: number, z: number,
   fx: number, fz: number,
   running: boolean,
   now: number,
-): MantleRun | null {
-  const probe = getObstacleProbe();
-  if (!probe) {
-    traversalStats.record({ probeKind: 'none', reading: null, move: null, started: false,
-      refusedBecause: 'this world has no obstacle probe installed' });
+): ParkourRun | null {
+  const scanner = getScanner();
+  if (!scanner) {
+    parkourStats.record({ scannerKind: 'none', reading: null, move: null, started: false,
+      refusedBecause: 'this world has no scanner installed' });
     return null;
   }
 
-  const reading = probe.probe(x, footY, z, fx, fz, REACH, MAX_RISE);
+  const reading = scanner.scan(x, footY, z, fx, fz, REACH, MAX_RISE);
   if (!reading) {
-    traversalStats.record({ probeKind: probe.kind, reading: null, move: null, started: false,
+    parkourStats.record({ scannerKind: scanner.kind, reading: null, move: null, started: false,
       refusedBecause: 'nothing within reach' });
     return null;
   }
 
-  const choice = chooseTraversal(reading, running);
+  const choice = chooseMove(reading, running);
 
   // ONTO the obstacle.
   if (choice.move === 'mantle' && choice.landY !== null) {
@@ -82,7 +82,7 @@ export function tryStartMantle(
     // than balanced on its edge, where the next collision step would push them
     // off.
     const over = reading.distance + 0.6;
-    const run: MantleRun = {
+    const run: ParkourRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
@@ -90,17 +90,17 @@ export function tryStartMantle(
       peakY: reading.topY + LIFT_CLEARANCE,
       durationMs: MANTLE_MS,
     };
-    traversalStats.record({ probeKind: probe.kind, reading, move: 'mantle', started: true, refusedBecause: null });
+    parkourStats.record({ scannerKind: scanner.kind, reading, move: 'mantle', started: true, refusedBecause: null });
     return run;
   }
 
-  // OVER it, landing on the far side. Refused outright when the probe could not
+  // OVER it, landing on the far side. Refused outright when the scanner could not
   // find far-side ground: vaulting a wall into an unmeasured drop is how a
   // character ends up inside the world.
   if ((choice.move === 'vaultLow' || choice.move === 'vaultHigh')
       && reading.farSideY !== null && Number.isFinite(reading.depth)) {
     const clear = reading.distance + reading.depth + 0.7;
-    const run: MantleRun = {
+    const run: ParkourRun = {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
@@ -111,12 +111,12 @@ export function tryStartMantle(
       peakY: reading.topY + 0.45,
       durationMs: VAULT_MS,
     };
-    traversalStats.record({ probeKind: probe.kind, reading, move: choice.move, started: true, refusedBecause: null });
+    parkourStats.record({ scannerKind: scanner.kind, reading, move: choice.move, started: true, refusedBecause: null });
     return run;
   }
 
-  traversalStats.record({
-    probeKind: probe.kind, reading, move: choice.move, started: false,
+  parkourStats.record({
+    scannerKind: scanner.kind, reading, move: choice.move, started: false,
     refusedBecause:
       choice.move === 'stepUp' ? 'low enough to just walk over'
       : choice.move === 'blocked' ? 'too tall, or not moving fast enough'
@@ -134,8 +134,8 @@ export function tryStartMantle(
  * Rises FIRST, then moves forward. Doing both at once cuts the corner and
  * drags the body through the ledge.
  */
-export function mantlePosition(
-  run: MantleRun, now: number,
+export function runPosition(
+  run: ParkourRun, now: number,
   out: { x: number; y: number; z: number },
 ): boolean {
   const t = (now - run.startedAt) / run.durationMs;

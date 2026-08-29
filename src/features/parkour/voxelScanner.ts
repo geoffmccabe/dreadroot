@@ -13,10 +13,10 @@
  * class of bug is miserable to chase. One source of truth for "solid".
  *
  * The mesh version for Siege Worlds is the hard one and is still to come — see
- * obstacleProbe.ts for why the seam is here.
+ * surroundings.ts for why the seam is here.
  */
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
-import type { ObstacleProbe, ObstacleReading } from './obstacleProbe';
+import { UNMEASURED, type Scanner, type Surroundings } from './surroundings';
 
 /** Blocks are 1m. Sampling finer than half a block cannot reveal anything. */
 const STEP = 0.5;
@@ -61,14 +61,14 @@ function columnTop(x: number, z: number, footY: number, maxRise: number): number
   return null;
 }
 
-export class VoxelObstacleProbe implements ObstacleProbe {
+export class VoxelScanner implements Scanner {
   readonly kind = 'voxel' as const;
 
-  probe(
+  scan(
     x: number, y: number, z: number,
     fx: number, fz: number,
     reach: number, maxRise: number,
-  ): ObstacleReading | null {
+  ): Surroundings | null {
     for (let d = STEP; d <= reach; d += STEP) {
       const px = x + fx * d;
       const pz = z + fz * d;
@@ -120,6 +120,7 @@ export class VoxelObstacleProbe implements ObstacleProbe {
         // Standable when a body could actually fit above the surface.
         standable: headroom >= 1.5,
         farSideY,
+        ...UNMEASURED,
       };
     }
     return null;

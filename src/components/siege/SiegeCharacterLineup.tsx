@@ -30,7 +30,7 @@ import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weapon
 import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
 import { cycleAtlas } from './charlineup/weaponAtlas';
 import { findUpperArms, applyArmPose, getPose, nudgePose, registerArmRoot } from './charlineup/armSpread';
-import { classifyObstacle } from './charlineup/obstacleDetector';
+import { chooseMove } from '@/features/parkour';
 import { parkourGraph } from './charlineup/parkourGraphs';
 import { OBSTACLE_PRESETS, OBSTACLE_DIST } from './charlineup/parkourDemo';
 import { UNARMED_MALE } from './charlineup/locomotionClips';
@@ -175,7 +175,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
     if (pseq !== seenParkour.current) {
       seenParkour.current = pseq;
       const preset = OBSTACLE_PRESETS[pseq % OBSTACLE_PRESETS.length];
-      const action = classifyObstacle(preset.probe);
+      const action = chooseMove(preset.reading, true).move;
       const graph = parkourGraph(action, UNARMED_MALE, pseq);
       if (graph) {
         actions[names[animIndex % names.length]]?.fadeOut(0.15);
