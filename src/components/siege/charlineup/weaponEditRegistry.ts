@@ -74,7 +74,7 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '14';  // v14: third Basic Pistol pass + per-character shoulder pitch
+const BAKE_VERSION = '16';  // v16: Shi Yang's Pistol (item_25) tuned on all six
 const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',

@@ -208,8 +208,27 @@ export const HELD_WEAPONS: HeldWeapon[] = [
                  Flamma: [-84, 6, -86], Jeanette: [-84, 6, -86], 'Shi Yang': [-78, -3, -85] },
     gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR },
   { key: 'plasma_pistol', name: 'Plasma Pistol',       itemNumbers: [0],   url: '/siege/weapons/item_0.glb',   lengthM: 0.32, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'scifi' },
-  { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'military' },
-  { key: 'shiyang_pistol',name: "Shi Yang's Pistol",   itemNumbers: [25],  url: '/siege/weapons/item_25.glb',  lengthM: 0.30, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol', atlas: 'military' },
+  // TUNED BY EYE, all six, 2026-Aug-29. Rotation came out identical for everyone and equal to the
+  // shared PISTOL_ROT, which is good evidence that baseline is right. Grip and size are its own:
+  // the Revolver sits noticeably higher in the hand and runs bigger than the Basic Pistol.
+  { key: 'revolver',      name: 'Revolver',            itemNumbers: [201], url: '/siege/weapons/item_201.glb', lengthM: 0.34,
+    rotDeg: PISTOL_ROT, gripPos: [0.06, 0.24, 0.02], animSet: 'pistol', atlas: 'military',
+    gripByChar: { Ash: [0.06, 0.24, 0.02], Dago: [0.05, 0.3, 0.02], Fluffer: [0.07, 0.34, 0.04],
+                  Jankz: [0.03, 0.17, 0.02], Rajax: [0.04, 0.22, 0.02], Thorn: [0.03, 0.15, 0.04],
+                  Flamma: [0.06, 0.24, 0.02], Jeanette: [0.03, 0.15, 0.04], 'Shi Yang': [0.04, 0.22, 0.02] },
+    sizeByChar: { Ash: 1.15, Dago: 1.52, Fluffer: 1.90, Jankz: 1.06, Rajax: 1.08, Thorn: 1.04,
+                  Flamma: 1.15, Jeanette: 1.04, 'Shi Yang': 1.08 } },
+  // TUNED BY EYE, all six, 2026-Aug-29. Rotation matched PISTOL_ROT exactly again — three weapons
+  // in a row now, so that baseline is well established. Sizes all land near 1.6-2.0, which says
+  // lengthM 0.30 is an under-estimate of this model's real length; the tuned sizes absorb it, so
+  // it is left alone rather than re-scaled (that would invalidate every number below).
+  { key: 'shiyang_pistol',name: "Shi Yang's Pistol",   itemNumbers: [25],  url: '/siege/weapons/item_25.glb',  lengthM: 0.30,
+    rotDeg: PISTOL_ROT, gripPos: [0.09, 0.24, 0.02], animSet: 'pistol', atlas: 'military',
+    gripByChar: { Ash: [0.09, 0.24, 0.02], Dago: [0.13, 0.3, 0.02], Fluffer: [0.14, 0.33, 0.04],
+                  Jankz: [0.06, 0.18, 0.02], Rajax: [0.07, 0.23, 0.02], Thorn: [0.06, 0.15, 0.04],
+                  Flamma: [0.09, 0.24, 0.02], Jeanette: [0.06, 0.15, 0.04], 'Shi Yang': [0.07, 0.23, 0.02] },
+    sizeByChar: { Ash: 1.64, Dago: 1.92, Fluffer: 1.97, Jankz: 1.32, Rajax: 1.60, Thorn: 1.61,
+                  Flamma: 1.64, Jeanette: 1.61, 'Shi Yang': 1.60 } },
   { key: 'flame_glove',   name: 'Flame Glove',         itemNumbers: [193], url: '/siege/weapons/item_193.glb', lengthM: 0.26, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol' },
   { key: 'bonnies_rifle', name: "Bonnie's Rifle",      itemNumbers: [24],  url: '/siege/weapons/item_24.glb',  lengthM: 1.10, rotDeg: R, gripPos: G, animSet: 'rifle', texture: '/siege/weapons/tex_item_24.png' },
   { key: 'zk5',           name: 'ZK-5',                itemNumbers: [168], url: '/siege/weapons/item_168.glb', lengthM: 0.90, rotDeg: R, gripPos: G, animSet: 'rifle' },

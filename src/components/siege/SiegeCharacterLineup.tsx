@@ -339,7 +339,9 @@ export function SiegeCharacterLineup() {
       else if (e.key === 'n' || e.key === 'N') { e.stopImmediatePropagation(); cycleCharAnim(-1); }
       // F/G (flight demo) and J (parkour demo) are DISABLED — they hijack the pose during weapon tuning
       // and were hard to stop. Re-enable later if the demos are needed again.
-      else if (e.key === '*') { e.stopImmediatePropagation(); cycleWeapon(1, GUNS.length); } // next held gun
+      // ( ) step backwards / forwards through the weapon list. (Was '*', one-way only.)
+      else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); cycleWeapon(-1, GUNS.length); }
+      else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); cycleWeapon( 1, GUNS.length); }
       // ── Gun tuning (lineup-only, captured so it never reaches game/Chrome/macOS) ──
       // 1-6 select which character the gizmo shows on + size keys target (1=Ash … 6=Fluffer); 0 = ALL.
       else if (e.key >= '1' && e.key <= '6') { e.preventDefault(); e.stopImmediatePropagation(); setTuneCharIndex(Number(e.key) - 1); }
@@ -387,7 +389,7 @@ export function SiegeCharacterLineup() {
       }
       else if (e.key === '\\') { e.preventDefault(); e.stopImmediatePropagation(); exportTuning(); } // copy all tuning to clipboard
       // Left-hand IK: K = aim at the gun + capture the palm grip point; ( / ) = twist the wrist.
-      // (K, not P — the Arrange tool steals P to spawn a box.)
+      // (K, not P — the Arrange tool steals P to spawn a box.) 7 / 8 twist the wrist.
       else if (e.key === 'k' || e.key === 'K') {
         e.preventDefault(); e.stopImmediatePropagation();
         const wraps = weaponWraps();
@@ -401,8 +403,9 @@ export function SiegeCharacterLineup() {
           if (wrap) setLeftTarget(gunRef.current.url, wrap.worldToLocal(hit.point.clone()));
         } else console.log('[lefthand] aim the crosshair AT the gun, then press K');
       }
-      else if (e.key === '(') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
-      else if (e.key === ')') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
+      // Wrist twist moved to 7 / 8 when ( ) were given to weapon cycling.
+      else if (e.key === '7') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url, -5); }
+      else if (e.key === '8') { e.preventDefault(); e.stopImmediatePropagation(); nudgeWrist(gunRef.current.url,  5); }
       // Gun orientation about its LOCAL axes (Red=X, Green=Y, Blue=Z on the gizmo).
       //   Shift + X/Y/Z = 90° quarter turn   |   Alt + X/Y/Z = 2° fine nudge
       // A MODIFIER IS REQUIRED, deliberately. Plain Z and X are god-mode-down and holster in

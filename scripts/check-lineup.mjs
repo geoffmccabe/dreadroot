@@ -71,6 +71,14 @@ console.log('in hands  :', JSON.stringify(held));
 // The wrap's rotation as loaded, BEFORE any key is pressed. It must equal the baked rotDeg
 // exactly. Anything else means a saved browser tune is composing on top of the baked value —
 // the doubling that BAKE_VERSION / BAKED_URLS exist to prevent.
+// Select the weapon named by CHECK_WEAPON (default: whatever the tool opens on) before reading,
+// so a freshly baked gun can be verified per character instead of only the opening one.
+if (process.env.CHECK_WEAPON) {
+  await page.evaluate(async (i) => {
+    window.__lineupSetWeapon(Number(i));
+    await new Promise((r) => setTimeout(r, 1500));
+  }, process.env.CHECK_WEAPON);
+}
 const asLoaded = await page.evaluate(() => ({
   guns: (window.__lineupWeaponSizes() || []).map((w) => `${w.char}: rot[${w.rot}] tex=${w.textured}`),
   arms: window.__lineupHands(),
@@ -78,6 +86,19 @@ const asLoaded = await page.evaluate(() => ({
 console.log('as loaded :');
 for (const g of asLoaded.guns.sort()) console.log('    ', g);
 for (const [k, v] of Object.entries(asLoaded.arms).sort()) console.log('    ', k, JSON.stringify(v));
+
+// Do ( and ) step the weapon list both ways?
+const cycle = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  const at = () => window.__lineup().weaponIndex;
+  const start = at();
+  fire(')'); await wait(250); const fwd = at();
+  fire('('); await wait(250); const back = at();
+  fire('('); await wait(250); const back2 = at();
+  return { start, afterForward: fwd, afterBack: back, afterBackAgain: back2 };
+});
+console.log('( ) cycle :', JSON.stringify(cycle));
 
 // Do the SHOULDER keys move anything? The tuning state recorded the presses last time while the
 // pose visibly did not change, so recording the value proves nothing — measure the hands.
