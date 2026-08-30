@@ -1953,7 +1953,12 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
           // Eggs take priority over fruit on the F key — easy to walk
           // past a freshly-dropped egg if a tree's right there.
           if (findClosestEgg()) {
-            await pickupClosestEgg();
+            const picked = await pickupClosestEgg();
+            // The pickup happens SERVER-SIDE: pickup_egg deletes the world row and inserts the
+            // inventory row in one transaction. Nothing on the client is watching user_slots
+            // (only the vault subscribes to it), so without this the egg lands in the database
+            // correctly and simply never appears on screen — it reads as "it vanished".
+            if (picked) await refetchInventoryAndQs();
             return;
           }
           harvestNearest();

@@ -28,6 +28,9 @@ export interface ItemTileVisualProps {
 
 export function ItemTileVisual({ occupant, spriteSize = 42 }: ItemTileVisualProps) {
   if (!occupant) return null;
+  // A picture served out of the block-texture bucket is a 3D surface map, not a cut-out icon.
+  const isSurfaceTexture = !!occupant.spriteUrl && occupant.spriteUrl.includes('/block-textures/');
+
   return (
     <>
       {occupant.tier != null && (
@@ -57,6 +60,14 @@ export function ItemTileVisual({ occupant, spriteSize = 42 }: ItemTileVisualProp
             height: spriteSize,
             objectFit: 'contain',
             pointerEvents: 'none',
+            // Items in /item-sprites/ are proper icons: cut out, transparent, whatever shape the
+            // object is. Items whose picture comes from /block-textures/ are 3D SURFACE textures
+            // being reused as an icon — square, fully opaque, subject drawn on a solid backdrop.
+            // The Shpider Egg is the visible case: a 256x256 with no alpha channel at all, a pale
+            // egg on near-black, so the tile showed a black square with an egg in the middle.
+            // Clipping to a circle drops the backdrop. These textures are all centred subjects, so
+            // a circle is the right crop; it is not applied to real icons, which would get chewed.
+            ...(isSurfaceTexture ? { borderRadius: '50%' } : null),
           }}
         />
       ) : (
