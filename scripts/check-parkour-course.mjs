@@ -124,18 +124,30 @@ async function record(ms = 2000) {
 /** One attempt: face a wall, hold the keys, report the timeline. */
 async function attempt(wall, { run, jump }) {
   await reset(wall.yaw);
-  const before = await page.evaluate(() => window.__parkour().feet);
+  const feetNow = () => page.evaluate(() => window.__parkour().feet ?? null).catch(() => null);
+  let before = await feetNow();
+  for (let i = 0; i < 10 && !before; i++) { await sleep(200); before = await feetNow(); }
+  before = before ?? { x: 0, y: 0, z: 0 };
   if (run) await page.keyboard.down('Shift');
   await page.keyboard.down('w');
-  // Approach for a moment first, so a jump lands at the wall and not at the
-  // centre — a jump pressed from four metres away tests nothing.
-  await sleep(900);
-  if (jump) await page.keyboard.down('Space');
+  // PRESS JUMP WHEN THE WALL IS ACTUALLY IN REACH, not on a timer. A fixed
+  // delay makes the result depend on frame rate: the same case fired a mantle
+  // on one run and a plain jump on the next, purely because the approach took
+  // a few frames longer. Poll the scanner and press when it sees something.
+  if (jump) {
+    await page.waitForFunction(() => {
+      const p = window.__parkour();
+      return !!(p && p.reading);
+    }, null, { timeout: 6000 }).catch(() => {});
+    await page.keyboard.down('Space');
+  } else {
+    await sleep(900);
+  }
   const frames = await record(1800);
   if (jump) await page.keyboard.up('Space');
   await page.keyboard.up('w');
   if (run) await page.keyboard.up('Shift');
-  const after = await page.evaluate(() => window.__parkour().feet);
+  const after = (await feetNow()) ?? before;
 
   // Why nothing happened is the whole question, so carry the refusal reason
   // and the raw sample count out of every attempt rather than only the summary.
@@ -184,10 +196,15 @@ for (const r of results) {
   );
 }
 
-const bad = results.filter((r) => r.restPose || r.overshoot > 0.6);
+// Overshoot only counts when a PARKOUR MOVE was responsible. Standing on top
+// of a one-block wall and pressing jump legitimately reaches a metre above it,
+// and flagging that is crying wolf at correct behaviour.
+const bad = results.filter((r) => r.restPose || (r.moves.length && r.overshoot > 0.5));
 console.log(`\npage errors: ${errors.length}`);
 errors.slice(0, 3).forEach((e) => console.log('  ', e));
+const noMove = results.filter((r) => !r.moves.length);
+console.log(`\ncases with NO parkour move: ${noMove.length}/16 — ${noMove.map((r) => r.label).join('; ') || 'none'}`);
 console.log(bad.length
-  ? `\nRESULT: ${bad.length} case(s) look wrong — rest pose, or rose more than 0.6m above the wall.`
-  : '\nRESULT: no rest poses and nothing rose far above the wall it was climbing.');
+  ? `\nRESULT: ${bad.length} case(s) look wrong — ${bad.map((r) => r.label + (r.restPose ? ' (REST POSE)' : ` (+${r.overshoot}m over)`)).join('; ')}`
+  : '\nRESULT: no rest poses, and every parkour move ended at the height of the wall it climbed.');
 await ctx.close();
