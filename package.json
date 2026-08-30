@@ -75,7 +75,8 @@
     "check:edge-culling": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-edge-culling.ts",
     "check:boot": "node scripts/check-boot.mjs",
     "check:lineup": "node scripts/check-lineup.mjs",
-    "check:parkour": "node scripts/check-parkour.mjs"
+    "check:parkour": "node scripts/check-parkour.mjs",
+    "check:course": "node scripts/check-parkour-course.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -12,7 +12,7 @@ export { chooseMove, THRESHOLDS, type ParkourMove, type ParkourChoice, type Park
 export { useParkour, type ParkourController, type ParkourStep } from './useParkour';
 export { parkourStats } from './stats';
 export { parkourReport } from './liveReport';
-export { publishPlayerFeet, getPlayerFeet } from './playerFeet';
+export { publishPlayerFeet, getPlayerFeet, publishActiveMove, activeMoveLabel } from './playerFeet';
 export { dropToGround } from './groundDrop';
 
 import { setScanner } from './surroundings';

@@ -14,6 +14,7 @@
  */
 import { useRef } from 'react';
 import { tryStartMove, runPosition, type ParkourRun } from './runner';
+import { publishActiveMove } from './playerFeet';
 
 export interface ParkourStep {
   /** Feet position this frame. */
@@ -74,6 +75,7 @@ export function useParkour(): ParkourController {
         const started = tryStartMove(x, footY, z, fx, fz, running, now);
         if (!started) return null;
         run.current = started;
+        publishActiveMove(`${started.move}/${started.style}`);
         // The CLIP follows the style, not the move name. Hauling yourself up a
         // wall and hopping onto a single block are different animations, and
         // playing the wall climb on a one-block ledge is what "it climbs the
@@ -92,7 +94,7 @@ export function useParkour(): ParkourController {
         s.x = pos.current.x; s.y = pos.current.y; s.z = pos.current.z;
         s.done = !stillRunning;
         s.landsOnGround = s.done && r.move === 'mantle';
-        if (s.done) { run.current = null; endedAt.current = now; }
+        if (s.done) { run.current = null; endedAt.current = now; publishActiveMove(null); }
         return s;
       },
     };

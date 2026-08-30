@@ -220,7 +220,7 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
           g.updateWorldMatrix(true, true);
           _ikTarget.copy(tgt); reg.wrap.localToWorld(_ikTarget);
           checkReach(b.arm, b.fore, b.hand, _ikTarget, `${charName} ${weapon.name}`);
-          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0), getSwivel(weapon.url));
+          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0), getSwivel(weapon.url, weapon.leftHand?.swivel ?? 0));
         }
       }
     }

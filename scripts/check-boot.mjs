@@ -23,7 +23,10 @@ const BUDGET_MS = Number(process.env.CHECK_MS ?? 90000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
-  headless: false, viewport: { width: 1280, height: 720 },
+  // Headless by DEFAULT. A visible window steals the GPU from whatever the user is
+  // testing in their own browser — and a checker that degrades the thing being checked
+  // is worse than no checker. SHOW=1 to watch it.
+  headless: !process.env.SHOW, viewport: { width: 1280, height: 720 },
   args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());

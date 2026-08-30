@@ -11,6 +11,12 @@ export interface CharSnap {
   groundTerrain: number | null;   // sampleHeight (heightfield)
   groundMesh: number | null;      // mesh-collider ground under the player
   grid: (number | null)[];        // 3×3 sampleHeight around the player (0.5 m), row-major
+  /** Which movement state the selector picked (idle/walkF/jump/fall/…). */
+  state?: string;
+  /** The parkour move owning the body, or null. Without this a climb and a
+   *  jump look identical in the log, which is the exact confusion this whole
+   *  readout exists to end. */
+  move?: string | null;
 }
 
 let current: CharSnap | null = null;
@@ -32,16 +38,20 @@ function gapOf(s: CharSnap): number | null { const g = groundOf(s); return g == 
 /** One-line summary for the live panel. */
 export function charAnimLine(): string {
   const s = current; if (!s) return 'anim: (no data)';
-  return `${s.clip.replace(/Anim_Rifle_|_NoSkin/g, '')} | grnd=${s.grounded ? 'Y' : 'N'} vy=${f2(s.vy)} gap=${f2(gapOf(s))} mf=${s.mf} mr=${s.mr}${s.run ? ' run' : ''}`;
+  return `${s.clip.replace(/Anim_Rifle_|_NoSkin/g, '')} | ${s.state ?? '?'}${s.move ? ` | PARKOUR ${s.move}` : ''} | grnd=${s.grounded ? 'Y' : 'N'} vy=${f2(s.vy)} gap=${f2(gapOf(s))} mf=${s.mf} mr=${s.mr}${s.run ? ' run' : ''}`;
 }
 
 /** Full dump appended to the DFLOW COPY. */
 export function charAnimExport(): string {
-  if (!current) return '=== CHARACTER ANIMATION ===\n(no data — spawn + move in a siege world so the self-avatar records)';
+  if (!current) return '=== CHARACTER ANIMATION ===\n(no data — the self-avatar has not rendered a frame yet)';
   const s = current;
-  const grid = [0, 1, 2].map((r) => '    ' + [0, 1, 2].map((c) => f2(s.grid[r * 3 + c]).padStart(7)).join(' ')).join('\n');
+  const grid = s.grid.length
+    ? [0, 1, 2].map((r) => '    ' + [0, 1, 2].map((c) => f2(s.grid[r * 3 + c]).padStart(7)).join(' ')).join('\n')
+    : '    (voxel world — no heightfield)';
   let out = '=== CHARACTER ANIMATION DIAGNOSTICS ===\n';
-  out += `CURRENT: clip=${s.clip} grounded=${s.grounded} vy=${f2(s.vy)} mf=${s.mf} mr=${s.mr} run=${s.run} gun=${s.gun}\n`;
+  out += `CURRENT: clip=${s.clip}\n`;
+  out += `  state=${s.state ?? '?'}   parkour=${s.move ?? 'none'}\n`;
+  out += `  grounded=${s.grounded} vy=${f2(s.vy)} mf=${s.mf} mr=${s.mr} run=${s.run} gun=${s.gun}\n`;
   out += `  feetY=${f2(s.y - s.eyeH)} groundTerrain=${f2(s.groundTerrain)} groundMesh=${f2(s.groundMesh)} gapToGround=${f2(gapOf(s))}\n`;
   out += `  pos=(${f2(s.x)}, ${f2(s.y)}, ${f2(s.z)})\n`;
   out += `  heightGrid (0.5 m spacing, sampleHeight):\n${grid}\n`;
@@ -49,7 +59,8 @@ export function charAnimExport(): string {
     out += '\nRECENT CLIP CHANGES (newest last):\n';
     for (const e of events) {
       const es = e.snap;
-      out += `  ${e.from.replace(/Anim_Rifle_|_NoSkin/g, '')} → ${e.to.replace(/Anim_Rifle_|_NoSkin/g, '')}  (grnd=${es.grounded ? 'Y' : 'N'} vy=${f2(es.vy)} gap=${f2(gapOf(es))} mf=${es.mf} mr=${es.mr}${es.run ? ' run' : ''})\n`;
+      out += `  ${e.from.replace(/Anim_Rifle_|_NoSkin/g, '')} → ${e.to.replace(/Anim_Rifle_|_NoSkin/g, '')}\n`;
+      out += `      y=${f2(es.y)} vy=${f2(es.vy)} grnd=${es.grounded ? 'Y' : 'N'} state=${es.state ?? '?'} parkour=${es.move ?? 'none'}\n`;
     }
   }
   return out;

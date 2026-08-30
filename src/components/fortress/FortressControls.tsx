@@ -265,6 +265,16 @@ export function FirstPersonControls({
    *  position and normal movement stands down. */
   // Parkour owns its own state — see src/features/parkour/useParkour.ts.
   const parkour = useParkour();
+  /**
+   * A parkour move just finished, and the jump key has not been let go since.
+   *
+   * The jump check reads space as HELD, so the frame after a climb lands you on
+   * the ledge it fires an ordinary jump — and you leave the top of the wall at
+   * jump speed. Measured on the 2-block wall: the climb ended correctly at 2.0m
+   * and the body then rose to 3.29m, which is the whole of "it climbs into the
+   * air". One press should buy one move and nothing else.
+   */
+  const jumpLockedRef = useRef(false);
   const lastSiegeGround = useRef<{ x: number; z: number; y: number } | null>(null); // prev-frame terrain pos for the slope limit
   const yaw = useRef(Math.PI); // Start facing outward (180 degrees)
   const pitch = useRef(0);
@@ -962,6 +972,7 @@ export function FirstPersonControls({
         break;
       case 'Space':
         keys.current.space = false;
+        jumpLockedRef.current = false;   // a fresh press may jump again
         break;
       case 'ControlLeft':
         keys.current.ctrl = false;
@@ -3172,6 +3183,7 @@ export function FirstPersonControls({
         if (step.done) {
           onGround.current = step.landsOnGround;
           if (step.landsOnGround) lastGroundedAtRef.current = performance.now();
+          jumpLockedRef.current = true;   // released on the next space keyup
         }
         return;   // skip all movement + collision this frame
       } else {
@@ -3185,7 +3197,7 @@ export function FirstPersonControls({
         );
         // Normal ground-based jump logic. coyoteGrounded (not the raw flag) so a bump/downhill frame
         // never eats the jump — the press reliably jumps instead of being read as an airborne boost.
-        const canJump = coyoteGrounded && !keys.current.ctrl;
+        const canJump = coyoteGrounded && !keys.current.ctrl && !jumpLockedRef.current;
 
         if (keys.current.space && canJump) {
           // JUMPING AT A LEDGE CLIMBS IT. Checked before the jump rather than

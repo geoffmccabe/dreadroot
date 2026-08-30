@@ -8,11 +8,13 @@ import { getActiveGame } from '@/config/activeGame';
 import { gameUsesVoxels } from '@/config/gameRegistry';
 import { installScanner, setScanner } from './index';
 import { installParkourDebug } from './debugProbe';
+import { installCourseHooks } from './testCourse';
 
 export function ScannerInstaller(): null {
   useEffect(() => {
     installScanner(gameUsesVoxels(getActiveGame()));
     installParkourDebug();
+    installCourseHooks();
     return () => setScanner(null);
   }, []);
   return null;

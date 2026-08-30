@@ -18,7 +18,10 @@ const URL_ = process.env.CHECK_URL ?? 'http://localhost:8080/?perftest';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
-  headless: false, viewport: { width: 1280, height: 720 },
+  // Headless by DEFAULT. A visible window steals the GPU from whatever the user is
+  // testing in their own browser — and a checker that degrades the thing being checked
+  // is worse than no checker. SHOW=1 to watch it.
+  headless: !process.env.SHOW, viewport: { width: 1280, height: 720 },
   args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());
@@ -56,6 +59,12 @@ await page.evaluate(() => {
 });
 await sleep(6000);
 
+// Put the tool back on the weapon under test. The sweep above walks every weapon, so without
+// this the final verdict describes whatever it happened to stop on rather than what was asked for.
+await page.evaluate(async (i) => {
+  window.__lineupSetWeapon(Number(i));
+  await new Promise((r) => setTimeout(r, 1500));
+}, process.env.CHECK_WEAPON ?? 14);
 const st = await page.evaluate(() => (window.__lineup ? window.__lineup() : null));
 const probe = await page.evaluate((s) => {
   if (!window.__lineupProbe || !s) return null;
@@ -209,7 +218,8 @@ console.log('screenshot :', process.env.SHOT ?? '/tmp/lineup.png');
 await ctx.close();
 
 if (!st?.enabled) { console.log('\nRESULT: the lineup did NOT open.'); process.exit(1); }
-if (!st.clip || !st.clip.startsWith('pistol_')) {
+const wantPistol = (process.env.CHECK_WEAPON ?? '14') === '14';
+if (wantPistol && (!st.clip || !st.clip.startsWith('pistol_'))) {
   console.log(`\nRESULT: WRONG POSE — clip is "${st.clip}".`);
   process.exit(1);
 }
@@ -217,4 +227,4 @@ if (!held || held.length === 0) {
   console.log('\nRESULT: PISTOL POSE but EMPTY HANDS — no weapon model attached.');
   process.exit(1);
 }
-console.log(`\nRESULT: pistol pose, ${held.length} weapon(s) in hand.`);
+console.log(`\nRESULT: clip "${st.clip}", ${held.length} weapon(s) in hand.`);

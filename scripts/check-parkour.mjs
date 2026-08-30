@@ -13,12 +13,19 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile');
+// ITS OWN PROFILE. A second Claude co-builds this repo and runs the game from
+// the shared .perftest profile; Chrome refuses to open one profile twice, so a
+// shared directory means whichever of us starts second simply fails.
+const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile-probe');
 const URL_ = process.env.CHECK_URL ?? 'http://localhost:8080/?perftest';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ctx = await chromium.launchPersistentContext(PROFILE, {
-  headless: false, viewport: { width: 1280, height: 720 },
+  // HEADLESS BY DEFAULT. A visible Chrome running this game competes for the
+  // GPU with the window Geoff is actually testing in — the game is GPU-bound,
+  // so a headed checker actively degrades the thing being measured. SHOW=1 to
+  // watch it. (Agreed with the other session, which did the same to its three.)
+  headless: !process.env.SHOW, viewport: { width: 1280, height: 720 },
   args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());

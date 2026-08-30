@@ -25,3 +25,16 @@ export function publishPlayerFeet(x: number, y: number, z: number, fx: number, f
 }
 
 export function getPlayerFeet(): Readonly<PlayerFeet> { return feet; }
+
+/**
+ * The parkour move that owns the body right now, for the D-Flow readout.
+ *
+ * Published by the controller rather than read off it, because the running
+ * move lives in a React ref inside a hook and nothing outside the movement
+ * loop can reach it. A climb and an ordinary jump look identical in an
+ * animation log without this line.
+ */
+let moveLabel: string | null = null;
+
+export function publishActiveMove(label: string | null): void { moveLabel = label; }
+export function activeMoveLabel(): string | null { return moveLabel; }

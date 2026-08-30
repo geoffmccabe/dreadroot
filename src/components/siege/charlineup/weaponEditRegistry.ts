@@ -76,7 +76,7 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '16';  // v16: Shi Yang's Pistol (item_25) tuned on all six
+const BAKE_VERSION = '18';  // v18: Rocket Launcher per-character pass + arm hold (item_14)
 const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
@@ -91,7 +91,11 @@ try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {
     for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i); if (!k) continue;
-      if (k.startsWith('siege_weapon_tune::') || k.startsWith('siege_weapon_pos::')) {
+      // Also the left-hand hold (grip point / wrist / swivel). Those are ABSOLUTE values rather
+      // than offsets so they cannot double like rotation and position do — but a saved one still
+      // SHADOWS a newly baked one, so the person who tuned it would be the only one seeing the fix.
+      if (k.startsWith('siege_weapon_tune::') || k.startsWith('siege_weapon_pos::')
+          || k.startsWith('siege_lefthand_')) {
         const url = k.slice(k.lastIndexOf('::') + 2);           // key = prefix[::char]::url
         if (BAKED_URLS.has(url)) localStorage.removeItem(k);
       }

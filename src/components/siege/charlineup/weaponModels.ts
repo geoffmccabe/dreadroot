@@ -50,7 +50,11 @@ export interface HeldWeapon {
   sizeByChar?: Record<string, number>;  // baked per-character size multiplier (auto-fit × this); default 1
   rotByChar?: Record<string, [number, number, number]>;   // baked per-character rotDeg (else rotDeg)
   gripByChar?: Record<string, [number, number, number]>;  // baked per-character gripPos (else gripPos)
-  leftHand?: { point: [number, number, number]; wrist: number };  // baked support-hand grip (gun-local) + wrist°
+  /** Baked support-hand hold: where on the gun the left hand grips (gun-local), how far the wrist
+   *  is rolled, and the elbow swivel — which way round the elbow points. Without the swivel the
+   *  elbow direction comes from whatever the animation clip happened to be doing, which is what bent
+   *  arms the wrong way on the long weapons. */
+  leftHand?: { point: [number, number, number]; wrist: number; swivel?: number };
   animSet: 'rifle' | 'pistol';
   /**
    * Which shared texture atlas to paint on, for models exported WITHOUT their
@@ -169,10 +173,23 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     gripByChar: PISTOL_GRIP_BY_CHAR,
     sizeByChar: { Ash: 0.66, Dago: 0.80, Fluffer: 0.93, Jankz: 0.80, Rajax: 0.70, Thorn: 0.64, Flamma: 0.66, Jeanette: 0.64, 'Shi Yang': 0.70 } },
   { key: 'rocket',        name: 'Rocket Launcher',      itemNumbers: [14],  url: '/siege/weapons/item_14.glb',  lengthM: 1.2,
-    rotDeg: [92, 9, -93], gripPos: G, animSet: 'rifle',
-    gripByChar: { Rajax: [0.12, 0.02, 0.04] },
-    sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91, Flamma: 0.94, Jeanette: 0.91, 'Shi Yang': 1.00 },
-    leftHand: { point: [0.078, -0.025, -0.425], wrist: 0 } },
+    // TUNED BY EYE 2026-Aug-30 — the first weapon posed with the elbow swivel, and the one that
+    // needed it: the support hand takes a 220° wrist roll and -210° of swivel to get the elbow
+    // outside the ribcage. Nothing near zero, which is why every character's left arm was folded
+    // the wrong way when the elbow direction was left to whatever the animation clip was doing.
+    // Rotation and grip are per character on this weapon — a launcher is held across the body, so
+    // shoulder width changes the hold much more than it does on a rifle.
+    // Thorn was not in the tuning pass; her earlier values stand (an omitted name means unchanged).
+    rotDeg: [92, 4, -93], gripPos: [0.018, 0.224, 0.05], animSet: 'rifle',
+    rotByChar: { Ash: [92, 4, -93], Rajax: [92, 4, -93], Dago: [91, -6, -93], Fluffer: [91, -6, -93],
+                 Jankz: [91, -1, -93], Thorn: [92, 9, -93],
+                 Flamma: [92, 4, -93], Jeanette: [92, 9, -93], 'Shi Yang': [92, 4, -93] },
+    gripByChar: { Ash: [0.018, 0.224, 0.05], Dago: [0.082, 0.384, -0.006], Fluffer: [0.21, 0.281, 0.059],
+                  Jankz: [0.06, 0.21, 0.026], Rajax: [0.096, 0.246, 0.105], Thorn: [0.02, 0.3, 0.04],
+                  Flamma: [0.018, 0.224, 0.05], Jeanette: [0.02, 0.3, 0.04], 'Shi Yang': [0.096, 0.246, 0.105] },
+    sizeByChar: { Ash: 1.00, Dago: 1.37, Fluffer: 1.32, Jankz: 1.04, Rajax: 1.17, Thorn: 0.91,
+                  Flamma: 1.00, Jeanette: 0.91, 'Shi Yang': 1.17 },
+    leftHand: { point: [0.016, -0.066, -0.302], wrist: 220, swivel: -210 } },
 
   // ── Converted from the Siege Worlds Unity project, 2026-Aug-27 ──────────
   // Assets/Content/_weapon/Weapons/Item_models/<id>_<name>/*.fbx, run through

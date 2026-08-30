@@ -28,6 +28,8 @@ import {
   ACTION_HOLDS, ACTION_MODE, LOCAL_ACTOR, isUpperBodyTrack, takeAction,
   revivalCount, type ActionId,
 } from './characterActions';
+import { setCharSnap, pushCharAnimEvent, type CharSnap } from '@/components/siege/charAnimDebug';
+import { dropToGround, activeMoveLabel } from '@/features/parkour';
 
 export interface CharacterAvatarProps {
   /** Character name from the roster; falls back to the first one. */
@@ -229,6 +231,20 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const actionSet = useMemo(() => actionClipSetFor(c.rig, stance), [c.rig, stance]);
   /** An override action owns the whole body until this time. */
   const overrideUntil = useRef(0);
+  const lastLoggedClip = useRef('(start)');
+
+  /** Which clip is ACTUALLY playing with weight right now — including a
+   *  one-shot override, which `current` does not track. '' means nothing is
+   *  playing, which renders as the rest pose and is worth seeing as such. */
+  const playing = (): string => {
+    let best = ''; let bestW = 0.01;
+    for (const [name, a] of Object.entries(actions)) {
+      if (!a.isRunning()) continue;
+      const w = a.getEffectiveWeight();
+      if (w > bestW) { bestW = w; best = name; }
+    }
+    return best;
+  };
   /** Death holds forever; nothing releases it but a respawn. */
   const held = useRef(false);
   /** Last revival tick we acted on, so a respawn releases the death pose exactly once. */
@@ -416,6 +432,33 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
         : actionSet[queued.id];
       if (clip && actions[clip]) playAction(queued.id, clip, ACTION_MODE[queued.id], queued.seconds);
       else if (!clip) warnMissingAction(c.rig, queued.id);
+    }
+
+    // WHAT POSE AM I IN, AND WHERE? Recorded every frame for the local body so
+    // the D-Flow panel can show it. Without this the only description of what
+    // the character is doing came from someone watching the screen and typing
+    // it out, which is how a mantle that was measuring correctly got chased for
+    // three rounds as a scanner bug.
+    if (actor === LOCAL_ACTOR) {
+      const feetY = pos.current.y;
+      const drop = input.grounded ? 0 : dropToGround(pos.current.x, feetY, pos.current.z);
+      const snap: CharSnap = {
+        t: now,
+        clip: playing() || '(none — REST POSE)',
+        grounded: input.grounded, vy: input.vy, mf: input.mf, mr: input.mr,
+        run: input.run, gun: armed,
+        x: pos.current.x, y: pos.current.y, z: pos.current.z, eyeH: 0,
+        groundTerrain: null,
+        groundMesh: input.grounded ? feetY : feetY - drop,
+        grid: [],
+        state,
+        move: activeMoveLabel(),
+      };
+      if (snap.clip !== lastLoggedClip.current) {
+        pushCharAnimEvent(lastLoggedClip.current, snap.clip, snap);
+        lastLoggedClip.current = snap.clip;
+      }
+      setCharSnap(snap);
     }
 
     // While an override action owns the body, the locomotion selector stands
