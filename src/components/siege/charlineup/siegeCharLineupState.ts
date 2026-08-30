@@ -100,49 +100,36 @@ export const getTuneCharIndex = (): number => tuneCharIndex;
 export function setTuneCharIndex(i: number): void { tuneCharIndex = i; emit(); }
 
 /**
- * WHAT THE ARROW KEYS DRIVE.
+ * WHAT THE ARROW KEYS DRIVE — the gun, or the left arm. Toggled with '.
  *
- * The lineup grew three separate posing tools — gun placement, an IK hand target,
- * and a per-joint FK poser — that all wanted the same four arrow keys, and which
- * one was live was tracked by a bare -1..2 integer with no readout anywhere. So a
- * key that did the right thing to the wrong system was indistinguishable from a
- * key that did nothing. One named mode list, cycled with < and >, shown in the HUD.
+ * There is deliberately no third option and no cycling. An earlier version had six
+ * modes on a cycler and it was worse than useless: nobody can hold six states in
+ * their head, and a key acting on the wrong one is indistinguishable from a key
+ * that does nothing.
  */
-export const EDIT_MODES = [
-  { key: 'gun',      label: 'GUN POSITION',   hint: 'arrows move the gun · , . depth' },
-  { key: 'hand',     label: 'LEFT HAND (IK)', hint: 'arrows move the grip point · , . depth' },
-  { key: 'elbow',    label: 'ELBOW SWIVEL',   hint: 'left/right swing the elbow around' },
-  { key: 'shoulder', label: 'SHOULDER (FK)',  hint: 'arrows rotate X/Y · , . rotate Z' },
-  { key: 'forearm',  label: 'FOREARM (FK)',   hint: 'arrows rotate X/Y · , . rotate Z' },
-  { key: 'wristfk',  label: 'WRIST (FK)',     hint: 'arrows rotate X/Y · , . rotate Z' },
-] as const;
-export type EditModeKey = typeof EDIT_MODES[number]['key'];
+export type EditTarget = 'gun' | 'arm';
+let editTarget: EditTarget = 'gun';
+export const getEditTarget = (): EditTarget => editTarget;
+export function toggleEditTarget(): void { editTarget = editTarget === 'gun' ? 'arm' : 'gun'; emit(); }
 
-let editMode = 0;
-export const getEditMode = (): EditModeKey => EDIT_MODES[editMode].key;
-export function cycleEditMode(dir: number): void {
-  editMode = (editMode + dir + EDIT_MODES.length) % EDIT_MODES.length;
-  emit();
-}
-/** The FK joint index the arrows drive, or -1 when the current mode is not an FK one.
- *  Kept so armFK's existing per-joint storage needs no change. */
-export const getArmJoint = (): number =>
-  ({ shoulder: 0, forearm: 1, wristfk: 2 } as Record<string, number>)[getEditMode()] ?? -1;
+/** The manual per-joint FK poser is legacy — kept because baked data uses it, but no
+ *  longer on the front-line controls. -1 = never active. */
+export const getArmJoint = (): number => -1;
 
 // Dev introspection for scripts/check-lineup.mjs. The lineup is keyboard-only and lives inside the
 // Canvas, so there is no other way for an automated check to answer "what is it actually holding?" —
 // and guessing at that is exactly how this tool shipped in the wrong pose twice.
 if (typeof window !== 'undefined') {
-  // Deterministic weapon selection for the check — cycling with '*' drops presses.
+  // Deterministic weapon selection for the check — cycling with ( ) drops presses.
   (window as unknown as { __lineupSetWeapon?: (i: number) => void }).__lineupSetWeapon = (i) => setWeaponIndex(i);
   (window as unknown as { __lineup?: () => unknown }).__lineup = () => ({
     enabled, weaponIndex, animIndex, clip: animNames[animIndex] ?? null, clipCount: animNames.length,
     anchorY: anchor?.groundY ?? null, anchorX: anchor?.x ?? null, anchorZ: anchor?.z ?? null,
-    groundSource: lastGroundSource, gridSize: gridSize(),
+    groundSource: lastGroundSource, gridSize: gridSize(), editTarget,
   });
 }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number; editMode: EditModeKey } {
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number; editTarget: EditTarget } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex, armJoint: getArmJoint(), editMode: getEditMode() };
+  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex, armJoint: getArmJoint(), editTarget };
 }

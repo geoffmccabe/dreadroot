@@ -16,7 +16,7 @@ import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, PISTOL_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon, getTuneCharIndex, setTuneCharIndex,
-  getArmJoint, getEditMode, cycleEditMode, EDIT_MODES, setCharAnimByName, setCharAnimIndex, setWeaponIndex,
+  getArmJoint, getEditTarget, toggleEditTarget, setCharAnimByName, setCharAnimIndex, setWeaponIndex,
 } from './charlineup/siegeCharLineupState';
 import { getArmFK, hasArmFK, nudgeArmFK, applyArmFK, clearArmFK } from './charlineup/armFK';
 import { AnimFSM } from './charlineup/animFSM';
@@ -26,8 +26,8 @@ import { type LineupWeaponDef } from './charlineup/lineupWeapons';
 import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
-import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
-import { setLeftTarget, nudgeWrist, nudgeSwivel, nudgeLeftTarget, findLeftArm, getLeftTarget, getWrist, getSwivel, solveArmIK, checkReach } from './charlineup/leftHandIK';
+import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPosDir, weaponWraps } from './charlineup/weaponEditRegistry';
+import { setLeftTarget, nudgeWrist, nudgeSwivel, nudgeLeftTargetDir, findLeftArm, getLeftTarget, getWrist, getSwivel, solveArmIK, checkReach } from './charlineup/leftHandIK';
 import { cycleAtlas } from './charlineup/weaponAtlas';
 import { findUpperArms, applyArmPose, getPose, nudgePose, registerArmRoot } from './charlineup/armSpread';
 import { chooseMove } from '@/features/parkour';
@@ -52,6 +52,7 @@ const _tailQ = new THREE.Quaternion();
 const _ikTarget = new THREE.Vector3();   // scratch: left-hand grip point in world space
 const _bakedLeft = new THREE.Vector3();  // scratch: baked left-hand point when there's no saved capture
 const _fwd = new THREE.Vector3();        // scratch: the character's forward axis, for arm spread
+const UP = new THREE.Vector3(0, 1, 0);
 const CHAR_NAMES = LINEUP_CHARS.map((c) => c.name);   // for "adjust ALL characters" (tune target = null)
 
 const glbUrl = (file: string) => `${file}?a=${CHAR_ASSET_VERSION}`;
@@ -319,27 +320,31 @@ export function SiegeCharacterLineup() {
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
     // Arrows/,. route to the ACTIVE left-arm joint (FK) when one is selected, else move the gun.
-    const AXIS_I = { x: 0, y: 1, z: 2 } as const;
-    const armK = (axis: 0 | 1 | 2, deg: number, posAxis: 'x' | 'y' | 'z', pos: number) => {
+    // SCREEN DIRECTIONS, not bone axes. Right and up come from the camera so they mean what the
+    // viewer sees; "in" is the camera's forward flattened, which from in front of the lineup is
+    // straight at the character. Recomputed per press so it still reads right after you move.
+    const _d = new THREE.Vector3();
+    const screenDir = (which: 'right' | 'up' | 'in'): THREE.Vector3 => {
+      if (which === 'up') return _d.set(0, 1, 0);
+      camera.getWorldDirection(_d);
+      if (which === 'in') { _d.y = 0; return _d.normalize(); }
+      return _d.cross(UP).normalize();          // camera forward × up = camera right
+    };
+    /** One nudge, in a direction the viewer means. */
+    const move = (which: 'right' | 'up' | 'in', sign: number) => {
       const url = gunRef.current?.url;
-      const mode = getEditMode();
-      if (mode === 'gun' || !url) { nudgeWeaponPos(tuneTarget(), posAxis, pos); return; }
-      if (mode === 'hand') { nudgeLeftTarget(url, AXIS_I[posAxis], pos); return; }
-      if (mode === 'elbow') {
-        // Only one degree of freedom here: which way round the elbow points. Left/right swing it;
-        // up/down and depth have nothing to drive, so they are deliberately inert rather than
-        // quietly doing something else.
-        if (posAxis === 'x') nudgeSwivel(url, pos > 0 ? SWIVEL_STEP : -SWIVEL_STEP);
+      const dir = screenDir(which);
+      if (getEditTarget() === 'arm' && url) {
+        const reg = weaponWraps().find((r) => r.charName === (tuneTarget() ?? r.charName));
+        if (reg) nudgeLeftTargetDir(url, reg.wrap, dir, sign * POS);
         return;
       }
-      const jointOn = getArmJoint();
-      if (jointOn >= 0) nudgeArmFK(tuneTarget(), url, jointOn, axis, deg, CHAR_NAMES);
+      nudgeWeaponPosDir(tuneTarget(), dir, sign * POS);
     };
     const SWIVEL_STEP = 5;   // degrees of elbow swing per tap
     const logMode = () => {
-      const m = EDIT_MODES.find((x) => x.key === getEditMode())!;
-      console.log(`[lineup] EDIT MODE → ${m.label} — ${m.hint}`);
-      if ((getEditMode() === 'hand' || getEditMode() === 'elbow')
+      console.log(`[lineup] arrows now move the ${getEditTarget() === 'arm' ? 'LEFT HAND' : 'GUN'}`);
+      if (getEditTarget() === 'arm'
           && hasArmFK(tuneTarget() ?? CHAR_NAMES[0], gunRef.current?.url ?? '')) {
         console.warn('[lineup] this character+weapon has manual FK offsets, which OVERRIDE the IK — press ! to clear them and let the hand target drive the arm');
       }
@@ -384,20 +389,26 @@ export function SiegeCharacterLineup() {
       // arrows + ,/. rotate THAT joint on its 3 local axes; otherwise they move the gun as before.
       // The left-arm FK joint cycler moved off { } (now shoulder pitch) onto < >, which came free
       // when keyboard world switching was removed.
-      else if (e.key === '<') { e.preventDefault(); e.stopImmediatePropagation(); cycleEditMode(-1); logMode(); }
-      else if (e.key === '>') { e.preventDefault(); e.stopImmediatePropagation(); cycleEditMode( 1); logMode(); }
+      // ' swaps what the arrows drive: the GUN or the LEFT ARM. Same keys either way.
+      else if (e.key === "'") { e.preventDefault(); e.stopImmediatePropagation(); toggleEditTarget(); logMode(); }
+      // < > swing the elbow around without moving the hand. Arm only — there is no elbow on a gun.
+      else if (e.key === '<' || e.key === '>') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        if (getEditTarget() !== 'arm') { console.log("[lineup] < > swing the elbow — press ' to switch to LEFT ARM first"); return; }
+        nudgeSwivel(gunRef.current?.url ?? '', e.key === '>' ? SWIVEL_STEP : -SWIVEL_STEP);
+      }
       // ! drops the manual FK offsets for this character+weapon, so the IK hand target takes over
       // again. Without it, one stray FK nudge silently disables the IK forever.
       else if (e.key === '!') {
         e.preventDefault(); e.stopImmediatePropagation();
         clearArmFK(tuneTarget(), gunRef.current?.url ?? '', CHAR_NAMES);
       }
-      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); armK(0, -ARM_STEP, 'x', -POS); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); armK(0,  ARM_STEP, 'x',  POS); }
-      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); armK(1,  ARM_STEP, 'y',  POS); }
-      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); armK(1, -ARM_STEP, 'y', -POS); }
-      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2, -ARM_STEP, 'z', -POS); }
-      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); armK(2,  ARM_STEP, 'z',  POS); }
+      else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); move('right', -1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); move('right',  1); }
+      else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); move('up',     1); }
+      else if (e.key === 'ArrowDown')  { e.preventDefault(); e.stopImmediatePropagation(); move('up',    -1); }
+      else if (e.key === '.')          { e.preventDefault(); e.stopImmediatePropagation(); move('in',     1); }   // toward the character
+      else if (e.key === ',')          { e.preventDefault(); e.stopImmediatePropagation(); move('in',    -1); }   // away from them
       // [ / ] pull the selected character's arms apart / together by 1°. The two-handed pistol
       // clips were captured on one actor's proportions, so narrower characters' palms intersect.
       else if (e.key === '[' || e.key === ']') {

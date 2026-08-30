@@ -1,96 +1,98 @@
-# Posing the left arm on a held weapon
+# Posing a held weapon and the left arm
 
-## The bug this was written for
+## The two things the arrow keys can drive
 
-On the Rocket Launcher (and others) every character's left arm bent the wrong way
-— elbow through the ribcage, forearm folded backwards.
+Press `'` to swap between them. The HUD at the bottom of the screen always says
+which one is live, and on which character.
 
-That is not a broken rig or a bad model. It is the classic missing piece in a
-two-bone IK setup: **there was no pole target.**
+| | arrows | `.` | `,` |
+|---|---|---|---|
+| **GUN** | move the gun left / right / up / down | toward the character | away |
+| **LEFT HAND** | move the grip point left / right / up / down | toward | away |
 
-A two-bone solve fixes the shoulder and elbow ANGLES from the distance to the
-target. It does not fix which way the elbow POINTS — the whole arm can rotate
+In LEFT HAND mode there are two extras: `<` `>` swing the elbow round without
+moving the hand, and `7` `8` twist the wrist.
+
+That is the whole control set. There is no mode cycling and nothing is doubled up.
+
+## Directions are what you see, not what the skeleton says
+
+The gun's offset is stored along the HAND BONE's own axes, and a hand bone points
+wherever the skeleton says — nowhere near screen left/right/up/down. So the left
+arrow moved the gun up, the up arrow moved it sideways, and differently per
+character. Reported as "the arrow keys are all reversed"; they were worse than
+reversed, they were scrambled.
+
+Arrow keys now take a direction the VIEWER means — the camera's right, world up,
+the camera's forward flattened — and convert it into each hand's own frame.
+
+Measured, ten taps per key: right `x −0.105`, left `x +0.100`, up `y +0.101`,
+down `y −0.108`, `.` `z +0.102`, `,` `z −0.101`. One axis each, no cross-talk. The
+camera looks along +Z there, so −X is screen right, which is what the right arrow
+gives.
+
+## Why the arm bent the wrong way
+
+Not a broken rig. A two-bone IK solve sets the shoulder and elbow ANGLES from the
+distance to the target, but not which way the elbow POINTS — the limb can rotate
 freely about the shoulder-to-hand axis with the hand staying exactly where it is.
-Something has to choose that rotation. `solveArmIK` was taking it from the
-animation clip's own pose:
+Something has to choose that rotation, and `solveArmIK` was inheriting it from the
+animation clip's own pose. Fine while the grip is near where the clip put the hand;
+sends the elbow through the ribcage when it is not, which is why the Rocket
+Launcher was the worst case.
 
-    // bend axis = normal of the shoulder-elbow-hand plane (keeps the current elbow direction)
-    _axis.copy(_dAB).cross(_dAC);
+Every mainstream rig exposes this control — Blender's IK Pole Target and Pole
+Angle, Unity's `SetIKHintPosition(AvatarIKHint.LeftElbow)`, Unreal's TwoBoneIK
+Joint Target. It was the missing piece, and it is now on `<` `>`.
 
-That works while the grip point is near where the clip already put the hand. Move
-the target somewhere the clip never anticipated — a rocket launcher's foregrip,
-way forward and low — and the inherited plane sends the elbow somewhere anatomy
-does not go.
+Options considered before writing it:
 
-## What was chosen, and why not a library
+1. **Install `three-ik`.** Rejected. CCD-based, so it replaces a working
+   closed-form solver with an iterative one; no clean pole story; unmaintained. A
+   permanent dependency for what is fifteen lines of vector maths.
+2. **Rewrite as FABRIK with constraints.** Rejected. Far bigger change, and
+   closed-form two-bone is what Unreal and Blender use for a two-bone chain. The
+   solver was not the problem.
+3. **Add the pole angle to the existing solver.** Chosen — the standard method,
+   purely additive, no dependency.
 
-This is a solved problem and every mainstream rig exposes the same control:
+Implementation: after the solve, rotate the SHOULDER about the shoulder-to-hand
+axis. The hand lies on that axis so it does not move; the elbow swings around it.
+Applied last so it cannot disturb the solve. Stored per weapon rather than per
+character — the grip is the same spot on the same model for everyone, so the elbow
+wants to go the same way for everyone.
 
-| system | what it is called |
-|---|---|
-| Blender | IK constraint → Pole Target + Pole Angle |
-| Unity | `SetIKHintPosition(AvatarIKHint.LeftElbow, …)` |
-| Unreal | TwoBoneIK node → Joint Target |
-| three-ik / ikjs | pole / hinge constraint |
+Measured on the Rocket Launcher: 20° of swivel moves the elbow **5.07 cm** and the
+hand **0.1 cm**. That near-zero hand movement is the proof the axis is right.
 
-Options considered:
+## Why there is no shoulder / elbow / wrist ROTATION mode
 
-1. **Install `three-ik`.** Rejected. It is CCD/FABRIK-based, so it would replace a
-   working closed-form solver with an iterative one, it has no clean pole story,
-   and it is an unmaintained package — a dependency to verify and carry forever
-   for a control that is about fifteen lines of vector maths.
-2. **Rewrite as FABRIK with constraints.** Rejected. Much bigger change, and
-   closed-form two-bone is exactly what Unreal's TwoBoneIK and Blender's solver
-   use for a two-bone chain. The existing solver is not the problem.
-3. **Add the pole angle to the existing solver.** Chosen. It is the standard
-   method, it is additive, and it needs no dependency.
+There was one, and it is still in the code because baked data uses it, but it is
+off the front-line controls. Posing an arm by rotating three joints in sequence
+means every joint you touch moves everything below it, so the hand drifts off the
+gun and you chase it. The IK set — put the hand where you want it, swing the elbow,
+twist the wrist — is five numbers, it is complete, and each control does one thing
+without disturbing the others.
 
-## How the swivel works
+`!` clears any leftover manual joint offsets for the selected character and weapon.
+That matters because those offsets switch the IK off entirely, so one stray nudge
+would otherwise disable the hand target permanently with no way back. Switching to
+LEFT HAND mode warns when they are present.
 
-After the two-bone solve, rotate the SHOULDER about the shoulder-to-hand axis. The
-hand lies on that axis, so it does not move; the elbow swings around it. Applied
-last, so it cannot disturb the solve.
+## Weapons with no support hand
 
-Measured: 20° of swivel moves the elbow **5.1 cm** and the hand **0.2 mm**. That
-near-zero hand movement is the check that the axis is right — if the hand moves,
-the axis is wrong.
-
-Stored per weapon, not per character: the grip point is the same spot on the same
-model for everyone, so the elbow wants to go the same way for everyone.
-
-## The controls
-
-`<` and `>` cycle the edit mode. The mode and its keys are shown in the HUD at the
-bottom of the screen, because three posing tools share the arrow keys and a key
-acting on the wrong one is indistinguishable from a key that does nothing.
-
-| mode | arrows | `,` `.` |
-|---|---|---|
-| GUN POSITION | move the gun X / Y | depth |
-| LEFT HAND (IK) | move the grip point X / Y | depth |
-| ELBOW SWIVEL | left/right swing the elbow | — |
-| SHOULDER (FK) | rotate X / Y | rotate Z |
-| FOREARM (FK) | rotate X / Y | rotate Z |
-| WRIST (FK) | rotate X / Y | rotate Z |
-
-Also: `K` aims at the gun to set the grip point from scratch, `7` / `8` twist the
-wrist, `!` clears the manual FK offsets.
-
-## The FK / IK trap
-
-`hasArmFK()` gates the IK off entirely — one manual joint nudge and the hand target
-stops driving the arm, permanently, with no way back short of clearing
-localStorage. That is why `!` exists, and why switching to LEFT HAND or ELBOW mode
-warns when FK offsets are present.
+Pistols use a one-handed animation set, so there is no support hand to place and
+LEFT HAND mode does nothing on them. Rifles, shotguns, the launchers and the melee
+weapons all use it.
 
 ## Out-of-reach grip points
 
-`checkReach()` warns once per character+weapon when a grip point sits further from
-the shoulder than the arm can reach. The solver clamps rather than failing, so an
-out-of-reach target quietly gives a straight arm aimed off into space — which reads
-as a broken rig rather than as bad data.
+`checkReach()` warns once per character and weapon when a grip point sits further
+from the shoulder than the arm can stretch. The solver clamps rather than failing,
+so that case quietly produces a straight arm aimed off into space — which reads as
+a broken rig rather than as bad data.
 
 Worth a look: the Plasma Sniper's baked grip point is `[5.254, -0.952, -1.271]`
 where every other weapon's is inside 43 cm. Those are model-local units and differ
-per model, so it is not provably wrong — but it is the outlier by a wide margin and
+per model, so it is not provably wrong, but it is the outlier by a wide margin and
 is the first thing to re-capture with `K` if that weapon looks off.

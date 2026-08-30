@@ -74,6 +74,28 @@ export function nudgeSwivel(weaponKey: string, deg: number): void {
   console.log('[lefthand-swivel]', weaponKey, '→', Math.round(d) + '° (elbow direction)');
 }
 
+/**
+ * Move the captured grip point in a direction the USER can see.
+ *
+ * Same reason as the gun's own position keys: the point is stored in the gun
+ * model's frame, and that frame is rotated ~90° in two axes to sit in the hand, so
+ * its axes have nothing to do with what is on screen. `worldDir` is what the viewer
+ * means; `wrap` converts it into the model's frame, scale included.
+ */
+export function nudgeLeftTargetDir(weaponKey: string, wrap: THREE.Object3D, worldDir: THREE.Vector3, metres: number): void {
+  const cur = getLeftTarget(weaponKey);
+  const v = cur ? cur.clone() : new THREE.Vector3();
+  wrap.getWorldQuaternion(_wq);
+  wrap.getWorldScale(_scale);
+  _dirL.copy(worldDir).normalize().applyQuaternion(_wq.invert());
+  // Undo the wrap's scale so a centimetre on screen is a centimetre on screen for
+  // every weapon, however the model happens to be scaled.
+  v.x += (_dirL.x * metres) / (_scale.x || 1);
+  v.y += (_dirL.y * metres) / (_scale.y || 1);
+  v.z += (_dirL.z * metres) / (_scale.z || 1);
+  setLeftTarget(weaponKey, v);
+}
+
 /** Move the captured grip point along one axis of the gun's own frame, in metres.
  *  Without this the target could only be set by a raycast, so it could be placed
  *  but never adjusted — and a grip point is exactly the kind of thing you want to
@@ -101,6 +123,7 @@ const _dAT = new THREE.Vector3(), _dAC = new THREE.Vector3(), _dAB = new THREE.V
 const _n1 = new THREE.Vector3(), _n2 = new THREE.Vector3();
 const _axis = new THREE.Vector3(), _fore = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _pq = new THREE.Quaternion();
+const _scale = new THREE.Vector3(), _dirL = new THREE.Vector3();
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 // Apply a WORLD-space rotation (axis, angle) to a bone, converting back to its local quaternion, then

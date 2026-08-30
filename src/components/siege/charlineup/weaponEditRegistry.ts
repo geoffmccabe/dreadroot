@@ -61,7 +61,9 @@ if (typeof window !== 'undefined') {
       });
       const e = new THREE.Euler().setFromQuaternion(r.wrap.quaternion);
       const deg = (v: number) => Math.round(v * 180 / Math.PI);
-      return { char: r.charName, weapon: r.weaponKey.split('/').pop(), longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
+      const wp = new THREE.Vector3(); r.wrap.getWorldPosition(wp);
+      return { char: r.charName, weapon: r.weaponKey.split('/').pop(),
+        world: [+wp.x.toFixed(3), +wp.y.toFixed(3), +wp.z.toFixed(3)], longestM: +Math.max(s.x, s.y, s.z).toFixed(3), mats, textured,
         rot: [deg(e.x), deg(e.y), deg(e.z)],
         pos: [+r.wrap.position.x.toFixed(3), +r.wrap.position.y.toFixed(3), +r.wrap.position.z.toFixed(3)] };
     });
@@ -103,6 +105,8 @@ const _flip = new THREE.Quaternion();
 const _axisV = new THREE.Vector3();
 const _out = new THREE.Quaternion();
 const _outE = new THREE.Euler();
+const _wq2 = new THREE.Quaternion();
+const _dir = new THREE.Vector3();
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const baseRotByKey = new Map<string, [number, number, number]>();   // `${char}::${weapon}` → baseline
@@ -201,6 +205,36 @@ function getPos(charName: string, weaponKey: string): [number, number, number] {
 export function applyWrapPos(reg: WeaponWrapReg): void {
   const p = getPos(reg.charName, reg.weaponKey);
   reg.wrap.position.set((reg.baseGrip[0] + p[0]) / reg.handScale, (reg.baseGrip[1] + p[1]) / reg.handScale, (reg.baseGrip[2] + p[2]) / reg.handScale);
+}
+
+/**
+ * Move the current weapon in a direction the USER can see, for the SELECTED character (or ALL).
+ *
+ * WHY THIS EXISTS. The offset is stored along the HAND BONE's own axes, and a hand
+ * bone points wherever the skeleton says — nowhere near screen left/right/up/down.
+ * So the left arrow moved the gun up, the up arrow moved it sideways, and so on.
+ * Reported as "the arrow keys are all reversed"; they were worse than reversed,
+ * they were scrambled, and differently per character.
+ *
+ * `worldDir` is a direction the viewer means — screen right, world up, into the
+ * screen — and it is converted into each hand's own frame here. Same key, same
+ * visible result, on every character.
+ */
+export function nudgeWeaponPosDir(charName: string | null, worldDir: THREE.Vector3, metres: number): void {
+  const targets = weaponWraps().filter((r) => charName === null || r.charName === charName);
+  if (!targets.length) { console.log('[weapon-pos] (no gun on the selected character)'); return; }
+  for (const reg of targets) {
+    reg.hand.getWorldQuaternion(_wq2).invert();
+    _dir.copy(worldDir).normalize().applyQuaternion(_wq2).multiplyScalar(metres);
+    const p = getPos(reg.charName, reg.weaponKey);
+    for (let i = 0; i < 3; i++) p[i] = Math.round((p[i] + _dir.getComponent(i)) * 1000) / 1000;
+    try { localStorage.setItem(posKey(reg.charName, reg.weaponKey), JSON.stringify(p)); } catch { /* ignore */ }
+    dirty.add(ck(reg.charName, reg.weaponKey));
+    applyWrapPos(reg);
+  }
+  const rep = targets[0]; const p = getPos(rep.charName, rep.weaponKey);
+  console.log('[gun-pos]', charName ?? 'ALL', 'grip now',
+    [rep.baseGrip[0] + p[0], rep.baseGrip[1] + p[1], rep.baseGrip[2] + p[2]].map((n) => Math.round(n * 1000) / 1000));
 }
 
 // Move the current weapon along a hand-local axis, for the SELECTED character (or ALL).

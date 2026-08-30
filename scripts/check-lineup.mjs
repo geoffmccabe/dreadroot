@@ -87,19 +87,44 @@ console.log('as loaded :');
 for (const g of asLoaded.guns.sort()) console.log('    ', g);
 for (const [k, v] of Object.entries(asLoaded.arms).sort()) console.log('    ', k, JSON.stringify(v));
 
+// DO THE ARROW KEYS MOVE THINGS THE WAY THEY LOOK? The offsets are stored along bone axes that
+// point wherever the skeleton says, so "left" moving the gun upward is exactly the failure to
+// catch. Right arrow must move it along the camera's right, up arrow along world up, and so on.
+const dirs = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  const gunPos = () => (window.__lineupWeaponSizes() || []).find((w) => w.char === 'Ash')?.world;
+  const step = async (key, n) => {
+    const a = gunPos();
+    for (let i = 0; i < n; i++) { fire(key); await wait(60); }
+    await wait(300);
+    const b = gunPos();
+    return a && b ? { dx: +(b[0]-a[0]).toFixed(3), dy: +(b[1]-a[1]).toFixed(3), dz: +(b[2]-a[2]).toFixed(3) } : null;
+  };
+  fire('1'); await wait(200);                       // target Ash only
+  const right = await step('ArrowRight', 10);
+  const left  = await step('ArrowLeft', 10);
+  const up    = await step('ArrowUp', 10);
+  const down  = await step('ArrowDown', 10);
+  const inn   = await step('.', 10);
+  const out   = await step(',', 10);
+  return { right, left, up, down, in: inn, out, camDir: window.__lineupCam ? window.__lineupCam() : null };
+});
+console.log('gun dirs  :', JSON.stringify(dirs, null, 1));
+
+// THE ELBOW SWIVEL.
 // THE ELBOW SWIVEL. A pole angle is only correct if it swings the elbow while leaving the hand
 // exactly where the IK put it — if the hand moves too, the rotation axis is wrong.
 const swivel = await page.evaluate(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
   const read = () => { const h = window.__lineupHands()['Ash']; return { hand: h.leftHand, elbow: h.leftElbow }; };
-  fire('>'); await wait(120);   // gun -> hand
-  fire('>'); await wait(120);   // hand -> elbow
+  fire("'"); await wait(250);                                            // gun -> arm
   const before = read();
-  for (let i = 0; i < 4; i++) { fire('ArrowRight'); await wait(90); }   // +20 degrees of swivel
+  for (let i = 0; i < 4; i++) { fire('>'); await wait(90); }             // 20 degrees of swivel
   await wait(400);
   const after = read();
-  const d = (p, q) => p && q ? +Math.hypot(p[0]-q[0], p[1]-q[1], p[2]-q[2]).toFixed(4) : null;
+  const d = (p, q) => (p && q ? Math.hypot(p[0]-q[0], p[1]-q[1], p[2]-q[2]) : null);
   return { handMovedCm: +(d(before.hand, after.hand) * 100).toFixed(2),
            elbowMovedCm: +(d(before.elbow, after.elbow) * 100).toFixed(2) };
 });

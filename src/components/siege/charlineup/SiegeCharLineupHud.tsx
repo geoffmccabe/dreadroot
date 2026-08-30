@@ -1,14 +1,14 @@
 // SiegeCharLineupHud — DOM readout for the character lineup (the in-canvas part is
 // SiegeCharacterLineup). Shows which animation is current, its 1-based number, and the M/N hint.
 // Only visible while the lineup is toggled on ("&&&").
-import { EDIT_MODES, LINEUP_CHARS, useCharLineup } from './siegeCharLineupState';
+import { LINEUP_CHARS, useCharLineup } from './siegeCharLineupState';
 
 export function SiegeCharLineupHud() {
-  const { enabled, animIndex, animNames, editMode, tuneCharIndex } = useCharLineup();
+  const { enabled, animIndex, animNames, editTarget, tuneCharIndex } = useCharLineup();
   if (!enabled) return null;
 
   const total = animNames.length;
-  const mode = EDIT_MODES.find((m) => m.key === editMode) ?? EDIT_MODES[0];
+  const arm = editTarget === 'arm';
   const who = tuneCharIndex < 0 ? 'ALL' : (LINEUP_CHARS[tuneCharIndex]?.name ?? 'ALL');
 
   const card: React.CSSProperties = {
@@ -29,15 +29,19 @@ export function SiegeCharLineupHud() {
           <span style={{ opacity: 0.7 }}>loading…</span>
         )}
       </div>
-      {/* WHAT THE ARROWS DO RIGHT NOW. Three posing tools share the arrow keys, and with no
-          readout a key acting on the wrong one looked exactly like a key that did nothing. */}
+      {/* WHAT THE ARROWS DO RIGHT NOW. Two tools share them, and without a readout a key acting
+          on the wrong one is indistinguishable from a key that does nothing. */}
       <div style={{ marginTop: 6, paddingTop: 5, borderTop: '1px solid hsla(200,70%,55%,0.25)' }}>
-        <b style={{ color: '#ffd479' }}>{mode.label}</b>
+        <span style={{ opacity: 0.55 }}>arrows move the </span>
+        <b style={{ color: arm ? '#ffd479' : '#8fd6ff' }}>{arm ? 'LEFT HAND' : 'GUN'}</b>
         <span style={{ opacity: 0.55 }}> on </span><b style={{ color: '#9be8a0' }}>{who}</b>
-        <div style={{ opacity: 0.75, fontSize: 11, marginTop: 1 }}>{mode.hint}</div>
-        <div style={{ opacity: 0.5, fontSize: 11, marginTop: 1 }}>&lt; &gt; change mode · 1-6 pick character (0 = all) · K aim at the gun to set the grip point · ! clear FK</div>
+        <span style={{ opacity: 0.55 }}> — ' to swap</span>
+        <div style={{ opacity: 0.75, fontSize: 11, marginTop: 1 }}>
+          &larr;&rarr; left/right · &uarr;&darr; up/down · . toward the character · , away
+          {arm ? ' · < > swing the elbow · 7 8 twist the wrist' : ''}
+        </div>
       </div>
-      <div style={{ opacity: 0.5, fontSize: 11, marginTop: 3 }}>M/N animation · ( ) weapon · - = size (_ + coarse) · Shift/Opt+XYZ rotate · [ ] spread · {'{'} {'}'} shoulders · \ export · &amp;&amp;&amp; hide</div>
+      <div style={{ opacity: 0.5, fontSize: 11, marginTop: 3 }}>1-6 character (0 = all) · M/N animation · ( ) weapon · - = size (_ + coarse) · Shift/Opt+XYZ rotate · [ ] hands apart · {'{'} {'}'} shoulders · K set grip · \\ export</div>
     </div>
   );
 }
