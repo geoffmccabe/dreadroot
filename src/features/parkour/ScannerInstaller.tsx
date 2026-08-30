@@ -7,10 +7,12 @@ import { useEffect } from 'react';
 import { getActiveGame } from '@/config/activeGame';
 import { gameUsesVoxels } from '@/config/gameRegistry';
 import { installScanner, setScanner } from './index';
+import { installParkourDebug } from './debugProbe';
 
 export function ScannerInstaller(): null {
   useEffect(() => {
     installScanner(gameUsesVoxels(getActiveGame()));
+    installParkourDebug();
     return () => setScanner(null);
   }, []);
   return null;

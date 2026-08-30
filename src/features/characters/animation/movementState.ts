@@ -29,12 +29,24 @@ export interface MoveInput {
   gliding: boolean;
   /** jet-boost / air-jump burn active */
   boosting: boolean;
+  /** Metres from the feet to the ground below. Undefined when unknown, which
+   *  falls back to the old behaviour rather than guessing. */
+  dropToGround?: number;
 }
 
 /** Upward speed that counts as a real jump rather than a bump. */
 export const JUMP_VY = 3.0;
 /** Off the ground for less than this is a stumble, not a fall. */
 export const COYOTE_MS = 140;
+/**
+ * A drop shorter than this keeps the walk/run pose instead of the free-fall one.
+ *
+ * Hopping off a single block and falling off a tower are indistinguishable from
+ * vertical speed alone — gravity does not know how far there is to go — so the
+ * character used to throw a full free-fall pose over a 1m step, which reads as
+ * panic. Two blocks is the point where a drop is worth reacting to.
+ */
+export const FALL_MIN_DROP = 2.0;
 
 /**
  * Tracks whether the body is meaningfully airborne.
@@ -74,7 +86,14 @@ export function pickMovementState(i: MoveInput, airborne: boolean): MoveState {
   // Jet-boost holds a neutral airborne pose rather than a jump: the air-jump
   // has no launch crouch and the flames already say what is happening.
   if (i.boosting) return 'fall';
-  if (airborne) return i.vy > 0 ? 'jump' : 'fall';
+  if (airborne) {
+    if (i.vy > 0) return 'jump';
+    // Falling, but only far enough to be worth showing. A short drop keeps
+    // whatever the legs were already doing, so stepping off a block looks like
+    // stepping off a block. Unknown distance falls through to 'fall' — the old
+    // behaviour — rather than guessing that the ground is close.
+    if (i.dropToGround === undefined || i.dropToGround >= FALL_MIN_DROP) return 'fall';
+  }
   if (i.mf > 0) return i.run ? 'runF' : 'walkF';   // forward beats strafe
   if (i.mf < 0) return 'walkB';
   if (i.mr < 0) return i.run ? 'runL' : 'strafeL';

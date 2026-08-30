@@ -21,6 +21,7 @@ import { remotePlayerBuffer, type SampledTransform } from '@/features/netcode/tr
 import { frameLoop } from '@/lib/frameLoop';
 import { CharacterAvatar } from '@/features/characters/animation/CharacterAvatar';
 import type { MoveInput } from '@/features/characters/animation/movementState';
+import { dropToGround } from '@/features/parkour';
 
 interface MultiplayerPlayersProps {
   players: Map<string, PlayerState>;
@@ -74,6 +75,13 @@ function OtherPlayer({ player }: { player: PlayerState }) {
       // Jet-boost is a visual on the owner's client (boot flames) and only
       // changes the airborne pose, so it is not worth a wire field.
       boosting: false,
+      // Measured locally from their published position rather than sent: the
+      // world is the same on every client, so this costs nothing on the wire
+      // and keeps remote players from free-falling over a one-block step the
+      // way the local player used to.
+      dropToGround: p.grounded !== false
+        ? 0
+        : dropToGround(p.position.x, p.position.y - EYE_HEIGHT, p.position.z),
     };
   }, []);
 

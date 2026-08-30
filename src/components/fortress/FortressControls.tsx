@@ -58,7 +58,7 @@ import { dlog } from '@/lib/debugLog';
 import { SW_BASE_WALK, SW_BASE_RUN } from '@/features/characters/dreadrootCharacters';
 import { getSelectedCharacterSpeedScale } from '@/features/characters/characterSelection';
 import { triggerAction } from '@/features/characters/animation/characterActions';
-import { useParkour } from '@/features/parkour';
+import { useParkour, publishPlayerFeet } from '@/features/parkour';
 import { applyThirdPerson } from '@/features/camera/cameraClearance';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
@@ -3175,6 +3175,14 @@ export function FirstPersonControls({
         }
         return;   // skip all movement + collision this frame
       } else {
+        // Publish the exact position a parkour attempt would measure from, EVERY
+        // frame — not only on a jump. The question the console probe answers is
+        // "what does it see while I am standing right here", and a position that
+        // only updates on a keypress cannot answer it.
+        publishPlayerFeet(
+          camera.position.x, camera.position.y - playerHeight, camera.position.z,
+          -Math.sin(yaw.current), -Math.cos(yaw.current),
+        );
         // Normal ground-based jump logic. coyoteGrounded (not the raw flag) so a bump/downhill frame
         // never eats the jump — the press reliably jumps instead of being read as an airborne boost.
         const canJump = coyoteGrounded && !keys.current.ctrl;

@@ -74,7 +74,8 @@
     "check:pathfind-throttle": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-pathfind-throttle.ts",
     "check:edge-culling": "node --experimental-strip-types --loader ./scripts/ts-alias-loader.mjs scripts/check-edge-culling.ts",
     "check:boot": "node scripts/check-boot.mjs",
-    "check:lineup": "node scripts/check-lineup.mjs"
+    "check:lineup": "node scripts/check-lineup.mjs",
+    "check:parkour": "node scripts/check-parkour.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

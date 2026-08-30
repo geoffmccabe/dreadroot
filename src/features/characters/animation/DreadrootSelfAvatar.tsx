@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { dropToGround, getPlayerFeet } from '@/features/parkour';
 import { playerState } from '@/components/siege/playerState';
 import { useTPDist } from '@/components/siege/siegeThirdPerson';
 import { useActiveWeapon } from '@/config/activeWeapon';
@@ -92,12 +93,24 @@ export const DreadrootSelfAvatar: React.FC = () => {
     return () => { store.listeners.delete(l); };
   }, [character]);
 
+  /** The drop under the feet, measured from the position the controller
+   *  publishes — the same one parkour measures from, so the animation and the
+   *  physics cannot disagree about where the ground is. */
+  const dropBelowFeet = useCallback(() => {
+    const f = getPlayerFeet();
+    return f.known ? dropToGround(f.x, f.y, f.z) : Infinity;
+  }, []);
+
   const getInput = useCallback((): MoveInput => ({
     mf: playerState.mf, mr: playerState.mr,
     run: playerState.run, grounded: playerState.grounded,
     vy: playerState.vy, gliding: playerState.gliding,
     boosting: playerState.boosting,
-  }), []);
+    // Measured, not inferred: a 1m hop and a 20m fall look the same from
+    // vertical speed alone, and only one of them deserves a free-fall pose.
+    // Skipped while grounded — the answer is 0 and the lookup is not free.
+    dropToGround: playerState.grounded ? 0 : dropBelowFeet(),
+  }), [dropBelowFeet]);
 
   /**
    * The controller publishes the EYE; the body stands on the ground below it —
