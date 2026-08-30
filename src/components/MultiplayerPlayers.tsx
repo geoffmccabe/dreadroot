@@ -63,6 +63,17 @@ function OtherPlayer({ player }: { player: PlayerState }) {
     return (ok ? sample.current.yaw : p.rotation.yaw) + Math.PI;
   }, []);
 
+  /** Throttled drop measurement — see the note at its call site. */
+  const dropCache = useRef({ at: 0, value: Infinity });
+  const cachedDrop = useCallback((p: PlayerState) => {
+    const now = performance.now();
+    if (now - dropCache.current.at >= 120) {
+      dropCache.current.at = now;
+      dropCache.current.value = dropToGround(p.position.x, p.position.y - EYE_HEIGHT, p.position.z);
+    }
+    return dropCache.current.value;
+  }, []);
+
   const getInput = useCallback((): MoveInput => {
     const p = latest.current;
     return {
@@ -79,11 +90,14 @@ function OtherPlayer({ player }: { player: PlayerState }) {
       // world is the same on every client, so this costs nothing on the wire
       // and keeps remote players from free-falling over a one-block step the
       // way the local player used to.
-      dropToGround: p.grounded !== false
-        ? 0
-        : dropToGround(p.position.x, p.position.y - EYE_HEIGHT, p.position.z),
+      //
+      // CACHED. This walks the collision grid, and running it per player per
+      // frame is a cost that scales with the player count — the target here is
+      // 20-200 of them. A drop only has to be right to within a fraction of a
+      // second for an animation choice.
+      dropToGround: p.grounded !== false ? 0 : cachedDrop(p),
     };
-  }, []);
+  }, [cachedDrop]);
 
   const namePos = useMemo<[number, number, number]>(() => [0, NAME_HEIGHT, 0], []);
 

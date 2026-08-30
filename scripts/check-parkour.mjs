@@ -34,7 +34,7 @@ page.on('pageerror', (e) => errors.push(String(e.message || e)));
 
 await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 for (let i = 0; i < 20; i++) {
-  const btn = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
+  const btn = page.getByRole('button', { name: /START GAME|LOGIN|PLAY WITHOUT ACCT/i }).first();
   if (await btn.count().catch(() => 0)) { await btn.click({ timeout: 5000 }).catch(() => {}); break; }
   await sleep(500);
 }

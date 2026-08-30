@@ -29,6 +29,11 @@ import {
   revivalCount, type ActionId,
 } from './characterActions';
 import { setCharSnap, pushCharAnimEvent, type CharSnap } from '@/components/siege/charAnimDebug';
+
+/** How often to record a pose for the D-Flow readout. A human reads that panel
+ *  a few times a second; recording it every frame cost a collision-grid scan
+ *  and an object allocation 60 times a second for nothing. */
+const SNAP_INTERVAL_MS = 100;
 import { dropToGround, activeMoveLabel } from '@/features/parkour';
 
 export interface CharacterAvatarProps {
@@ -232,16 +237,23 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   /** An override action owns the whole body until this time. */
   const overrideUntil = useRef(0);
   const lastLoggedClip = useRef('(start)');
+  const lastSnapAt = useRef(0);
+
+  /** Action names, captured ONCE. `Object.entries` in the frame loop allocated
+   *  an array of ~94 pairs every frame for the local body — the exact object
+   *  churn this repo forbids in render loops. */
+  const actionNames = useMemo(() => Object.keys(actions), [actions]);
 
   /** Which clip is ACTUALLY playing with weight right now — including a
    *  one-shot override, which `current` does not track. '' means nothing is
    *  playing, which renders as the rest pose and is worth seeing as such. */
   const playing = (): string => {
     let best = ''; let bestW = 0.01;
-    for (const [name, a] of Object.entries(actions)) {
-      if (!a.isRunning()) continue;
+    for (let i = 0; i < actionNames.length; i++) {
+      const a = actions[actionNames[i]];
+      if (!a || !a.isRunning()) continue;
       const w = a.getEffectiveWeight();
-      if (w > bestW) { bestW = w; best = name; }
+      if (w > bestW) { bestW = w; best = actionNames[i]; }
     }
     return best;
   };
@@ -439,7 +451,8 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     // the character is doing came from someone watching the screen and typing
     // it out, which is how a mantle that was measuring correctly got chased for
     // three rounds as a scanner bug.
-    if (actor === LOCAL_ACTOR) {
+    if (actor === LOCAL_ACTOR && now - lastSnapAt.current >= SNAP_INTERVAL_MS) {
+      lastSnapAt.current = now;
       const feetY = pos.current.y;
       const drop = input.grounded ? 0 : dropToGround(pos.current.x, feetY, pos.current.z);
       const snap: CharSnap = {

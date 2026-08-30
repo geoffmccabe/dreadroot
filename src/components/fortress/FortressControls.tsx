@@ -972,7 +972,6 @@ export function FirstPersonControls({
         break;
       case 'Space':
         keys.current.space = false;
-        jumpLockedRef.current = false;   // a fresh press may jump again
         break;
       case 'ControlLeft':
         keys.current.ctrl = false;
@@ -3187,6 +3186,14 @@ export function FirstPersonControls({
         }
         return;   // skip all movement + collision this frame
       } else {
+        // RELEASE THE JUMP LOCK THE MOMENT SPACE IS NOT HELD. Checked here every
+        // frame rather than in the keyup handler: this file already documents
+        // that the browser stops delivering keyup when the canvas loses focus,
+        // so a lock cleared only on keyup can stick FOREVER — and a stuck lock
+        // means the player can never jump again. Self-healing beats correct-
+        // if-nothing-goes-wrong for anything that can disable core movement.
+        if (!keys.current.space) jumpLockedRef.current = false;
+
         // Publish the exact position a parkour attempt would measure from, EVERY
         // frame — not only on a jump. The question the console probe answers is
         // "what does it see while I am standing right here", and a position that

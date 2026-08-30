@@ -41,7 +41,7 @@ await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 // the dev hooks — and click START GAME whenever it is on screen.
 let booted = false;
 for (let i = 0; i < 180; i++) {
-  const btn = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
+  const btn = page.getByRole('button', { name: /START GAME|LOGIN|PLAY WITHOUT ACCT/i }).first();
   if (await btn.count().catch(() => 0)) await btn.click({ timeout: 3000 }).catch(() => {});
   if (await page.evaluate(() => typeof window.__parkourCourse === 'object'
     && typeof window.__perfTestControls === 'object').catch(() => false)) { booted = true; break; }
@@ -176,6 +176,63 @@ async function attempt(wall, { run, jump }) {
   };
 }
 
+/**
+ * CAN THE PLAYER STILL DO ORDINARY THINGS?
+ *
+ * The whole matrix passed while Geoff reported that movement was broken across
+ * the board, because every case here tested PARKOUR and none tested walking or
+ * jumping. The specific fault it missed: a lock set when a parkour move ends,
+ * cleared only on the space KEYUP — and this game already stops receiving
+ * keyup when the canvas loses focus, so one lost keyup killed jumping for good.
+ *
+ * So: walk, jump, then do a parkour move and jump AGAIN. A regression that
+ * disables core movement must fail here, not in Geoff's session.
+ */
+async function checkBasicMovement(wall) {
+  const feet = () => page.evaluate(() => window.__parkour().feet ?? null).catch(() => null);
+  const out = {};
+
+  // Walking moves you.
+  await reset(wall.yaw + Math.PI);   // face AWAY from the wall, into open floor
+  const a = await feet();
+  await page.keyboard.down('w'); await sleep(1200); await page.keyboard.up('w');
+  const b = await feet();
+  out.walked = +Math.hypot(b.x - a.x, b.z - a.z).toFixed(2);
+
+  // Jumping lifts you.
+  const jumpPeak = async () => {
+    await page.keyboard.down('Space');
+    let peak = 0;
+    for (let i = 0; i < 12; i++) { const f = await feet(); if (f) peak = Math.max(peak, f.y); await sleep(80); }
+    await page.keyboard.up('Space');
+    await sleep(900);
+    return +peak.toFixed(2);
+  };
+  out.jump1 = await jumpPeak();
+
+  // Now do a parkour move, then jump again. THIS is the one that matters.
+  await reset(wall.yaw);
+  await page.keyboard.down('w');
+  await page.waitForFunction(() => !!window.__parkour()?.reading, null, { timeout: 6000 }).catch(() => {});
+  await page.keyboard.down('Space');
+  await sleep(1600);
+  await page.keyboard.up('Space');
+  await page.keyboard.up('w');
+  await sleep(600);
+  out.parkourRan = await page.evaluate(() => /STARTED/.test(window.__parkour().lastAttempt || '')).catch(() => false);
+
+  await reset(wall.yaw + Math.PI);
+  out.jump2 = await jumpPeak();
+  return out;
+}
+
+const basic = await checkBasicMovement(course.walls[1]);
+console.log('\n=== BASIC MOVEMENT ===');
+console.log(`  walked ${basic.walked}m in 1.2s   jump before parkour: ${basic.jump1}m` +
+            `   parkour ran: ${basic.parkourRan}   jump AFTER parkour: ${basic.jump2}m`);
+const movementBroken = basic.walked < 1 || basic.jump1 < 0.8 || basic.jump2 < 0.8;
+if (movementBroken) console.log('  *** CORE MOVEMENT REGRESSION — walking or jumping stopped working ***');
+
 const results = [];
 for (const wall of course.walls) {
   for (const run of [false, true]) {
@@ -204,6 +261,7 @@ console.log(`\npage errors: ${errors.length}`);
 errors.slice(0, 3).forEach((e) => console.log('  ', e));
 const noMove = results.filter((r) => !r.moves.length);
 console.log(`\ncases with NO parkour move: ${noMove.length}/16 — ${noMove.map((r) => r.label).join('; ') || 'none'}`);
+if (movementBroken) console.log('\nCORE MOVEMENT IS BROKEN — fix that before reading the parkour table.');
 console.log(bad.length
   ? `\nRESULT: ${bad.length} case(s) look wrong — ${bad.map((r) => r.label + (r.restPose ? ' (REST POSE)' : ` (+${r.overshoot}m over)`)).join('; ')}`
   : '\nRESULT: no rest poses, and every parkour move ended at the height of the wall it climbed.');
