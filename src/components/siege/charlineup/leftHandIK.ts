@@ -9,8 +9,10 @@ import * as THREE from 'three';
 
 const targets = new Map<string, THREE.Vector3 | null>();   // weaponKey → grip point in wrap-local
 const wrist = new Map<string, number>();                    // weaponKey → wrist twist (degrees)
+const swivel = new Map<string, number>();                   // weaponKey → elbow pole angle (degrees)
 const tKey = (w: string) => `siege_lefthand_pt::${w}`;
 const wKey = (w: string) => `siege_lefthand_wrist::${w}`;
+const sKey = (w: string) => `siege_lefthand_swivel::${w}`;
 
 export function getLeftTarget(weaponKey: string): THREE.Vector3 | null {
   if (!targets.has(weaponKey)) {
@@ -37,6 +39,50 @@ export function nudgeWrist(weaponKey: string, deg: number): void {
   const d = getWrist(weaponKey) + deg; wrist.set(weaponKey, d);
   try { localStorage.setItem(wKey(weaponKey), String(d)); } catch { /* ignore */ }
   console.log('[lefthand-wrist]', weaponKey, '→', Math.round(d) + '°');
+}
+
+/**
+ * ELBOW SWIVEL — the pole angle.
+ *
+ * THIS IS THE THING THAT WAS MISSING, and it is why arms came out bent the wrong
+ * way on weapons like the Rocket Launcher. A two-bone solve fixes the shoulder and
+ * elbow ANGLES, but not which way the elbow points: the whole arm can rotate freely
+ * about the shoulder-to-hand axis with the hand staying exactly where it is. Some
+ * value has to choose that rotation. The solver below inherited it from the
+ * animation clip's own pose, which is fine while the target is near where the clip
+ * put the hand and produces an elbow through the ribcage when it is not.
+ *
+ * Every mainstream rig exposes this as a control: Blender calls it the IK
+ * constraint's Pole Target and Pole Angle, Unity's Animator IK calls it
+ * SetIKHintPosition(AvatarIKHint.LeftElbow), Unreal's TwoBoneIK node calls it the
+ * Joint Target. Same idea in each — pick the plane the limb bends in.
+ *
+ * Per weapon rather than per character: the grip point is the same spot on the same
+ * model for everyone, so the elbow wants to go the same way for everyone.
+ */
+export function getSwivel(weaponKey: string, fallback = 0): number {
+  if (!swivel.has(weaponKey)) {
+    let d = fallback;
+    try { const s = typeof localStorage !== 'undefined' && localStorage.getItem(sKey(weaponKey)); if (s) { const n = parseFloat(s); if (isFinite(n)) d = n; } } catch { /* fallback */ }
+    swivel.set(weaponKey, d);
+  }
+  return swivel.get(weaponKey) ?? fallback;
+}
+export function nudgeSwivel(weaponKey: string, deg: number): void {
+  const d = getSwivel(weaponKey) + deg; swivel.set(weaponKey, d);
+  try { localStorage.setItem(sKey(weaponKey), String(d)); } catch { /* ignore */ }
+  console.log('[lefthand-swivel]', weaponKey, '→', Math.round(d) + '° (elbow direction)');
+}
+
+/** Move the captured grip point along one axis of the gun's own frame, in metres.
+ *  Without this the target could only be set by a raycast, so it could be placed
+ *  but never adjusted — and a grip point is exactly the kind of thing you want to
+ *  creep a centimetre at a time. */
+export function nudgeLeftTarget(weaponKey: string, axis: 0 | 1 | 2, delta: number): void {
+  const cur = getLeftTarget(weaponKey);
+  const v = cur ? cur.clone() : new THREE.Vector3();
+  v.setComponent(axis, v.getComponent(axis) + delta);
+  setLeftTarget(weaponKey, v);
 }
 
 // Left-arm bone chain of a mixamorig character (sanitized names have no colon).
@@ -72,7 +118,22 @@ function rotateBoneWorld(bone: THREE.Object3D, axis: THREE.Vector3, angle: numbe
 // Two-bone IK: bend shoulder (arm) + elbow (fore) so the hand reaches targetWorld, then roll the wrist.
 // Iterated a few times so it converges even when the target is far from the animation's hand pose (a
 // single pass under-reaches on far targets like a long gun's foregrip).
-export function solveArmIK(arm: THREE.Object3D, fore: THREE.Object3D, hand: THREE.Object3D, targetWorld: THREE.Vector3, wristTwistDeg: number): void {
+const warned = new Set<string>();
+/** Warn ONCE if a grip point is beyond the arm's reach. The solver clamps rather than breaking, so
+ *  an out-of-reach target quietly produces a straight arm aimed off into space — which looks like a
+ *  broken rig rather than like bad data, and is worth naming. */
+export function checkReach(arm: THREE.Object3D, fore: THREE.Object3D, hand: THREE.Object3D, targetWorld: THREE.Vector3, label: string): void {
+  if (warned.has(label)) return;
+  arm.getWorldPosition(_pA); fore.getWorldPosition(_pB); hand.getWorldPosition(_pC);
+  const reach = _pA.distanceTo(_pB) + _pB.distanceTo(_pC);
+  const need = _pA.distanceTo(targetWorld);
+  if (need > reach * 1.02) {
+    warned.add(label);
+    console.warn(`[lefthand] ${label}: grip point is ${need.toFixed(2)}m from the shoulder but the arm only reaches ${reach.toFixed(2)}m — the arm will stretch straight at it. Re-capture with K, or nudge it in LEFT HAND mode.`);
+  }
+}
+
+export function solveArmIK(arm: THREE.Object3D, fore: THREE.Object3D, hand: THREE.Object3D, targetWorld: THREE.Vector3, wristTwistDeg: number, swivelDeg = 0): void {
   for (let iter = 0; iter < 4; iter++) {
     arm.getWorldPosition(_pA); fore.getWorldPosition(_pB); hand.getWorldPosition(_pC);
     const lAB = _pA.distanceTo(_pB), lBC = _pB.distanceTo(_pC);
@@ -100,6 +161,14 @@ export function solveArmIK(arm: THREE.Object3D, fore: THREE.Object3D, hand: THRE
       arm.parent!.getWorldQuaternion(_pq); arm.quaternion.copy(_pq.invert().multiply(_wq)); arm.updateMatrixWorld(true);
     }
   }
+  // Elbow swivel (pole). Rotating the SHOULDER about the shoulder-to-hand axis leaves the hand
+  // exactly where it is — it lies on that axis — while swinging the elbow around it. So this
+  // chooses the bend plane without disturbing the solve above, which is why it goes last.
+  if (swivelDeg) {
+    arm.getWorldPosition(_pA); hand.getWorldPosition(_pC);
+    _axis.copy(_pC).sub(_pA);
+    if (_axis.lengthSq() > 1e-8) { _axis.normalize(); rotateBoneWorld(arm, _axis, swivelDeg * Math.PI / 180); }
+  }
   // wrist twist: roll the hand about the forearm axis to wrap the grip
   if (wristTwistDeg) {
     hand.getWorldPosition(_pC); fore.getWorldPosition(_pB);
@@ -112,7 +181,7 @@ export function leftHandExportLines(): string[] {
   const out: string[] = [];
   for (const [weaponKey, v] of targets) {
     if (!v) continue;
-    out.push(`  ${weaponKey} leftHand: point=[${[v.x, v.y, v.z].map((n) => +n.toFixed(3)).join(', ')}] wrist=${Math.round(getWrist(weaponKey))}`);
+    out.push(`  ${weaponKey} leftHand: point=[${[v.x, v.y, v.z].map((n) => +n.toFixed(3)).join(', ')}] wrist=${Math.round(getWrist(weaponKey))} swivel=${Math.round(getSwivel(weaponKey))}`);
   }
   return out;
 }

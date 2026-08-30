@@ -61,6 +61,19 @@ export function applyArmFK(bones: { arm: THREE.Object3D; fore: THREE.Object3D; h
   }
 }
 
+/** Drop every manual offset for this character+weapon (or all characters) so the IK hand target
+ *  drives the arm again. hasArmFK() gates IK off entirely, so a single stray nudge would otherwise
+ *  disable the hand target permanently with no way back short of clearing localStorage by hand. */
+export function clearArmFK(charName: string | null, weaponKey: string, allChars: string[]): void {
+  const targets = charName === null ? allChars : [charName];
+  for (const c of targets) {
+    store.set(ck(c, weaponKey), blank());
+    dirty.delete(ck(c, weaponKey));
+    try { localStorage.removeItem(lsKey(c, weaponKey)); } catch { /* ignore */ }
+  }
+  console.log('[arm-fk] cleared', charName ?? 'ALL', weaponKey, '— the IK hand target drives the arm now');
+}
+
 // Lines for the '\' export (per adjusted character+weapon).
 export function armFKExportLines(): string[] {
   const out: string[] = [];

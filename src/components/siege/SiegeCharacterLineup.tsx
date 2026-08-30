@@ -16,9 +16,9 @@ import {
   LINEUP_CHARS, ANIM_LIBRARY, RIFLE_LIBRARY, LOCO_LIBRARY, PISTOL_LIBRARY, CHAR_ASSET_VERSION, useCharLineup, getCharLineupEnabled,
   toggleCharLineup, cycleCharAnim, setCharAnimNames, setCharAnchor, triggerFlight,
   getFlightSeq, getFlightMode, triggerParkour, getParkourSeq, cycleWeapon, getTuneCharIndex, setTuneCharIndex,
-  getArmJoint, cycleArmJoint, setCharAnimByName, setCharAnimIndex, setWeaponIndex,
+  getArmJoint, getEditMode, cycleEditMode, EDIT_MODES, setCharAnimByName, setCharAnimIndex, setWeaponIndex,
 } from './charlineup/siegeCharLineupState';
-import { getArmFK, hasArmFK, nudgeArmFK, applyArmFK, ARM_JOINTS } from './charlineup/armFK';
+import { getArmFK, hasArmFK, nudgeArmFK, applyArmFK, clearArmFK } from './charlineup/armFK';
 import { AnimFSM } from './charlineup/animFSM';
 import { FLIGHT_GRAPH } from './charlineup/flightGraph';
 import { AshCigaretteFx } from './charadmin/AshCigaretteFx';
@@ -27,7 +27,7 @@ import { HELD_WEAPONS } from './charlineup/weaponModels';
 import { LineupWeapon } from './charlineup/LineupWeapon';
 import { WeaponEditBridge } from './charlineup/WeaponEditBridge';
 import { rotateWeaponLocal, bumpWeaponSize, exportTuning, nudgeWeaponPos, weaponWraps } from './charlineup/weaponEditRegistry';
-import { setLeftTarget, nudgeWrist, findLeftArm, getLeftTarget, getWrist, solveArmIK } from './charlineup/leftHandIK';
+import { setLeftTarget, nudgeWrist, nudgeSwivel, nudgeLeftTarget, findLeftArm, getLeftTarget, getWrist, getSwivel, solveArmIK, checkReach } from './charlineup/leftHandIK';
 import { cycleAtlas } from './charlineup/weaponAtlas';
 import { findUpperArms, applyArmPose, getPose, nudgePose, registerArmRoot } from './charlineup/armSpread';
 import { chooseMove } from '@/features/parkour';
@@ -218,7 +218,8 @@ function LineupChar({ file, charName, x, z, yaw, fallbackY, scale, minY, heightM
         if (tgt && reg) {
           g.updateWorldMatrix(true, true);
           _ikTarget.copy(tgt); reg.wrap.localToWorld(_ikTarget);
-          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0));
+          checkReach(b.arm, b.fore, b.hand, _ikTarget, `${charName} ${weapon.name}`);
+          solveArmIK(b.arm, b.fore, b.hand, _ikTarget, getWrist(weapon.url, weapon.leftHand?.wrist ?? 0), getSwivel(weapon.url));
         }
       }
     }
@@ -318,13 +319,31 @@ export function SiegeCharacterLineup() {
     const tuneTarget = () => { const i = getTuneCharIndex(); return i < 0 ? null : LINEUP_CHARS[i]?.name ?? null; };
     const ARM_STEP = 3;   // degrees per arrow tap when a left-arm joint is active
     // Arrows/,. route to the ACTIVE left-arm joint (FK) when one is selected, else move the gun.
+    const AXIS_I = { x: 0, y: 1, z: 2 } as const;
     const armK = (axis: 0 | 1 | 2, deg: number, posAxis: 'x' | 'y' | 'z', pos: number) => {
-      const jointOn = getArmJoint();
       const url = gunRef.current?.url;
-      if (jointOn >= 0 && url) nudgeArmFK(tuneTarget(), url, jointOn, axis, deg, CHAR_NAMES);
-      else nudgeWeaponPos(tuneTarget(), posAxis, pos);
+      const mode = getEditMode();
+      if (mode === 'gun' || !url) { nudgeWeaponPos(tuneTarget(), posAxis, pos); return; }
+      if (mode === 'hand') { nudgeLeftTarget(url, AXIS_I[posAxis], pos); return; }
+      if (mode === 'elbow') {
+        // Only one degree of freedom here: which way round the elbow points. Left/right swing it;
+        // up/down and depth have nothing to drive, so they are deliberately inert rather than
+        // quietly doing something else.
+        if (posAxis === 'x') nudgeSwivel(url, pos > 0 ? SWIVEL_STEP : -SWIVEL_STEP);
+        return;
+      }
+      const jointOn = getArmJoint();
+      if (jointOn >= 0) nudgeArmFK(tuneTarget(), url, jointOn, axis, deg, CHAR_NAMES);
     };
-    const logJoint = () => { const aj = getArmJoint(); console.log('[arm-fk] joint →', aj < 0 ? 'OFF (arrows move the gun)' : `${ARM_JOINTS[aj]} — arrows = X/Y, ,/. = Z`); };
+    const SWIVEL_STEP = 5;   // degrees of elbow swing per tap
+    const logMode = () => {
+      const m = EDIT_MODES.find((x) => x.key === getEditMode())!;
+      console.log(`[lineup] EDIT MODE → ${m.label} — ${m.hint}`);
+      if ((getEditMode() === 'hand' || getEditMode() === 'elbow')
+          && hasArmFK(tuneTarget() ?? CHAR_NAMES[0], gunRef.current?.url ?? '')) {
+        console.warn('[lineup] this character+weapon has manual FK offsets, which OVERRIDE the IK — press ! to clear them and let the hand target drive the arm');
+      }
+    };
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // never hijack typing (covers <select> + contentEditable)
       if (e.key === '&') {
@@ -365,8 +384,14 @@ export function SiegeCharacterLineup() {
       // arrows + ,/. rotate THAT joint on its 3 local axes; otherwise they move the gun as before.
       // The left-arm FK joint cycler moved off { } (now shoulder pitch) onto < >, which came free
       // when keyboard world switching was removed.
-      else if (e.key === '<') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint(-1); logJoint(); }
-      else if (e.key === '>') { e.preventDefault(); e.stopImmediatePropagation(); cycleArmJoint( 1); logJoint(); }
+      else if (e.key === '<') { e.preventDefault(); e.stopImmediatePropagation(); cycleEditMode(-1); logMode(); }
+      else if (e.key === '>') { e.preventDefault(); e.stopImmediatePropagation(); cycleEditMode( 1); logMode(); }
+      // ! drops the manual FK offsets for this character+weapon, so the IK hand target takes over
+      // again. Without it, one stray FK nudge silently disables the IK forever.
+      else if (e.key === '!') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        clearArmFK(tuneTarget(), gunRef.current?.url ?? '', CHAR_NAMES);
+      }
       else if (e.key === 'ArrowLeft')  { e.preventDefault(); e.stopImmediatePropagation(); armK(0, -ARM_STEP, 'x', -POS); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); armK(0,  ARM_STEP, 'x',  POS); }
       else if (e.key === 'ArrowUp')    { e.preventDefault(); e.stopImmediatePropagation(); armK(1,  ARM_STEP, 'y',  POS); }

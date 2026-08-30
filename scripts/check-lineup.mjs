@@ -87,6 +87,24 @@ console.log('as loaded :');
 for (const g of asLoaded.guns.sort()) console.log('    ', g);
 for (const [k, v] of Object.entries(asLoaded.arms).sort()) console.log('    ', k, JSON.stringify(v));
 
+// THE ELBOW SWIVEL. A pole angle is only correct if it swings the elbow while leaving the hand
+// exactly where the IK put it — if the hand moves too, the rotation axis is wrong.
+const swivel = await page.evaluate(async () => {
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const fire = (key) => window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  const read = () => { const h = window.__lineupHands()['Ash']; return { hand: h.leftHand, elbow: h.leftElbow }; };
+  fire('>'); await wait(120);   // gun -> hand
+  fire('>'); await wait(120);   // hand -> elbow
+  const before = read();
+  for (let i = 0; i < 4; i++) { fire('ArrowRight'); await wait(90); }   // +20 degrees of swivel
+  await wait(400);
+  const after = read();
+  const d = (p, q) => p && q ? +Math.hypot(p[0]-q[0], p[1]-q[1], p[2]-q[2]).toFixed(4) : null;
+  return { handMovedCm: +(d(before.hand, after.hand) * 100).toFixed(2),
+           elbowMovedCm: +(d(before.elbow, after.elbow) * 100).toFixed(2) };
+});
+console.log('swivel    :', JSON.stringify(swivel));
+
 // Do ( and ) step the weapon list both ways?
 const cycle = await page.evaluate(async () => {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));

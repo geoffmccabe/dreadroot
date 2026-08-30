@@ -99,11 +99,35 @@ let tuneCharIndex = 4;
 export const getTuneCharIndex = (): number => tuneCharIndex;
 export function setTuneCharIndex(i: number): void { tuneCharIndex = i; emit(); }
 
-// Left-arm FK poser: which joint is being adjusted. -1 = off (arrows move the gun); 0/1/2 =
-// shoulder / elbow / wrist. { } cycle it (wrapping through 'off').
-let armJoint = -1;
-export const getArmJoint = (): number => armJoint;
-export function cycleArmJoint(dir: number): void { armJoint = (((armJoint + 1) + dir + 4) % 4) - 1; emit(); }
+/**
+ * WHAT THE ARROW KEYS DRIVE.
+ *
+ * The lineup grew three separate posing tools — gun placement, an IK hand target,
+ * and a per-joint FK poser — that all wanted the same four arrow keys, and which
+ * one was live was tracked by a bare -1..2 integer with no readout anywhere. So a
+ * key that did the right thing to the wrong system was indistinguishable from a
+ * key that did nothing. One named mode list, cycled with < and >, shown in the HUD.
+ */
+export const EDIT_MODES = [
+  { key: 'gun',      label: 'GUN POSITION',   hint: 'arrows move the gun · , . depth' },
+  { key: 'hand',     label: 'LEFT HAND (IK)', hint: 'arrows move the grip point · , . depth' },
+  { key: 'elbow',    label: 'ELBOW SWIVEL',   hint: 'left/right swing the elbow around' },
+  { key: 'shoulder', label: 'SHOULDER (FK)',  hint: 'arrows rotate X/Y · , . rotate Z' },
+  { key: 'forearm',  label: 'FOREARM (FK)',   hint: 'arrows rotate X/Y · , . rotate Z' },
+  { key: 'wristfk',  label: 'WRIST (FK)',     hint: 'arrows rotate X/Y · , . rotate Z' },
+] as const;
+export type EditModeKey = typeof EDIT_MODES[number]['key'];
+
+let editMode = 0;
+export const getEditMode = (): EditModeKey => EDIT_MODES[editMode].key;
+export function cycleEditMode(dir: number): void {
+  editMode = (editMode + dir + EDIT_MODES.length) % EDIT_MODES.length;
+  emit();
+}
+/** The FK joint index the arrows drive, or -1 when the current mode is not an FK one.
+ *  Kept so armFK's existing per-joint storage needs no change. */
+export const getArmJoint = (): number =>
+  ({ shoulder: 0, forearm: 1, wristfk: 2 } as Record<string, number>)[getEditMode()] ?? -1;
 
 // Dev introspection for scripts/check-lineup.mjs. The lineup is keyboard-only and lives inside the
 // Canvas, so there is no other way for an automated check to answer "what is it actually holding?" —
@@ -118,7 +142,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number } {
+export function useCharLineup(): { enabled: boolean; animIndex: number; animNames: string[]; anchor: LineupAnchor | null; parkourSeq: number; weaponIndex: number; tuneCharIndex: number; armJoint: number; editMode: EditModeKey } {
   useSyncExternalStore((cb) => { subs.add(cb); return () => subs.delete(cb); }, () => version, () => version);
-  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex, armJoint };
+  return { enabled, animIndex, animNames, anchor, parkourSeq, weaponIndex, tuneCharIndex, armJoint: getArmJoint(), editMode: getEditMode() };
 }

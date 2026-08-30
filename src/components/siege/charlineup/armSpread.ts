@@ -153,7 +153,14 @@ if (typeof window !== 'undefined') {
       if (!lh || !rh) { out[name] = 'hands not found'; continue; }
       (lh as THREE.Object3D).getWorldPosition(a);
       (rh as THREE.Object3D).getWorldPosition(b);
-      out[name] = { gapCm: +(a.distanceTo(b) * 100).toFixed(1), leftY: +a.y.toFixed(3), pose: getPose(name) };
+      let le: THREE.Object3D | null = null;
+      root.traverse((o) => { if (o.name.endsWith('LeftForeArm')) le = o; });
+      const e = new THREE.Vector3();
+      if (le) (le as THREE.Object3D).getWorldPosition(e);
+      out[name] = { gapCm: +(a.distanceTo(b) * 100).toFixed(1), leftY: +a.y.toFixed(3),
+        leftHand: [+a.x.toFixed(3), +a.y.toFixed(3), +a.z.toFixed(3)],
+        leftElbow: le ? [+e.x.toFixed(3), +e.y.toFixed(3), +e.z.toFixed(3)] : null,
+        pose: getPose(name) };
     }
     return out;
   };
