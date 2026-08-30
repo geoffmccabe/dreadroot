@@ -13,7 +13,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile');
+const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile-lineup');
 const URL_ = process.env.CHECK_URL ?? 'http://localhost:8080/?perftest';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

@@ -72,13 +72,36 @@ export function ProceduralGround({
     grassTexture.needsUpdate = true;
   }, [grassTexture]);
 
-  const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
+  /**
+   * A FLAT TOP FACE, not a cube.
+   *
+   * This was a BoxGeometry — twelve triangles per instance — and it was 24% of every
+   * triangle in the scene (379K of 1.58M, measured). Eleven of those twelve are
+   * bottom and side faces that NOTHING can ever see: the ground sits at one fixed
+   * height everywhere (SURFACE_Y, top surface at y=0), tiles butt flush against
+   * their neighbours, and it runs to the horizon. There is no angle from which a
+   * side face is exposed.
+   *
+   * Two triangles instead of twelve — a 6x cut on a quarter of the scene's geometry,
+   * with nothing to see differently. The plane is rotated into the XZ plane in the
+   * geometry itself, so the existing per-instance scale (CHUNK_SIZE, 1, CHUNK_SIZE)
+   * keeps working unchanged and the texture maps exactly as the box's top face did.
+   */
+  const geometry = useMemo(() => {
+    const g = new THREE.PlaneGeometry(1, 1);
+    g.rotateX(-Math.PI / 2);   // face up
+    return g;
+  }, []);
 
   const material = useMemo(() => {
     return new THREE.MeshStandardMaterial({
       map: grassTexture,
       roughness: 1,
       metalness: 0,
+      // The old cube was visible from underneath (you saw its bottom face). A single
+      // plane would vanish when flown under in god mode, so keep it drawn both ways.
+      // Costs nothing here: the profile says this is triangle-bound, not fill-bound.
+      side: THREE.DoubleSide,
     });
   }, [grassTexture]);
 
@@ -153,7 +176,7 @@ export function ProceduralGround({
 
             if (instanceIdx >= MAX_NEAR_INSTANCES) break;
 
-            temp.position.set(worldX + 0.5, SURFACE_Y + 0.5, worldZ + 0.5);
+            temp.position.set(worldX + 0.5, SURFACE_Y + 1, worldZ + 0.5);   // plane sits AT the surface
             temp.scale.set(1, 1, 1);
             temp.updateMatrix();
             mesh.setMatrixAt(instanceIdx, temp.matrix);
@@ -204,7 +227,7 @@ export function ProceduralGround({
         // Place one large block at chunk center, scaled to cover entire chunk
         temp.position.set(
           baseX + CHUNK_SIZE / 2,
-          SURFACE_Y + 0.5,
+          SURFACE_Y + 1,          // plane sits AT the surface, not at a cube's centre
           baseZ + CHUNK_SIZE / 2
         );
         temp.scale.set(CHUNK_SIZE, 1, CHUNK_SIZE);

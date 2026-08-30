@@ -1229,3 +1229,4 @@ import type * as THREE from 'three';
 
 // Expose globally for console access
 (window as any).__d = diagnostics;
+

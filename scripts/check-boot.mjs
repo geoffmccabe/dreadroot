@@ -17,7 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile');
+const PROFILE = path.join(ROOT, '.perftest', 'chrome-profile-boot');
 const URL_ = process.env.CHECK_URL ?? 'http://localhost:8080/?perftest';
 const BUDGET_MS = Number(process.env.CHECK_MS ?? 90000);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
