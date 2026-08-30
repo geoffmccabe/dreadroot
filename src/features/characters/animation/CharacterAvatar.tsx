@@ -315,7 +315,12 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     if (prev) prev.fadeOut(0.08);
     current.current = '';
     a.fadeIn(0.08).play();
-    const dur = a.getClip().duration * 1000;
+    // DIVIDED BY timeScale. The lockout has to be how long the clip will
+    // actually take, not how long it was authored to take — a clip sped up to
+    // fit a 0.9s climb finishes in 0.9s, and holding locomotion down for its
+    // full authored length leaves the body with NOTHING playing. That is a
+    // T-pose, and it is exactly what appeared the moment clip scaling landed.
+    const dur = (a.getClip().duration / (a.timeScale || 1)) * 1000;
     if (ACTION_HOLDS[id]) held.current = true;
     else overrideUntil.current = performance.now() + dur;
   };

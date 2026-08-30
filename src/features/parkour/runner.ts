@@ -33,9 +33,16 @@ export const MAX_RISE = 3.5;
 export const MANTLE_MS = 900;
 /** A vault is a single committed movement — faster than pulling yourself up. */
 export const VAULT_MS = 520;
+/** Hopping onto a single block. Between a vault and a climb. */
+export const HOP_MS = 600;
 /** Clearance above the ledge before moving forward, so the feet do not scuff
  *  through the top block on the way over. */
 const LIFT_CLEARANCE = 0.15;
+/** At or below this rise, getting onto a ledge is a hop and not a climb. One
+ *  block is 1m, so this covers exactly the single-block case. */
+const HOP_MAX_RISE = 1.3;
+/** How far a hop arcs above the ledge it is landing on. */
+const HOP_ARC = 0.35;
 
 export interface ParkourRun {
   startedAt: number;
@@ -45,6 +52,18 @@ export interface ParkourRun {
   toX: number; toY: number; toZ: number;
   /** Which move this is — decides the arc and how long it takes. */
   move: 'mantle' | 'vaultLow' | 'vaultHigh';
+  /**
+   * How the body gets there.
+   *
+   * 'climb' hauls straight up the face and then forward, which is what a
+   * wall-height ledge needs. 'hop' arcs over in one motion.
+   *
+   * A ONE-BLOCK ledge must be a hop. Given the climb treatment it rises a
+   * metre in open air with a wall-climb clip playing against nothing, which is
+   * precisely the "it climbs the air" that keeps being reported — the geometry
+   * was right the whole time and the MOVE was wrong for the height.
+   */
+  style: 'climb' | 'hop';
   /** How high the body rises above the higher of the two ends, mid-move. A
    *  vault arcs OVER the obstacle; a mantle only needs to clear its own top. */
   peakY: number;
@@ -115,13 +134,15 @@ export function planMove(
     // than balanced on its edge, where the next collision step would push them
     // off.
     const over = reading.distance + 0.6;
+    const hop = choice.landY - footY <= HOP_MAX_RISE;
     return { move: 'mantle', refusedBecause: null, run: {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
       move: 'mantle',
-      peakY: reading.topY + LIFT_CLEARANCE,
-      durationMs: MANTLE_MS,
+      style: hop ? 'hop' : 'climb',
+      peakY: reading.topY + (hop ? HOP_ARC : LIFT_CLEARANCE),
+      durationMs: hop ? HOP_MS : MANTLE_MS,
     } };
   }
 
@@ -139,6 +160,7 @@ export function planMove(
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
       move: choice.move,
+      style: 'hop',
       // Clear the obstacle's top by a margin — the body swings over it, and
       // scuffing through the block it is vaulting is the tell that gives a
       // fake vault away.
@@ -174,7 +196,7 @@ export function runPosition(
     return false;
   }
 
-  if (run.move === 'mantle') {
+  if (run.style === 'climb') {
     // Up the face FIRST, then over the top. Doing both at once cuts the corner
     // and drags the body through the ledge.
     if (t < 0.55) {
@@ -190,7 +212,7 @@ export function runPosition(
     return true;
   }
 
-  // A VAULT is one continuous arc: forward at a steady rate the whole way,
+  // A HOP is one continuous arc: forward at a steady rate the whole way,
   // height following a parabola that peaks over the obstacle. Splitting it into
   // up-then-across would read as climbing, which is the move it is meant to be
   // faster and more fluid than.

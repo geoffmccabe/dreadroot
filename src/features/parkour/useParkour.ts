@@ -74,9 +74,12 @@ export function useParkour(): ParkourController {
         const started = tryStartMove(x, footY, z, fx, fz, running, now);
         if (!started) return null;
         run.current = started;
-        // Climbing onto it and clearing it are different animations.
+        // The CLIP follows the style, not the move name. Hauling yourself up a
+        // wall and hopping onto a single block are different animations, and
+        // playing the wall climb on a one-block ledge is what "it climbs the
+        // air" has been all along — there is nothing there to climb.
         return {
-          action: started.move === 'mantle' ? 'climb' : 'vault',
+          action: started.style === 'climb' ? 'climb' : 'vault',
           seconds: started.durationMs / 1000,
         };
       },
