@@ -33,19 +33,33 @@ export interface ParkourController {
   isActive(): boolean;
   /**
    * Start a move if the geometry allows one. Feet coordinates, not the camera.
-   * @returns the animation action to trigger, or null if nothing started.
+   * @returns the animation to trigger AND how long the move takes, or null if
+   *   nothing started. The DURATION matters: the clip has to be scaled to it,
+   *   or the body finishes the move and keeps climbing thin air.
    */
   tryStart(
     x: number, footY: number, z: number,
     fx: number, fz: number,
     running: boolean, now: number,
-  ): 'climb' | 'vault' | null;
+  ): { action: 'climb' | 'vault'; seconds: number } | null;
   /** Advance the running move. Only valid while `isActive()`. */
   advance(now: number): ParkourStep;
 }
 
+/**
+ * Quiet period after a move ends before another can start.
+ *
+ * The jump key is read as HELD, not as a press, and a mantle finishes by
+ * marking the player grounded — so the very next frame is eligible to start
+ * another one. Against a stack that chains climbs together into a single ride
+ * up the wall, which is what "it does 2-3 climb animations" was. A press should
+ * buy one move.
+ */
+const COOLDOWN_MS = 300;
+
 export function useParkour(): ParkourController {
   const run = useRef<ParkourRun | null>(null);
+  const endedAt = useRef(0);
   const pos = useRef({ x: 0, y: 0, z: 0 });
   const step = useRef<ParkourStep>({ x: 0, y: 0, z: 0, done: false, landsOnGround: false });
   const api = useRef<ParkourController>();
@@ -56,11 +70,15 @@ export function useParkour(): ParkourController {
 
       tryStart(x, footY, z, fx, fz, running, now) {
         if (run.current) return null;
+        if (now - endedAt.current < COOLDOWN_MS) return null;
         const started = tryStartMove(x, footY, z, fx, fz, running, now);
         if (!started) return null;
         run.current = started;
         // Climbing onto it and clearing it are different animations.
-        return started.move === 'mantle' ? 'climb' : 'vault';
+        return {
+          action: started.move === 'mantle' ? 'climb' : 'vault',
+          seconds: started.durationMs / 1000,
+        };
       },
 
       advance(now) {
@@ -71,7 +89,7 @@ export function useParkour(): ParkourController {
         s.x = pos.current.x; s.y = pos.current.y; s.z = pos.current.z;
         s.done = !stillRunning;
         s.landsOnGround = s.done && r.move === 'mantle';
-        if (s.done) run.current = null;
+        if (s.done) { run.current = null; endedAt.current = now; }
         return s;
       },
     };

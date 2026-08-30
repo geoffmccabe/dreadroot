@@ -3201,7 +3201,7 @@ export function FirstPersonControls({
               !!keys.current.shift,
               performance.now(),
             );
-            if (action) { triggerAction(action); velocity.current.y = 0; }
+            if (action) { triggerAction(action.action, undefined, action.seconds); velocity.current.y = 0; }
           }
           if (!parkour.isActive()) {
             const jumpHeight = 1.25;   // normal jump for everyone — no admin/superadmin super-jump

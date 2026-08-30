@@ -267,7 +267,7 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
   const pos = useRef(new THREE.Vector3());
 
   /** Play one action. Additive rides on top of locomotion; override takes over. */
-  const playAction = (id: ActionId, clip: string, mode: 'additive' | 'override') => {
+  const playAction = (id: ActionId, clip: string, mode: 'additive' | 'override', seconds?: number) => {
     // An additive action MUST use its prepared additive variant. Falling back
     // to the original clip and forcing blendMode on it would add absolute bone
     // values instead of a delta, which is not a worse animation — it is a
@@ -294,6 +294,13 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     if (id === 'reload' && clip === FAKE_RELOAD_CLIP) {
       const secs = reloadSeconds ?? FAKE_RELOAD_SECONDS;
       a.timeScale = FAKE_RELOAD_SECONDS / Math.max(0.3, secs);
+    } else if (seconds && seconds > 0 && a.getClip().duration > 0) {
+      // The caller knows how long this takes — a climb is carried along a
+      // scripted path for a fixed time, and the clip was authored at some other
+      // length entirely. Unscaled, the body finishes the move and then carries
+      // on climbing thin air, which is exactly what "it climbs into the sky"
+      // looked like from outside.
+      a.timeScale = a.getClip().duration / seconds;
     }
     if (useMode === 'additive') {
       a.blendMode = THREE.AdditiveAnimationBlendMode;
@@ -399,11 +406,11 @@ export const CharacterAvatar: React.FC<CharacterAvatarProps> = ({
     // A queued one-shot from gameplay (shoot / reload / throw / hit / death).
     const queued = takeAction(actor);
     if (queued) {
-      const clip = queued === 'land' && c.rig !== 'root' && fallSpeed.current < -12
+      const clip = queued.id === 'land' && c.rig !== 'root' && fallSpeed.current < -12
         ? MIXAMO_HARD_LAND
-        : actionSet[queued];
-      if (clip && actions[clip]) playAction(queued, clip, ACTION_MODE[queued]);
-      else if (!clip) warnMissingAction(c.rig, queued);
+        : actionSet[queued.id];
+      if (clip && actions[clip]) playAction(queued.id, clip, ACTION_MODE[queued.id], queued.seconds);
+      else if (!clip) warnMissingAction(c.rig, queued.id);
     }
 
     // While an override action owns the body, the locomotion selector stands

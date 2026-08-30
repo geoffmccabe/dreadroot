@@ -26,8 +26,11 @@ export const REACH = 1.1;
 /** Tallest thing worth measuring — above this nothing is climbable anyway. */
 export const MAX_RISE = 3.5;
 /** Climb duration. Long enough to read as effort, short enough not to feel
- *  like a loss of control. */
-export const MANTLE_MS = 700;
+ *  like a loss of control. The clip is now SCALED to this (see triggerAction's
+ *  `seconds`), so this number sets the whole feel of a climb — a by-eye value,
+ *  raised from 700ms because an authored climb crammed into 0.7s reads as a
+ *  twitch rather than a pull-up. */
+export const MANTLE_MS = 900;
 /** A vault is a single committed movement — faster than pulling yourself up. */
 export const VAULT_MS = 520;
 /** Clearance above the ledge before moving forward, so the feet do not scuff

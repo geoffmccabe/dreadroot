@@ -71,7 +71,7 @@ export function isUpperBodyTrack(trackName: string): boolean {
   return UPPER.test(bone);
 }
 
-interface Pending { id: ActionId; at: number; }
+interface Pending { id: ActionId; at: number; /** requested length in seconds, or undefined for as-authored */ seconds?: number; }
 
 /**
  * Fire-and-forget action requests, keyed by who they belong to.
@@ -108,12 +108,20 @@ export function onLocalAction(fn: LocalActionListener): () => void {
   return () => { localListeners.delete(fn); };
 }
 
-export function triggerAction(id: ActionId, actor: string = LOCAL_ACTOR): void {
+/**
+ * @param seconds how long the action should TAKE, when gameplay already knows.
+ *   A climb is driven along a scripted path for a fixed time; the clip was
+ *   authored at some other length entirely, and playing it unscaled means the
+ *   body finishes the move and then carries on climbing thin air. Same fix as
+ *   the reload below, which is matched to the weapon's real reload time.
+ *   Omitted means "play it as authored", which is right for shoot/hit/death.
+ */
+export function triggerAction(id: ActionId, actor: string = LOCAL_ACTOR, seconds?: number): void {
   const now = performance.now();
   const cur = pending.get(actor);
   // Keep the more important of two requests in the same frame.
   if (cur && ACTION_PRIORITY[cur.id] > ACTION_PRIORITY[id] && now - cur.at < 50) return;
-  pending.set(actor, { id, at: now });
+  pending.set(actor, { id, at: now, seconds });
   if (actor === LOCAL_ACTOR) {
     for (const fn of localListeners) {
       try { fn(id); } catch { /* a broken listener must never stop the animation */ }
@@ -121,15 +129,17 @@ export function triggerAction(id: ActionId, actor: string = LOCAL_ACTOR): void {
   }
 }
 
+export interface QueuedAction { id: ActionId; /** requested length, or undefined for as-authored */ seconds?: number }
+
 /** Consume the queued action, if any. Returns null when there is nothing new. */
-export function takeAction(actor: string = LOCAL_ACTOR): ActionId | null {
+export function takeAction(actor: string = LOCAL_ACTOR): QueuedAction | null {
   const p = pending.get(actor);
   if (!p) return null;
   pending.delete(actor);
   // Stale requests are dropped: an action queued while the tab was hidden
   // should not fire a second later when it comes back.
   if (performance.now() - p.at > 250) return null;
-  return p.id;
+  return { id: p.id, seconds: p.seconds };
 }
 
 export function clearActions(actor: string = LOCAL_ACTOR): void {
