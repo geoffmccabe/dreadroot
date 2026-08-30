@@ -45,6 +45,7 @@ class ParkourStats {
     L.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     L.push('PARKOUR');
     L.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     if (this.last === null) {
       L.push('  No attempt yet. Walk INTO a ledge and press jump —');
       L.push('  it only probes on a jump while moving forward.');
@@ -71,3 +72,4 @@ class ParkourStats {
 }
 
 export const parkourStats = new ParkourStats();
+

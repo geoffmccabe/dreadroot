@@ -16,6 +16,7 @@
  * that disagrees with the physics.
  */
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
+import { WORLD_FLOOR_Y } from './worldFloor';
 
 /** Sampling finer than this cannot reveal anything in a world of 1m cubes. */
 const STEP = 0.25;
@@ -45,5 +46,11 @@ export function dropToGround(x: number, footY: number, z: number, maxLook = 4): 
   for (let d = STEP; d <= maxLook; d += STEP) {
     if (solidAt(x, footY - d, z)) return d;
   }
+  // Nothing in the grid — but the grid does not contain the world's own ground
+  // plane, and over open terrain that is exactly what is underneath. Without
+  // this the answer over ordinary ground is always "further than I looked", and
+  // a one-block hop plays the free-fall pose.
+  const toFloor = footY - WORLD_FLOOR_Y;
+  if (toFloor > 0 && toFloor <= maxLook) return toFloor;
   return maxLook;
 }

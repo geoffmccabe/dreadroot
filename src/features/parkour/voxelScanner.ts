@@ -17,6 +17,7 @@
  */
 import { worldCollisionGrid } from '@/lib/spatialHashGrid';
 import { UNMEASURED, type Scanner, type Surroundings } from './surroundings';
+import { WORLD_FLOOR_Y } from './worldFloor';
 
 /** Blocks are 1m. Sampling finer than half a block cannot reveal anything. */
 const STEP = 0.5;
@@ -109,6 +110,11 @@ export class VoxelScanner implements Scanner {
         for (let yy = top; yy >= y - MAX_DROP; yy -= 1) {
           if (solidAt(bx, yy - 0.5, bz)) { farSideY = yy; break; }
         }
+        // The grid holds placed blocks only — the world's own ground plane is
+        // not in it. Over open ground the search above finds nothing, the far
+        // side reads UNKNOWN, and every vault is refused as "might be a pit".
+        // That is why running at an obstacle did nothing at all.
+        if (farSideY === null && y - WORLD_FLOOR_Y <= MAX_DROP) farSideY = WORLD_FLOOR_Y;
       }
 
       return {

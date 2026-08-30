@@ -93,6 +93,15 @@ const attempt = await page.evaluate(() => window.__parkour().lastAttempt).catch(
 console.log('\n--- after pressing jump while walking forward ---');
 console.log(attempt);
 
+// The D-FLOW block, verbatim — this is the text Geoff reads in the panel, so
+// the check has to read the same thing and not a console-only approximation.
+const dflow = await page.evaluate(async () => {
+  const m = await import('/src/features/parkour/liveReport.ts');
+  return m.parkourReport();
+}).catch((e) => 'could not read D-Flow block: ' + e.message);
+console.log('\n--- D-FLOW PARKOUR BLOCK ---');
+console.log(dflow);
+
 console.log('\nwalk samples:', samples.length);
 for (const s of samples) console.log('  ', JSON.stringify(s));
 const moved = samples.length > 1 &&

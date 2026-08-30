@@ -17,14 +17,14 @@
  * same reason the plan concluded motion warping is unnecessary here. A mesh
  * world would need the clip's own root motion, warped.
  */
-import { getScanner } from './surroundings';
-import { chooseMove } from './moves';
+import { getScanner, type Surroundings } from './surroundings';
+import { chooseMove, type ParkourMove } from './moves';
 import { parkourStats } from './stats';
 
 /** How far ahead a ledge counts as reachable. */
-const REACH = 1.1;
+export const REACH = 1.1;
 /** Tallest thing worth measuring — above this nothing is climbable anyway. */
-const MAX_RISE = 3.5;
+export const MAX_RISE = 3.5;
 /** Climb duration. Long enough to read as effort, short enough not to feel
  *  like a loss of control. */
 export const MANTLE_MS = 700;
@@ -74,6 +74,36 @@ export function tryStartMove(
     return null;
   }
 
+  const plan = planMove(reading, running, x, footY, z, fx, fz, now);
+  parkourStats.record({
+    scannerKind: scanner.kind, reading, move: plan.move,
+    started: plan.run !== null, refusedBecause: plan.refusedBecause,
+  });
+  return plan.run;
+}
+
+export interface MovePlan {
+  move: ParkourMove;
+  /** The move to drive, or null when it was refused. */
+  run: ParkourRun | null;
+  /** Why it was refused, in words. Null when it was not. */
+  refusedBecause: string | null;
+}
+
+/**
+ * Would this measurement produce a move, and if not, WHY not?
+ *
+ * Split out of `tryStartMove` so the live D-Flow readout can ask the same
+ * question without actually starting anything. Two implementations of "would
+ * this work" would eventually disagree, and a diagnostic that disagrees with
+ * the thing it is diagnosing is worse than no diagnostic.
+ */
+export function planMove(
+  reading: Surroundings, running: boolean,
+  x: number, footY: number, z: number,
+  fx: number, fz: number,
+  now: number,
+): MovePlan {
   const choice = chooseMove(reading, running);
 
   // ONTO the obstacle.
@@ -82,25 +112,26 @@ export function tryStartMove(
     // than balanced on its edge, where the next collision step would push them
     // off.
     const over = reading.distance + 0.6;
-    const run: ParkourRun = {
+    return { move: 'mantle', refusedBecause: null, run: {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * over, toY: choice.landY, toZ: z + fz * over,
       move: 'mantle',
       peakY: reading.topY + LIFT_CLEARANCE,
       durationMs: MANTLE_MS,
-    };
-    parkourStats.record({ scannerKind: scanner.kind, reading, move: 'mantle', started: true, refusedBecause: null });
-    return run;
+    } };
   }
 
-  // OVER it, landing on the far side. Refused outright when the scanner could not
-  // find far-side ground: vaulting a wall into an unmeasured drop is how a
+  // OVER it, landing on the far side. Refused outright when the scanner could
+  // not find far-side ground: vaulting a wall into an unmeasured drop is how a
   // character ends up inside the world.
-  if ((choice.move === 'vaultLow' || choice.move === 'vaultHigh')
-      && reading.farSideY !== null && Number.isFinite(reading.depth)) {
+  if (choice.move === 'vaultLow' || choice.move === 'vaultHigh') {
+    if (reading.farSideY === null || !Number.isFinite(reading.depth)) {
+      return { move: choice.move, run: null,
+        refusedBecause: 'no measurable ground on the far side — refused rather than vault into a drop' };
+    }
     const clear = reading.distance + reading.depth + 0.7;
-    const run: ParkourRun = {
+    return { move: choice.move, refusedBecause: null, run: {
       startedAt: now,
       fromX: x, fromY: footY, fromZ: z,
       toX: x + fx * clear, toY: reading.farSideY, toZ: z + fz * clear,
@@ -110,21 +141,17 @@ export function tryStartMove(
       // fake vault away.
       peakY: reading.topY + 0.45,
       durationMs: VAULT_MS,
-    };
-    parkourStats.record({ scannerKind: scanner.kind, reading, move: choice.move, started: true, refusedBecause: null });
-    return run;
+    } };
   }
 
-  parkourStats.record({
-    scannerKind: scanner.kind, reading, move: choice.move, started: false,
+  return {
+    move: choice.move, run: null,
     refusedBecause:
       choice.move === 'stepUp' ? 'low enough to just walk over'
+      : choice.move === 'none' ? 'level ground'
       : choice.move === 'blocked' ? 'too tall, or not moving fast enough'
-      : (choice.move === 'vaultLow' || choice.move === 'vaultHigh')
-        ? 'no measurable ground on the far side — refused rather than vault into a drop'
       : `no path built for "${choice.move}" yet`,
-  });
-  return null;
+  };
 }
 
 /**

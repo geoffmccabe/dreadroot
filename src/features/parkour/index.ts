@@ -11,6 +11,7 @@ export { MeshScanner } from './meshScanner';
 export { chooseMove, THRESHOLDS, type ParkourMove, type ParkourChoice, type ParkourThresholds } from './moves';
 export { useParkour, type ParkourController, type ParkourStep } from './useParkour';
 export { parkourStats } from './stats';
+export { parkourReport } from './liveReport';
 export { publishPlayerFeet, getPlayerFeet } from './playerFeet';
 export { dropToGround } from './groundDrop';
 
