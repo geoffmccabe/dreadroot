@@ -25,15 +25,32 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
   args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());
+
+/**
+ * Get past the sign-in gate.
+ *
+ * These checks used to ride on a stored session in the browser profile. That broke
+ * the moment the profile was copied for parallel harnesses: Supabase ROTATES the
+ * refresh token, so two copies of one session invalidate each other and every check
+ * afterwards reports "no canvas" for a reason that has nothing to do with the code.
+ *
+ * Signing in as a guest instead makes the harness self-sufficient — no shared
+ * credential to expire, burn or leak.
+ */
+async function enterGame(page, sleep) {
+  for (let i = 0; i < 30; i++) {
+    const start = page.getByRole('button', { name: /START GAME/i }).first();
+    if (await start.count().catch(() => 0)) { await start.click({ timeout: 5000 }).catch(() => {}); return; }
+    const guest = page.getByRole('button', { name: /PLAY WITHOUT ACCT|STARTING/i }).first();
+    if (await guest.count().catch(() => 0)) { await guest.click({ timeout: 5000 }).catch(() => {}); await sleep(3000); continue; }
+    await sleep(500);
+  }
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e.message || e)));
 
 await page.goto(URL_, { waitUntil: 'domcontentloaded' });
-for (let i = 0; i < 20; i++) {
-  const btn = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
-  if (await btn.count().catch(() => 0)) { await btn.click({ timeout: 5000 }).catch(() => {}); break; }
-  await sleep(500);
-}
+await enterGame(page, sleep);
 // Let the world stream in far enough that the collision grid has ground in it —
 // the lineup's feet are placed off that grid.
 for (let i = 0; i < 60; i++) {
@@ -62,6 +79,7 @@ await sleep(6000);
 // Put the tool back on the weapon under test. The sweep above walks every weapon, so without
 // this the final verdict describes whatever it happened to stop on rather than what was asked for.
 await page.evaluate(async (i) => {
+  if (!window.__lineupSetWeapon) return;   // lineup never mounted; the checks below will say so
   window.__lineupSetWeapon(Number(i));
   await new Promise((r) => setTimeout(r, 1500));
 }, process.env.CHECK_WEAPON ?? 14);
@@ -84,6 +102,7 @@ console.log('in hands  :', JSON.stringify(held));
 // so a freshly baked gun can be verified per character instead of only the opening one.
 if (process.env.CHECK_WEAPON) {
   await page.evaluate(async (i) => {
+    if (!window.__lineupSetWeapon) return;
     window.__lineupSetWeapon(Number(i));
     await new Promise((r) => setTimeout(r, 1500));
   }, process.env.CHECK_WEAPON);

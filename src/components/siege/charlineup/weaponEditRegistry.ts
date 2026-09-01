@@ -76,7 +76,7 @@ export const WEAPON_EDIT_ID = 'weapon:held';
 // When weapon tuning is baked into code, the in-browser tweaks for those weapons must be cleared ONCE
 // so the baked values apply cleanly (else base ∘ saved-tune doubles). Bump BAKE_VERSION + list the
 // baked urls; a scan removes their per-character tune/pos keys. (Size never doubles, so it's kept.)
-const BAKE_VERSION = '18';  // v18: Rocket Launcher per-character pass + arm hold (item_14)
+const BAKE_VERSION = '19';  // v19: 7 untuned weapons moved off the blind guess onto RIFLE_ROT
 const BAKED_URLS = new Set([
   '/siege/weapons/ak47.glb', '/siege/weapons/item_17.glb', '/siege/weapons/item_18.glb',
   '/siege/weapons/item_19.glb', '/siege/weapons/item_142.glb', '/siege/weapons/item_4.glb',
@@ -86,6 +86,10 @@ const BAKED_URLS = new Set([
   '/siege/weapons/item_15.glb', '/siege/weapons/item_0.glb', '/siege/weapons/item_201.glb',
   '/siege/weapons/item_25.glb', '/siege/weapons/item_193.glb', '/siege/weapons/item_2.glb',
   '/siege/weapons/item_3.glb', '/siege/weapons/item_153.glb',
+  // v19 — the seven still on the original blind guess, now on the tuned two-handed baseline.
+  '/siege/weapons/item_208.glb', '/siege/weapons/item_24.glb', '/siege/weapons/item_168.glb',
+  '/siege/weapons/item_180.glb', '/siege/weapons/item_26.glb', '/siege/weapons/item_215.glb',
+  '/siege/weapons/item_222.glb',
 ]);
 try {
   if (typeof localStorage !== 'undefined' && localStorage.getItem('siege_weapon_bake') !== BAKE_VERSION) {

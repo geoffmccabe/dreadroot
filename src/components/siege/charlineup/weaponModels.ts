@@ -78,7 +78,12 @@ export interface HeldWeapon {
 // then baked here. AK74 keeps the hand-cleaned model already accepted; the rest are the SWU models.
 // Baseline orientation/grip carried from the tuned AK74 onto the other (untuned) weapons as a starting
 // point — each SWU model differs, so they still need a per-weapon pass, but this beats raw/floating.
-const R: [number, number, number] = [2, 3, -81];
+// [2, 3, -81] — the ORIGINAL BLIND GUESS, kept only as a record of what it was.
+// Nothing uses it any more: every weapon now starts from an eye-tuned baseline
+// (RIFLE_ROT or PISTOL_ROT). It is roughly a quarter turn from both of those,
+// which is why anything still carrying it appeared at a strange right angle.
+const _ABANDONED_GUESS: [number, number, number] = [2, 3, -81];
+void _ABANDONED_GUESS;
 const G: [number, number, number] = [0.02, 0.3, 0.04];
 
 /**
@@ -95,6 +100,37 @@ const G: [number, number, number] = [0.02, 0.3, 0.04];
  * model has its own pivot, so each still wants a pass in the lineup. They are much
  * closer than the old generic guess, which pointed the barrel the wrong way.
  */
+/**
+ * THE TWO-HANDED BASELINE, for weapons that have not had an eye pass yet.
+ *
+ * Every rifle that HAS been tuned landed within a few degrees of the same value —
+ * m27, submgun, both plasma snipers and the double-barrel shotgun all came out at
+ * exactly [-88, -9, -87], the M16 at [-88, -9, -89], the Dragunov at [-83, -9, -86].
+ * That is the shared Mixamo right hand again: a long gun held across the body wants
+ * the same orientation on everyone, and the model axes agree across the SWU set.
+ *
+ * The untouched weapons were still sitting on the original blind guess of
+ * [2, 3, -81], which is close to a quarter turn away from all of the above — hence
+ * rifles and every melee weapon appearing at strange right angles. This is a
+ * STARTING POINT, not a final answer; each still wants its own pass.
+ */
+const RIFLE_ROT: [number, number, number] = [-88, -9, -87];
+
+/**
+ * Per-character size for an untuned two-handed weapon: the mean of the nine that
+ * HAVE been tuned. The ratios between characters are near-identical from weapon to
+ * weapon (Ash 1.00, Dago 1.22, Fluffer 1.40, Jankz 1.22, Rajax 1.06, Thorn 0.96),
+ * which is the hand-size factor documented at the top of this file — so averaging
+ * is meaningful rather than mixing unrelated numbers.
+ */
+const RIFLE_SIZE_BY_CHAR: Record<string, number> = {
+  Ash: 1.07, Dago: 1.30, Fluffer: 1.50, Jankz: 1.30, Rajax: 1.13, Thorn: 1.03,
+  Flamma: 1.07, Jeanette: 1.03, 'Shi Yang': 1.13,
+};
+/** Rajax is the only character with his own grip on the tuned long guns; everyone
+ *  else uses the shared one. Mean of his eight. */
+const RIFLE_GRIP_BY_CHAR: Record<string, [number, number, number]> = { Rajax: [0.055, 0.33, 0.04] };
+
 const PISTOL_ROT: [number, number, number] = [-84, 6, -86];
 const PISTOL_GRIP: [number, number, number] = [0.01, 0.16, 0.02];
 // Flamma / Jeanette / Shi Yang are not in the lineup; they inherit from their nearest
@@ -157,7 +193,7 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     rotDeg: [-87, -11, -94], gripPos: G, animSet: 'rifle',
     gripByChar: { Rajax: [0.06, 0.3, 0.04] },
     sizeByChar: { Ash: 0.94, Dago: 1.15, Fluffer: 1.32, Jankz: 1.15, Rajax: 1.00, Thorn: 0.91, Flamma: 0.94, Jeanette: 0.91, 'Shi Yang': 1.00 } },
-  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: R, gripPos: G, sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04, Flamma: 1.08, Jeanette: 1.04, 'Shi Yang': 1.15 },
+  { key: 'shotgun',       name: 'Shotgun',              itemNumbers: [208], url: '/siege/weapons/item_208.glb', lengthM: 1.0, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: { Ash: 1.08, Dago: 1.32, Fluffer: 1.52, Jankz: 1.32, Rajax: 1.15, Thorn: 1.04, Flamma: 1.08, Jeanette: 1.04, 'Shi Yang': 1.15 },
     animSet: 'rifle' },
   // "Musket" is the in-game NAME, not the size: weapon_stats says both are ONE-HANDED, and the models
   // are flintlock PISTOLS (raw model 0.57 m on its longest axis). They were carrying lengthM 1.4 —
@@ -247,12 +283,12 @@ export const HELD_WEAPONS: HeldWeapon[] = [
     sizeByChar: { Ash: 1.64, Dago: 1.92, Fluffer: 1.97, Jankz: 1.32, Rajax: 1.60, Thorn: 1.61,
                   Flamma: 1.64, Jeanette: 1.61, 'Shi Yang': 1.60 } },
   { key: 'flame_glove',   name: 'Flame Glove',         itemNumbers: [193], url: '/siege/weapons/item_193.glb', lengthM: 0.26, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol' },
-  { key: 'bonnies_rifle', name: "Bonnie's Rifle",      itemNumbers: [24],  url: '/siege/weapons/item_24.glb',  lengthM: 1.10, rotDeg: R, gripPos: G, animSet: 'rifle', texture: '/siege/weapons/tex_item_24.png' },
-  { key: 'zk5',           name: 'ZK-5',                itemNumbers: [168], url: '/siege/weapons/item_168.glb', lengthM: 0.90, rotDeg: R, gripPos: G, animSet: 'rifle' },
-  { key: 'flamethrower',  name: 'Flamethrower',        itemNumbers: [180], url: '/siege/weapons/item_180.glb', lengthM: 1.00, rotDeg: R, gripPos: G, animSet: 'rifle', atlas: 'military' },
-  { key: 'crossbow_cn',   name: 'Chinese Repeating Crossbow!', itemNumbers: [26], url: '/siege/weapons/item_26.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle', texture: '/siege/weapons/tex_item_26.png' },
-  { key: 'baseball_bat',  name: 'Baseball Bat',        itemNumbers: [215], url: '/siege/weapons/item_215.glb', lengthM: 0.85, rotDeg: R, gripPos: G, animSet: 'rifle', atlas: 'military' },
-  { key: 'golf_club',     name: 'GolfClub',            itemNumbers: [222], url: '/siege/weapons/item_222.glb', lengthM: 1.00, rotDeg: R, gripPos: G, animSet: 'rifle', atlas: 'military' },
+  { key: 'bonnies_rifle', name: "Bonnie's Rifle",      itemNumbers: [24],  url: '/siege/weapons/item_24.glb',  lengthM: 1.10, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle', texture: '/siege/weapons/tex_item_24.png' },
+  { key: 'zk5',           name: 'ZK-5',                itemNumbers: [168], url: '/siege/weapons/item_168.glb', lengthM: 0.90, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle' },
+  { key: 'flamethrower',  name: 'Flamethrower',        itemNumbers: [180], url: '/siege/weapons/item_180.glb', lengthM: 1.00, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle', atlas: 'military' },
+  { key: 'crossbow_cn',   name: 'Chinese Repeating Crossbow!', itemNumbers: [26], url: '/siege/weapons/item_26.glb', lengthM: 0.85, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle', texture: '/siege/weapons/tex_item_26.png' },
+  { key: 'baseball_bat',  name: 'Baseball Bat',        itemNumbers: [215], url: '/siege/weapons/item_215.glb', lengthM: 0.85, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle', atlas: 'military' },
+  { key: 'golf_club',     name: 'GolfClub',            itemNumbers: [222], url: '/siege/weapons/item_222.glb', lengthM: 1.00, rotDeg: RIFLE_ROT, gripPos: G, gripByChar: RIFLE_GRIP_BY_CHAR, sizeByChar: RIFLE_SIZE_BY_CHAR, animSet: 'rifle', atlas: 'military' },
   { key: 'pickaxe',       name: 'Pickaxe',             itemNumbers: [153], url: '/siege/weapons/item_153.glb', lengthM: 0.55, rotDeg: PISTOL_ROT, gripPos: PISTOL_GRIP, gripByChar: PISTOL_GRIP_BY_CHAR, sizeByChar: PISTOL_SIZE_BY_CHAR, animSet: 'pistol' },
 ];
 

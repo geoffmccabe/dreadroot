@@ -12,12 +12,30 @@ const ctx = await chromium.launchPersistentContext(path.join(ROOT, '.perftest', 
   args: ['--use-gl=angle', '--enable-webgl', '--ignore-gpu-blocklist'],
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());
-await page.goto('http://localhost:8080/?perftest', { waitUntil: 'domcontentloaded' });
-for (let i = 0; i < 20; i++) {
-  const b = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
-  if (await b.count().catch(() => 0)) { await b.click({ timeout: 5000 }).catch(() => {}); break; }
-  await sleep(500);
+
+/**
+ * Get past the sign-in gate.
+ *
+ * These checks used to ride on a stored session in the browser profile. That broke
+ * the moment the profile was copied for parallel harnesses: Supabase ROTATES the
+ * refresh token, so two copies of one session invalidate each other and every check
+ * afterwards reports "no canvas" for a reason that has nothing to do with the code.
+ *
+ * Signing in as a guest instead makes the harness self-sufficient — no shared
+ * credential to expire, burn or leak.
+ */
+async function enterGame(page, sleep) {
+  for (let i = 0; i < 30; i++) {
+    const start = page.getByRole('button', { name: /START GAME/i }).first();
+    if (await start.count().catch(() => 0)) { await start.click({ timeout: 5000 }).catch(() => {}); return; }
+    const guest = page.getByRole('button', { name: /PLAY WITHOUT ACCT|STARTING/i }).first();
+    if (await guest.count().catch(() => 0)) { await guest.click({ timeout: 5000 }).catch(() => {}); await sleep(3000); continue; }
+    await sleep(500);
+  }
 }
+
+await page.goto('http://localhost:8080/?perftest', { waitUntil: 'domcontentloaded' });
+await enterGame(page, sleep);
 for (let i = 0; i < 120; i++) {
   if (await page.evaluate(() => !!window.__perftestReady).catch(() => false)) break;
   await sleep(1000);

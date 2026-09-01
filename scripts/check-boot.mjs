@@ -31,6 +31,28 @@ const ctx = await chromium.launchPersistentContext(PROFILE, {
 });
 const page = ctx.pages()[0] ?? (await ctx.newPage());
 
+/**
+ * Get past the sign-in gate.
+ *
+ * These checks used to ride on a stored session in the browser profile. That broke
+ * the moment the profile was copied for parallel harnesses: Supabase ROTATES the
+ * refresh token, so two copies of one session invalidate each other and every check
+ * afterwards reports "no canvas" for a reason that has nothing to do with the code.
+ *
+ * Signing in as a guest instead makes the harness self-sufficient — no shared
+ * credential to expire, burn or leak.
+ */
+async function enterGame(page, sleep) {
+  for (let i = 0; i < 30; i++) {
+    const start = page.getByRole('button', { name: /START GAME/i }).first();
+    if (await start.count().catch(() => 0)) { await start.click({ timeout: 5000 }).catch(() => {}); return; }
+    const guest = page.getByRole('button', { name: /PLAY WITHOUT ACCT|STARTING/i }).first();
+    if (await guest.count().catch(() => 0)) { await guest.click({ timeout: 5000 }).catch(() => {}); await sleep(3000); continue; }
+    await sleep(500);
+  }
+}
+
+
 const fatal = [];
 const errors = [];
 // Noise that is not a boot failure: missing textures, aborted fetches, the
@@ -58,14 +80,7 @@ await page.goto(URL_, { waitUntil: 'domcontentloaded' });
  * would train me to ignore it. Getting past the gate is part of "does it
  * start".
  */
-for (let i = 0; i < 20; i++) {
-  const btn = page.getByRole('button', { name: /START GAME|LOGIN/i }).first();
-  if (await btn.count().catch(() => 0)) {
-    await btn.click({ timeout: 5000 }).catch(() => {});
-    break;
-  }
-  await sleep(500);
-}
+await enterGame(page, sleep);
 
 let ready = false;
 const t0 = Date.now();
