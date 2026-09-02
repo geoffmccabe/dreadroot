@@ -3213,7 +3213,16 @@ export function FirstPersonControls({
           // the exact feeling this is meant to remove. Only when actually
           // moving forward, so a stationary hop is still just a hop.
           const wantsForward = keys.current.w && !keys.current.s;
-          if (wantsForward) {
+          // PARKOUR STARTS FROM THE GROUND, not from coyote time. `canJump`
+          // stays true for 300ms AFTER leaving the ground, which is right for
+          // the jump itself — it stops a bump eating the press. But it also
+          // meant that holding space and W through the first third of a second
+          // of an ordinary jump kept re-offering parkour, and the moment
+          // anything came into reach the move seized a body that was already
+          // in mid-air and carried it along a scripted path with gravity off.
+          // From outside that is a jump that stops dead and hangs on nothing,
+          // which is what Geoff described as sticking on an invisible block.
+          if (wantsForward && onGround.current) {
             const action = parkour.tryStart(
               camera.position.x, camera.position.y - playerHeight, camera.position.z,
               -Math.sin(yaw.current), -Math.cos(yaw.current),

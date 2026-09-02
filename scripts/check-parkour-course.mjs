@@ -40,9 +40,25 @@ await page.goto(URL_, { waitUntil: 'domcontentloaded' });
 // and reported every hook as missing. Poll for the thing we actually need —
 // the dev hooks — and click START GAME whenever it is on screen.
 let booted = false;
-for (let i = 0; i < 180; i++) {
-  const btn = page.getByRole('button', { name: /START GAME|LOGIN|PLAY WITHOUT ACCT/i }).first();
-  if (await btn.count().catch(() => 0)) await btn.click({ timeout: 3000 }).catch(() => {});
+// Headless uses software rendering, and world init measured 116s that way
+// against ~19s headed. A 3-minute budget was not enough to get past the
+// loading overlay, so the run reported 'never booted' when it was simply slow.
+for (let i = 0; i < 420; i++) {
+  // Click whatever gets us in, by ROLE OR TEXT. The guest entry is a plain
+  // <button> with no accessible name beyond its text, and the sign-in modal
+  // that a half-stale profile lands on has no START GAME at all — so also try
+  // to back out of it.
+  for (const rx of [/PLAY WITHOUT ACCT/i, /START GAME/i, /^LOGIN$/i]) {
+    const b = page.getByRole('button', { name: rx }).first();
+    if (await b.count().catch(() => 0)) { await b.click({ timeout: 3000 }).catch(() => {}); break; }
+    const t = page.getByText(rx).first();
+    if (await t.count().catch(() => 0)) { await t.click({ timeout: 3000 }).catch(() => {}); break; }
+  }
+  // A stale session can land on the sign-in sheet, which has no way forward
+  // without credentials. Escape back to the gate, which does have guest entry.
+  if (await page.getByText(/Continue with Google/i).count().catch(() => 0)) {
+    await page.keyboard.press('Escape').catch(() => {});
+  }
   if (await page.evaluate(() => typeof window.__parkourCourse === 'object'
     && typeof window.__perfTestControls === 'object').catch(() => false)) { booted = true; break; }
   await sleep(1000);

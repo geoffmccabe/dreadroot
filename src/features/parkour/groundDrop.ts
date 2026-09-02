@@ -50,7 +50,16 @@ export function dropToGround(x: number, footY: number, z: number, maxLook = 4): 
   // plane, and over open terrain that is exactly what is underneath. Without
   // this the answer over ordinary ground is always "further than I looked", and
   // a one-block hop plays the free-fall pose.
+  //
+  // `>= 0`, NOT `> 0`. Standing on flat ground puts the feet exactly ON the
+  // floor, so toFloor is 0 — and with a strict `> 0` that fell through to
+  // "further than I looked", i.e. a four-metre drop. The instant a jump made
+  // the body airborne while the published feet were still at floor level, the
+  // animation picked a full free-fall pose and flashed it for a frame or two.
+  // Geoff saw exactly that: "a falling pose for a tiny fraction of a second".
   const toFloor = footY - WORLD_FLOOR_Y;
-  if (toFloor > 0 && toFloor <= maxLook) return toFloor;
-  return maxLook;
+  if (toFloor >= 0 && toFloor <= maxLook) return toFloor;
+  // Below the floor should not happen, but if it does the ground is not
+  // somewhere far below — it is right here.
+  return toFloor < 0 ? 0 : maxLook;
 }
