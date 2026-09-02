@@ -77,7 +77,8 @@
     "check:lineup": "node scripts/check-lineup.mjs",
     "check:parkour": "node scripts/check-parkour.mjs",
     "check:course": "node scripts/check-parkour-course.mjs",
-    "profile:tris": "node scripts/profile-triangles.mjs"
+    "profile:tris": "node scripts/profile-triangles.mjs",
+    "check:clips": "node scripts/check-clips.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

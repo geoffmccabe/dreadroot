@@ -205,7 +205,11 @@ export const MIXAMO_ACTIONS: ActionClipSet = {
   death:  'Anim_Death_Slow_Fall_Back_NoSkin',
   land:   'Anim_Hit_Falling_To_Landing_NoSkin',
   climb:  'Climbing Up Wall',
-  vault:  'Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object',
+  // _NoSkin. Without that suffix this matched no clip at all, so the vault action
+  // resolved to nothing and silently played the idle — the vault animation had never
+  // once been seen. Every other clip in these libraries carries the suffix; this was
+  // the only name typed without it. scripts/check-clips.mjs now catches the class.
+  vault:  'Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object_NoSkin',
 };
 
 /** Only used when the fall was fast enough to warrant it. */
