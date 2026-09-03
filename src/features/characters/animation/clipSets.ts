@@ -194,7 +194,7 @@ export const JUMP_OFFSET: Record<string, number> = {
  * and would read as dying every time you were grazed.
  */
 export type ActionClipSet = Partial<Record<
-  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb' | 'vault', string | null
+  'shoot' | 'reload' | 'throw' | 'hit' | 'death' | 'land' | 'climb' | 'vault' | 'vaultHigh', string | null
 >>;
 
 export const MIXAMO_ACTIONS: ActionClipSet = {
@@ -210,6 +210,11 @@ export const MIXAMO_ACTIONS: ActionClipSet = {
   // once been seen. Every other clip in these libraries carries the suffix; this was
   // the only name typed without it. scripts/check-clips.mjs now catches the class.
   vault:  'Anim_Parkour_Run_To_Kick-Jump_Over_1m_Object_NoSkin',
+  // The 2-block vault. We have owned this clip all along and NOTHING referenced it:
+  // the runner distinguishes vaultLow from vaultHigh, but both resolved to the single
+  // 'vault' action, so diving a 2m wall played the 1m hop. Named for the height it was
+  // authored at, exactly like its sibling.
+  vaultHigh: 'Anim_Parkour_Run_To_Dive_Over_2m_Object_NoSkin',
 };
 
 /** Only used when the fall was fast enough to warrant it. */
@@ -229,6 +234,7 @@ export const ROOT_ACTIONS: ActionClipSet = {
   land:   null,
   climb:  null,   // no climb clip on this rig — these three do not mantle
   vault:  null,   // nor vault
+  vaultHigh: null,
 };
 
 /**
