@@ -3,8 +3,9 @@
 Status: **analysis + plan only, nothing built.** Written 2026-Sep-03, against dreadroot v4.352.83.
 
 The idea: take Siege Worlds Web (SWW) and spin it into a separate game the way Divi Kaiju is
-separate, sharing the same engine. A single persistent world made of 100 m x 100 m land squares
-that people own, build on, and mine. Alien Worlds land NFT holders claim a square free. Everyone
+separate, sharing the same engine. A single persistent world made of hexagonal land parcels,
+100 m across, tiled as a honeycomb into one giant hexagon, that people own, build on, and mine.
+Alien Worlds land NFT holders claim a parcel free. Everyone
 else buys one. Characters, weapons, combat and inventory carry over unchanged from SWW and
 DreadRoot. **This is NOT a voxel game.**
 
@@ -59,53 +60,128 @@ Honest assessment: roughly **70% of this already exists**, built for other reaso
 
 ---
 
-## 2. The world
+## 2. The world (hexagonal)
 
-### 2a. Grid
+Parcels are **regular hexagons tiled as a honeycomb**, not squares. Section 2e explains why this
+is the right call for this particular design, and what it costs.
+
+### 2a. Parcel geometry
+
+Sized so a parcel still reads as "100 metres across", which is the number in the original spec.
 
 | | |
 |---|---|
-| Parcel size | 100 m x 100 m (1 hectare) |
-| Grid | 300 x 300 |
-| Total parcels | 90,000 |
-| World extent | 30 km x 30 km = 900 km2 |
-| Parcel indices | x and z each run -150 to +149 |
-| Centre | the world origin (0,0,0) is the shared corner of a **2 x 2 block of 4 parcels** |
-| Plaza | those 4 parcels, 200 m x 200 m, **nobody can own them** |
+| Across the flats (and centre-to-centre spacing of neighbours) | **100 m exactly** |
+| Side length | 57.74 m |
+| Across the corners | 115.47 m |
+| Area | 8,660 m2 = **0.866 hectares** |
+| Neighbours | **6, all sharing a full edge, all exactly 100 m away** |
 
-The 2 x 2 centre keeps the world perfectly symmetric on both axes (300 is even, so there is no
-single middle square, and forcing one would put the origin off-centre). The origin point sits
-exactly where parcels (-1,-1), (-1,0), (0,-1) and (0,0) meet. Those four are the spawn plaza and
-are permanently unowned.
+The alternative is to hold the area at exactly 1 hectare, which gives a hex 107.5 m across the
+flats and 124.1 m across the corners. **Recommendation: use the 100 m spacing above.** The
+centre-to-centre spacing is the number the entire coordinate system is built on, and a round 100
+is worth more than a round hectare.
 
-### 2a-i. Ring distance
+### 2b. Total parcel count: the giant hexagon
 
-Distance from the centre is counted in **rings** measured from the origin point, not from a
-centre square. A parcel's ring is how many parcels out it sits on its furthest axis: the four
-plaza parcels are ring 1, the shell around them is ring 2, and so on out to ring 150 at the edge.
+A honeycomb that itself forms a perfect hexagon always has a **centred hexagonal number** of
+parcels. With R rings around the centre parcel:
 
-- Ring R contains 8R - 4 parcels.
-- Everything within ring R totals (2R)^2 parcels.
-- Ring 150 is the edge, and (2 x 150)^2 = 90,000, which checks out against the whole grid.
+> **total = 3R^2 + 3R + 1**, and ring r on its own holds 6r parcels.
 
-### 2b. Scale in context
+The sequence is 1, 7, 19, 37, 61, 91, 127 and so on. Candidates near the 90,000 target:
+
+| Rings (R) | Total parcels |
+|---|---|
+| 170 | 87,211 |
+| 171 | 88,237 |
+| 172 | 89,269 |
+| **173** | **90,307** |
+| 174 | 91,351 |
+| 175 | 92,401 |
+
+**Recommendation: R = 173, giving 90,307 parcels.** It is the closest centred hexagonal number to
+90,000, and it has a small bonus: 90,307 divides exactly by 7 (7 x 12,901), which sits nicely with
+a 7-parcel home fortress. That is a divisibility fact and nothing more; seven-parcel rosettes do
+tile the plane, but they will not come out flush against a hexagonal boundary, so do not plan on
+carving the whole world into tidy 7-blocks.
+
+If the world ever needs to be smaller, the same formula gives clean fallbacks: R = 100 is 30,301
+parcels, R = 60 is 10,981, R = 57 is 9,919.
+
+### 2c. World size
+
+| | |
+|---|---|
+| Total parcels | 90,307 |
+| Widest span (corner to corner) | **34.7 km** |
+| Narrowest span (flat to flat) | **30.1 km** |
+| Total land area | **782 km2** |
+| Furthest parcel from the centre | 17.36 km |
+
+That last row matters: the terrain system's coordinate range is +/- 32,768 m, so the world fits
+with roughly half the range to spare.
+
+### 2d. The centre: the home fortress
+
+The middle of the world is the centre parcel plus its 6 neighbours, a **7-parcel rosette**, and
+**nobody can own any of it**. It is the shared spawn, the fortress, and the starting town.
+
+| Fortress size | Parcels | Across the flats | Area |
+|---|---|---|---|
+| **Rings 0 to 1 (recommended)** | **7** | **300 m** | **6.1 ha** |
+| Rings 0 to 2 | 19 | 500 m | 16.5 ha |
+| Rings 0 to 3 | 37 | 700 m | 32.0 ha |
+
+6.1 hectares is about eight football pitches, which is a real town rather than a courtyard. If it
+starts to feel cramped once buildings go in, stepping up to 19 parcels is a config change, not a
+redesign, so **build it at 7 and leave the door open**.
+
+### 2e. Why hexagons, and what they cost
+
+Three reasons this design specifically wants hexes:
+
+1. **The hexagon has 6 sides and Alien Worlds has exactly 6 planets.** One planet per 60 degree
+   sector, radiating from the fortress. Every ring divides by 6 with no remainder, so the sectors
+   are *exactly* equal in size, forever, at every radius. On a square grid, six wedges is an ugly
+   approximation. This alone is close to decisive.
+2. **The centre-proximity perks actually work.** Perks scale with distance from the middle. On a
+   square grid the corner parcels of "ring 20" are 1.41x further from the centre than the edge
+   parcels of the same ring, so any ring-based perk is quietly unfair. Hex rings are genuinely
+   ring-shaped and every parcel in a ring is a comparable distance out.
+3. **Six equal neighbours, every one sharing a full edge.** A square has 4 edge neighbours plus 4
+   corner neighbours at a different distance, which distorts every adjacency rule (alliances,
+   merged plots, resource spread, territory control). Hex adjacency is uniform and needs no
+   special cases.
+
+The cost is real but smaller than it first looks. The square plan had one lovely property: parcel
+= streaming cell = network zone = save unit, all the same grid. Hexes break that, because the
+terrain renderer builds square mesh patches on a square 1 m height lattice.
+
+**The fix is to stop insisting those be the same thing.** They do not have to be:
+
+- **Save unit = the hex parcel.** This is the part that genuinely matters, because it is what
+  stops one person's edit rewriting the world (Section 6a).
+- **Render and streaming unit = a square cell**, sized to hold many hexes. A cell rebuilds its
+  mesh from whatever hex edits fall inside it. Height sampling is bilinear at any position, so
+  patch shape and sample lattice are already independent.
+- **Network interest area = a radius in metres** around the player, which is what it should have
+  been anyway.
+
+What that leaves is a hex-to-cell lookup and a set of hex coordinate helpers. Use standard axial
+/ cube coordinates (q, r, s with q + r + s = 0), where the ring number falls straight out as
+(|q| + |r| + |s|) / 2 and the world is simply every hex with ring <= 173. It is a well solved
+problem with good public references; budget it as a small module, not a research project.
+
+Two smaller costs to accept: minimap and map-UI tiles are square by nature and will need hex
+rendering, and people build rectangular buildings, which fit a hexagon slightly less neatly than
+a square. At 0.87 hectares neither is a real constraint.
+
+### 2f. Scale in context
 
 The current SWW map is about 2 km x 2 km. The largest existing map is +/- 10 km. This world is
-**225x the area of SWW today**. That is the single biggest engineering fact in this document,
-and Section 6 covers what it costs.
-
-### 2c. The key architectural decision
-
-**Make one land parcel equal one streaming cell equal one network zone equal one save unit.**
-
-Terrain today streams in 128 m cells, a size chosen so it nests into DreadRoot's 16 m voxel
-chunks. That reason does not apply here, because this game has no voxels. Changing the cell to
-100 m makes the parcel, the streaming chunk, the network interest area, the ownership unit and
-the save unit all the same grid. Every ownership, streaming and "who can see whom" question then
-collapses into one question with one answer.
-
-If the cell stays at 128 m, every parcel straddles up to four cells forever, and every one of
-those questions stays messy. This is the highest-leverage decision in the plan.
+**roughly 200x the area of SWW today**. That is the single biggest engineering fact in this
+document, and Section 6 covers what it costs.
 
 ---
 
@@ -113,12 +189,15 @@ those questions stays messy. This is the highest-leverage decision in the plan.
 
 ### 3a. Supply
 
-| Category | Count |
+| Category | Parcels |
 |---|---|
-| Total parcels | 90,000 |
-| Reserved for Alien Worlds land NFT claims | 3,343 |
-| Reserved: centre spawn plaza (the 2 x 2 block) | 4 |
-| **Available for sale** | **86,653** |
+| Total (R = 173 giant hexagon) | 90,307 |
+| Reserved: home fortress, rings 0 to 1 | 7 |
+| Reserved: Alien Worlds claims, rings 2 to 36 | 3,990 |
+| **Available for sale** | **86,310** |
+
+The Alien Worlds reserve is deliberately larger than the 3,343 land NFTs. Section 4b explains
+why, and what happens to the surplus.
 
 ### 3b. Price
 
@@ -126,59 +205,72 @@ Paid in crypto. Two tiers:
 
 | Tier | Price | What you get |
 |---|---|---|
-| **Random** | **$5** | The system assigns you a parcel. You do not choose where. |
-| **Choose** | **$10** | You pick the exact parcel from the map, if it is unclaimed. |
+| **Random** | **$5** | The system assigns you a parcel from the current random pool (3c). You do not choose. |
+| **Choose** | **$10** | You pick the exact parcel off the map, anywhere unsold. |
 
-Theoretical ceiling if every parcel sold: $433k at the random price, $867k at the choose price.
+Theoretical ceiling if every parcel sold: $432k at the random price, $863k at the choose price.
 Treat both as arithmetic, not a forecast.
 
-The two-tier split is doing real work beyond revenue: it sorts buyers by how much they care
-about location, which is what concentrates the built-up area instead of scattering it. See 3d.
+The two tier split does real work beyond revenue: it sorts buyers by how much they care about
+location, and that is what concentrates the built-up area instead of scattering it.
 
-### 3c. How "random" should actually work
+### 3c. The random pool: the innermost 5 bands
 
-Random must not mean uniformly random across 900 km2, or the $5 tier actively creates the empty
-world we are trying to avoid. **Recommendation: random draws from the innermost ring band that
-still has unsold parcels, expanding outward only as each band fills.** So early $5 buyers land
-near the centre and near each other, and the world grows outward as a settled area rather than
-as scattered dust. The buyer still does not choose, so the $10 tier keeps its value: choosers
-get a *specific* parcel, including one that random buyers cannot reach yet.
+The for-sale area is divided into numbered **bands, each 5 rings wide**, starting at ring 37 and
+running out to the edge (28 bands in total). Bands are an allocation mechanism, not a place name;
+the named regions in 3d are what players actually see.
 
-This is a recommendation, not a decision. The alternative (true uniform random over the whole
-grid) is simpler to explain but produces a visibly dead world.
+**A random ($5) purchase draws from the innermost 5 bands that still have unsold parcels.** As an
+inner band sells out the window slides outward by one, so the settled area grows outward from the
+fortress as a spreading town rather than as dust scattered over 782 km2.
 
-### 3d. Benefits of being near the centre
+The opening window, bands 1 to 5:
 
-Distance from the centre is measured in **rings**, defined in 2a-i.
+| Band | Rings | Parcels |
+|---|---|---|
+| 1 | 37 to 41 | 1,170 |
+| 2 | 42 to 46 | 1,320 |
+| 3 | 47 to 51 | 1,470 |
+| 4 | 52 to 56 | 1,620 |
+| 5 | 57 to 61 | 1,770 |
+| **Opening pool** | **37 to 61** | **7,350** |
 
-Proposed ring bands (names and exact perks to be finalised):
+That pool is a band roughly 10.6 km across, wrapped immediately around the Alien Worlds core. A
+five band window rather than a single band is the right call: it keeps a real element of luck in
+the $5 tier (you might land next to the core or five bands out) while still filling from the
+inside. The $10 tier keeps its value because a chooser gets a *named* parcel, including parcels
+far outside the random window that random buyers cannot reach yet.
 
-| Band | Rings | Parcels in band | Footprint | Character |
+### 3d. Regions and the benefits of being near the centre
+
+Rings are the raw measure; regions are what players see. Perks should scale **continuously with
+ring number**, not jump at region edges, so there is no cliff.
+
+| Region | Rings | Parcels | Across | Character |
 |---|---|---|---|---|
-| Plaza | 1 | 4 | 200 m | Spawn point, everyone arrives here, never for sale |
-| Inner City | 2 to 10 | 396 | 2.0 km across | Densest, highest traffic, highest perks |
-| Districts | 11 to 30 | 3,200 | 6.0 km across | Where the Alien Worlds claims go, see 4b |
-| Outlands | 31 to 75 | 18,900 | 15.0 km across | Cheaper, quieter, room to build big |
-| Frontier | 76 to 150 | 67,500 | 30 km across | Wilderness, best resources, worst footfall |
+| Fortress | 0 to 1 | 7 | 300 m | Spawn, town, never for sale |
+| Homelands | 2 to 36 | 3,990 | 6.4 km | The Alien Worlds claim reserve, 6 planet sectors |
+| Districts | 37 to 61 | 7,350 | 10.6 km | The opening random pool |
+| Outlands | 62 to 110 | 25,284 | 19.1 km | Cheaper, quieter, room to build big |
+| Frontier | 111 to 173 | 53,676 | 30.1 km | Wilderness, best resources, worst footfall |
 
-Perks should scale continuously with ring number rather than jumping at band edges, so there is
-no cliff. Candidate perks, to be chosen later:
+Candidate perks, to be chosen later:
 
-- **Footfall.** Everyone spawns on the 4-parcel Plaza, so nearness to centre literally is
-  nearness to every other player. This perk costs nothing to implement and is the strongest one.
-- **Faster travel.** Free or cheap teleport to the Plaza from inner parcels; long walk or paid
-  transport from the Frontier.
-- **Mining yield vs. mining rarity.** Inner parcels yield more often; Frontier parcels yield
-  rarer things. This makes the Frontier genuinely worth buying instead of merely cheap.
-- **Build allowance.** Higher object count or higher structure height nearer the centre.
+- **Footfall.** Everyone spawns at the Fortress, so nearness to the centre literally is nearness
+  to every other player. This perk costs nothing to implement and is the strongest one.
+- **Faster travel.** Free or cheap teleport to the Fortress from inner parcels; a long walk or
+  paid transport from the Frontier.
+- **Mining yield versus mining rarity.** Inner parcels yield more often; Frontier parcels yield
+  rarer things. This is what makes the Frontier genuinely worth buying rather than merely cheap.
+- **Build allowance.** Higher object count or greater structure height nearer the centre.
 - **Marketplace visibility.** Shops on inner parcels surface first in search.
-- **Safety.** Inner rings are safe zones, outer rings have hostile spawns from the existing
+- **Safety.** Inner rings are safe zones; outer rings have hostile spawns drawn from the existing
   monster roster. This reuses the whole SWW enemy system with no new work.
 
 ### 3e. Resale
 
-Not in scope for the first build, but the parcel record should carry an owner from day one so
-that transferring one later is a change of owner, not a schema migration.
+Not in scope for the first build, but the parcel record should carry an owner from day one, so
+that transferring one later is a change of owner rather than a schema migration.
 
 ---
 
@@ -187,23 +279,36 @@ that transferring one later is a change of owner, not a schema migration.
 ### 4a. The claim
 
 A holder connects their WAX wallet through LW-SSO, we read their `alien.worlds` / `land.worlds`
-holdings server-side (never trusting the browser), and they may claim **one parcel per land NFT
-they hold**, free.
+holdings **server side** (never trusting the browser), and they may claim **one parcel per land
+NFT they hold**, free.
 
-### 4b. Where the claims go
+### 4b. Where the claims go: six planets, six sectors
 
-**Recommendation: reserve the Inner City and Districts bands (rings 2 to 30) for Alien Worlds
-claims.** Those bands hold 3,596 parcels; there are 3,343 land NFTs. They fit, with 253 to spare.
+The giant hexagon has 6 sides, Alien Worlds has 6 planets, and **every hex ring divides by 6 with
+no remainder**. So the Homelands split into six exactly equal 60 degree sectors, one per planet.
+Magor holders end up neighbours, Veles holders end up neighbours, and so on.
+
+The reserve is **rings 2 to 36: 3,990 parcels, exactly 665 per sector.** That size was chosen so
+the largest planet fits inside its own sector:
+
+| Planet | Land NFTs | Sector capacity | Spare |
+|---|---|---|---|
+| Magor | 652 | 665 | 13 |
+| Neri | 650 | 665 | 15 |
+| Kavian | 648 | 665 | 17 |
+| Naron | 609 | 665 | 56 |
+| Eyeke | 429 | 665 | 236 |
+| Veles | 355 | 665 | 310 |
+| **Total** | **3,343** | **3,990** | **647** |
 
 This matters more than it looks. It guarantees the core of the world is populated on day one by
 the people most likely to actually build, instead of hoping paying customers happen to cluster.
-It also gives the free claim a real perk (a central parcel) without giving away revenue parcels.
+It also gives the free claim a genuine perk (a central parcel, in your own planet's quarter)
+without giving away revenue parcels.
 
-Within that band, **give each of the 6 planets its own wedge radiating from the centre**, so
-Magor holders end up neighbours, Veles holders end up neighbours, and so on. Planet populations
-(652 / 650 / 648 / 609 / 429 / 355) are close enough that six equal wedges work.
-
-Any inner parcels still unclaimed after a cutoff date go on sale at the $10 choose price.
+The 647 spare parcels, plus anything still unclaimed after a cutoff date, go on sale at the $10
+choose price. They are the most desirable land in the world after the Fortress, so they should
+not be released cheaply or early.
 
 ### 4c. Snapshot or lease
 
@@ -214,8 +319,8 @@ Two ways to handle a holder selling their NFT on WAX after claiming:
 - **Lease.** The parcel is yours only while you hold the NFT. Keeps the NFT valuable, but means
   someone's city can disappear out from under them, and it needs a continuous re-check job.
 
-**Recommendation: snapshot.** Decision still open, and it should be made before launch because it
-is not reversible in either direction without upsetting someone.
+**Recommendation: snapshot.** Decision still open, and it should be made before launch, because
+it is not reversible in either direction without upsetting someone.
 
 ---
 
@@ -233,7 +338,7 @@ Small Island, Methane Swampland.
 
 Design notes:
 
-- **Land type is generated, not stored per parcel.** 90,000 rows of "this one is forest" is
+- **Land type is generated, not stored per parcel.** 90,307 rows of "this one is forest" is
   waste. Generate the type from the world seed and the parcel coordinates, so it is identical for
   every player and costs nothing to store. Only *overrides* (a hand-authored region, a special
   parcel) get a row.
@@ -260,20 +365,22 @@ Four engineering gaps, plus art.
 ### 6a. Per-parcel terrain storage (the main rewrite)
 
 Today `src/components/siege/terrain/mapPersistence.ts` saves an entire map's terrain as **one
-blob in one record**. That is correct for one authored map and fatal for 90,000 independently
-owned parcels, because every save would rewrite the world. It has to become one record per
-parcel, written only when that parcel is actually edited. Not a huge job, but unavoidable, and
+blob in one record**. That is correct for one authored map and fatal for 90,307 independently
+owned parcels, because every save would rewrite the world. It has to become one record per **hex
+parcel**, written only when that parcel is actually edited, with the square render cell rebuilding
+its mesh from whichever hex edits fall inside it (see 2e). Not a huge job, but unavoidable, and
 everything else depends on it.
 
 ### 6b. The parcel and ownership tables
 
-Who owns which square, how they got it (claim / random buy / choose buy), when, and what they
-paid. Plus the anti-double-claim rule, which must be enforced by the database, not by the app.
+Who owns which parcel, how they got it (claim / random buy / choose buy), when, and what they
+paid. Parcels are addressed by axial hex coordinate, not by row and column. Plus the anti-double-claim rule, which must be enforced by the database, not by the app.
 
 ### 6c. Per-parcel build permission
 
-Object editing is currently locked to admins. It has to become "you may edit inside squares you
-own", enforced on the server. The contract for this is already written up in
+Object editing is currently locked to admins. It has to become "you may edit inside parcels you
+own", enforced on the server, with the parcel boundary test being a point-in-hexagon check rather
+than a rectangle test. The contract for this is already written up in
 `docs/NAMED_WORLDS_PERSISTENCE.md`: every build action is a named, server-validated call that
 checks the caller against the parcel, and rejects edits outside its bounds.
 
@@ -308,8 +415,9 @@ See Section 5. Shader slots plus textures plus props per biome.
 
 Each phase should end with something playable.
 
-1. **The grid exists.** New game entry in the registry, new world definition, 300 x 300 parcel
-   maths, parcel outlines visible on the ground, a coordinate readout. Walk around, see squares.
+1. **The honeycomb exists.** New game entry in the registry, new world definition, the hex
+   coordinate module (axial coords, ring number, hex-to-cell lookup), parcel outlines drawn on the
+   ground, a coordinate and ring readout. Walk around, see the honeycomb.
 2. **Terrain generation.** World seed, land types as regions, biome colouring using whatever
    textures exist today. The world looks like somewhere.
 3. **Parcel records and ownership.** Tables, the claim/buy paths as admin-only tools, a map
@@ -326,21 +434,23 @@ Each phase should end with something playable.
 
 ## 9. Risks
 
-- **Emptiness is the main risk, and it is what killed Decentraland and The Sandbox.** 90,000
+- **Emptiness is the main risk, and it is what killed Decentraland and The Sandbox.** 90,307
   parcels against roughly 3,343 claims plus realistically a few hundred sales is about 4%
-  occupancy. Within a 1 km view you would see around a dozen built parcels in an ocean of
-  nothing. This concern was raised and the 300 x 300 grid was confirmed as the decision, so the
+  occupancy. Spread evenly, a 1 km view would show around a dozen built parcels in an ocean of
+  nothing. This concern was raised and the full-size world was confirmed as the decision, so the
   plan keeps it. **The mitigations are the ones already in the design and they are genuinely
-  good ones:** centre perks pull building inward (3d), the Alien Worlds claims are placed in the
-  core rather than scattered (4b), and random buys fill from the middle outward (3c). Together
+  good ones:** centre perks pull building inward (3d), the Alien Worlds claims fill six equal
+  sectors of the core rather than scattering (4b), and random buys draw from a five-band window
+  that slides outward only as it fills (3c). Together
   those turn a 4%-occupied world into a small dense city surrounded by wilderness, which is a
   perfectly good thing to be. What must be avoided is uniformly scattering owners across all
-  900 km2. If that happens the world will feel dead no matter what else is built.
+  782 km2. If that happens the world will feel dead no matter what else is built.
 - **The free-claim audience is 545 accounts.** Concentrated too: the top 10 hold 37%. Do not
   plan launch traffic around the Alien Worlds crossover alone.
 - **Art scope.** A dozen biomes plus buildings plus props is a lot of asset work and it is what
   players judge in the first ten seconds.
-- **Performance.** 225x the current world area, on a codebase already being tuned for framerate.
+- **Performance.** Roughly 200x the current world area, on a codebase already being tuned for
+  framerate.
 - **Moderation.** User-built content on owned land, with no takedown path yet.
 
 ---
@@ -351,5 +461,5 @@ That the technical path works: **high, about 85%.** The coordinate range, the st
 the object placement, the WAX gating and the non-voxel render mode are all real and were read
 directly, not assumed. The four gaps in Section 6 are ordinary work, not research.
 
-That 90,000 parcels sell: **low.** The revenue arithmetic in 3b is a ceiling and should not be
+That 90,307 parcels sell: **low.** The revenue arithmetic in 3b is a ceiling and should not be
 planned against. The product case rests on the core being alive, not on the acreage.
