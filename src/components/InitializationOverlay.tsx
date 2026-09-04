@@ -146,13 +146,13 @@ export function InitializationOverlay() {
       {isStarblink ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '26px', marginBottom: '14px' }}>
           <img
-            src="/starblink_logo.png"
+            src="/starblink_logo.webp"
             alt="Starblink"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
             style={{ maxWidth: '340px', maxHeight: '112px', objectFit: 'contain', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
           />
           <img
-            src="/alien_worlds_community_logo.png"
+            src="/alien_worlds_community_logo.webp"
             alt="Alien Worlds Community"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
             style={{ maxWidth: '190px', maxHeight: '96px', objectFit: 'contain', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
