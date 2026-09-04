@@ -604,6 +604,17 @@ export function resolveMapId<T extends string | null | undefined>(id: T): T | st
   return (id && LEGACY_MAP_IDS[id]) || id;
 }
 
+/**
+ * Does this world's ground come from the shared sculptable heightfield? That is what the terrain
+ * brush, the drop-in object palette and the procedural tree/mushroom tools require.
+ *
+ * 'hexland' (Starblink) qualifies: its honeycomb reads the very same heightfield, so sculpting and
+ * planting behave exactly as they do on a heightmap map.
+ */
+export function usesEditableTerrain(kind: GroundKind): boolean {
+  return kind === 'heightmap' || kind === 'hexland';
+}
+
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {
   const rid = resolveMapId(id);
   if (rid && SIEGE_WORLDS[rid]) return SIEGE_WORLDS[rid];

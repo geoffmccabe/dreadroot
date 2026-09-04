@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
-import { getWorldDefinition, isEnchantedForest } from '@/config/worldDefinition';
+import { getWorldDefinition, isEnchantedForest, usesEditableTerrain } from '@/config/worldDefinition';
 import { serializeField } from '../terrain/heightField';
 import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
@@ -147,7 +147,7 @@ export function BuilderPalette() {
   // Hide during a challenge (open-world build tool, not a gameplay panel).
   const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
   // Enchanted Forest is a finished, reconstructed map (not a build canvas) — no terrain/builder tools.
-  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || isEnchantedForest(world.id) || inChallenge) return null;
+  if (game !== 'siege-worlds' || !usesEditableTerrain(world.ground.kind) || isEnchantedForest(world.id) || inChallenge) return null;
 
   const onSave = async () => {
     const res = await saveMap({

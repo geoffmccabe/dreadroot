@@ -17,8 +17,20 @@ export interface EnemyDefinition {
   name: string;
   texture_url: string | null;
   rarity?: string;
-  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman' | 'shpider' | 'walapa' | 'shroomer' | 'vortax';
+  enemyType: 'shwarm' | 'shnake' | 'shombie' | 'shtickman' | 'shpider' | 'walapa' | 'shroomer' | 'vortax' | 'reddemon';
 }
+
+/**
+ * Starblink red demon ladder — must stay in step with TIERS in
+ * src/components/siege/StarblinkDemonSpawner.tsx (names, order and rarity).
+ */
+const RED_DEMON_DEFS: EnemyDefinition[] = [
+  { id: 'reddemon_t1', tier: 1, name: 'Ash Demon',     texture_url: null, rarity: 'common',    enemyType: 'reddemon' },
+  { id: 'reddemon_t2', tier: 2, name: 'Jade Demon',    texture_url: null, rarity: 'uncommon',  enemyType: 'reddemon' },
+  { id: 'reddemon_t3', tier: 3, name: 'Azure Demon',   texture_url: null, rarity: 'rare',      enemyType: 'reddemon' },
+  { id: 'reddemon_t4', tier: 4, name: 'Violet Demon',  texture_url: null, rarity: 'epic',      enemyType: 'reddemon' },
+  { id: 'reddemon_t5', tier: 5, name: 'Crimson Demon', texture_url: null, rarity: 'legendary', enemyType: 'reddemon' },
+];
 
 // Rarity order for sorting (lowest to highest)
 const RARITY_ORDER: Record<string, number> = {
@@ -148,6 +160,11 @@ export function useUserCombatStats() {
       
       const allDefs: EnemyDefinition[] = [];
       
+      // Starblink's tiered red demons. Defined in CODE, not in a *_definitions table: they are a
+      // fixed five-tier ladder owned by StarblinkDemonSpawner, so a table would be a migration on
+      // the shared database for five rows that never change. Kills join on `reddemon_t<tier>`.
+      allDefs.push(...RED_DEMON_DEFS);
+
       // Add shwarm definitions
       if (!shwarmDefsResult.error) {
         const shwarmDefs = (shwarmDefsResult.data || []).map(d => ({

@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, Suspense } from 'react';
 import { useThree } from '@react-three/fiber';
 import { MonsterEnemy } from './MonsterEnemy';
 import { sampleHeight } from './terrainHeight';
+import { worldStore } from '@/services/worldStore';
 
 const CHECK_EVERY_MS = 60_000;   // one roll per minute
 const SPAWN_CHANCE = 0.5;        // …which succeeds half the time
@@ -29,14 +30,25 @@ const BASE_HEALTH = 500;         // so the 4 m tier lands on 1000, matching SWU'
 const BASE_SPEED = 2.5;          // MonsterEnemy's default walk speed
 const SPEED_PER_TIER = 1.05;
 const HEALTH_PER_TIER = 2;
+const KNOCKBACK_PER_TIER = 1.5;  // 100%, 150%, 225%, 337%, 506%
+const DAMAGE_PER_TIER = 1.1;     // +10% per tier
+const BASE_MELEE_DMG: [number, number] = [20, 60];
+const BASE_MELEE_KB: [number, number] = [4, 9];
 
-/** Per-tier hue rotation (radians) off the red source model, plus a name for the death screen. */
+/**
+ * Per-tier appearance, as hue rotation (radians) off the RED source model plus optional
+ * desaturation, and a name used by the death screen and the KILLS panel.
+ *
+ * Tier 1 is deliberately the drab one and tier 5 the original red, so the rarest demon is the one
+ * that looks like the real thing. Tier 1 gets a nudge towards orange and then most of its colour
+ * pulled out, which reads as brown/tan rather than flat grey.
+ */
 const TIERS = [
-  { name: 'Red Demon',    hueShift: 0 },
-  { name: 'Amber Demon',  hueShift: 1.05 },
-  { name: 'Jade Demon',   hueShift: 2.09 },
-  { name: 'Azure Demon',  hueShift: 3.14 },
-  { name: 'Violet Demon', hueShift: 4.19 },
+  { name: 'Ash Demon',     hueShift: 0.45, desat: 0.72, rarity: 'common' },
+  { name: 'Jade Demon',    hueShift: 2.09, desat: 0,    rarity: 'uncommon' },
+  { name: 'Azure Demon',   hueShift: 4.19, desat: 0,    rarity: 'rare' },
+  { name: 'Violet Demon',  hueShift: 5.06, desat: 0,    rarity: 'epic' },
+  { name: 'Crimson Demon', hueShift: 0,    desat: 0,    rarity: 'legendary' },
 ];
 
 const MODEL_URL = '/siege/monsters/reddemon.glb';
@@ -89,15 +101,27 @@ export function StarblinkDemonSpawner() {
     return () => window.clearInterval(timer);
   }, [camera]);
 
-  const despawn = (id: string) => setDemons((cur) => cur.filter((d) => d.id !== id));
+  // A despawn only happens after the death sequence finishes, so it doubles as the kill signal.
+  // Tiers are 1-based everywhere the player sees them, hence the +1.
+  const despawn = (id: string, tier: number) => {
+    setDemons((cur) => cur.filter((d) => d.id !== id));
+    void worldStore.recordKill(`reddemon_t${tier + 1}`)
+      .catch((e) => console.error('[Starblink] recordKill failed', e));
+  };
 
   return (
-    <Suspense fallback={null}>
+    <>
       {demons.map((d) => {
         const t = TIERS[d.tier];
+        const kb = Math.pow(KNOCKBACK_PER_TIER, d.tier);
+        const dmg = Math.pow(DAMAGE_PER_TIER, d.tier);
         return (
+          // ONE Suspense PER DEMON, and that matters. With a single boundary around the whole
+          // list, a newly spawning demon suspends its already-running siblings: their mixers stop
+          // and they freeze mid-fight in the bind pose (the T-pose Geoff hit). Isolated boundaries
+          // mean a new arrival can never interrupt a demon that is already on screen.
+          <Suspense key={d.id} fallback={null}>
           <MonsterEnemy
-            key={d.id}
             id={d.id}
             spawn={d.pos}
             url={MODEL_URL}
@@ -107,18 +131,24 @@ export function StarblinkDemonSpawner() {
             health={BASE_HEALTH * Math.pow(HEALTH_PER_TIER, d.tier)}
             speed={BASE_SPEED * Math.pow(SPEED_PER_TIER, d.tier)}
             hueShift={t.hueShift}
+            desat={t.desat || undefined}
             aggro={140}
             noStun
             attackRange={2.2}
             attackMs={1500}
-            meleeContact={{ dmg: [20, 60], kb: [4, 9], cooldownMs: 1500 }}
+            meleeContact={{
+              dmg: [BASE_MELEE_DMG[0] * dmg, BASE_MELEE_DMG[1] * dmg],
+              kb: [BASE_MELEE_KB[0] * kb, BASE_MELEE_KB[1] * kb],
+              cooldownMs: 1500,
+            }}
             roarSound="/demon_roar_1.mp3"
             attackSound="/demon_attack.mp3"
             missSound="/swoosh_miss_low.mp3"
-            onDespawn={despawn}
+            onDespawn={(id) => despawn(id, d.tier)}
           />
+          </Suspense>
         );
       })}
-    </Suspense>
+    </>
   );
 }

@@ -19,9 +19,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { WorldDefinition } from '@/config/worldDefinition';
-import { setTiles, type HeightTile } from './terrainHeight';
+import { setDynamicHeightProvider } from './terrainHeight';
 import { toRenderSpace } from '@/lib/renderSpace';
 import { HEX_CORNERS, hexesWithin, hexToWorld, worldToHex, type Hex } from '@/features/starblink/hexGrid';
+import { getHeight, setBaseline, consumeDirtyCells } from './terrain/heightField';
 
 const VIEW_RINGS = 40;        // parcels drawn in every direction (~4 km disc)
 const REBUILD_STEP = 8;       // rebuild only after crossing this many parcels
@@ -30,12 +31,14 @@ const TEX_REPEAT_M = 8;       // grass tiles every 8 m
 // timid once the map ran under the engine's real lighting and SWW's fog: from standing height the
 // honeycomb was invisible, which defeats the point of drawing it. Wider band, stronger mix, and a
 // pale sand colour instead of a yellow-green that sat right on top of the grass.
-const EDGE_START = 0.78;      // where the rim lightening begins, 0 = parcel centre, 1 = rim
-const EDGE_STRENGTH = 0.9;    // how far the rim is pushed towards EDGE_COLOR
+// Halved twice over on 2026-Sep-04: the band was too wide and too white in game. Band width is
+// (1 - EDGE_START), so 0.89 is half of the previous 0.78, and the mix strength is halved too.
+const EDGE_START = 0.89;      // where the rim lightening begins, 0 = parcel centre, 1 = rim
+const EDGE_STRENGTH = 0.45;   // how far the rim is pushed towards EDGE_COLOR
 const EDGE_COLOR = new THREE.Color('#f4f1dc');
 const GRASS_URL = '/grass_texture_seamless.webp';   // DreadRoot's own grass
 
-function buildGeometry(centre: Hex, surfaceY: number): THREE.BufferGeometry {
+function buildGeometry(centre: Hex, _surfaceY: number): THREE.BufferGeometry {
   const hexes = hexesWithin(centre, VIEW_RINGS);
   const n = hexes.length;
   const pos = new Float32Array(n * 7 * 3);
@@ -51,8 +54,10 @@ function buildGeometry(centre: Hex, surfaceY: number): THREE.BufferGeometry {
     for (let k = 0; k < 7; k++) {
       const wx = k === 0 ? c.x : c.x + HEX_CORNERS[k - 1].x;
       const wz = k === 0 ? c.z : c.z + HEX_CORNERS[k - 1].z;
+      // Height comes from the shared sculptable heightfield, which is what lets the SWW terrain
+      // brush work on this map: raise ground and the honeycomb rises with it.
       // Through the world→render boundary, like every other layer (identity today).
-      const [rx, ry, rz] = toRenderSpace(wx, surfaceY, wz);
+      const [rx, ry, rz] = toRenderSpace(wx, getHeight(wx, wz), wz);
       pos[v * 3] = rx; pos[v * 3 + 1] = ry; pos[v * 3 + 2] = rz;
       nor[v * 3] = 0; nor[v * 3 + 1] = 1; nor[v * 3 + 2] = 0;
       uv[v * 2] = wx / TEX_REPEAT_M; uv[v * 2 + 1] = wz / TEX_REPEAT_M;
@@ -106,6 +111,8 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
   const [material, setMaterial] = useState<THREE.MeshStandardMaterial | null>(null);
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   const built = useRef<Hex>({ q: 0, r: 0 });
+  // Bumped whenever the terrain brush edits a cell, which forces the honeycomb to rebuild.
+  const [editEpoch, setEditEpoch] = useState(0);
 
   // Creation and disposal share one effect so a StrictMode / remount cycle cannot leave a
   // disposed material behind (which renders nothing, silently).
@@ -129,24 +136,23 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
     const g = buildGeometry(centre, surfaceY);
     setGeometry(g);
     return () => { g.dispose(); };
-  }, [centre, surfaceY]);
+  }, [centre, surfaceY, editEpoch]);
 
-  // The height contract the rest of the engine reads. One flat tile over the whole world, so
-  // sampleHeight() returns surfaceY everywhere: ground-follow, god mode and physics all work.
+  // The height contract the rest of the engine reads. Registering the heightfield sampler (rather
+  // than one flat tile) means ground-follow, god mode, physics, monsters and coin drops all agree
+  // with what the terrain brush has sculpted — and an untouched world still reads flat, because an
+  // unedited heightfield returns its baseline everywhere.
   useEffect(() => {
-    const b = world.bounds;
-    const minX = b ? b.min[0] : -17400, maxX = b ? b.max[0] : 17400;
-    const minZ = b ? b.min[1] : -17400, maxZ = b ? b.max[1] : 17400;
-    const tile: HeightTile = {
-      posX: minX, posZ: minZ, sizeX: maxX - minX, sizeZ: maxZ - minZ, res: 2,
-      heights: new Float32Array([surfaceY, surfaceY, surfaceY, surfaceY]),
-    };
-    setTiles([tile]);
+    setBaseline(surfaceY);
+    setDynamicHeightProvider(getHeight);
     onReady?.();
+    return () => setDynamicHeightProvider(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [world.id, surfaceY]);
 
   useFrame(({ camera }) => {
+    // The brush marks edited cells dirty; draining that queue is how a sculpt shows up here.
+    if (consumeDirtyCells().length) setEditEpoch((n) => n + 1);
     const h = worldToHex(camera.position.x, camera.position.z);
     const moved = Math.max(
       Math.abs(h.q - built.current.q),

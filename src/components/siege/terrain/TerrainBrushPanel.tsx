@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
-import { getWorldDefinition, isEnchantedForest } from '@/config/worldDefinition';
+import { getWorldDefinition, isEnchantedForest, usesEditableTerrain } from '@/config/worldDefinition';
 import { useRef, useState, useSyncExternalStore } from 'react';
 import { useDraggablePanel } from '../useDraggablePanel';
 import { subscribeChallenge, getChallengeState } from '../challenge/challengeStore';
@@ -52,7 +52,7 @@ export function TerrainBrushPanel() {
   // Hide the editor during a challenge (it's an open-world build tool, not a gameplay panel).
   const inChallenge = useSyncExternalStore(subscribeChallenge, () => getChallengeState().active);
   // Enchanted Forest is a finished, reconstructed map (not a build canvas) — no terrain/builder tools.
-  if (game !== 'siege-worlds' || world.ground.kind !== 'heightmap' || isEnchantedForest(world.id) || inChallenge) return null;
+  if (game !== 'siege-worlds' || !usesEditableTerrain(world.ground.kind) || isEnchantedForest(world.id) || inChallenge) return null;
 
   const onSave = async () => {
     setSaving(true);

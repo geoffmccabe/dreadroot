@@ -146,7 +146,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   const wantsFillLight = isBlank && !isGlobe;
   // Enchanted Forest uses heightmap GROUND but is a finished reconstructed map, not a build canvas —
   // so it keeps the terrain/water but drops the in-world terrain-brush + object-builder tools/modals.
-  const isBuilderMap = isHeightmap && !isEnchantedForest(world.id);
+  // Starblink's honeycomb rides the same sculptable heightfield, so it gets the builder tools too.
+  const isBuilderMap = (isHeightmap || isHexland) && !isEnchantedForest(world.id);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   // Diagnostic: timestamp when the siege scene first mounts, so the init log shows whether the long
