@@ -6,8 +6,12 @@ import { useSyncExternalStore } from 'react';
 import { GAME_ID } from '@/config/game';
 
 const KEY = 'activeGame';
-let active: string =
-  (typeof localStorage !== 'undefined' && localStorage.getItem(KEY)) || GAME_ID;
+// A Starblink deploy always starts as Starblink. Other builds honour the remembered choice.
+// Without the override, a stale 'activeGame' left in localStorage by dreadroot.com would open
+// the land deploy in the wrong game.
+let active: string = GAME_ID === 'starblink'
+  ? 'starblink'
+  : ((typeof localStorage !== 'undefined' && localStorage.getItem(KEY)) || GAME_ID);
 
 const subs = new Set<() => void>();
 

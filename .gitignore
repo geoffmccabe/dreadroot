@@ -46,3 +46,6 @@ public/Synty Animation Packs/
 *.unitypackage
 public/*.psd
 .city-cache/
+
+# Starblink-flavoured build output (VITE_GAME_ID=starblink), deployed by hand to CF Pages
+dist-starblink

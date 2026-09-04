@@ -18,3 +18,10 @@
 # makes a repeat visit instant.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# FRAMING. The Alien Worlds wallet (sso.lightningworks.io) opens the Starblink deploy of this
+# engine as a fullscreen iframe, so that origin must be allowed to frame us. frame-ancestors is
+# an allow-LIST: every other site is still refused, and there must be no X-Frame-Options header
+# anywhere or it would override this and blank the frame.
+/*
+  Content-Security-Policy: frame-ancestors https://sso.lightningworks.io http://localhost:3000

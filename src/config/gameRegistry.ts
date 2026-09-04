@@ -41,6 +41,14 @@ export const GAMES: Record<string, GameDef> = {
     id: 'siege-worlds', label: 'Siege Worlds', enabled: true,
     usesVoxelWorld: false, worldsTableKey: null, hue: null,
   },
+  // Starblink — the hex land world. Its own deploy (VITE_GAME_ID=starblink) on its own origin so
+  // the Alien Worlds wallet can frame it, but the SAME engine, so every SWW system works there.
+  // worldsTableKey stays null, i.e. it rides the build's default data-game exactly as Siege does;
+  // giving it separate data is a later decision, not a rendering one.
+  'starblink': {
+    id: 'starblink', label: 'Starblink', enabled: true,
+    usesVoxelWorld: false, worldsTableKey: null, hue: null,
+  },
   'pinkland': {
     id: 'pinkland', label: 'Pinkland', enabled: false,
     usesVoxelWorld: true, worldsTableKey: 'pinkland', hue: 320,

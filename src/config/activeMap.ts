@@ -6,8 +6,12 @@
 // entry starts in the SWW open world, and you reach the Builder Sandbox via its teleport pad. That
 // prevents getting stranded on the wrong map after a reload or DreadRoot↔SWW switch.
 import { useSyncExternalStore } from 'react';
+import { GAME_ID } from '@/config/game';
 
-let active = 'siege-test';
+// A Starblink deploy (VITE_GAME_ID=starblink) opens directly in the land world; every other
+// build still starts in the SWW open world. This is the only thing the land deploy changes about
+// boot: it is the same engine, on a different map.
+let active = GAME_ID === 'starblink' ? 'starblink' : 'siege-test';
 const subs = new Set<() => void>();
 
 export function getActiveMapId(): string {
