@@ -5,6 +5,7 @@
 //   • ModelPortCanvas — the single fixed transparent canvas that draws every ModelThumb.
 //   • ModelPreview    — the big floating turntable shown to the left while you hover a thumb.
 import { Canvas, useFrame } from '@react-three/fiber';
+import { useBuilder } from './builderObjectsState';
 import { useGLTF, View, PerspectiveCamera } from '@react-three/drei';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -94,6 +95,15 @@ export function ModelPortCanvas() {
 // If onGrab is given (PLACE mode), the preview is clickable — click it to GRAB the model for placing.
 export function ModelPreview({ panelLeft, onGrab }: { panelLeft: number; onGrab?: () => void }) {
   const url = usePgPreview();
+  const { armed } = useBuilder();
+  // ONCE YOU ARE HOLDING SOMETHING, THIS MUST GET OUT OF THE WAY. It is a 60vh square pinned over
+  // the middle of the screen and, in Place mode, it is CLICKABLE (click-to-grab). So while an item
+  // was armed it sat on top of the world and ate the very click meant to put the item down: the
+  // click re-armed the same model instead of placing it, and the big turntable stayed on screen
+  // looking like a ghost stuck to the view. That is the "I see it hovering there, then clicking
+  // does nothing and it disappears" bug. Holding an item already shows a ghost in the world, so
+  // there is nothing this preview adds at that moment.
+  if (armed) return null;
   const h = Math.round((typeof window !== 'undefined' ? window.innerHeight : 800) * 0.6);
   const left = Math.max(8, panelLeft - h - 16);
   const grabbable = !!(url && onGrab);

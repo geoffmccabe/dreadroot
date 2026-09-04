@@ -4,6 +4,7 @@
 // Database types yet, so the client is cast in THIS ONE place — isolated tech debt
 // until types.ts is regenerated.
 import { supabase } from '@/integrations/supabase/client';
+import { BOOT_MAP } from '@/config/game';
 import type { WorldObject, TRS } from './types';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +46,13 @@ export async function getUid(): Promise<string | null> {
 // Edit mode is locked to admins/superadmins. RLS enforces writes too; this just
 // keeps the toggle from doing anything for normal players.
 export async function loadCanEdit(): Promise<boolean> {
+  // ⚠ TESTING ONLY. On a boot-map build (Starblink) everyone may edit. Without this the whole
+  // Arrange editor is silently inert: toggleEditMode() refuses, so its click, wheel and Escape
+  // handlers all bail on their first line and clicking an object, Option+wheel scaling and Escape
+  // release do nothing at all. The client-side role override elsewhere does not reach here,
+  // because this asks the database about the real account, and the auto-login guest is a 'user'.
+  // Stripped from dreadroot.com, where BOOT_MAP is null.
+  if (BOOT_MAP) { cachedCanEdit = true; return true; }
   if (cachedCanEdit !== undefined) return cachedCanEdit;
   const uid = await getUid();
   if (!uid) { cachedCanEdit = false; return false; }
