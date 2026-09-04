@@ -183,7 +183,12 @@ export function ObjectEditController() {
       if (!getEditMode()) return;
       const o = current(); if (!o) return;
       e.preventDefault(); e.stopImmediatePropagation();
-      const dir = e.deltaY < 0 ? 1 : -1;       // wheel up = raise / +rotation / +scale
+      // macOS Chrome turns Option+wheel into HORIZONTAL scrolling: deltaY arrives as 0 and the
+      // movement shows up in deltaX. Reading deltaY alone therefore made Option+wheel (scale) do
+      // nothing at all. Take whichever axis actually moved.
+      const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+      if (delta === 0) return;
+      const dir = delta < 0 ? 1 : -1;          // wheel up = raise / +rotation / +scale
       const pf = getProfile();
       const grabbing = grab.current.active;
       const ax = axisHeld.current;
@@ -237,6 +242,18 @@ export function ObjectEditController() {
           if (Object.keys(CODES).some((k) => k.startsWith(cand))) { cmdBuf = cand; e.preventDefault(); e.stopImmediatePropagation(); return; }
           cmdArmed = false; cmdBuf = '';   // dead end — fall through so this key acts normally
         } else if (e.key.length !== 1) return;   // modifier keydown (Shift etc.) — stay armed, ignore
+      }
+      // ESC ALWAYS LETS GO. Previously Escape only cleared the typed-command buffer, so an object
+      // picked up in Arrange stayed stuck to the pointer with no way to release it, and the key fell
+      // through to the game instead. Now it drops whatever is held, clears the selection, and is
+      // swallowed so it cannot also pause/exit out of the world.
+      if (e.key === 'Escape') {
+        // Drop it WHERE IT IS rather than snapping it back. "Let go" is what was asked for, and a
+        // silent revert after carrying something across the map reads as the object disappearing.
+        if (grab.current.active) { grab.current.active = false; dragCommit(); }
+        clearBaked(); clearBuilder(); setSelected(null);
+        e.preventDefault(); e.stopImmediatePropagation();
+        return;
       }
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.code === 'KeyZ') { e.preventDefault(); e.stopImmediatePropagation(); if (e.shiftKey) redo(); else undo(); return; }

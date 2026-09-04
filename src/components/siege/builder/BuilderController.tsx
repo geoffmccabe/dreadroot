@@ -122,10 +122,14 @@ export function BuilderController() {
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         if (b.selectedId) { removeObject(b.selectedId); e.preventDefault(); }
       } else if (e.code === 'Escape') {
-        // 1st ESC while holding/selecting → drop the held item (or deselect) and CONSUME the event,
-        // so it doesn't also exit gameplay. 2nd ESC (nothing held) falls through to normal behaviour.
-        if (b.armed) { setBuilder({ armed: null, armedY: 0 }); e.preventDefault(); e.stopImmediatePropagation(); }
-        else if (b.selectedId) { setBuilder({ selectedId: null }); e.preventDefault(); e.stopImmediatePropagation(); }
+        // ESC LETS GO OF EVERYTHING AT ONCE: the held item leaves the pointer and the selection
+        // clears, in ONE press. It used to take two presses (armed first, then selection), which
+        // felt like the item was stuck to the cursor. Consumed while the builder is on so it can
+        // never also pause or exit the world out from under you.
+        if (b.armed || b.selectedId) {
+          setBuilder({ armed: null, armedY: 0, selectedId: null });
+          e.preventDefault(); e.stopImmediatePropagation();
+        }
       }
     };
     window.addEventListener('mousedown', onMouse, true);
