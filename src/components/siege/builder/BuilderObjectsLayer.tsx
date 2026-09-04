@@ -18,7 +18,7 @@ import { registerMeshGeometry, setGroupInstances, clearGroup, type MeshInstanceI
 const resolveModel = (file: string) => (file.startsWith('/') || file.startsWith('http') ? file : scifiAsset(file));
 
 // Force materials opaque + double-sided so imported models (esp. mushrooms) don't flicker/vanish by
-// angle from alpha-blend depth sorting — same treatment as the Starblink display mushrooms.
+// angle from alpha-blend depth sorting — same treatment as the Builder Sandbox display mushrooms.
 function makeSolid(mat: THREE.Material): void {
   const m = mat as THREE.MeshStandardMaterial;
   m.side = THREE.DoubleSide; m.transparent = false; m.depthWrite = true; m.alphaTest = 0;

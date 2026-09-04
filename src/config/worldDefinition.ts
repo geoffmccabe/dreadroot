@@ -214,15 +214,23 @@ export const SIEGE_TEST_WORLD: WorldDefinition = {
 };
 
 /**
- * Starblink — a blank flat map, 10× SWW in every direction (20 km), grass at y=0.
+ * Builder Sandbox — a blank flat map, 10× SWW in every direction (20 km), grass at y=0.
  * The canvas for the in-world builder (drop-in objects/monsters) and the terrain
  * brush. No SWW props, no ambient enemies, no mesh colliders — just ground + spawn.
  * 'flat' ground is rendered by FlatGroundLayer; Phase 1D swaps it for a chunked,
  * brush-editable GPU heightmap. Players will later author unlimited such named maps.
  */
-export const STARBLINK_WORLD: WorldDefinition = {
-  id: 'starblink',
-  name: 'Starblink',
+/**
+ * Builder Sandbox — the blank ±10 km editable canvas reached from the teleport menu, where the
+ * terrain brush and drop-in object builder are exercised.
+ *
+ * ⚠ RENAMED 2026-Sep-03. This map was called 'Starblink' (id `starblink`). That name now belongs
+ * to the standalone hex land game, which lives in its OWN repo (/Users/geoffreymccabe/starblink),
+ * so the sandbox was renamed to free it. Old ids still resolve — see LEGACY_MAP_IDS below.
+ */
+export const BUILDER_SANDBOX_WORLD: WorldDefinition = {
+  id: 'builder-sandbox',
+  name: 'Builder Sandbox',
   gameId: 'siege-worlds',
   ownerId: null, // org-owned built-in map (player-made maps set their creator)
   wireId: 2,
@@ -265,7 +273,7 @@ export const BLEAKROCK2_WORLD: WorldDefinition = {
 
 /**
  * City Demo — the fully-baked Synty SciFi City scene on a flat map, with BVH colliders.
- * A showcase/walkthrough map (teleport slot 0), separate from the Starblink builder.
+ * A showcase/walkthrough map (teleport slot 0), separate from the Builder Sandbox.
  */
 export const CITY_DEMO_WORLD: WorldDefinition = {
   id: 'city-demo',
@@ -276,7 +284,7 @@ export const CITY_DEMO_WORLD: WorldDefinition = {
   kind: 'siege',
   meshColliders: false, // the demo wires its own colliders via DemoScene
   bounds: { min: [-1500, -1500], max: [1500, 1500] },
-  ground: { kind: 'heightmap', surfaceY: 0 }, // same editable grass terrain as Starblink
+  ground: { kind: 'heightmap', surfaceY: 0 }, // same editable grass terrain as the Builder Sandbox
   fill: { ambient: 0.28, hemi: 0.22 }, // NIGHT city — dim fill so neon/windows glow (not black)
   night: true,
   spawn: { position: [0, 3, 0], yaw: 0 },
@@ -465,7 +473,7 @@ export const isEnchantedForest = (id: string | null | undefined): boolean =>
  * This is a FULL Siege Worlds map, not a demo scene: weapons, jumping, jet boost, inventory,
  * the HUD panels, crypto, coins, challenges and monster spawning all work here exactly as on
  * every other siege map. Only SWW's place-bound scenery (Bleakrock fog, the beach ambient
- * enemies, the lobby portal) is gated off, via the same `isBlank` flag Starblink uses.
+ * enemies, the lobby portal) is gated off, via the same `isBlank` flag the Builder Sandbox uses.
  */
 /**
  * Mini Earth arrival: in orbit at 160,000 units (about 2.5 planet radii, which frames the whole
@@ -522,7 +530,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [ENCHANTED_FOREST_WORLD.id]: ENCHANTED_FOREST_WORLD,
   [ENCHANTED_FOREST_BAD_WORLD.id]: ENCHANTED_FOREST_BAD_WORLD,
   [SIEGE_TEST_WORLD.id]: SIEGE_TEST_WORLD,
-  [STARBLINK_WORLD.id]: STARBLINK_WORLD,
+  [BUILDER_SANDBOX_WORLD.id]: BUILDER_SANDBOX_WORLD,
   [BLEAKROCK2_WORLD.id]: BLEAKROCK2_WORLD,
   [CITY_DEMO_WORLD.id]: CITY_DEMO_WORLD,
   [SPACE_DEMO_WORLD.id]: SPACE_DEMO_WORLD,
@@ -550,7 +558,22 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [KAIJU_LAB_WORLD.id]: KAIJU_LAB_WORLD,
 };
 
+/**
+ * Map ids that were renamed, old → new. Teleport links, saved sculpts (`siege_maps` rows and the
+ * local IndexedDB cache) and any bookmarked state still carry the old id, so every lookup resolves
+ * through here rather than 404-ing to the default map.
+ */
+export const LEGACY_MAP_IDS: Record<string, string> = {
+  starblink: 'builder-sandbox',   // renamed 2026-Sep-03; 'Starblink' is now the standalone land game
+};
+
+/** Old map id → current map id (pass-through when it is already current). */
+export function resolveMapId<T extends string | null | undefined>(id: T): T | string {
+  return (id && LEGACY_MAP_IDS[id]) || id;
+}
+
 export function getWorldDefinition(id: string | null | undefined): WorldDefinition {
-  if (id && SIEGE_WORLDS[id]) return SIEGE_WORLDS[id];
+  const rid = resolveMapId(id);
+  if (rid && SIEGE_WORLDS[rid]) return SIEGE_WORLDS[rid];
   return SIEGE_TEST_WORLD;
 }

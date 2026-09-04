@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Settings, Store } from 'lucide-react';
 import { FPSDisplay, BlockDeleteHandler } from '@/components/FPSCounter';
 import { GameSwitcher } from '@/components/GameSwitcher';
+import { StarblinkButton } from '@/components/StarblinkButton';
 import { SiegeTitleSplash } from '@/components/siege/SiegeTitleSplash';
 import { ChallengePointsCounter } from '@/components/siege/challenge/ChallengePointsCounter';
 import { DropToWorldGlobe } from '@/components/fortress/DropToWorldGlobe';
@@ -1067,6 +1068,7 @@ export function FortressHUD(props: FortressHUDProps) {
     <>
       {/* Universal game switcher (top-right) — flip between Dreadroot / Siege Worlds. */}
       <GameSwitcher />
+      <StarblinkButton />
       {/* Siege Worlds title splash — logo over the loading map, then fades. */}
       <SiegeTitleSplash />
       {/* Siege Worlds live debug readout (temporary) — shows only in siege. */}

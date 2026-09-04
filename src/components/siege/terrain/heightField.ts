@@ -1,4 +1,4 @@
-// heightField — the CANONICAL terrain for editable maps (Starblink + player maps).
+// heightField — the CANONICAL terrain for editable maps (Builder Sandbox + player maps).
 // A sparse height value on a 1 m world lattice (only edited points are stored; the
 // rest read the map baseline). This is the source of truth that:
 //   • sampleHeight() reads for player ground-follow / coins / boulders (via the

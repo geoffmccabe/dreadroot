@@ -1,5 +1,5 @@
 // FlatGroundLayer — a single flat grass plane at world.ground.surfaceY, used by
-// flat maps (e.g. Starblink) as a blank canvas for the in-world builder. It is the
+// flat maps (e.g. the Builder Sandbox) as a blank canvas for the in-world builder. It is the
 // 'flat' counterpart of TerrainLayer: same height-sampler contract (registers ONE
 // flat HeightTile so sampleHeight() returns surfaceY everywhere within the map), so
 // player ground-follow, coin drops, and boulder physics all work with no voxels.

@@ -126,7 +126,7 @@ interface UseChunkLoaderProps {
  */
 const ensureBlockCollider = (block: PlacedBlock): void => {
   // Siege has no voxel blocks — never add DreadRoot block colliders there (they'd be
-  // invisible walls in Starblink/City). Siege colliders come from meshColliders/inserts.
+  // invisible walls in Builder Sandbox / City). Siege colliders come from meshColliders/inserts.
   if (getActiveGame() === 'siege-worlds') return;
   const shouldTime = (Math.random() * 32) < 1;
   const t0 = shouldTime ? performance.now() : 0;

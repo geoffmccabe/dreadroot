@@ -1,9 +1,9 @@
 // Runtime active-MAP switch (within the Siege game). A "map" is a WorldDefinition in the
 // SIEGE_WORLDS registry — the SWW open world ('siege-test', whose areas you teleport
-// between by coords), Starblink (the builder sandbox), and later player-made maps. The
+// between by coords), the Builder Sandbox, and later player-made maps. The
 // map is INTRINSIC to the area you teleport to (SiegeTeleport sets it); there is no
 // independent persisted "map chooser". So this does NOT persist — every session/game-
-// entry starts in the SWW open world, and you reach Starblink via its teleport pad. That
+// entry starts in the SWW open world, and you reach the Builder Sandbox via its teleport pad. That
 // prevents getting stranded on the wrong map after a reload or DreadRoot↔SWW switch.
 import { useSyncExternalStore } from 'react';
 

@@ -18,7 +18,7 @@ interface ItemDef {
 interface UseWorldDropsOptions {
   userId: string | null;
   /** When false, the system is fully inert (no fetch, no realtime, no drops). Siege Worlds
-   *  has its own loot; DreadRoot world_drops must not bleed into it (or into Starblink). */
+   *  has its own loot; DreadRoot world_drops must not bleed into it (or the Builder Sandbox). */
   enabled?: boolean;
 }
 

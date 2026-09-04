@@ -5,7 +5,7 @@ import { worldCollisionGrid, entityCollisionGrid } from '@/lib/spatialHashGrid';
 import { getActiveGame } from '@/config/activeGame';
 
 // The central fortress only exists in DreadRoot. Its collider boxes sit at the origin —
-// exactly where Siege builder maps (Starblink) spawn — so they MUST NOT be in the grid in
+// exactly where Siege builder maps (Builder Sandbox) spawn — so they MUST NOT be in the grid in
 // Siege, or they read as invisible walls.
 const isSiegeGame = () => getActiveGame() === 'siege-worlds';
 
@@ -42,7 +42,7 @@ if (typeof window !== 'undefined' && !(window as any)[FORTRESS_GRID_LISTENER_KEY
   (window as any)[FORTRESS_GRID_LISTENER_KEY] = true;
   window.addEventListener('collisionGridCleared', () => {
     _fortressCollidersInGrid = false;
-    // Re-insert if we have cached colliders — but NEVER in Siege (origin = Starblink spawn).
+    // Re-insert if we have cached colliders — but NEVER in Siege (origin = Builder Sandbox spawn).
     if (_fortressColliders && !isSiegeGame()) {
       for (const fc of _fortressColliders) {
         worldCollisionGrid.insert(fc);

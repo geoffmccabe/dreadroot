@@ -7,6 +7,13 @@
 
 import type { PlacedObject } from '../builder/builderObjectsState';
 import { supabase } from '@/integrations/supabase/client';
+import { LEGACY_MAP_IDS } from '@/config/worldDefinition';
+
+// Old → new map ids, so a sculpt saved before a map was renamed still loads. Inverted from the
+// canonical table in worldDefinition so there is only ONE place renames are declared.
+const PREVIOUS_ID: Record<string, string> = Object.fromEntries(
+  Object.entries(LEGACY_MAP_IDS).map(([oldId, newId]) => [newId, oldId]),
+);
 
 // Cloud home for authored maps: the additive, siege-only `siege_maps` table (see the SQL Geoff
 // pastes into the Supabase dashboard). types.ts is generated and doesn't include it yet, so these
@@ -72,6 +79,17 @@ export async function saveMap(data: Omit<MapSaveData, 'version' | 'savedAt'>): P
 }
 
 export async function loadMap(id: string): Promise<MapSaveData | null> {
+  const found = await loadMapById(id);
+  if (found) return found;
+  // Renamed map: nothing saved under the current id yet, so look for a sculpt saved under the old
+  // one. Returned under the CURRENT id, so the next save writes to the new key and migrates itself.
+  const prev = PREVIOUS_ID[id];
+  if (!prev) return null;
+  const legacy = await loadMapById(prev);
+  return legacy ? { ...legacy, id } : null;
+}
+
+async function loadMapById(id: string): Promise<MapSaveData | null> {
   // Prefer the cloud copy (latest, cross-device); cache it locally; fall back to IndexedDB offline.
   try {
     const { data, error } = await cloud.from('siege_maps').select('name, data').eq('id', id).maybeSingle();

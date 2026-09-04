@@ -291,10 +291,10 @@ export function FortressScene({
   // HUD, lighting, sky) is world-agnostic and shared. Gated so Dreadroot is untouched.
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
-  // Which siege MAP is rendered (Bleakrock SWW, Starblink, or a future named map).
+  // Which siege MAP is rendered (Bleakrock SWW, Builder Sandbox, or a future named map).
   const activeMapId = useActiveMapId();
   const activeWorld = useMemo(() => getWorldDefinition(activeMapId), [activeMapId]);
-  // Builder sandbox maps (flat/heightmap, e.g. Starblink) are BLANK — none of the SWW
+  // Builder sandbox maps (flat/heightmap, e.g. Builder Sandbox) are BLANK — none of the SWW
   // review/diagnostic content (monster row, character pair, collider debug, spawner) which
   // is only for inspecting the real SWW open world. isSiegeReview = real SWW map only.
   const isBuilderMap = activeWorld.ground.kind === 'flat' || activeWorld.ground.kind === 'heightmap';
@@ -487,7 +487,7 @@ export function FortressScene({
   const { rollDrop, isLoaded: dropTablesLoaded } = useDropTableCache();
   const { drops: droppedItems, dropsRef: droppedItemsRef, spawnDrop, pickupDrop } = useWorldDrops({
     userId: currentUserId ?? null,
-    enabled: !isSiege,   // DreadRoot/Pinkland loot must not bleed into Siege/Starblink
+    enabled: !isSiege,   // DreadRoot/Pinkland loot must not bleed into Siege / Builder Sandbox
   });
   useLootPickup({
     droppedItemsRef,
@@ -2104,7 +2104,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {!isSiege && <WispParticlesMesh ref={wispParticlesMeshRef} particles={wispParticlesRef.current} renderTrigger={wispRenderTrigger} />}
       
       {/* DreadRoot enemies + eggs — gated OFF in Siege so they never leak into
-          Starblink / City Demo (their logic is already !isSiege; this stops lingering
+          Builder Sandbox / City Demo (their logic is already !isSiege; this stops lingering
           renders from a prior DreadRoot session). */}
       {!isSiege && (<>
       {/* Shwarm Renderer */}
@@ -2210,7 +2210,7 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
       {!isSiege && <WideTreeLights plantedTrees={plantedTrees} />}
 
       {/* Glowing-block point lights — DreadRoot glow blocks; gated OFF in Siege so their
-          glow doesn't illuminate Starblink / City terrain. */}
+          glow doesn't illuminate Builder Sandbox / City terrain. */}
       {!isSiege && <GlowLightPool />}
 
       {/* Tree Info Labels */}

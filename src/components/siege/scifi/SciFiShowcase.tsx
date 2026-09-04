@@ -1,5 +1,5 @@
 // SciFiShowcase — a TEMPORARY verification display: the first converted Synty sci-fi
-// models, dropped into Starblink near spawn so they can be eyeballed in-game (grounded,
+// models, dropped into the Builder Sandbox near spawn so they can be eyeballed in-game (grounded,
 // real 1:1 metre scale, textured via their shared external webp atlases). This is NOT
 // the builder — it's a fixed grid to confirm the conversion pipeline before scaling.
 // Replaced by the Phase 3 drop-in palette (reads catalog.json) once verified.

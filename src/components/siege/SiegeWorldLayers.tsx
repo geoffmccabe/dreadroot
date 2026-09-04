@@ -88,7 +88,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // While a challenge is running, hide the ambient beach enemies + parade so ONLY challenge
   // monsters are in the world.
   const challengeActive = useSyncExternalStore(subscribeChallenge, selectActive, selectActive);
-  // Blank builder canvases (flat or editable heightmap, e.g. Starblink) get NONE of the
+  // Blank builder canvases (flat or editable heightmap, e.g. Builder Sandbox) get NONE of the
   // SWW-specific scenery/enemies/regions — just ground + spawn + the builder tools.
   const kind = world.ground.kind;
   const isHeightmap = kind === 'heightmap';
@@ -166,7 +166,7 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           : kind === 'flat'
             ? <FlatGroundLayer key={world.id} world={world} onReady={signalReady} />
             : <TerrainLayer key={world.id} onReady={signalReady} />}
-      {/* Builder/blank maps (Starblink, City Demo) drop the SWW horror fog, so faces away
+      {/* Builder/blank maps (Builder Sandbox, City Demo) drop the SWW horror fog, so faces away
           from the sun go near-black with only the base ambient. Add bright fill light so
           all object textures read clearly (esp. the tall city buildings). */}
       {wantsFillLight && (
@@ -291,11 +291,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           <SiegeBoulders />
           {/* Press "I" to show a floating grid of every game item over spawn (SWW review only). */}
           {!isBlank && <SiegeItemGrid />}
-          {/* TEMP: sci-fi conversion verification grid (Starblink only). Remove when the
+          {/* TEMP: sci-fi conversion verification grid (Builder Sandbox only). Remove when the
               Phase 3 drop-in palette lands. */}
-          {world.id === 'starblink' && <SciFiShowcase />}
+          {world.id === 'builder-sandbox' && <SciFiShowcase />}
           {/* Imported mushroom-tree FBX models, side by side at native height (laser-pickable). */}
-          {world.id === 'starblink' && (
+          {world.id === 'builder-sandbox' && (
             <Suspense fallback={null}><MushroomImportDisplay /></Suspense>
           )}
           {/* Pole-dance girls in the SciFi City nightclub. */}

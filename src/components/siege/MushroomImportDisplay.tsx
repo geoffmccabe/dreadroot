@@ -1,10 +1,10 @@
-// Starblink display of the imported models (mushroom trees + Khaured Tower), converted from the
+// Builder Sandbox display of the imported models (mushroom trees + Khaured Tower), converted from the
 // FBX/glb set in public/Mushroom Trees. Shown side by side at NATIVE height with their bottoms on
 // the ground (y=0), spaced by each model's own width, centred on x=0. Every mesh is tagged
 // userData.fbx so the Laser Pointer reports its name + coords. Each material is forced SOLID +
 // double-sided (the FBX conversion left some with inverted normals / transparency, which made them
 // look see-through and inside-out). Each mesh is also registered as a real BVH collider so the
-// player collides with the actual shape. Mounted only in Starblink (SiegeWorldLayers gates on id).
+// player collides with the actual shape. Mounted only in the Builder Sandbox (SiegeWorldLayers gates on id).
 import { useEffect, useMemo, useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
@@ -40,7 +40,7 @@ const FILES: { url: string; name: string; bump?: boolean }[] = [
   { url: '/siege/imports/Khaured_Tower_1.glb', name: 'Khaured_Tower_1' },
 ];
 const GAP = 20;       // metres of clear space between models
-const ROW_Z = -200;   // place the row in front of the Starblink spawn (0, 3, 0)
+const ROW_Z = -200;   // place the row in front of the Builder Sandbox spawn (0, 3, 0)
 const BUMP_H = 100;   // scale the "between" models to this height so they're easy to see
 const GROUP = 'mushroom-display';
 

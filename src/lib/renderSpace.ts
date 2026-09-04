@@ -2,7 +2,7 @@
 // the server/DB/DO store and what gameplay math uses) and RENDER coordinates (what
 // three.js meshes/camera live in). Today it is the IDENTITY: render == world. It
 // exists so that the L123 plan's deferred "per-region origin shift" (to keep float32
-// precision sane in very large worlds — e.g. Starblink at ±10 km, where float error
+// precision sane in very large worlds — e.g. the Builder Sandbox at ±10 km, where float error
 // starts to bite) becomes a change to THIS FILE ONLY, not a sweep across renderers.
 //
 // Rule (from the architecture plan): new rendering code that positions meshes/camera
