@@ -78,22 +78,75 @@ It starts to matter the moment a character falls outside roughly 1.3m–2.5m, an
 the ratio form is what makes that safe. It is worth adopting for that reason, not
 for a change you would see today.
 
-## 4. The height tables disagree with each other
+## 4. DreadRoot ignores the intended heights entirely
 
-Two tables give different heights for the same characters:
+Two tables give different heights for the same characters, and the FIRST version
+of this audit called `targetH` the trustworthy one because it is "measured from
+the model". That was backwards, and Geoff corrected it: Thorn is 1.4m and has
+never been 1.92m.
 
-| character | lineup `heightM` | in-game `targetH` | disagreement |
+Checking the arithmetic settles it. Every single `targetH` is exactly
+`rawH x 1.08902`:
+
+| character | rawH | x 1.08902 | targetH |
 |---|---|---|---|
-| Thorn | 1.40 | 1.92 | **37%** |
-| Dago | 2.20 | 1.85 | 19% |
-| Rajax | 1.75 | 2.10 | 20% |
-| Jankz | 1.65 | 1.86 | 13% |
-| Fluffer | 2.30 | 2.22 | 3% |
-| Ash | 2.00 | 1.95 | 3% |
+| Ash | 1.7906 | 1.95 | 1.95 |
+| Dago | 1.6946 | 1.85 | 1.85 |
+| Fluffer | 2.0355 | 2.22 | 2.22 |
+| Jankz | 1.7106 | 1.86 | 1.86 |
+| Rajax | 1.9260 | 2.10 | 2.10 |
+| Thorn | 1.7598 | 1.92 | 1.92 |
+| Flamma | 1.7943 | 1.95 | 1.95 |
+| Shi Yang | 1.9247 | 2.10 | 2.10 |
 
-Anything height-relative must read `targetH`, which is what the player actually
-is. It is also measured from the model rather than guessed, so it is the more
-trustworthy of the two.
+Eight for eight. `targetH` is not a height anyone chose — it is the raw glb
+bounding box scaled by a constant. The field is documented as "height this
+character should stand in the world" and does not do that for anybody; it just
+renders every model at 109% of however big it happened to be exported.
+
+The art-directed heights are the lineup's `heightM`, and DreadRoot honours none
+of them:
+
+| character | intended | in DreadRoot | error |
+|---|---|---|---|
+| Thorn | 1.40 | 1.92 | **+37%** |
+| Rajax | 1.75 | 2.10 | +20% |
+| Dago | 2.20 | 1.85 | **-16%** |
+| Jankz | 1.65 | 1.86 | +13% |
+| Fluffer | 2.30 | 2.22 | -3% |
+| Ash | 2.00 | 1.95 | -3% |
+
+The effect is that the cast is FLATTENED: an intended spread of 1.40-2.30m
+(64%) renders as 1.85-2.22m (20%). Thorn is meant to be the short one and is
+taller than Dago, who is meant to be the tall one.
+
+This has stayed invisible because DreadRoot is first-person — you do not see your
+own body. The tell that IS felt is the camera: `eyeH` is expressed in final world
+metres, so playing Thorn puts the eye at 1.74m when it should be near 1.27m.
+
+Correcting it means setting `targetH` from the intended height and scaling `eyeH`
+by the same ratio, so the eye stays at the same fraction of the body:
+
+| character | targetH | eyeH |
+|---|---|---|
+| Ash | 1.95 -> 2.00 | 1.66 -> 1.70 |
+| Dago | 1.85 -> 2.20 | 1.63 -> 1.94 |
+| Fluffer | 2.22 -> 2.30 | 2.00 -> 2.07 |
+| Jankz | 1.86 -> 1.65 | 1.68 -> 1.49 |
+| Rajax | 2.10 -> 1.75 | 1.91 -> 1.59 |
+| Thorn | 1.92 -> 1.40 | 1.74 -> 1.27 |
+
+Flamma, Jeanette and Shi Yang are not in the lineup, so no art-directed height
+exists for them and they are left alone.
+
+NOT APPLIED. It changes how every character plays — camera height most of all —
+so it is a call to make deliberately, not a correction to slip in.
+
+Note this also revives section 3: the intended spread of 1.40-2.30m is WIDER than
+the 1.3-2.5m band inside which absolute thresholds are safe. Thorn at 1.40m sits
+right at the edge, where a 1m block is 71% of her height. If the intended heights
+are applied, the height-relative block table in section 3 stops being theoretical
+and should be applied with them.
 
 ## 5. Weapon size does not transfer from the tuner to the game
 
