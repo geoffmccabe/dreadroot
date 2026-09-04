@@ -60,8 +60,13 @@ import { getSelectedCharacterSpeedScale } from '@/features/characters/characterS
 import { triggerAction } from '@/features/characters/animation/characterActions';
 import { useParkour, publishPlayerFeet } from '@/features/parkour';
 import { applyThirdPerson } from '@/features/camera/cameraClearance';
+import { BOOT_MAP } from '@/config/game';
 
 // Pre-allocated scratch objects for inspector/raycast (avoid per-frame GC)
+
+/** ⚠ TESTING ONLY: jet-boost charges granted regardless of level on a boot-map build. */
+const TESTING_MIN_JET_BOOSTS = BOOT_MAP ? 5 : 0;
+
 const _inspectorMatrix = new THREE.Matrix4();
 const _inspectorPos = new THREE.Vector3();
 const _inspectorDir = new THREE.Vector3();
@@ -2862,7 +2867,11 @@ export function FirstPersonControls({
       // === JET BOOST SYSTEM ===
       // Update max charges based on player level (1 per 3 levels, rounded down)
       const level = playerLevelRef.current || 0;
-      const newMaxBoosts = Math.floor(level / 3);
+      // Jet boosts are earned 1 per 3 player levels. On a testing build the auto-signed-in guest is
+      // level 1, so that is zero charges and the HUD indicator hides itself entirely — which reads
+      // as "jet boots are broken" rather than "you have not earned any". Give test builds the
+      // level-15 allowance so the feature is actually testable. Stripped on dreadroot.com.
+      const newMaxBoosts = Math.max(Math.floor(level / 3), TESTING_MIN_JET_BOOSTS);
       if (newMaxBoosts !== jetBoostMaxRef.current) {
         dlog('controls', `[JetBoost] Level ${level} → Max boosts changing from ${jetBoostMaxRef.current} to ${newMaxBoosts}`);
         jetBoostMaxRef.current = newMaxBoosts;

@@ -23,6 +23,7 @@ import { KaijuWalkController } from './globe/KaijuWalkController';
 import { GlobePortals } from './globe/GlobePortals';
 import { GlobeErrorBoundary } from './globe/GlobeErrorBoundary';
 import { StarblinkHexGround } from './StarblinkHexGround';
+import { StarblinkDemonSpawner } from './StarblinkDemonSpawner';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -426,6 +427,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           {/* {!challengeActive && <SiegeMonsterParade />} */}
           {/* Open-World ambient spawner: plays + loops any region-tagged Challenge at its coords. */}
           {!isBlank && !challengeActive && <RegionSpawnerRunner />}
+          {/* Starblink: ambient tiered red demons. Its own spawner because the SWW one above is
+              keyed to Bleakrock coordinates, which mean nothing on the land world. */}
+          {isHexland && !challengeActive && <StarblinkDemonSpawner />}
         </>
       )}
     </>
