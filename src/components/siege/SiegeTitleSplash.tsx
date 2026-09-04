@@ -2,11 +2,16 @@
 // centered over the loading map for a moment, then fades out to reveal the world.
 // Pure DOM overlay (the 3D canvas/map renders behind it). Renders nothing for any
 // other game, so Dreadroot is unaffected.
+//
+// It also renders nothing on a boot-map build. Starblink runs AS Siege Worlds (that is how the
+// engine's ~20 isSiege checks pass), but it is its own game to the player, so throwing a big
+// SIEGE WORLDS banner over its opening would be wrong. Its branding is in the loading overlay.
 import { useEffect, useState } from 'react';
 import { useActiveGame } from '@/config/activeGame';
+import { BOOT_MAP } from '@/config/game';
 
 export function SiegeTitleSplash() {
-  const isSiege = useActiveGame() === 'siege-worlds';
+  const isSiege = useActiveGame() === 'siege-worlds' && !BOOT_MAP;
   const [phase, setPhase] = useState<'in' | 'out' | 'gone'>('in');
 
   useEffect(() => {

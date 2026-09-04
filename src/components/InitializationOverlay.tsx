@@ -3,6 +3,7 @@ import { useInitialization, InitStepStatus } from '@/contexts/InitializationCont
 import { Copy, Check } from 'lucide-react';
 import fortressImage from '@/assets/fortress_loading_screen.webp';
 import { useActiveGame } from '@/config/activeGame';
+import { BOOT_MAP } from '@/config/game';
 
 // Status indicator component
 const StatusIndicator: React.FC<{ status: InitStepStatus; accent?: string }> = ({ status, accent }) => {
@@ -50,6 +51,9 @@ export function InitializationOverlay() {
   // red/black tint for Siege Worlds (Dreadroot/others keep the default HUD theme).
   const activeGame = useActiveGame();
   const isSiege = activeGame === 'siege-worlds';
+  // Starblink is its own game to the player even though it runs as Siege Worlds internally, so
+  // it gets its own pair of logos here instead of the SWW wordmark.
+  const isStarblink = !!BOOT_MAP;
   const logoSrc = isSiege ? '/sww_logo_transp_v1_hq.webp' : '/Dreadroot_words_logo_horiz_2400px.webp';
   // Translucent so the live 3D world shows THROUGH the overlay (darkened) while it streams in —
   // the player watches the lobby build up behind the logs, then "Ready to Play". Kept dark enough
@@ -136,12 +140,31 @@ export function InitializationOverlay() {
         paddingTop: '11vh',
       }}
     >
-      {/* Game logo header above the panel (Siege Worlds / Dreadroot). */}
-      <img
-        src={logoSrc}
-        alt=""
-        style={{ maxWidth: '300px', maxHeight: '108px', objectFit: 'contain', marginBottom: '14px', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
-      />
+      {/* Game logo header above the panel. Starblink shows its own wordmark beside the Alien
+          Worlds Community logo; every other game shows its single wordmark.
+          onError hides a logo rather than leaving a broken-image icon over the loading screen. */}
+      {isStarblink ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '26px', marginBottom: '14px' }}>
+          <img
+            src="/starblink_logo.png"
+            alt="Starblink"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            style={{ maxWidth: '340px', maxHeight: '112px', objectFit: 'contain', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
+          />
+          <img
+            src="/alien_worlds_community_logo.png"
+            alt="Alien Worlds Community"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+            style={{ maxWidth: '190px', maxHeight: '96px', objectFit: 'contain', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
+          />
+        </div>
+      ) : (
+        <img
+          src={logoSrc}
+          alt=""
+          style={{ maxWidth: '300px', maxHeight: '108px', objectFit: 'contain', marginBottom: '14px', filter: 'drop-shadow(0 0 18px rgba(0,0,0,0.7))' }}
+        />
+      )}
       {/* Content panel - game UI style frame, positioned below the logo header */}
       <div
         className="relative w-[64%] overflow-hidden rounded-xl shadow-2xl"
