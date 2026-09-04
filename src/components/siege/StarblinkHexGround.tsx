@@ -26,9 +26,13 @@ import { HEX_CORNERS, hexesWithin, hexToWorld, worldToHex, type Hex } from '@/fe
 const VIEW_RINGS = 40;        // parcels drawn in every direction (~4 km disc)
 const REBUILD_STEP = 8;       // rebuild only after crossing this many parcels
 const TEX_REPEAT_M = 8;       // grass tiles every 8 m
-const EDGE_START = 0.86;      // where the rim lightening begins, 0 = centre, 1 = rim
-const EDGE_STRENGTH = 0.62;
-const EDGE_COLOR = new THREE.Color('#cfe6a8');
+// Rim (parcel border) appearance. These were first tuned in a bare test scene and were far too
+// timid once the map ran under the engine's real lighting and SWW's fog: from standing height the
+// honeycomb was invisible, which defeats the point of drawing it. Wider band, stronger mix, and a
+// pale sand colour instead of a yellow-green that sat right on top of the grass.
+const EDGE_START = 0.78;      // where the rim lightening begins, 0 = parcel centre, 1 = rim
+const EDGE_STRENGTH = 0.9;    // how far the rim is pushed towards EDGE_COLOR
+const EDGE_COLOR = new THREE.Color('#f4f1dc');
 const GRASS_URL = '/grass_texture_seamless.webp';   // DreadRoot's own grass
 
 function buildGeometry(centre: Hex, surfaceY: number): THREE.BufferGeometry {

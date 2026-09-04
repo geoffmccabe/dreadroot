@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { BOOT_MAP } from '@/config/game';
 import { Canvas } from '@react-three/fiber';
 import { Perf } from 'r3f-perf';
 import * as THREE from 'three';
@@ -106,6 +107,10 @@ import { triggerAction, clearActions, reviveActor } from '@/features/characters/
 /** Where a DreadRoot player comes back: the world origin, at standing eye
  *  height. Matches the initial camera height, so a respawn puts you in the same
  *  stance a fresh session does. */
+
+/** ⚠ TESTING ONLY — see the comment on `userRoles` in Fortress below. */
+const TESTING_ALL_ROLES = !!BOOT_MAP;
+
 const DREADROOT_RESPAWN_EYE_Y = 1.8;
 
 
@@ -335,7 +340,29 @@ export function Fortress() {
   const waterfallEnabled = false;
   
   // Hooks
-  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, equippedGear, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, applySwapOptimistic, applyTransferOptimistic, refetchInventoryAndQs, userRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+  const { profile, tokenBalance, allTokenBalances, inventory, equippedItems, equippedGear, updateEquippedSlot, consumeQuickSlot, setEquippedSlotOptimistic, removeInventoryRowOptimistic, addInventoryRowOptimistic, swapInventoryRowsOptimistic, moveInventoryRowOptimistic, applySwapOptimistic, applyTransferOptimistic, refetchInventoryAndQs, userRoles: accountRoles, addCoins, addPoints, useBlock, refreshData, collectWispBlock, returnSeed, addItem, removeInventoryRow, updateVisualDistance, updateFogEnabled } = useUserData();
+
+  /**
+   * ⚠ TEMPORARY, TESTING ONLY. On a boot-map build (the Starblink deploy) everyone counts as an
+   * admin CLIENT-SIDE, so the dev tools are usable while we test: God Mode (`), the teleport menu,
+   * the terrain brush, the object editor. Without this the auto-signed-in guest has role 'user'
+   * and God Mode simply refuses to toggle.
+   *
+   * SCOPE, and it matters: this only relaxes checks that run in the browser. Every privileged
+   * WRITE is a server-validated RPC that checks the caller's real role in the database, and those
+   * are untouched. But it does mean anyone who opens the test URL gets the dev tools, so this must
+   * come out before Starblink is public.
+   *
+   * dreadroot.com does not set VITE_BOOT_MAP, so TESTING_ALL_ROLES is a false constant there and
+   * the bundler removes this entirely.
+   *
+   * TO REMOVE: delete this block and rename `accountRoles` back to `userRoles` in the destructure
+   * above. Nothing else refers to it.
+   */
+  const userRoles = useMemo(
+    () => (TESTING_ALL_ROLES && !accountRoles.includes('admin') ? [...accountRoles, 'admin'] : accountRoles),
+    [accountRoles],
+  );
   const { blocks, placeBlock, placeBlocksBatch, removeBlock, setBlockMode, currentWorld, navigateWorld, worldIndex, currentWorldId, refreshBlocks, loadedChunksRef, refetchSingleChunk, removeBlocksByPositions } = useBlocks();
   const { user } = useAuth();
   const { toast } = useToast();
