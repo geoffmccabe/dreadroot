@@ -22,6 +22,7 @@ import { KaijuLabController } from './globe/KaijuLabController';
 import { KaijuWalkController } from './globe/KaijuWalkController';
 import { GlobePortals } from './globe/GlobePortals';
 import { GlobeErrorBoundary } from './globe/GlobeErrorBoundary';
+import { StarblinkHexGround } from './StarblinkHexGround';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -97,6 +98,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // place-bound content), but it is otherwise a FULL siege map: weapons, jumping, panels,
   // crypto, coins, challenges and @-spawn all mount exactly as on every other siege map.
   const isGlobe = kind === 'globe';
+  // Starblink's honeycomb land world. An ordinary siege map otherwise, so every engine system
+  // (HUD, god mode, characters, weapons, inventory, combat, parkour) runs here unchanged.
+  const isHexland = kind === 'hexland';
   // ONE FLAG WAS DOING TWO JOBS, AND SPLITTING THEM IS THE WHOLE FIX.
   //
   // `isBlank` was flipped off for the globe in order to remove a bright flat fill light — which was
@@ -125,7 +129,11 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // and it's not disappearing" — because without it, WorldObjectsLayer mounts on the Mini Earth and
   // starts placing the Bleakrock lobby's trees and rocks on a planet that has none. The lighting
   // meaning that motivated removing it lives in `wantsFillLight` below; do not merge them again.
-  const isBlank = kind === 'flat' || isHeightmap || isGlobe;
+  // 'Blank' means: this map brings its OWN ground and has none of SWW's baked Bleakrock scenery
+  // or its hardcoded beach monsters (which sit at SWW coordinates and would hover in mid-air
+  // anywhere else). It does NOT mean stripped-down: the HUD, controls and every gameplay system
+  // are engine-level and unaffected.
+  const isBlank = kind === 'flat' || isHeightmap || isGlobe || isHexland;
   /**
    * Does this map want the builder-map fill light?
    *
@@ -161,6 +169,8 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
           re-signals), so terrainReady stayed false forever → lobby objects never un-hid. */}
       {isGlobe
         ? <GlobeTerrain key={world.id} onReady={signalReady} />
+        : isHexland
+        ? <StarblinkHexGround key={world.id} world={world} onReady={signalReady} />
         : isHeightmap
           ? <HeightmapTerrain key={world.id} world={world} onReady={signalReady} />
           : kind === 'flat'

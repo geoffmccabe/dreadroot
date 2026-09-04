@@ -48,6 +48,8 @@ export const SIEGE_TELEPORTS: SiegeTeleport[] = [
   { slot: 8, name: 'Jungle',        pos: [-733, 29, 651] },
   // Builder sandbox — its OWN map (flat editable terrain), reached like any other area.
   { slot: 9, name: 'Builder Sandbox', pos: [0, 3, 0], mapId: 'builder-sandbox' },
+  // Starblink — the honeycomb land world, its own map. Jump key '@' (next to the '!' sandbox).
+  { slot: -2, key: '@', name: 'Starblink (Land)', pos: [0, 3, 0], mapId: 'starblink' },
   // Snowy Cabin — the walled snowy challenge world (NOT an asset demo). Cmd-J then 0. Drops at the
   // snowy-cabin spawn; this same pos/facing is the challenge arrival (via challengeWorldArrival).
   { slot: 0, name: 'Snowy Cabin',    pos: [23.442, 22.824, 2.420], yaw: -1.700, pitch: -0.214, mapId: 'yeti-time' },

@@ -16,7 +16,8 @@ export type GroundKind =
   | 'flat'          // a static flat plane (size from bounds/`flatSize`)
   | 'heightmap'     // editable chunked GPU heightmap (128 m cells, 1 m samples) + brush
   | 'gltf-terrain'  // a glTF/mesh terrain loaded from `terrainUrl` (real SW terrain)
-  | 'globe';        // Mini Earth: cube-sphere quadtree of real ETOPO relief (see docs/MINI_EARTH_PLAN.md)
+  | 'globe'         // Mini Earth: cube-sphere quadtree of real ETOPO relief (see docs/MINI_EARTH_PLAN.md)
+  | 'hexland';      // Starblink: honeycomb of 100 m hexagonal land parcels (see docs/LAND_WORLD_PLAN.md)
 
 export interface GroundConfig {
   kind: GroundKind;
@@ -524,6 +525,34 @@ export const KAIJU_LAB_WORLD: WorldDefinition = {
   props: undefined,
 };
 
+/**
+ * Starblink — the land world. A honeycomb of 90,307 hexagonal parcels, each 100 m across the
+ * flats, tiled into one giant hexagon 30 km across. Alien Worlds land NFT holders claim a parcel;
+ * everyone else buys one. Full design in docs/LAND_WORLD_PLAN.md.
+ *
+ * It is an ordinary siege map, which is the whole point: everything SWW has (HUD, god mode,
+ * characters, weapons, inventory, combat, parkour, teleport) works here unchanged, and the only
+ * difference is the ground under your feet. Deployed on its own origin via VITE_GAME_ID, per the
+ * one-deploy-per-game model described in src/config/game.ts.
+ */
+export const STARBLINK_WORLD: WorldDefinition = {
+  id: 'starblink',
+  name: 'Starblink (Land World)',
+  gameId: 'siege-worlds',
+  ownerId: null,
+  wireId: 41,
+  kind: 'siege',
+  meshColliders: false,
+  // The giant hexagon reaches 17,358 m from the centre at its corners. Rounded out to a square
+  // that contains it; the real boundary is the hex ring test in features/starblink/hexGrid.
+  bounds: { min: [-17400, -17400], max: [17400, 17400] },
+  ground: { kind: 'hexland', surfaceY: 0 },
+  // Bright open-sky fill: this map has no SWW horror fog and no baked scenery to light.
+  fill: { ambient: 0.7, hemi: 0.6 },
+  spawn: { position: [0, 3, 0], yaw: 0 },   // the centre parcel, the unowned Fortress
+  props: undefined,
+};
+
 /** Registry of known SW worlds / named maps (later: load from the `worlds` table). */
 export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [APOC_CITY_WORLD.id]: APOC_CITY_WORLD,
@@ -556,6 +585,7 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
   [SAMURAI_GRID_WORLD.id]: SAMURAI_GRID_WORLD,
   [MINING_GRID_WORLD.id]: MINING_GRID_WORLD,
   [KAIJU_LAB_WORLD.id]: KAIJU_LAB_WORLD,
+  [STARBLINK_WORLD.id]: STARBLINK_WORLD,
 };
 
 /**
@@ -564,7 +594,9 @@ export const SIEGE_WORLDS: Record<string, WorldDefinition> = {
  * through here rather than 404-ing to the default map.
  */
 export const LEGACY_MAP_IDS: Record<string, string> = {
-  starblink: 'builder-sandbox',   // renamed 2026-Sep-03; 'Starblink' is now the standalone land game
+  // (none right now) The builder sandbox was renamed off 'starblink' on 2026-Sep-03 so the land
+  // world could take that id. Anything still pointing at the OLD sandbox by its old id would now
+  // land on the land world instead, which is the intended meaning of the name today.
 };
 
 /** Old map id → current map id (pass-through when it is already current). */
