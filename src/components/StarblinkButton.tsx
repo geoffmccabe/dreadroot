@@ -9,6 +9,8 @@
 // deploy, or production: set VITE_STARBLINK_URL. Without it, dev falls back to the Starblink
 // dev server's port (8081, chosen so both can run side by side) and production to the live site.
 import React from 'react';
+import { topRightY } from '@/lib/embedded';
+import { BOOT_MAP } from '@/config/game';
 
 const FALLBACK = import.meta.env.DEV ? 'http://localhost:8081' : 'https://starblink.pages.dev';
 const STARBLINK_URL = (import.meta.env.VITE_STARBLINK_URL as string | undefined) || FALLBACK;
@@ -23,6 +25,8 @@ const panel: React.CSSProperties = {
 };
 
 export function StarblinkButton() {
+  // Pointless inside the Starblink deploy itself, where it would just link to the current page.
+  if (BOOT_MAP === 'starblink') return null;
   return (
     <div
       onClick={() => { window.location.href = STARBLINK_URL; }}
@@ -31,7 +35,7 @@ export function StarblinkButton() {
         // Same 36x36 box as the GameSwitcher's sword button, sitting immediately to its left
         // (that one is 36 wide at right:8, so 8 + 36 + 8 of gap = 52).
         ...panel,
-        position: 'fixed', top: '8px', right: '52px', zIndex: 30,
+        position: 'fixed', top: `${topRightY()}px`, right: '52px', zIndex: 30,
         width: '36px', height: '36px',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '18px', cursor: 'pointer',

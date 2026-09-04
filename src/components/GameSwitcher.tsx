@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { setActiveGame, useActiveGame } from '@/config/activeGame';
 import { GAME_LIST } from '@/config/gameRegistry';
+import { topRightY } from '@/lib/embedded';
 
 const GAMES = GAME_LIST;
 
@@ -18,11 +19,13 @@ const panel: React.CSSProperties = {
   userSelect: 'none',
 };
 
+// Pinned top-right. When the game is framed (the Alien Worlds wallet), it drops below the host's
+// own "✕ Close" button, which otherwise sits directly on top of it and hides the switcher.
 export function GameSwitcher() {
   const [open, setOpen] = useState(false);
   const active = useActiveGame();
   return (
-    <div style={{ position: 'fixed', top: '8px', right: '8px', zIndex: 30 }}>
+    <div style={{ position: 'fixed', top: `${topRightY()}px`, right: '8px', zIndex: 30 }}>
       <div
         onClick={() => setOpen((o) => !o)}
         title="Switch game"

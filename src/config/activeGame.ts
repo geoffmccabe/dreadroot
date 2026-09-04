@@ -3,14 +3,15 @@
 // without separate deploys. The chosen game persists and the app reads it on boot to
 // decide which world/modules + styling to load.
 import { useSyncExternalStore } from 'react';
-import { GAME_ID } from '@/config/game';
+import { GAME_ID, BOOT_MAP } from '@/config/game';
 
 const KEY = 'activeGame';
-// A Starblink deploy always starts as Starblink. Other builds honour the remembered choice.
-// Without the override, a stale 'activeGame' left in localStorage by dreadroot.com would open
-// the land deploy in the wrong game.
-let active: string = GAME_ID === 'starblink'
-  ? 'starblink'
+// A boot-map build runs as SIEGE WORLDS, not as some new game of its own. That matters: roughly
+// twenty places in the engine decide "am I in Siege?" with a literal comparison to 'siege-worlds',
+// so any other id renders the voxel DreadRoot world instead. The remembered choice is ignored
+// here on purpose, so the deploy always opens where it is supposed to.
+let active: string = BOOT_MAP
+  ? 'siege-worlds'
   : ((typeof localStorage !== 'undefined' && localStorage.getItem(KEY)) || GAME_ID);
 
 const subs = new Set<() => void>();

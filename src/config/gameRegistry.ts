@@ -32,6 +32,11 @@ export interface GameDef {
   hue: number | null;
 }
 
+// ⚠ Adding a game here is NOT enough to make the engine treat it as non-voxel. About twenty
+// call sites decide "am I in Siege?" with a literal `activeGame === 'siege-worlds'` rather than
+// asking this registry, so a new non-voxel id silently renders as DreadRoot. Starblink hit exactly
+// that and is therefore NOT a game here: it is Siege Worlds booted onto a different map (BOOT_MAP
+// in config/game.ts). Converting those call sites to gameUsesVoxels() is the real fix, later.
 export const GAMES: Record<string, GameDef> = {
   'dreadroot': {
     id: 'dreadroot', label: 'Dreadroot', enabled: true,
@@ -39,14 +44,6 @@ export const GAMES: Record<string, GameDef> = {
   },
   'siege-worlds': {
     id: 'siege-worlds', label: 'Siege Worlds', enabled: true,
-    usesVoxelWorld: false, worldsTableKey: null, hue: null,
-  },
-  // Starblink — the hex land world. Its own deploy (VITE_GAME_ID=starblink) on its own origin so
-  // the Alien Worlds wallet can frame it, but the SAME engine, so every SWW system works there.
-  // worldsTableKey stays null, i.e. it rides the build's default data-game exactly as Siege does;
-  // giving it separate data is a later decision, not a rendering one.
-  'starblink': {
-    id: 'starblink', label: 'Starblink', enabled: true,
     usesVoxelWorld: false, worldsTableKey: null, hue: null,
   },
   'pinkland': {

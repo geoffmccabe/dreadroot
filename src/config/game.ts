@@ -10,6 +10,17 @@
 // Defaults to 'dreadroot' when VITE_GAME_ID is unset.
 export const GAME_ID: string = (import.meta.env.VITE_GAME_ID as string | undefined) ?? 'dreadroot';
 
+/**
+ * Optional build-time starting MAP (VITE_BOOT_MAP). Used to ship the same engine at a second
+ * origin that opens on a particular map — today the Starblink land world, which the Alien Worlds
+ * wallet frames.
+ *
+ * It deliberately does NOT touch GAME_ID. GAME_ID is the DATA key: change it and every query
+ * filtering by `game` looks in the wrong place, so accounts, inventory and items would come back
+ * empty. A boot map changes where you arrive, nothing else.
+ */
+export const BOOT_MAP: string | null = (import.meta.env.VITE_BOOT_MAP as string | undefined) || null;
+
 // GAME_ID also IS this game's slug in the cross-game creature registry
 // (games.slug). The same value selects this game's rows everywhere.
 
