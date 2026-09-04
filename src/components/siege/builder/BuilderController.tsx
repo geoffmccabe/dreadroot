@@ -14,7 +14,7 @@ import {
   getBuilder, setBuilder, addObject, updateObject, removeObject, useBuilder,
 } from './builderObjectsState';
 import { scifiAsset } from '@/config/assetBase';
-import { getEditMode } from '@/features/objectEditor/store';
+import { getEditMode, selectBuilder, rotateSelectedYaw, scaleSelectedBy } from '@/features/objectEditor/store';
 
 const MARCH_MAX = 800;   // meters the placement ray reaches
 const MARCH_STEP = 2;    // coarse step (m), refined by bisection
@@ -75,7 +75,12 @@ export function BuilderController() {
       const b = getBuilder();
       if (!b.armed || !hitValid.current) return;
       const y = groundY(hit.x, hit.z) + b.armedY;   // wheel raises/lowers above the ground
-      addObject({ set: b.armed.set, file: b.armed.file, name: b.armed.name, pos: [hit.x, y, hit.z], rotY: b.armedRotY, scale: b.armedScale });
+      const id = addObject({ set: b.armed.set, file: b.armed.file, name: b.armed.name, pos: [hit.x, y, hit.z], rotY: b.armedRotY, scale: b.armedScale });
+      // Hand the new object straight to the shared editor, so the moment it lands you can grab,
+      // move, rotate, scale or undo it with the SAME controls as anything else already in the world.
+      // Without this it was placed but inert until you clicked it again.
+      const hy = b.armedRotY / 2;
+      selectBuilder(id, { pos: [hit.x, y, hit.z], quat: [0, Math.sin(hy), 0, Math.cos(hy)], scale: [b.armedScale, b.armedScale, b.armedScale] });
     };
     const selectAtCrosshair = () => {
       camera.getWorldPosition(ro); camera.getWorldDirection(rd); ray.set(ro, rd);
@@ -109,15 +114,20 @@ export function BuilderController() {
       const b = getBuilder();
       if (!b.enabled || e.metaKey || e.ctrlKey || e.altKey) return;
       const sel = b.selectedId ? b.objects.find((o) => o.id === b.selectedId) : null;
+      // [ ] rotate and - = scale work the SAME whether you are holding an item or have one
+      // selected. When not holding, they go through the shared editor's selection (which is what
+      // clicking an object now selects), so one pair of keys covers the whole workflow.
       if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
         const step = (Math.PI / 12) * (e.code === 'BracketRight' ? 1 : -1);
         if (b.armed) setBuilder({ armedRotY: b.armedRotY + step });
         else if (sel) updateObject(sel.id, { rotY: sel.rotY + step });
+        else rotateSelectedYaw(step);
         e.preventDefault();
       } else if (e.code === 'Minus' || e.code === 'Equal') {
         const f = e.code === 'Equal' ? 1.1 : 0.9;
         if (b.armed) setBuilder({ armedScale: clampScale(b.armedScale * f) });
         else if (sel) updateObject(sel.id, { scale: clampScale(sel.scale * f) });
+        else scaleSelectedBy(f);
         e.preventDefault();
       } else if (e.code === 'Delete' || e.code === 'Backspace') {
         if (b.selectedId) { removeObject(b.selectedId); e.preventDefault(); }

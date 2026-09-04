@@ -150,6 +150,10 @@ export function ObjectEditController() {
     // ── grab / release (left button) ──
     const onDown = (e: MouseEvent) => {
       if (!getEditMode() || e.button !== 0) return;
+      // While the Model Placer is HOLDING something, this click means "put it down" and belongs to
+      // the placer. Without this, whichever listener happened to run first won: Arrange would
+      // swallow the click and try to grab, and the placement silently never happened.
+      if (getBuilder().armed) return;
       e.preventDefault(); e.stopImmediatePropagation();
       if (!selectAtCrosshair()) return;          // nothing under the crosshair
       if (e.shiftKey) duplicateSelected([0, 0, 0]); // Shift+click ⇒ grab a copy (no-op for baked)

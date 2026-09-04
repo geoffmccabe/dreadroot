@@ -13,6 +13,7 @@ import { getWorldDefinition, isEnchantedForest, usesEditableTerrain } from '@/co
 import { serializeField } from '../terrain/heightField';
 import { getBrushState, setBrushState } from '../terrain/terrainBrushState';
 import { saveMap } from '../terrain/mapPersistence';
+import { setEditMode } from '@/features/objectEditor/store';
 import { useBuilder, setBuilder, removeObject, clearObjects, getBuilder } from './builderObjectsState';
 import { ProceduralPanel } from './ProceduralPanel';
 import { ModelPreview, ModelPortCanvas, ModelThumb, purgeUrls } from './ModelPreview';
@@ -209,9 +210,10 @@ export function BuilderPalette() {
         <span {...handleProps} className="font-bold text-primary select-none" title="Drag to move">⠿ 🧩 Model Placer</span>
         <span className="flex gap-1">
           <Button size="sm" variant={b.enabled ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-            onClick={() => { const on = !b.enabled; setBuilder({ enabled: on }); if (on) setBrushState({ enabled: false }); }}>{b.enabled ? 'ON' : 'OFF'}</Button>
+            onClick={() => { const on = !b.enabled; setBuilder({ enabled: on }); setEditMode(on); if (on) setBrushState({ enabled: false }); }}
+            title={b.enabled ? 'Building is ON — click to turn it off' : 'Building is OFF — click to turn it on'}>{b.enabled ? 'ON' : 'OFF'}</Button>
           <Button size="sm" variant={b.enabled && b.pgMode === 'place' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
-            onClick={() => { setBuilder({ enabled: true, pgMode: 'place' }); setBrushState({ enabled: false }); }}>Place</Button>
+            onClick={() => { setBuilder({ enabled: true, pgMode: 'place' }); setEditMode(true); setBrushState({ enabled: false }); }}>Place</Button>
           <Button size="sm" variant={b.enabled && b.pgMode === 'pg' ? 'default' : 'outline'} className="h-6 px-2 text-[10px]"
             onClick={() => { setBuilder({ enabled: true, pgMode: 'pg' }); setBrushState({ enabled: false }); }} title="Procedural Generator">PG</Button>
         </span>

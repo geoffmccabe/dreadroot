@@ -50,6 +50,12 @@ export function setCanEdit(v: boolean): void { if (state.canEdit !== v) { state.
 
 // --- selection / mode (no history) ---
 export function setSelected(id: string | null): void { if (state.selectedId !== id) { state.selectedId = id; emit(); } }
+/** Set edit mode explicitly (idempotent). Lets the Model Placer's ON switch drive Arrange too, so
+ *  there is ONE build switch rather than two modes the user has to discover separately. */
+export function setEditMode(v: boolean): void {
+  if (state.editMode !== v) toggleEditMode();
+}
+
 export function toggleEditMode(): void {
   if (!state.canEdit) return;
   state.editMode = !state.editMode;
@@ -173,6 +179,27 @@ function persistTRS(o: WorldObject, t: TRS): void {
   if (o.builder) { writeBuilder(o.builder.id, t); return; }
   if (o.baked) applyBakedTransform(o.baked, t);
   else persistTransform(o.id, t);
+}
+
+/**
+ * Yaw the selection by `rad`. Exposed so the Model Placer's [ and ] keys can drive the SAME
+ * selection as Arrange, instead of each tool keeping its own idea of "the selected thing".
+ * Quaternion premultiply written out longhand to keep this module free of a three.js import.
+ */
+export function rotateSelectedYaw(rad: number): void {
+  const o = current(); if (!o) return;
+  const t = trsOf(o);
+  const [x, y, z, w] = t.quat;
+  const c = Math.cos(rad / 2), sn = Math.sin(rad / 2);
+  transformSelected({ pos: t.pos, scale: t.scale, quat: [c * x + sn * z, c * y + sn * w, c * z - sn * x, c * w - sn * y] });
+}
+
+/** Scale the selection uniformly by `f`, for the placer's - and = keys. */
+export function scaleSelectedBy(f: number): void {
+  const o = current(); if (!o) return;
+  const t = trsOf(o);
+  const cl = (v: number) => Math.min(50, Math.max(0.05, v * f));
+  transformSelected({ pos: t.pos, quat: t.quat, scale: [cl(t.scale[0]), cl(t.scale[1]), cl(t.scale[2])] });
 }
 
 // Move/rotate/scale the selected object. prev is captured before the change so the
