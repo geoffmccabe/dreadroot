@@ -52,10 +52,17 @@ function SpeciesInstances({ file, list }: { file: string; list: PgInstance[] }) 
   // which is why a 50k forest ran at 2 fps. The budget below is what a scene can actually afford
   // with source meshes this heavy; a genuinely DENSE forest needs decimated LOD meshes or
   // billboard impostors, not a bigger cap. See docs/STARBLINK_WORLDGEN_PLAN.md Phase 4.
-  const DRAW_CAP = 22;              // instances per species actually uploaded (~30 species)
-  const LOD_BASE_M = 120;           // even a tiny prop is visible this far
-  const LOD_PER_HEIGHT = 6;         // ...plus this much per metre of its height
-  const REFILL_MOVE_M = 25;         // refill after the camera has moved this far
+  // Sizing these against the ACTUAL density, which is the mistake the first pass made. Spread over
+  // the world's 782 km2:
+  //     50,000 trees =    64/km2, one every 125 m  -> a 120 m radius finds THREE. Effectively none.
+  //    200,000 trees =   256/km2, one every  63 m  -> ~650 within 900 m
+  //  1,000,000 trees = 1,279/km2, one every  28 m  -> ~3,250 within 900 m
+  // So the radius has to be hundreds of metres to see anything at all, and the CAP is what keeps a
+  // high count from turning into hundreds of millions of triangles.
+  const DRAW_CAP = 30;              // instances per species uploaded (~30 species -> ~900 worst case)
+  const LOD_BASE_M = 500;           // even a tiny prop is visible this far
+  const LOD_PER_HEIGHT = 12;        // ...plus this much per metre of its height
+  const REFILL_MOVE_M = 35;         // refill after the camera has moved this far
 
   const meshes = useRef<THREE.InstancedMesh[]>([]);
   const lastFill = useRef(new THREE.Vector3(Infinity, Infinity, Infinity));
