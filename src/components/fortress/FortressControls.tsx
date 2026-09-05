@@ -3325,8 +3325,10 @@ export function FirstPersonControls({
             velocity.current.y = 0;
           }
         } else {
-          if (testPosRef.current.y < playerHeight && velocity.current.y < 0) {
-            camera.position.y = playerHeight + SURFACE_EPS;
+          // Same story as worldFloorY above: not everything stands on zero.
+          const floor0 = groundHeightFn ? groundHeightFn(camera.position.x, camera.position.z) : 0;
+          if (testPosRef.current.y < floor0 + playerHeight && velocity.current.y < 0) {
+            camera.position.y = floor0 + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
             onGround.current = true;
           } else {
@@ -3376,7 +3378,13 @@ export function FirstPersonControls({
         );
 
         const feetY = camera.position.y - playerHeight;
-        const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
+        // The world's floor is y=0 only where there is NO terrain, which is true of DreadRoot's
+        // voxel world (it sits on a literal plane at zero) and false of any generated map. Starblink
+        // has hills, and will have valleys, lake beds and oceans BELOW zero, and a hard-coded floor
+        // here meant the player stopped falling at y=0 and walked on air over anything lower.
+        // Where a terrain sampler exists, the world's floor is whatever it says.
+        const worldFloorY = groundHeightFn ? groundHeightFn(camera.position.x, camera.position.z) : 0;
+        const onWorldGround = feetY <= worldFloorY + SURFACE_EPS + 0.01;
 
         if (!edgeHit && !onWorldGround) {
           onGround.current = false;
@@ -3404,7 +3412,13 @@ export function FirstPersonControls({
           velocity.current.y
         );
         const feetY = camera.position.y - playerHeight;
-        const onWorldGround = feetY <= (SURFACE_EPS + 0.01);
+        // The world's floor is y=0 only where there is NO terrain, which is true of DreadRoot's
+        // voxel world (it sits on a literal plane at zero) and false of any generated map. Starblink
+        // has hills, and will have valleys, lake beds and oceans BELOW zero, and a hard-coded floor
+        // here meant the player stopped falling at y=0 and walked on air over anything lower.
+        // Where a terrain sampler exists, the world's floor is whatever it says.
+        const worldFloorY = groundHeightFn ? groundHeightFn(camera.position.x, camera.position.z) : 0;
+        const onWorldGround = feetY <= worldFloorY + SURFACE_EPS + 0.01;
 
         // Support = the highest collider under the feet. groundHit now INCLUDES the
         // walapa's own solid, bobbing colliders (no special-casing): you stand on a
@@ -3423,7 +3437,7 @@ export function FirstPersonControls({
             camera.position.y = supportY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           } else if (onWorldGround && !hasSupport && velocity.current.y < 0) {
-            camera.position.y = playerHeight + SURFACE_EPS;
+            camera.position.y = worldFloorY + playerHeight + SURFACE_EPS;
             velocity.current.y = 0;
           }
           onGround.current = true;

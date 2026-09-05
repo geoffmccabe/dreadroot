@@ -12,6 +12,7 @@ import { SiegeAnimPanel } from '@/components/siege/SiegeAnimPanel';
 import { SiegeTeleportMenu } from '@/components/siege/SiegeTeleportMenu';
 import { MapLoadModal } from '@/components/siege/MapLoadModal';
 import { TerrainBrushPanel } from '@/components/siege/terrain/TerrainBrushPanel';
+import { TerrainGenPanel } from '@/components/siege/terrain/TerrainGenPanel';
 import { BuilderPalette } from '@/components/siege/builder/BuilderPalette';
 import { BuildToolsDock } from '@/features/objectEditor/BuildToolsDock';
 import { MagicChestPanel } from '@/components/siege/chest/MagicChestPanel';
@@ -1081,6 +1082,7 @@ export function FortressHUD(props: FortressHUDProps) {
       {/* Character chooser: Opt+Cmd+1..9, or the button in the user panel. */}
       <CharacterChooserHost />
       <TerrainBrushPanel />
+      <TerrainGenPanel />
       {/* Drop-in object builder palette — same heightmap-map gating. */}
       <BuilderPalette />
       {/* Build Tools dock (right side) — Arrange panel + future Object Placer; backtick (`)

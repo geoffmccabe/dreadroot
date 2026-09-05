@@ -114,12 +114,16 @@ export function applyBrush(
       const w = falloff(d, edge);
       if (w <= 0) continue;
       const k = sKey(sx, sz);
-      const cur = samples.get(k) ?? baseY;
+      // getSampleAt, NOT `samples.get(k) ?? baseY`. On a generated world an untouched sample's real
+      // height comes from the baseline function, so falling back to the flat baseY made the FIRST
+      // brush stroke treat the ground as if it were at zero: lower slammed a mountain to the floor
+      // in one touch, at any strength, and flatten did the same.
+      const cur = getSampleAt(sx, sz);
       let next = cur;
       if (mode === 'raise') next = cur + amp * w;
       else if (mode === 'lower') next = cur - amp * w;
       else if (mode === 'smooth') next = cur + (neighborAvg(sx, sz) - cur) * Math.min(1, amp * 0.12 * w);
-      else if (mode === 'flat') next = cur + ((flatTarget ?? baseY) - cur) * Math.min(1, amp * 0.06 * w);
+      else if (mode === 'flat') next = cur + ((flatTarget ?? cur) - cur) * Math.min(1, amp * 0.06 * w);
       samples.set(k, next);
     }
   }

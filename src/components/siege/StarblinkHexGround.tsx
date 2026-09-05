@@ -24,7 +24,7 @@ import { toRenderSpace } from '@/lib/renderSpace';
 import { HEX_CORNERS, hexesWithin, hexToWorld, worldToHex, type Hex } from '@/features/starblink/hexGrid';
 import { getHeight, setBaseline, consumeDirtyCells, setBaselineProvider } from './terrain/heightField';
 import { terrainHeight } from '@/features/starblink/terrainGen';
-import { WORLD_SEED } from '@/features/starblink/worldConfig';
+import { useTerrainParams, getTerrainParams } from '@/features/starblink/terrainParams';
 
 // Each parcel is subdivided into SUB concentric rings of triangles. A flat 7-vertex hexagon was
 // fine while the world was flat, but terrain across a 100 m parcel needs interior vertices or
@@ -46,7 +46,7 @@ const TEX_REPEAT_M = 8;       // grass tiles every 8 m
 // Halved twice over on 2026-Sep-04: the band was too wide and too white in game. Band width is
 // (1 - EDGE_START), so 0.89 is half of the previous 0.78, and the mix strength is halved too.
 const EDGE_START = 0.89;      // where the rim lightening begins, 0 = parcel centre, 1 = rim
-const EDGE_STRENGTH = 0.45;   // how far the rim is pushed towards EDGE_COLOR
+const EDGE_STRENGTH = 0.11;   // how far the rim is pushed towards EDGE_COLOR (a quarter of 0.45)
 const EDGE_COLOR = new THREE.Color('#f4f1dc');
 const GRASS_URL = '/grass_texture_seamless.webp';   // DreadRoot's own grass
 
@@ -154,6 +154,7 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
   const [material, setMaterial] = useState<THREE.MeshStandardMaterial | null>(null);
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   const built = useRef<Hex>({ q: 0, r: 0 });
+  const tp = useTerrainParams();   // re-render (and rebuild) whenever a dial moves
   // The whole landscape, as a function. Unedited ground reads from here; brush edits stay as sparse
   // overrides on top, so an untouched 900 km2 world stores nothing at all.
   //
@@ -161,7 +162,7 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
   // declaration order, and the geometry effect below is declared FIRST, so registering the baseline
   // in a later effect meant the first mesh was built against a flat world and only picked up the
   // terrain once the player had walked eight parcels. This is an idempotent module-level setter.
-  setBaselineProvider((x, z) => surfaceY + terrainHeight(x, z, WORLD_SEED));
+  setBaselineProvider((x, z) => surfaceY + terrainHeight(x, z, getTerrainParams()));
 
   // Bumped whenever the terrain brush edits a cell, which forces the honeycomb to rebuild.
   const [editEpoch, setEditEpoch] = useState(0);
@@ -188,7 +189,7 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
     const g = buildGeometry(centre, surfaceY);
     setGeometry(g);
     return () => { g.dispose(); };
-  }, [centre, surfaceY, editEpoch]);
+  }, [centre, surfaceY, editEpoch, tp]);
 
   // The height contract the rest of the engine reads. Registering the heightfield sampler (rather
   // than one flat tile) means ground-follow, god mode, physics, monsters and coin drops all agree

@@ -17,40 +17,10 @@
 //
 // See docs/STARBLINK_WORLDGEN_PLAN.md.
 
-// ---------------------------------------------------------------- tuneables
+import type { TerrainParams } from './terrainParams';
 
-/** Peak height above the base plane, metres. Valleys sit near 0. */
+/** Kept for callers that just want the ceiling for a readout. */
 export const MAX_HEIGHT_M = 400;
-
-/** Wavelengths in metres. Bigger = broader, smoother features. */
-const WL_CONTINENT = 8000;
-const WL_MOUNTAIN = 2100;
-const WL_HILL = 900;
-const WL_DETAIL = 60;
-
-/** Amplitudes in metres, before the biome modifier. */
-const AMP_CONTINENT = 150;
-const AMP_MOUNTAIN = 340;
-const AMP_HILL = 55;
-const AMP_DETAIL = 14;
-
-/**
- * Ridged noise averages around 0.5, so summing its octaves produces a large CONSTANT plus a small
- * ripple: raising it by an amplitude lifts the whole world evenly instead of building peaks. Only
- * the part ABOVE this floor becomes mountain, which is what turns that ripple into actual ridges
- * standing out of low ground. Raise it for rarer, sharper ranges.
- */
-const RIDGE_FLOOR = 0.52;
-
-/** Everything sits on this, so the land RISES away from the Fortress rather than falling away. */
-const BASE_ELEVATION = 40;
-
-/** Biome regions: one cell every this many metres (about 18 parcels across). */
-const BIOME_CELL_M = 1800;
-
-/** The Fortress and its surroundings are flat: fully flat to here, fully normal by the outer radius. */
-const FLAT_RADIUS_M = 160;
-const FLAT_BLEND_M = 520;
 
 // ---------------------------------------------------------------- noise
 
@@ -103,6 +73,9 @@ function ridged(x: number, z: number, seed: number, octaves: number): number {
 
 // ---------------------------------------------------------------- biomes
 
+/** One biome region every this many metres (about 18 parcels across). */
+const BIOME_CELL_M = 1800;
+
 /**
  * Regional character. Each biome cell picks a profile, and its influence EASES OUT towards the cell
  * edge so an extreme region is confined to its own patch and blends back to ordinary land rather
@@ -115,20 +88,25 @@ interface Biome {
   hill: number;       // multiplier on the hill layer
   mountain: number;   // multiplier on the mountain layer
   spikes: number;     // extreme high-frequency spikes and holes (0 = none)
+  terrace: number;    // flat-topped benches: buttes, mesas and cliff faces
+  canyon: number;     // winding gorges cut down through whatever is there
+  lake: number;       // scooped basins, which is where water will sit
 }
 
 const BIOMES: Biome[] = [
-  { name: 'plains',    detail: 0.35, hill: 0.45, mountain: 0.25, spikes: 0 },
-  { name: 'downs',     detail: 0.8,  hill: 1.0,  mountain: 0.5,  spikes: 0 },
-  { name: 'highlands', detail: 1.0,  hill: 1.1,  mountain: 1.35, spikes: 0 },
-  { name: 'flats',     detail: 0.12, hill: 0.18, mountain: 0.06, spikes: 0 },   // eerily smooth
-  { name: 'broken',    detail: 2.4,  hill: 1.2,  mountain: 1.0,  spikes: 0.35 },
+  { name: 'plains',    detail: 0.5,  hill: 0.6,  mountain: 0.3,  spikes: 0,    terrace: 0,    canyon: 0.15, lake: 0.5 },
+  { name: 'downs',     detail: 1.0,  hill: 1.2,  mountain: 0.7,  spikes: 0,    terrace: 0.1,  canyon: 0.3,  lake: 0.3 },
+  { name: 'highlands', detail: 1.4,  hill: 1.2,  mountain: 1.6,  spikes: 0.05, terrace: 0.25, canyon: 0.5,  lake: 0.1 },
+  { name: 'flats',     detail: 0.12, hill: 0.18, mountain: 0.06, spikes: 0,    terrace: 0,    canyon: 0,    lake: 0.8 },
+  { name: 'mesas',     detail: 1.1,  hill: 0.9,  mountain: 1.1,  spikes: 0,    terrace: 1.0,  canyon: 0.7,  lake: 0.1 },
+  { name: 'canyonland',detail: 1.3,  hill: 0.8,  mountain: 0.9,  spikes: 0,    terrace: 0.55, canyon: 1.0,  lake: 0.1 },
+  { name: 'broken',    detail: 2.6,  hill: 1.3,  mountain: 1.1,  spikes: 0.4,  terrace: 0.3,  canyon: 0.5,  lake: 0.2 },
   // Rare and deliberately extreme: a forest of spikes and pits. Confined to one cell and eased out.
-  { name: 'spires',    detail: 3.2,  hill: 0.9,  mountain: 1.2,  spikes: 1.0 },
+  { name: 'spires',    detail: 3.4,  hill: 0.9,  mountain: 1.3,  spikes: 1.0,  terrace: 0,    canyon: 0.3,  lake: 0.2 },
 ];
 
 /** Weighted pick: ordinary land is common, the extreme regions are rare. */
-const BIOME_WEIGHTS = [26, 26, 20, 12, 12, 4];
+const BIOME_WEIGHTS = [20, 22, 16, 8, 12, 11, 8, 3];
 const WEIGHT_TOTAL = BIOME_WEIGHTS.reduce((a, b) => a + b, 0);
 
 function biomeOfCell(cx: number, cz: number, seed: number): Biome {
@@ -141,7 +119,7 @@ function biomeOfCell(cx: number, cz: number, seed: number): Biome {
 }
 
 /** The neutral profile every biome eases back to at its edges. */
-const NEUTRAL: Biome = { name: 'neutral', detail: 1, hill: 1, mountain: 1, spikes: 0 };
+const NEUTRAL: Biome = { name: 'neutral', detail: 1, hill: 1, mountain: 1, spikes: 0, terrace: 0.12, canyon: 0.25, lake: 0.2 };
 
 /**
  * Blend this point's biome towards neutral by how far it sits from its cell's (jittered) centre.
@@ -162,6 +140,9 @@ function biomeAt(x: number, z: number, seed: number): Biome {
     hill: mix(NEUTRAL.hill, b.hill),
     mountain: mix(NEUTRAL.mountain, b.mountain),
     spikes: mix(0, b.spikes),
+    terrace: mix(NEUTRAL.terrace, b.terrace),
+    canyon: mix(NEUTRAL.canyon, b.canyon),
+    lake: mix(NEUTRAL.lake, b.lake),
   };
 }
 
@@ -170,63 +151,100 @@ export const biomeNameAt = (x: number, z: number, seed: number) => biomeAt(x, z,
 
 // ---------------------------------------------------------------- height
 
-/**
- * Compress the top of the range instead of slicing it off. A hard `Math.min` gave every high peak
- * an identical dead-flat summit at exactly the ceiling, which reads as a mesa plateau rather than a
- * mountain. tanh eases the last stretch so summits stay pointed and still never exceed the ceiling.
- */
-const SOFT_KNEE = 280;
-function softCeiling(h: number): number {
-  if (h <= SOFT_KNEE) return h;
-  const room = MAX_HEIGHT_M - SOFT_KNEE;
-  return SOFT_KNEE + room * Math.tanh((h - SOFT_KNEE) / room);
+/** 0 on the Fortress plaza, easing to 1 by the outer radius, so the centre parcels stay flat. */
+function fortressFlatten(x: number, z: number, p: TerrainParams): number {
+  const d = Math.hypot(x, z);
+  if (d <= p.flatRadius) return 0;
+  if (d >= p.flatBlend) return 1;
+  return fade((d - p.flatRadius) / (p.flatBlend - p.flatRadius));
 }
 
-/** 0 on the Fortress plaza, easing to 1 by FLAT_BLEND_M, so the centre parcels stay flat. */
-function fortressFlatten(x: number, z: number): number {
-  const d = Math.hypot(x, z);
-  if (d <= FLAT_RADIUS_M) return 0;
-  if (d >= FLAT_BLEND_M) return 1;
-  return fade((d - FLAT_RADIUS_M) / (FLAT_BLEND_M - FLAT_RADIUS_M));
+/**
+ * Compress the top of the range instead of slicing it off. A hard `Math.min` gave every high peak
+ * an identical dead-flat summit at exactly the ceiling, which reads as a plateau rather than a
+ * mountain. tanh eases the last stretch so summits stay pointed and still never exceed the ceiling.
+ */
+function softCeiling(h: number, maxH: number): number {
+  const knee = maxH * 0.7;
+  if (h <= knee) return h;
+  const room = maxH - knee;
+  return knee + room * Math.tanh((h - knee) / room);
+}
+
+/**
+ * Benches. Quantising height to steps and then sharpening the tread is what makes buttes, mesas and
+ * cliff faces: a flat top with a steep riser, rather than a smooth dome.
+ */
+function terrace(h: number, step: number, sharp: number): number {
+  if (sharp <= 0.001 || step <= 0.1) return h;
+  const q = Math.floor(h / step) * step;
+  const f = (h - q) / step;
+  const shaped = q + step * Math.pow(f, 1 + sharp * 5);
+  return h + (shaped - h) * sharp;
 }
 
 /**
  * Ground height at a world position. This is the authoritative shape of Starblink.
  */
-export function terrainHeight(x: number, z: number, seed: number): number {
+export function terrainHeight(x: number, z: number, p: TerrainParams): number {
+  const seed = p.seed;
   const b = biomeAt(x, z, seed);
 
-  // Biased positive: broad highlands rather than half the world sitting in a hole.
-  const continent = (fbm(x / WL_CONTINENT, z / WL_CONTINENT, seed + 11, 3) * 0.5 + 0.5) * AMP_CONTINENT;
+  // DOMAIN WARP. Sampling the noise at a position that has itself been stirred by noise is the
+  // single biggest difference between "rolling blobs" and terrain that looks eroded and organic.
+  // Applied to the mountain and hill layers; the continental shape stays unwarped so the broad
+  // highlands keep their scale.
+  const wl = p.warpWavelength;
+  const wx = x + fbm(x / wl, z / wl, seed + 5, 2) * p.warpAmount;
+  const wz = z + fbm(x / wl + 31.7, z / wl - 17.3, seed + 6, 2) * p.warpAmount;
 
-  // Ridges: remap so only the top of the ridged field counts, then curve it. Most ground gets
-  // nothing at all and the ranges rise out of it.
-  const rr = ridged(x / WL_MOUNTAIN, z / WL_MOUNTAIN, seed + 23, 5);
-  const r = Math.max(0, (rr - RIDGE_FLOOR) / (1 - RIDGE_FLOOR));
-  const mountain = Math.pow(r, 1.4) * AMP_MOUNTAIN * b.mountain;
+  const continent = (fbm(x / p.wlContinent, z / p.wlContinent, seed + 11, 3) * 0.5 + 0.5) * p.ampContinent;
 
-  // Hills are biased upward too, so they mostly add relief instead of digging pits.
-  const hill = (fbm(x / WL_HILL, z / WL_HILL, seed + 37, 4) * 0.65 + 0.35) * AMP_HILL * b.hill;
+  // Ridges: only the top of the ridged field counts, then it is curved, so most ground gets no
+  // mountain at all and the ranges rise out of it.
+  const rr = ridged(wx / p.wlMountain, wz / p.wlMountain, seed + 23, 5);
+  const r = Math.max(0, (rr - p.ridgeFloor) / (1 - p.ridgeFloor));
+  const mountain = Math.pow(r, 1.4) * p.ampMountain * b.mountain;
+
+  const hill = (fbm(wx / p.wlHill, wz / p.wlHill, seed + 37, 4) * 0.65 + 0.35) * p.ampHill * b.hill;
 
   // Two scales of surface texture, so slopes have something to read at walking distance.
-  const detail = (fbm(x / WL_DETAIL, z / WL_DETAIL, seed + 53, 3) * 0.7
-                + fbm(x / 17, z / 17, seed + 97, 2) * 0.3) * AMP_DETAIL * b.detail;
+  const detail = (fbm(wx / p.wlDetail, wz / p.wlDetail, seed + 53, 3) * 0.7
+                + fbm(wx / 17, wz / 17, seed + 97, 2) * 0.3) * p.ampDetail * b.detail;
 
-  // Spikes and pits. Only the extreme biomes switch this on, and it is signed so the same term
-  // makes towers and holes rather than only pushing the ground up.
-  let spikes = 0;
+  let h = p.baseElevation + continent + mountain + hill + detail;
+
+  // Spikes and pits. Signed, so the same term makes towers AND holes rather than only pushing up.
   if (b.spikes > 0.001) {
-    const s = fbm(x / 34, z / 34, seed + 71, 2);
-    spikes = Math.sign(s) * Math.pow(Math.abs(s), 2.2) * 90 * b.spikes;
+    const sp = fbm(x / 34, z / 34, seed + 71, 2);
+    h += Math.sign(sp) * Math.pow(Math.abs(sp), 2.2) * 90 * b.spikes;
   }
 
-  const h = BASE_ELEVATION + continent + mountain + hill + detail + spikes;
-  return softCeiling(h) * fortressFlatten(x, z);
+  // Benches, before the cuts, so canyon walls inherit the bench profile.
+  h = terrace(h, p.terraceStep, p.terraceSharpness * b.terrace);
+
+  // CANYONS. A ridged field is a set of winding lines where it approaches its maximum; taking only
+  // that top sliver gives narrow meandering gorges rather than broad valleys. Warped, so they snake.
+  if (b.canyon > 0.001 && p.canyonDepth > 0) {
+    const c = ridged(wx / p.canyonWavelength, wz / p.canyonWavelength, seed + 131, 3);
+    const lo = 1 - Math.max(0.02, p.canyonWidth);
+    const t = c <= lo ? 0 : fade(Math.min(1, (c - lo) / (1 - lo)));
+    h -= t * p.canyonDepth * b.canyon;
+  }
+
+  // LAKE BASINS. Broad scoops in the low places, which is where water will sit later.
+  if (b.lake > 0.001 && p.lakeDepth > 0) {
+    const l = fbm(x / p.lakeWavelength, z / p.lakeWavelength, seed + 149, 2);
+    const t = l >= -0.18 ? 0 : fade(Math.min(1, (-0.18 - l) / 0.42));
+    h -= t * p.lakeDepth * b.lake;
+  }
+
+  return softCeiling(h, p.maxHeight) * fortressFlatten(x, z, p);
 }
 
 /** Approximate uphill slope (0 = flat, 1 = vertical) — for cliff shading and scatter rejection. */
-export function terrainSlope(x: number, z: number, seed: number, step = 2): number {
-  const hx = terrainHeight(x + step, z, seed) - terrainHeight(x - step, z, seed);
-  const hz = terrainHeight(x, z + step, seed) - terrainHeight(x, z - step, seed);
+export function terrainSlope(x: number, z: number, p: TerrainParams, step = 2): number {
+  const hx = terrainHeight(x + step, z, p) - terrainHeight(x - step, z, p);
+  const hz = terrainHeight(x, z + step, p) - terrainHeight(x, z - step, p);
   return Math.min(1, Math.hypot(hx, hz) / (2 * step));
 }
