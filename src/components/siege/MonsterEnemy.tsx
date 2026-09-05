@@ -75,6 +75,14 @@ export interface MonsterConfig {
   wanderRadius?: number;
   faceOffset?: number;
   health?: number;            // HP (default 100)
+  /**
+   * Opt in to the low-health injured crawl (see `injured` below). OFF by default, and that
+   * default is the fix for a real bug: the behaviour used to switch itself on for any model
+   * that merely HAPPENED to contain a clip named 'crawl'. Eighteen of the monster models do,
+   * including reddemon and the darklord boss, so most of the roster inherited a behaviour
+   * written only for skeletons. Turn it on per monster, deliberately.
+   */
+  injuredCrawl?: boolean;
   noStun?: boolean;           // bullets don't stun-freeze it (keeps walking when shot) — test/boss
   noKnockback?: boolean;      // bullets/hits deal HP only — no shove (Spintroll drives its own motion)
   riseFromGround?: boolean;   // spawn sunk in the floor and rise out over 1s (challenge drops)
@@ -669,11 +677,27 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     if (key === clips.idle && names.length) return actions[names[0]];
     return null;
   };
-  const play = (key: string, once = false) => {
+  /**
+   * `hard` = cut straight to the clip at full weight instead of crossfading.
+   *
+   * Used for DEATH, and it fixes a real artifact: a crossfade ramps the incoming clip's weight up
+   * from ZERO while ramping the outgoing one down. That is fine between two settled animations, but
+   * a killing blow plays the one-shot hit reaction and then death a few frames later, so the
+   * outgoing action is itself still fading IN at a low weight. Both sit near zero for a moment, the
+   * blend adds up to almost nothing, and the mesh snaps to its bind pose — the T-pose that flashes
+   * just before a demon dies. Starting death at weight 1 leaves no gap for that to happen in.
+   */
+  const play = (key: string, once = false, hard = false) => {
     const a = clip(key); if (!a || st.current.cur === key) return;
-    Object.values(actions).forEach((x) => { if (x && x !== a) x.fadeOut(0.15); });
-    a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
-    a.clampWhenFinished = once; a.fadeIn(0.15).play();
+    if (hard) {
+      Object.values(actions).forEach((x) => { if (x && x !== a) x.stop(); });
+      a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+      a.clampWhenFinished = once; a.setEffectiveWeight(1); a.play();
+    } else {
+      Object.values(actions).forEach((x) => { if (x && x !== a) x.fadeOut(0.15); });
+      a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+      a.clampWhenFinished = once; a.fadeIn(0.15).play();
+    }
     st.current.cur = key;
     // One-shot poses (attack/hit) clamp on their LAST frame when done. Record when that clamp has held
     // well past the clip's natural length so the watchdog can release it — otherwise a stale swipeUntil
@@ -923,7 +947,7 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
       if (spinLoopRef.current) { stopLoopSound(spinLoopRef.current); spinLoopRef.current = null; }  // kill the spin whir
       // Skeletons pick one of two death clips once, 50/50: the original 'death' or the retargeted 'death2'.
       if (!s.deathVariant) s.deathVariant = (hasDeath2 && Math.random() < 0.5) ? 'death2' : clips.death;
-      play(s.deathVariant, true);
+      play(s.deathVariant, true, true);   // hard cut — see the note on `play`
       s.x += inst.kvx * delta; s.z += inst.kvz * delta;
       inst.kvx *= 0.82; inst.kvz *= 0.82;
       const dh = corpseGround(s.x, s.z, s.y); if (dh != null) s.y = dh;
@@ -950,7 +974,14 @@ export function MonsterEnemy({ spawn, ...cfg }: { spawn: [number, number, number
     // speed. `injured` overrides the locomotion clip + speed below. The crawl's animation rate is
     // ABSOLUTE 2× (its own natural speed ×2), decoupled from the monster's animSpeed (the giant plays
     // everything at 6× — the crawl must NOT inherit that). Re-applied below after play() runs.
-    const injured = hasCrawl && inst.hp <= inst.maxHp * 0.10;
+    // OPT-IN. This used to read `hasCrawl && ...`, which switched itself on for every model
+    // carrying a clip named 'crawl': 18 of them, including reddemon and the darklord boss.
+    // The result looked exactly like a broken death. At <=10% HP the monster dropped into a
+    // crawl authored for a different rig (reads as a T-pose or a bent, wrong pose), drifted
+    // toward the player at 25% speed (reads as floating), kept attacking (reads as coming
+    // back to life), then died to one further shot (because it was already at 10% HP).
+    // It was never dying and reviving at all. See `injuredCrawl` on the config.
+    const injured = !!c.injuredCrawl && hasCrawl && inst.hp <= inst.maxHp * 0.10;
     const injMul = injured ? 0.25 : 1;
 
     // Ambient moans (SW zombie sounds): per-monster, ~every 4-8s a 50% chance, distance-scaled.
