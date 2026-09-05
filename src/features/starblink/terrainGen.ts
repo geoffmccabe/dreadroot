@@ -24,15 +24,26 @@ export const MAX_HEIGHT_M = 400;
 
 /** Wavelengths in metres. Bigger = broader, smoother features. */
 const WL_CONTINENT = 8000;
-const WL_MOUNTAIN = 3000;
+const WL_MOUNTAIN = 2100;
 const WL_HILL = 900;
 const WL_DETAIL = 60;
 
 /** Amplitudes in metres, before the biome modifier. */
-const AMP_CONTINENT = 120;
-const AMP_MOUNTAIN = 320;
-const AMP_HILL = 50;
-const AMP_DETAIL = 4;
+const AMP_CONTINENT = 150;
+const AMP_MOUNTAIN = 340;
+const AMP_HILL = 55;
+const AMP_DETAIL = 14;
+
+/**
+ * Ridged noise averages around 0.5, so summing its octaves produces a large CONSTANT plus a small
+ * ripple: raising it by an amplitude lifts the whole world evenly instead of building peaks. Only
+ * the part ABOVE this floor becomes mountain, which is what turns that ripple into actual ridges
+ * standing out of low ground. Raise it for rarer, sharper ranges.
+ */
+const RIDGE_FLOOR = 0.52;
+
+/** Everything sits on this, so the land RISES away from the Fortress rather than falling away. */
+const BASE_ELEVATION = 40;
 
 /** Biome regions: one cell every this many metres (about 18 parcels across). */
 const BIOME_CELL_M = 1800;
@@ -159,6 +170,18 @@ export const biomeNameAt = (x: number, z: number, seed: number) => biomeAt(x, z,
 
 // ---------------------------------------------------------------- height
 
+/**
+ * Compress the top of the range instead of slicing it off. A hard `Math.min` gave every high peak
+ * an identical dead-flat summit at exactly the ceiling, which reads as a mesa plateau rather than a
+ * mountain. tanh eases the last stretch so summits stay pointed and still never exceed the ceiling.
+ */
+const SOFT_KNEE = 280;
+function softCeiling(h: number): number {
+  if (h <= SOFT_KNEE) return h;
+  const room = MAX_HEIGHT_M - SOFT_KNEE;
+  return SOFT_KNEE + room * Math.tanh((h - SOFT_KNEE) / room);
+}
+
 /** 0 on the Fortress plaza, easing to 1 by FLAT_BLEND_M, so the centre parcels stay flat. */
 function fortressFlatten(x: number, z: number): number {
   const d = Math.hypot(x, z);
@@ -173,15 +196,21 @@ function fortressFlatten(x: number, z: number): number {
 export function terrainHeight(x: number, z: number, seed: number): number {
   const b = biomeAt(x, z, seed);
 
-  const continent = fbm(x / WL_CONTINENT, z / WL_CONTINENT, seed + 11, 3) * AMP_CONTINENT;
+  // Biased positive: broad highlands rather than half the world sitting in a hole.
+  const continent = (fbm(x / WL_CONTINENT, z / WL_CONTINENT, seed + 11, 3) * 0.5 + 0.5) * AMP_CONTINENT;
 
-  // Ridged, and squared so low ground stays low: it keeps ranges as ranges instead of raising
-  // everything into a general lumpiness.
-  const r = ridged(x / WL_MOUNTAIN, z / WL_MOUNTAIN, seed + 23, 5);
-  const mountain = r * r * AMP_MOUNTAIN * b.mountain;
+  // Ridges: remap so only the top of the ridged field counts, then curve it. Most ground gets
+  // nothing at all and the ranges rise out of it.
+  const rr = ridged(x / WL_MOUNTAIN, z / WL_MOUNTAIN, seed + 23, 5);
+  const r = Math.max(0, (rr - RIDGE_FLOOR) / (1 - RIDGE_FLOOR));
+  const mountain = Math.pow(r, 1.4) * AMP_MOUNTAIN * b.mountain;
 
-  const hill = fbm(x / WL_HILL, z / WL_HILL, seed + 37, 4) * AMP_HILL * b.hill;
-  const detail = fbm(x / WL_DETAIL, z / WL_DETAIL, seed + 53, 3) * AMP_DETAIL * b.detail;
+  // Hills are biased upward too, so they mostly add relief instead of digging pits.
+  const hill = (fbm(x / WL_HILL, z / WL_HILL, seed + 37, 4) * 0.65 + 0.35) * AMP_HILL * b.hill;
+
+  // Two scales of surface texture, so slopes have something to read at walking distance.
+  const detail = (fbm(x / WL_DETAIL, z / WL_DETAIL, seed + 53, 3) * 0.7
+                + fbm(x / 17, z / 17, seed + 97, 2) * 0.3) * AMP_DETAIL * b.detail;
 
   // Spikes and pits. Only the extreme biomes switch this on, and it is signed so the same term
   // makes towers and holes rather than only pushing the ground up.
@@ -191,8 +220,8 @@ export function terrainHeight(x: number, z: number, seed: number): number {
     spikes = Math.sign(s) * Math.pow(Math.abs(s), 2.2) * 90 * b.spikes;
   }
 
-  const h = continent + mountain + hill + detail + spikes;
-  return Math.min(MAX_HEIGHT_M, h) * fortressFlatten(x, z);
+  const h = BASE_ELEVATION + continent + mountain + hill + detail + spikes;
+  return softCeiling(h) * fortressFlatten(x, z);
 }
 
 /** Approximate uphill slope (0 = flat, 1 = vertical) — for cliff shading and scatter rejection. */

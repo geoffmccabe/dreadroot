@@ -45,6 +45,7 @@ import { useFlameGlove, getFlameGlove } from '@/config/flameGlove';
 import { useFlameTierOverride, setFlameTierOverride } from '@/config/flameTierOverride';
 import { SiegeWorldLayers } from '@/components/siege/SiegeWorldLayers';
 import { PlacedObjectsLayer } from '@/features/objectEditor/PlacedObjectsLayer';
+import { useSiegeFog } from '@/components/siege/siegeFog';
 import { ObjectEditController } from '@/features/objectEditor/ObjectEditController';
 import { DamageNumbers } from '@/components/siege/DamageNumbersLayer';
 import { spawnDamageNumber, fireDamageColor } from '@/components/siege/damageNumbers';
@@ -1353,7 +1354,10 @@ const USE_NEBULA_FOR_BULLET_IMPACTS = false;
 
   // Fog configuration — lightning panel overrides profile value for instant control
   const { visualDistance, fogEnabled: profileFogEnabled } = useBlocks();
-  const fogEnabled = lightningSettings?.fogEnabled ?? profileFogEnabled;
+  // Cmd-F force-off, for judging generated terrain from the air. ANDed in, so it can only ever turn
+  // fog OFF, never switch it on against the profile or the lighting preset.
+  const fogAllowed = useSiegeFog();
+  const fogEnabled = (lightningSettings?.fogEnabled ?? profileFogEnabled) && fogAllowed;
   // Scope multiplayer by world - prevents cross-world player visibility
   const { players, broadcastPosition, broadcastPlayerHit, isConnected, localPlayerOnFire, localFireBurnTimeMs, localFireColors, setLocalPlayerOnFire } = useMultiplayer(currentWorldId);
   const { user } = useAuth();

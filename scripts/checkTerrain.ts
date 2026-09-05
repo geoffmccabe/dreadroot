@@ -12,6 +12,13 @@ for (let x = -16000; x <= 16000; x += 500) {
 }
 console.log(`samples=${n}  min=${min.toFixed(1)}  max=${max.toFixed(1)}  mean=${(sum / n).toFixed(1)}  (ceiling ${MAX_HEIGHT_M})`);
 console.log('biome mix:', Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / n * 100).toFixed(0)}%`).join('  '));
+const buckets = [0, 50, 100, 150, 200, 250, 300, 350];
+const hist: number[] = new Array(buckets.length).fill(0);
+for (let x = -16000; x <= 16000; x += 500) for (let z = -16000; z <= 16000; z += 500) {
+  const h = terrainHeight(x, z, SEED);
+  for (let i = buckets.length - 1; i >= 0; i--) if (h >= buckets[i]) { hist[i]++; break; }
+}
+console.log('height spread:', buckets.map((b, i) => `${b}m+ ${(hist[i] / n * 100).toFixed(0)}%`).join('  '));
 console.log('\ntransect east from the Fortress (every 200 m):');
 let row = '';
 for (let x = 0; x <= 4000; x += 200) row += `${x}:${terrainHeight(x, 0, SEED).toFixed(0)}m  `;
