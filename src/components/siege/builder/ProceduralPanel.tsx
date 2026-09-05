@@ -103,6 +103,13 @@ export function ProceduralPanel() {
   const onDeleteAll = () => { if (window.confirm(`Delete all ${acceptedCount} generated objects (and their edits)?`)) removeBySet(); };
   return (
     <div className="flex flex-1 flex-col gap-2 overflow-y-auto pr-0.5 text-[10px]">
+      {/* Starblink: one switch to cover every hex, instead of the Bleakrock-shaped region box.
+          It also drops the altitude/water gates, which are tuned for Bleakrock's sea level. */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 8px', fontSize: 11 }}>
+        <input type="checkbox" checked={!!p.wholeWorld}
+          onChange={(e) => setPgParams({ wholeWorld: e.target.checked })} />
+        <span>Entire world (all hexes)</span>
+      </label>
       <select className="w-full rounded bg-background/60 px-1 py-1 text-[11px]" value="mushrooms" onChange={() => { /* only category for now */ }}>
         <option value="mushrooms">🍄 Mushroom Trees</option>
       </select>

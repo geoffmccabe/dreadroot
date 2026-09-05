@@ -5,6 +5,8 @@ import { useSyncExternalStore } from 'react';
 import { getHeight } from '../terrain/heightField';
 import { getBrushState } from '../terrain/terrainBrushState';
 import { MUSHROOM_TREES } from './mushroomCatalog';
+import { getWorldDefinition } from '@/config/worldDefinition';
+import { getActiveMapId } from '@/config/activeMap';
 
 export interface SpeciesCfg {
   file: string;
@@ -30,6 +32,14 @@ export interface PgParams {
   count: number; sizeBias: number; yawRandom: boolean; tiltMax: number; stretchVar: number; slopeMax: number;
   regionMinX: number; regionMaxX: number; regionMinZ: number; regionMaxZ: number;
   seed: number;
+  /**
+   * Starblink: scatter over EVERY hex instead of the region rectangle, and drop the SWW-tuned
+   * gates with it. The default region is Bleakrock's coordinates and the default altitude band
+   * starts at 22 m, so on a world that spawns you at 0,0,0 on ground 0-40 m high, every candidate
+   * was either generated kilometres away or rejected for being too low. That is why the generator
+   * looked broken there rather than merely empty.
+   */
+  wholeWorld: boolean;
 }
 
 const DEF = { minH: 10, maxH: 200, altMin: 22, altMax: 400, slope: 38 };
@@ -40,6 +50,7 @@ let params: PgParams = {
   defMinH: DEF.minH, defMaxH: DEF.maxH, defAltMin: DEF.altMin, defAltMax: DEF.altMax,
   count: 400, sizeBias: 3, yawRandom: true, tiltMax: 8, stretchVar: 0.15, slopeMax: 38,
   regionMinX: -1300, regionMaxX: -300, regionMinZ: 1400, regionMaxZ: 2520,
+  wholeWorld: false,
   seed: 1,
 };
 let instances: PgInstance[] = [];
@@ -71,6 +82,15 @@ function rng(seed: number) {
 
 export function generate(): void {
   const p = params;
+  // Whole-world mode ignores the region rectangle and the altitude/water gates, which are all
+  // tuned for Bleakrock. Bounds come from the active world so this stays honest if the world grows.
+  const world = getWorldDefinition(getActiveMapId());
+  const wholeWorld = p.wholeWorld;
+  const bx = world.bounds;
+  const minX = wholeWorld && bx ? bx.min[0] : p.regionMinX;
+  const maxX = wholeWorld && bx ? bx.max[0] : p.regionMaxX;
+  const minZ = wholeWorld && bx ? bx.min[1] : p.regionMinZ;
+  const maxZ = wholeWorld && bx ? bx.max[1] : p.regionMaxZ;
   const pool = p.chosen.filter((c) => c.weight > 0);
   if (!pool.length) { instances = []; emit(); return; }
   const totalW = pool.reduce((s, c) => s + c.weight, 0);
@@ -79,10 +99,10 @@ export function generate(): void {
   const out: PgInstance[] = [];
   const e = 2;
   for (let i = 0; i < p.count; i++) {
-    const x = p.regionMinX + rand() * (p.regionMaxX - p.regionMinX);
-    const z = p.regionMinZ + rand() * (p.regionMaxZ - p.regionMinZ);
+    const x = minX + rand() * (maxX - minX);
+    const z = minZ + rand() * (maxZ - minZ);
     const y = getHeight(x, z);
-    if (y <= waterLevel) continue;
+    if (!wholeWorld && y <= waterLevel) continue;
     const gx = (getHeight(x + e, z) - getHeight(x - e, z)) / (2 * e);
     const gz = (getHeight(x, z + e) - getHeight(x, z - e)) / (2 * e);
     const slopeDeg = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
@@ -92,7 +112,7 @@ export function generate(): void {
     // Global slope is the baseline for everyone; a species with a HIGHER own cap may climb steeper.
     const effSlope = Math.max(p.slopeMax, s.slopeMax ?? p.slopeMax);
     if (slopeDeg > effSlope) continue;
-    if (y < s.altMin || y > s.altMax) continue;   // this species' altitude band
+    if (!wholeWorld && (y < s.altMin || y > s.altMax)) continue;   // this species' altitude band
     const height = s.minH * Math.pow(s.maxH / s.minH, Math.pow(rand(), p.sizeBias));
     const yaw = p.yawRandom ? rand() * Math.PI * 2 : 0;
     const tiltX = (rand() * 2 - 1) * p.tiltMax * Math.PI / 180;
