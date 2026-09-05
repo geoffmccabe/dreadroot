@@ -78,7 +78,8 @@
     "check:parkour": "node scripts/check-parkour.mjs",
     "check:course": "node scripts/check-parkour-course.mjs",
     "profile:tris": "node scripts/profile-triangles.mjs",
-    "check:clips": "node scripts/check-clips.mjs"
+    "check:clips": "node scripts/check-clips.mjs",
+    "check:terrain": "esbuild scripts/checkTerrain.ts --bundle --format=esm --platform=node --outfile=node_modules/.cache/checkTerrain.mjs --log-level=warning && node node_modules/.cache/checkTerrain.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -24,6 +24,7 @@ import { GlobePortals } from './globe/GlobePortals';
 import { GlobeErrorBoundary } from './globe/GlobeErrorBoundary';
 import { StarblinkHexGround } from './StarblinkHexGround';
 import { StarblinkDemonSpawner } from './StarblinkDemonSpawner';
+import { installFogHotkey } from './siegeFog';
 import { TerrainBrushController } from './terrain/TerrainBrushController';
 import { BuilderObjectsLayer } from './builder/BuilderObjectsLayer';
 import { ProceduralObjectsLayer } from './builder/ProceduralObjectsLayer';
@@ -149,6 +150,9 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
   // Starblink's honeycomb rides the same sculptable heightfield, so it gets the builder tools too.
   const isBuilderMap = (isHeightmap || isHexland) && !isEnchantedForest(world.id);
   // Let falling coin drops land on the mesh terrain (no voxels here) instead of dropping through it.
+  // Cmd-F clears the fog, for judging generated terrain from the air.
+  useEffect(() => installFogHotkey(), []);
+
   useEffect(() => { setCoinGroundSampler(sampleHeight); return () => setCoinGroundSampler(null); }, []);
   // Diagnostic: timestamp when the siege scene first mounts, so the init log shows whether the long
   // pre-terrain gap is BEFORE the scene mounts (canvas/scene gating) or after (terrain effect delay).

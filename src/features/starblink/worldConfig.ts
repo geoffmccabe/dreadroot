@@ -47,3 +47,9 @@ export function regionOf(ring: number): string {
   for (const r of REGIONS) if (ring <= r.maxRing) return r.name;
   return 'Void';
 }
+
+/**
+ * The seed every generated feature hangs off: terrain shape, biome regions, and later the forest.
+ * ⚠ ONCE LAND IS SOLD THIS MUST NEVER CHANGE. Changing it moves the ground under people's parcels.
+ */
+export const WORLD_SEED = 20260904;

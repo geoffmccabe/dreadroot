@@ -24,7 +24,16 @@ export const cellKey = (cx: number, cz: number) => (cx + OFF) * 65536 + (cz + OF
 export const cellOf = (w: number) => Math.floor(w / CELL_M);
 
 let baseY = 0;
-const samples = new Map<number, number>(); // sample key → height (absent = baseY)
+/**
+ * Optional generated baseline. When set, an UNEDITED sample reads from this function instead of the
+ * flat `baseY`, which is what turns a blank map into a whole procedural world while keeping brush
+ * edits as sparse overrides on top: an untouched world stores nothing at all.
+ */
+let baseline: ((x: number, z: number) => number) | null = null;
+export function setBaselineProvider(fn: ((x: number, z: number) => number) | null) { baseline = fn; }
+export function hasBaselineProvider() { return baseline !== null; }
+
+const samples = new Map<number, number>(); // sample key → height (absent = the baseline)
 const dirty = new Set<number>();           // cell keys whose mesh needs a rebuild
 
 export function setBaseline(y: number) { baseY = y; }
@@ -35,7 +44,8 @@ export function editedSampleCount() { return samples.size; }
 /** Raw stored sample (or baseline). Used by the mesh builder per vertex. */
 export function getSampleAt(sx: number, sz: number): number {
   const v = samples.get(sKey(sx, sz));
-  return v === undefined ? baseY : v;
+  if (v !== undefined) return v;
+  return baseline ? baseline(sx, sz) : baseY;
 }
 
 /** Authoritative ground height at world (x,z) — bilinear over the 1 m lattice. */
