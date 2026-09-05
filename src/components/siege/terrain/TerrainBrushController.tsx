@@ -81,6 +81,13 @@ export function TerrainBrushController() {
     const onDown = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return;   // don't hijack typing in panel fields
       if (!getBrushState().enabled) return;
+      // ⚠ MODIFIED KEYS ARE NOT OURS. Every brush shortcut below is a PLAIN letter, and each
+      // one calls stopImmediatePropagation, which kills every other listener on the window
+      // including the ones registered before us. Without this guard the brush silently ate
+      // Cmd+G (the admin grenade grant), and equally Cmd+R, Cmd+F, Cmd+B and Cmd+T, for as
+      // long as the brush was enabled. The symptom is a feature that "was taken away", with
+      // nothing logged and nothing thrown.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const code = e.code;
       if (code === 'KeyB') { applying.current = true; flatTarget.current = undefined; e.preventDefault(); e.stopImmediatePropagation(); }
       else if (code === 'KeyR') { setBrushState({ mode: 'raise' }); e.preventDefault(); e.stopImmediatePropagation(); }
