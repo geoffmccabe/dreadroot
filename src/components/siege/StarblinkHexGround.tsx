@@ -48,7 +48,6 @@ const TEX_REPEAT_M = 8;       // grass tiles every 8 m
 const EDGE_START = 0.89;      // where the rim lightening begins, 0 = parcel centre, 1 = rim
 const EDGE_STRENGTH = 0.11;   // how far the rim is pushed towards EDGE_COLOR (a quarter of 0.45)
 const EDGE_COLOR = new THREE.Color('#f4f1dc');
-const GRASS_URL = '/grass_texture_seamless.webp';   // DreadRoot's own grass
 
 /** Vertices in one subdivided parcel: the centred hexagonal number, 1 + 3L(L+1). */
 const VERTS_PER_HEX = 1 + 3 * SUB * (SUB + 1);
@@ -122,25 +121,92 @@ function buildGeometry(centre: Hex, _surfaceY: number): THREE.BufferGeometry {
   g.setAttribute('aEdge', new THREE.BufferAttribute(edge, 1));
   g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeVertexNormals();   // real lighting on the hills instead of everything facing straight up
+
+  // Steepness per vertex, straight off the normals we just computed: 0 flat, 1 vertical. Doing it
+  // here costs one pass over an array we already have, and saves four extra noise evaluations per
+  // vertex that sampling the generator for a gradient would have cost.
+  const nAttr = g.getAttribute('normal') as THREE.BufferAttribute;
+  const slope = new Float32Array(nAttr.count);
+  for (let i = 0; i < nAttr.count; i++) slope[i] = 1 - Math.abs(nAttr.getY(i));
+  g.setAttribute('aSlope', new THREE.BufferAttribute(slope, 1));
+
   g.computeBoundingSphere();
   return g;
 }
 
-/** Standard material with the rim lightening patched into its albedo, so lighting stays normal. */
+/**
+ * Ground bands by elevation, in metres. Low flat ground is green; it dries to tan, then to brown
+ * earth, then bare rock on the tops. Transitions are eased, so there are no hard stripes.
+ */
+const BAND_GRASS_TOP = 70;    // green up to here
+const BAND_SAND_TOP = 165;    // tan
+const BAND_BROWN_TOP = 275;   // brown earth; rock above
+
+/** Steep ground is rock whatever its height, which is what makes cliffs and canyon walls read. */
+const SLOPE_ROCK_START = 0.30;   // 1 - |normal.y|; about 25 degrees
+const SLOPE_ROCK_FULL = 0.62;    // about 50 degrees
+
+const TEX = {
+  grass: '/sww_terrain_grass.webp',
+  sand: '/sww_terrain_sand.webp',
+  brown: '/cliff_texture_seamless.webp',
+  rock: '/sww_terrain_rock.webp',
+};
+
+function loadTiling(url: string): THREE.Texture {
+  const t = new THREE.TextureLoader().load(url);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/**
+ * Four ground textures blended in the fragment shader by world height and steepness, with the
+ * parcel-rim lightening layered on top. Blending in the shader rather than baking weights into a
+ * vertex attribute means the bands stay smooth across a 100 m parcel instead of stepping at each
+ * vertex, and re-tuning the bands is a uniform change rather than a mesh rebuild.
+ */
 function makeMaterial(): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6f8f4e'), roughness: 1, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+  mat.map = loadTiling(TEX.grass);   // gives the shader its UV plumbing; overridden below
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uEdgeStart = { value: EDGE_START };
     shader.uniforms.uEdgeStrength = { value: EDGE_STRENGTH };
     shader.uniforms.uEdgeColor = { value: EDGE_COLOR };
+    shader.uniforms.uSand = { value: loadTiling(TEX.sand) };
+    shader.uniforms.uBrown = { value: loadTiling(TEX.brown) };
+    shader.uniforms.uRock = { value: loadTiling(TEX.rock) };
+    shader.uniforms.uBands = { value: new THREE.Vector3(BAND_GRASS_TOP, BAND_SAND_TOP, BAND_BROWN_TOP) };
+    shader.uniforms.uSlopeBand = { value: new THREE.Vector2(SLOPE_ROCK_START, SLOPE_ROCK_FULL) };
+
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aEdge;\nvarying float vEdge;')
-      .replace('#include <uv_vertex>', '#include <uv_vertex>\n  vEdge = aEdge;');
+      .replace('#include <common>',
+        '#include <common>\nattribute float aEdge;\nattribute float aSlope;\nvarying float vEdge;\nvarying float vSlope;\nvarying float vGroundY;')
+      .replace('#include <uv_vertex>',
+        '#include <uv_vertex>\n  vEdge = aEdge;\n  vSlope = aSlope;\n  vGroundY = position.y;');
+
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>',
-        '#include <common>\nuniform float uEdgeStart;\nuniform float uEdgeStrength;\nuniform vec3 uEdgeColor;\nvarying float vEdge;')
+        '#include <common>\nuniform float uEdgeStart;\nuniform float uEdgeStrength;\nuniform vec3 uEdgeColor;\n'
+        + 'uniform sampler2D uSand;\nuniform sampler2D uBrown;\nuniform sampler2D uRock;\n'
+        + 'uniform vec3 uBands;\nuniform vec2 uSlopeBand;\n'
+        + 'varying float vEdge;\nvarying float vSlope;\nvarying float vGroundY;')
       .replace('#include <map_fragment>', `
         #include <map_fragment>
+        // Height bands, each eased into the next so there are no stripes.
+        vec3 _grass = diffuseColor.rgb;
+        vec3 _sand  = texture2D( uSand,  vMapUv ).rgb;
+        vec3 _brown = texture2D( uBrown, vMapUv ).rgb;
+        vec3 _rockc = texture2D( uRock,  vMapUv ).rgb;
+        float _h = vGroundY;
+        vec3 _c = mix( _grass, _sand,  smoothstep( uBands.x * 0.55, uBands.x, _h ) );
+        _c = mix( _c, _brown, smoothstep( uBands.y * 0.8, uBands.y, _h ) );
+        _c = mix( _c, _rockc, smoothstep( uBands.z * 0.85, uBands.z, _h ) );
+        // Steep ground is rock at any height: this is what makes cliffs and canyon walls read.
+        _c = mix( _c, _rockc, smoothstep( uSlopeBand.x, uSlopeBand.y, vSlope ) );
+        diffuseColor.rgb = _c;
+
         float _b = smoothstep( uEdgeStart, 1.0, vEdge ) * uEdgeStrength;
         diffuseColor.rgb = mix( diffuseColor.rgb, uEdgeColor, _b );
       `);
@@ -172,17 +238,8 @@ export function StarblinkHexGround({ world, onReady }: { world: WorldDefinition;
   useEffect(() => {
     const mat = makeMaterial();
     setMaterial(mat);
-    let cancelled = false;
-    new THREE.TextureLoader().load(GRASS_URL, (tex) => {
-      if (cancelled) { tex.dispose(); return; }
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 4;
-      mat.map = tex;
-      mat.color.set('#ffffff');
-      mat.needsUpdate = true;
-    }, undefined, (e) => console.error('[Starblink] grass texture failed', e));
-    return () => { cancelled = true; mat.map?.dispose(); mat.dispose(); setMaterial(null); };
+    // The material loads its own four textures now, so there is no separate load to wait on.
+    return () => { mat.map?.dispose(); mat.dispose(); setMaterial(null); };
   }, []);
 
   useEffect(() => {
