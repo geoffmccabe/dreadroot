@@ -146,8 +146,8 @@ export function ProceduralPanel() {
       <div className="rounded border border-border/40 p-1.5">
         <div className="mb-1 font-bold text-muted-foreground">Scatter</div>
         <div className="flex items-end gap-1">
-          <div className="flex-1"><Slider label="Count (attempts)" val={p.count} min={10} max={50000} step={10} on={(v) => setPgParams({ count: v })} /></div>
-          {N(p.count, (v) => setPgParams({ count: Math.min(50000, Math.max(10, v)) }), 10)}
+          <div className="flex-1"><Slider label="Count (attempts)" val={p.count} min={10} max={1000000} step={500} on={(v) => setPgParams({ count: v })} /></div>
+          {N(p.count, (v) => setPgParams({ count: Math.min(1000000, Math.max(10, v)) }), 10)}
         </div>
         <Slider label="Big-is-rare bias" val={p.sizeBias} min={1} max={6} step={0.5} on={(v) => setPgParams({ sizeBias: v })} />
         <Slider label="Max slope" val={p.slopeMax} min={0} max={70} step={1} suffix="°" on={(v) => setPgParams({ slopeMax: v })} />

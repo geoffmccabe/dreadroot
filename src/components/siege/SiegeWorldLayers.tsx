@@ -243,12 +243,18 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* The globe has NO separate water layer: the sea surface is the terrain mesh clamped up to
           sea level (see GlobeTerrain). A separate shell z-fought the terrain across the whole
           planet, because the depth buffer at orbit range cannot separate them. */}
-      {/* Starblink gets the BRUSH-controlled water, same as any editable map, not SWW's ocean.
-          Falling through to WaterLayer put Bleakrock's sea around the Fortress: a blue wall a few
-          hundred metres out, sitting above ground that is only 0-40 m high there. */}
-      {isGlobe
+      {/* Starblink has NO global water plane, on purpose.
+          SWW's WaterLayer put Bleakrock's sea (surface 22 m) around the Fortress, where the ground
+          is only 0-40 m: a blue wall closing in a few hundred metres out. Swapping it for the
+          brush's single-level plane was no better — one flat sheet across 900 km2 z-fights the
+          terrain wherever they meet, which is the flickering and shaking.
+          Water here is per-BODY instead, using the shore-seeking flood fill built for Enchanted
+          Forest: in Arrange, type ^wa to drop a pool then ^wf to flood it, and it spreads to the
+          real shoreline and stops where solid rises through the waterline. Its ground probe already
+          falls back to the terrain heightfield, so it traces generated valleys with no extra work. */}
+      {isGlobe || isHexland
         ? null
-        : (isHeightmap || isHexland) ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
+        : isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}

@@ -42,7 +42,7 @@ const FLOOD_PER_FRAME = 1500;  // cells probed per frame (matches MeshHeightmapB
 const clampScale = (s: number) => Math.min(50, Math.max(0.05, s));
 
 export function ObjectEditController() {
-  const { camera, scene } = useThree();
+  const { camera, scene, gl } = useThree();
   const ro = useMemo(() => new THREE.Vector3(), []);
   const rd = useMemo(() => new THREE.Vector3(), []);
   const ray = useMemo(() => new THREE.Raycaster(), []);
@@ -154,6 +154,12 @@ export function ObjectEditController() {
       // the placer. Without this, whichever listener happened to run first won: Arrange would
       // swallow the click and try to grab, and the placement silently never happened.
       if (getBuilder().armed) return;
+      // ONLY clicks on the 3D canvas belong to this tool. This listener is capture-phase and calls
+      // stopImmediatePropagation, so without this check it swallowed mousedown EVERYWHERE the moment
+      // edit mode was on: every slider in every panel stopped responding, because a slider needs the
+      // mousedown that starts its drag. Buttons still worked, which is what made it look like the
+      // sliders themselves were broken rather than something eating the event.
+      if (e.target !== gl.domElement) return;
       e.preventDefault(); e.stopImmediatePropagation();
       if (!selectAtCrosshair()) return;          // nothing under the crosshair
       if (e.shiftKey) duplicateSelected([0, 0, 0]); // Shift+click ⇒ grab a copy (no-op for baked)
@@ -295,7 +301,7 @@ export function ObjectEditController() {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('keyup', onKeyUp, true);
     };
-  }, [camera, scene, ray, ro, rd, dray, down, dq, cq, yAxis]);
+  }, [camera, scene, gl, ray, ro, rd, dray, down, dq, cq, yAxis]);
 
   // ── carry loop: while grabbing, slide the object along its height plane under the aim ──
   useFrame(() => {
