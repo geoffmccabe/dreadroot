@@ -3,12 +3,18 @@
 // The whole landscape is a function of these numbers, so a preset IS a world: a few hundred bytes
 // that reproduce it exactly. Write down a seed you like, or save it by name and load it back.
 //
-// Only shows on the hexland map, and only while building is on, so it never clutters normal play.
-
-import { useState } from 'react';
+// Shell copied from TerrainBrushPanel on purpose: same Card, same top grab-bar, same bottom-right
+// resize corner, and the same Radix <Slider>. A plain <input type="range"> does NOT work here —
+// the game installs capture-phase pointer handlers on window, so a raw range input never sees its
+// own drag and appears frozen. That is what made every dial on the first version dead.
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { useRef, useState } from 'react';
 import { useActiveGame } from '@/config/activeGame';
 import { useActiveMapId } from '@/config/activeMap';
 import { getWorldDefinition } from '@/config/worldDefinition';
+import { useDraggablePanel } from '../useDraggablePanel';
 import {
   useTerrainParams, setTerrainParams, rollSeed, DEFAULT_TERRAIN,
   listPresets, savePreset, loadPreset, deletePreset, type TerrainParams,
@@ -16,144 +22,133 @@ import {
 
 type Dial = { key: keyof TerrainParams; label: string; min: number; max: number; step: number };
 
-/** Grouped so the panel reads as "how big", "how rough", "what shapes". */
 const GROUPS: { title: string; dials: Dial[] }[] = [
-  {
-    title: 'Scale',
-    dials: [
-      { key: 'maxHeight', label: 'Peak ceiling', min: 100, max: 900, step: 10 },
-      { key: 'baseElevation', label: 'Base elevation', min: -100, max: 200, step: 5 },
-      { key: 'ampContinent', label: 'Continental rise', min: 0, max: 400, step: 5 },
-      { key: 'wlContinent', label: 'Continental size', min: 2000, max: 16000, step: 250 },
-    ],
-  },
-  {
-    title: 'Mountains',
-    dials: [
-      { key: 'ampMountain', label: 'Mountain height', min: 0, max: 700, step: 10 },
-      { key: 'wlMountain', label: 'Range size', min: 600, max: 6000, step: 100 },
-      { key: 'ridgeFloor', label: 'Rarity of ranges', min: 0.2, max: 0.85, step: 0.01 },
-    ],
-  },
-  {
-    title: 'Roughness',
-    dials: [
-      { key: 'ampHill', label: 'Hills', min: 0, max: 200, step: 5 },
-      { key: 'wlHill', label: 'Hill size', min: 200, max: 3000, step: 50 },
-      { key: 'ampDetail', label: 'Surface wrinkle', min: 0, max: 60, step: 1 },
-      { key: 'wlDetail', label: 'Wrinkle size', min: 15, max: 200, step: 5 },
-      { key: 'warpAmount', label: 'Warp (organic-ness)', min: 0, max: 900, step: 10 },
-      { key: 'warpWavelength', label: 'Warp size', min: 200, max: 3000, step: 50 },
-    ],
-  },
-  {
-    title: 'Features',
-    dials: [
-      { key: 'canyonDepth', label: 'Canyon depth', min: 0, max: 300, step: 5 },
-      { key: 'canyonWidth', label: 'Canyon width', min: 0.03, max: 0.6, step: 0.01 },
-      { key: 'canyonWavelength', label: 'Canyon spacing', min: 400, max: 5000, step: 100 },
-      { key: 'lakeDepth', label: 'Lake basin depth', min: 0, max: 250, step: 5 },
-      { key: 'lakeWavelength', label: 'Lake size', min: 800, max: 8000, step: 100 },
-      { key: 'terraceStep', label: 'Bench height', min: 4, max: 90, step: 2 },
-      { key: 'terraceSharpness', label: 'Cliff sharpness', min: 0, max: 1, step: 0.05 },
-    ],
-  },
-  {
-    title: 'Fortress',
-    dials: [
-      { key: 'flatRadius', label: 'Flat radius', min: 0, max: 600, step: 10 },
-      { key: 'flatBlend', label: 'Blend out to', min: 100, max: 2000, step: 20 },
-    ],
-  },
+  { title: 'Scale', dials: [
+    { key: 'maxHeight', label: 'Peak ceiling', min: 100, max: 900, step: 10 },
+    { key: 'baseElevation', label: 'Base elevation', min: -100, max: 200, step: 5 },
+    { key: 'ampContinent', label: 'Continental rise', min: 0, max: 400, step: 5 },
+    { key: 'wlContinent', label: 'Continental size', min: 2000, max: 16000, step: 250 },
+  ] },
+  { title: 'Mountains', dials: [
+    { key: 'ampMountain', label: 'Mountain height', min: 0, max: 700, step: 10 },
+    { key: 'wlMountain', label: 'Range size', min: 600, max: 6000, step: 100 },
+    { key: 'ridgeFloor', label: 'Rarity of ranges', min: 0.2, max: 0.85, step: 0.01 },
+  ] },
+  { title: 'Roughness', dials: [
+    { key: 'ampHill', label: 'Hills', min: 0, max: 200, step: 5 },
+    { key: 'wlHill', label: 'Hill size', min: 200, max: 3000, step: 50 },
+    { key: 'ampDetail', label: 'Surface wrinkle', min: 0, max: 60, step: 1 },
+    { key: 'wlDetail', label: 'Wrinkle size', min: 15, max: 200, step: 5 },
+    { key: 'warpAmount', label: 'Warp (organic-ness)', min: 0, max: 900, step: 10 },
+    { key: 'warpWavelength', label: 'Warp size', min: 200, max: 3000, step: 50 },
+  ] },
+  { title: 'Features', dials: [
+    { key: 'canyonDepth', label: 'Canyon depth', min: 0, max: 300, step: 5 },
+    { key: 'canyonWidth', label: 'Canyon width', min: 0.03, max: 0.6, step: 0.01 },
+    { key: 'canyonWavelength', label: 'Canyon spacing', min: 400, max: 5000, step: 100 },
+    { key: 'lakeDepth', label: 'Lake basin depth', min: 0, max: 250, step: 5 },
+    { key: 'lakeWavelength', label: 'Lake size', min: 800, max: 8000, step: 100 },
+    { key: 'terraceStep', label: 'Bench height', min: 4, max: 90, step: 2 },
+    { key: 'terraceSharpness', label: 'Cliff sharpness', min: 0, max: 1, step: 0.05 },
+  ] },
+  { title: 'Fortress', dials: [
+    { key: 'flatRadius', label: 'Flat radius', min: 0, max: 600, step: 10 },
+    { key: 'flatBlend', label: 'Blend out to', min: 100, max: 2000, step: 20 },
+  ] },
 ];
-
-const card: React.CSSProperties = {
-  position: 'fixed', right: 12, bottom: 12, zIndex: 62, width: 268, maxHeight: '72vh',
-  overflowY: 'auto', padding: '10px 12px', borderRadius: 10, fontSize: 11,
-  background: 'rgba(10,14,20,0.92)', border: '1px solid rgba(190,215,255,0.22)', color: '#dfe7f2',
-};
-const btn: React.CSSProperties = {
-  cursor: 'pointer', borderRadius: 6, padding: '4px 8px', fontSize: 11,
-  background: 'rgba(90,130,200,0.35)', border: '1px solid rgba(190,215,255,0.3)', color: '#eaf1ff',
-};
 
 export function TerrainGenPanel() {
   const p = useTerrainParams();
   const game = useActiveGame();
   const world = getWorldDefinition(useActiveMapId());
-  const [open, setOpen] = useState(true);
+  const { pos, handleProps } = useDraggablePanel({ left: Math.max(8, window.innerWidth - 300), top: 90 });
+  const [size, setSize] = useState({ w: 276, h: 520 });
   const [name, setName] = useState('');
   const [presets, setPresets] = useState(() => listPresets());
+
+  const rz = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const onRzDown = (e: React.PointerEvent) => {
+    rz.current = { x: e.clientX, y: e.clientY, w: size.w, h: size.h };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    e.preventDefault(); e.stopPropagation();
+  };
+  const onRzMove = (e: React.PointerEvent) => {
+    if (!rz.current) return;
+    setSize({ w: Math.max(230, rz.current.w + (e.clientX - rz.current.x)), h: Math.max(220, rz.current.h + (e.clientY - rz.current.y)) });
+  };
+  const onRzUp = (e: React.PointerEvent) => { rz.current = null; (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); };
 
   if (game !== 'siege-worlds' || world.ground.kind !== 'hexland') return null;
 
   const set = (k: keyof TerrainParams, v: number) => setTerrainParams({ [k]: v } as Partial<TerrainParams>);
   const refresh = () => setPresets(listPresets());
 
-  if (!open) {
-    return <div style={{ ...card, width: 'auto', maxHeight: 'none' }} onClick={() => setOpen(true)}>⛰ Terrain Generator</div>;
-  }
-
   return (
-    <div style={card}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <b>⛰ Terrain Generator</b>
-        <span style={{ cursor: 'pointer', opacity: 0.7 }} onClick={() => setOpen(false)}>–</span>
+    <Card className="waterfall-card fixed z-50 flex flex-col overflow-hidden p-0 text-xs font-mono"
+      style={{ left: pos.left, top: pos.top, width: size.w, height: size.h }}>
+      {/* Top grab-bar, same as the other panels. */}
+      <div {...handleProps} title="Drag to move" className="relative h-[18px] shrink-0">
+        <div className="absolute left-1/2 top-[6px] h-1 w-11 -translate-x-1/2 rounded" style={{ background: 'hsla(var(--hud-border-h) / 0.75)' }} />
       </div>
 
-      {/* Seed: the one number that defines which world you are looking at. */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ opacity: 0.75 }}>Seed</span>
-        <input
-          value={p.seed}
-          onChange={(e) => set('seed', Number(e.target.value) || 0)}
-          style={{ flex: 1, minWidth: 0, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(190,215,255,0.25)', borderRadius: 5, color: '#fff', padding: '3px 6px', fontSize: 11 }}
-        />
-        <button style={btn} onClick={() => setTerrainParams({ seed: rollSeed() })} title="New random world with these settings">Generate</button>
-      </div>
+      <div className="flex-1 overflow-y-auto px-3 pb-6">
+        <div className="mb-2 font-bold text-primary">⛰ Terrain Generator</div>
 
-      {GROUPS.map((g) => (
-        <div key={g.title} style={{ marginBottom: 8 }}>
-          <div style={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: 9, marginBottom: 3 }}>{g.title}</div>
-          {g.dials.map((d) => (
-            <div key={String(d.key)} style={{ marginBottom: 3 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ opacity: 0.85 }}>{d.label}</span>
-                <span style={{ opacity: 0.6 }}>{Number(p[d.key]).toFixed(d.step < 1 ? 2 : 0)}</span>
+        {/* The seed is the one number that names this world. */}
+        <div className="mb-2 flex items-center gap-1">
+          <span className="opacity-70">Seed</span>
+          <input value={p.seed} onChange={(e) => set('seed', Number(e.target.value) || 0)}
+            className="min-w-0 flex-1 rounded bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-foreground outline-none"
+            style={{ border: '1px solid hsla(var(--hud-border))' }} />
+          <Button size="sm" className="h-6 px-2 text-[10px]"
+            onClick={() => setTerrainParams({ seed: rollSeed() })} title="New random world, same settings">Generate</Button>
+        </div>
+
+        {GROUPS.map((g) => (
+          <div key={g.title} className="mb-2">
+            <div className="mb-1 text-[9px] uppercase tracking-wider opacity-60">{g.title}</div>
+            {g.dials.map((d) => (
+              <div key={String(d.key)} className="mb-1.5">
+                <div className="flex justify-between text-[10px]">
+                  <span className="opacity-85">{d.label}</span>
+                  <span className="opacity-60">{Number(p[d.key]).toFixed(d.step < 1 ? 2 : 0)}</span>
+                </div>
+                <Slider value={[Number(p[d.key])]} min={d.min} max={d.max} step={d.step}
+                  onValueChange={([v]) => set(d.key, v)} />
               </div>
-              <input
-                type="range" min={d.min} max={d.max} step={d.step}
-                value={Number(p[d.key])}
-                onChange={(e) => set(d.key, Number(e.target.value))}
-                style={{ width: '100%' }}
-              />
-            </div>
-          ))}
-        </div>
-      ))}
+            ))}
+          </div>
+        ))}
 
-      <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-        <input
-          value={name} placeholder="preset name" onChange={(e) => setName(e.target.value)}
-          style={{ flex: 1, minWidth: 0, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(190,215,255,0.25)', borderRadius: 5, color: '#fff', padding: '3px 6px', fontSize: 11 }}
-        />
-        <button style={btn} onClick={() => { if (name.trim()) { savePreset(name.trim()); refresh(); } }}>Save</button>
+        <div className="mb-1.5 flex gap-1">
+          <input value={name} placeholder="preset name" onChange={(e) => setName(e.target.value)}
+            className="min-w-0 flex-1 rounded bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-foreground outline-none"
+            style={{ border: '1px solid hsla(var(--hud-border))' }} />
+          <Button size="sm" className="h-6 px-2 text-[10px]"
+            onClick={() => { if (name.trim()) { savePreset(name.trim()); refresh(); } }}>Save</Button>
+        </div>
+        <Button size="sm" variant="outline" className="mb-2 h-6 w-full text-[10px]"
+          onClick={() => setTerrainParams(DEFAULT_TERRAIN)}>Reset to defaults</Button>
+
+        {presets.length > 0 && (
+          <div>
+            <div className="mb-1 text-[9px] uppercase tracking-wider opacity-60">Saved worlds</div>
+            {presets.map((pr) => (
+              <div key={pr.name} className="flex items-center justify-between py-0.5 text-[10px]">
+                <span className="cursor-pointer hover:text-primary" onClick={() => loadPreset(pr.name)} title={`seed ${pr.params.seed}`}>
+                  {pr.name} <span className="opacity-50">#{pr.params.seed}</span>
+                </span>
+                <span className="cursor-pointer opacity-50 hover:opacity-100" onClick={() => { deletePreset(pr.name); refresh(); }}>✕</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <button style={{ ...btn, width: '100%', marginBottom: 6 }} onClick={() => setTerrainParams(DEFAULT_TERRAIN)}>Reset to defaults</button>
 
-      {presets.length > 0 && (
-        <div>
-          <div style={{ opacity: 0.6, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Saved worlds</div>
-          {presets.map((pr) => (
-            <div key={pr.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
-              <span style={{ cursor: 'pointer' }} onClick={() => { loadPreset(pr.name); }} title={`seed ${pr.params.seed}`}>
-                {pr.name} <span style={{ opacity: 0.5 }}>#{pr.params.seed}</span>
-              </span>
-              <span style={{ cursor: 'pointer', opacity: 0.5 }} onClick={() => { deletePreset(pr.name); refresh(); }}>✕</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      {/* Resize from the bottom-right corner. */}
+      <div onPointerDown={onRzDown} onPointerMove={onRzMove} onPointerUp={onRzUp} title="Drag to resize"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize"
+        style={{ touchAction: 'none', background: 'linear-gradient(135deg, transparent 50%, hsla(var(--hud-border-h) / 0.7) 50%)' }} />
+    </Card>
   );
 }

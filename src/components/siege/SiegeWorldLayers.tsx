@@ -243,9 +243,12 @@ export function SiegeWorldLayers({ world }: { world: WorldDefinition }) {
       {/* The globe has NO separate water layer: the sea surface is the terrain mesh clamped up to
           sea level (see GlobeTerrain). A separate shell z-fought the terrain across the whole
           planet, because the depth buffer at orbit range cannot separate them. */}
+      {/* Starblink gets the BRUSH-controlled water, same as any editable map, not SWW's ocean.
+          Falling through to WaterLayer put Bleakrock's sea around the Fortress: a blue wall a few
+          hundred metres out, sitting above ground that is only 0-40 m high there. */}
       {isGlobe
         ? null
-        : isHeightmap ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
+        : (isHeightmap || isHexland) ? <EditableWaterLayer world={world} /> : <WaterLayer world={world} />}
       {/* Quick-travel: Ctrl/Cmd+J then 1-8. Always available in Siege. */}
       <SiegeTeleport />
       {/* Renders + simulates monster breath-weapon particles (acid vomit, etc.). */}

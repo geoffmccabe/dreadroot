@@ -138,9 +138,17 @@ function buildGeometry(centre: Hex, _surfaceY: number): THREE.BufferGeometry {
  * Ground bands by elevation, in metres. Low flat ground is green; it dries to tan, then to brown
  * earth, then bare rock on the tops. Transitions are eased, so there are no hard stripes.
  */
-const BAND_GRASS_TOP = 70;    // green up to here
-const BAND_SAND_TOP = 165;    // tan
-const BAND_BROWN_TOP = 275;   // brown earth; rock above
+// Measured average colours, which is how the previous pair got assigned the wrong way round:
+//   grass 83,101,53 (green) · sand 157,145,117 (tan)
+//   sww_terrain_rock 118,108,97 (warm BROWN, darker) · cliff_texture_seamless 134,134,132 (grey, LIGHTER)
+// So the light barren grey belongs on the tops and the brown below it, not the other way about.
+const BAND_GRASS_TOP = 45;    // green meadow up to here
+const BAND_FOREST_TOP = 110;  // darker green forest belt
+const BAND_SAND_TOP = 190;    // tan
+const BAND_BROWN_TOP = 290;   // dark brown earth; light barren rock above
+
+/** The forest belt is the grass texture pulled towards a deeper green, so it needs no new asset. */
+const FOREST_TINT = new THREE.Color(0.55, 0.78, 0.42);
 
 /** Steep ground is rock whatever its height, which is what makes cliffs and canyon walls read. */
 const SLOPE_ROCK_START = 0.30;   // 1 - |normal.y|; about 25 degrees
@@ -149,8 +157,8 @@ const SLOPE_ROCK_FULL = 0.62;    // about 50 degrees
 const TEX = {
   grass: '/sww_terrain_grass.webp',
   sand: '/sww_terrain_sand.webp',
-  brown: '/cliff_texture_seamless.webp',
-  rock: '/sww_terrain_rock.webp',
+  brown: '/sww_terrain_rock.webp',            // the warm brown one, despite the name
+  rock: '/cliff_texture_seamless.webp',       // the light barren grey one, for the tops
 };
 
 function loadTiling(url: string): THREE.Texture {
@@ -177,7 +185,8 @@ function makeMaterial(): THREE.MeshStandardMaterial {
     shader.uniforms.uSand = { value: loadTiling(TEX.sand) };
     shader.uniforms.uBrown = { value: loadTiling(TEX.brown) };
     shader.uniforms.uRock = { value: loadTiling(TEX.rock) };
-    shader.uniforms.uBands = { value: new THREE.Vector3(BAND_GRASS_TOP, BAND_SAND_TOP, BAND_BROWN_TOP) };
+    shader.uniforms.uBands = { value: new THREE.Vector4(BAND_GRASS_TOP, BAND_FOREST_TOP, BAND_SAND_TOP, BAND_BROWN_TOP) };
+    shader.uniforms.uForestTint = { value: FOREST_TINT };
     shader.uniforms.uSlopeBand = { value: new THREE.Vector2(SLOPE_ROCK_START, SLOPE_ROCK_FULL) };
 
     shader.vertexShader = shader.vertexShader
@@ -190,7 +199,7 @@ function makeMaterial(): THREE.MeshStandardMaterial {
       .replace('#include <common>',
         '#include <common>\nuniform float uEdgeStart;\nuniform float uEdgeStrength;\nuniform vec3 uEdgeColor;\n'
         + 'uniform sampler2D uSand;\nuniform sampler2D uBrown;\nuniform sampler2D uRock;\n'
-        + 'uniform vec3 uBands;\nuniform vec2 uSlopeBand;\n'
+        + 'uniform vec4 uBands;\nuniform vec3 uForestTint;\nuniform vec2 uSlopeBand;\n'
         + 'varying float vEdge;\nvarying float vSlope;\nvarying float vGroundY;')
       .replace('#include <map_fragment>', `
         #include <map_fragment>
@@ -199,10 +208,12 @@ function makeMaterial(): THREE.MeshStandardMaterial {
         vec3 _sand  = texture2D( uSand,  vMapUv ).rgb;
         vec3 _brown = texture2D( uBrown, vMapUv ).rgb;
         vec3 _rockc = texture2D( uRock,  vMapUv ).rgb;
+        vec3 _forest = _grass * uForestTint;   // deeper green: the forest belt
         float _h = vGroundY;
-        vec3 _c = mix( _grass, _sand,  smoothstep( uBands.x * 0.55, uBands.x, _h ) );
-        _c = mix( _c, _brown, smoothstep( uBands.y * 0.8, uBands.y, _h ) );
-        _c = mix( _c, _rockc, smoothstep( uBands.z * 0.85, uBands.z, _h ) );
+        vec3 _c = mix( _grass,  _forest, smoothstep( uBands.x * 0.5,  uBands.x, _h ) );
+        _c = mix( _c, _sand,  smoothstep( uBands.y * 0.75, uBands.y, _h ) );
+        _c = mix( _c, _brown, smoothstep( uBands.z * 0.82, uBands.z, _h ) );
+        _c = mix( _c, _rockc, smoothstep( uBands.w * 0.88, uBands.w, _h ) );
         // Steep ground is rock at any height: this is what makes cliffs and canyon walls read.
         _c = mix( _c, _rockc, smoothstep( uSlopeBand.x, uSlopeBand.y, vSlope ) );
         diffuseColor.rgb = _c;
