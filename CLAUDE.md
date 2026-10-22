@@ -1,185 +1,77 @@
-# AI Assistant Instructions for Fortress
+# DreadRoot ("Fortress"): browser 3D voxel FPS on three.js, also runs Siege Worlds + Pinkland
 
-> ⚠️ **TWO CLAUDE INSTANCES ARE CO-BUILDING THIS REPO.** You are not alone in this codebase.
-> Another Claude is building the Siege Worlds (SWW) integration as additive, gated modules on
-> the same `claude1-recovery` branch. Before pushing: `git fetch` (the version in
-> `src/version.ts` is ONE shared number — sync to latest, then increment). SWW lives mostly in
-> `src/components/siege/` + `src/config/` (safe), but also makes small **gated** edits to
-> `FortressScene.tsx`, `FortressControls.tsx`, `FortressHUD.tsx` (shared — coordinate).
-> **Read `docs/COBUILD_NOTES.md` for the full coordination guide.**
+Master doc: docs/PROJECT.md (read before any non-trivial change). Style guide: docs/STYLE_GUIDE.md (read before ANY UI work).
+Shared services and modules for all of Geoff's projects: ~/.claude/docs/ASSETS_AND_MODULES.md. Doc rules: ~/.claude/docs/PROJECT_DOCS_STANDARD.md.
 
-## Project Context
+> **TWO CLAUDE INSTANCES CO-BUILD THIS REPO** on the same branch. Read docs/COBUILD_NOTES.md.
+> Siege Worlds lives mostly in `src/components/siege/` + `src/config/`, with small gated edits to
+> `FortressScene.tsx`, `FortressControls.tsx`, `FortressHUD.tsx` (shared: coordinate).
 
-Fortress is a browser-based 3D voxel game with ambitious scale requirements:
+## Must-never (critical)
 
-- **20-200 concurrent multiplayer players** in same world
-- **300+ block tall trees** with navigable labyrinthine interiors
-- **100+ enemy variations** (dozens of types × 10+ tiers each)
-- **Beautiful visual effects** (fire, lightning, glitter, magic particles)
-- **Cross-platform** - must run on phones, tablets, AND desktops
-- **Three.js based** - performance is absolutely critical
+- **Never ship an FPS regression.** Performance is the top requirement on phones, tablets and desktops. No allocations in render loops, no React state for real-time data, no main-thread blocking.
+- **Never change a shared database function or data format for one game only.** DreadRoot, Pinkland and Siege Worlds share ONE Supabase (`ditecxjpkgbqkeckebzb`). Port every client first; bump the chunk-cache version in every repo after.
+- **Never hard-code styling values or use raw browser controls.** Theme module + shared components only (docs/STYLE_GUIDE.md). Every panel uses GamePanel.
+- **Never `git add -A`.** Stage only the files you changed (shared working tree).
+- **Never add UI elements Geoff didn't ask for.**
 
-This is NOT a simple Minecraft clone. Trees are massive structures players climb through and battle within.
+## How to work here
 
----
+- Stack: React + Vite + TypeScript, three.js via react-three-fiber, Supabase, Cloudflare Pages + Worker/Durable Object, R2 for 3D assets.
+- Deploy: push to **`claude1-recovery`** (NOT main); Cloudflare Pages auto-builds dreadroot.com. Verify via the HUD version badge or the live `assets/index-*.js` name.
+- Version: `src/version.ts` is ONE shared number. `git fetch` first, sync to latest, then bump on every push (patch while finishing a feature, minor for something new).
+- Before pushing: `npm run typecheck` must be clean (the build doesn't type-check, errors ship silently). Run the relevant `npm run check:*` scripts for the area you touched (`check:netcode` for netcode).
+- Local builds are allowed but are the highest-risk step: check config + entry files for the known payload before and after (global rules).
+- Game server: `worker/` (`dreadroot-l2`, server.dreadroot.com). Its logic lives in `src/features/netcode/server/` and is tested by the check scripts.
+- Login only works on dreadroot.com (SSO allow-list), not the pages.dev preview.
 
-## Communication Rules
+## Communication
 
-- NO code blocks or snippets in responses
-- NO technical jargon or code explanations unless asked
-- NO empathy, coddling, or excessive apologies
-- Keep responses SHORT, professional, action-focused
-- One-line explanations only when context needed
-- Ask clarifying questions when requirements unclear
+- Geoff isn't a coder: plain English, no code in replies, full file paths, calibrated confidence, end with the files changed and the version pushed.
+- Don't ask technical yes/no questions; pick the sensible option and say what you did. Ask only when requirements are genuinely unclear.
 
----
+## Critical performance patterns
 
-## Before Making Changes
+Do:
+- Use `useRef` for frequently changing data.
+- Use instanced rendering for blocks and the texture atlas for tree blocks.
+- Check `array?.length`, not `array ??`, for fallbacks (an empty array slips past `??`).
+- Budget expensive work across frames; throttle distant entities (LOD).
 
-1. **Read relevant files first** - understand existing code before modifying
-2. **Check for broken functionality** - will this change break something else?
-3. **Consider FPS/performance impact** - every change affects mobile users
-4. **Avoid over-engineering** - minimal changes only, no gold-plating
+Don't:
+- Create objects in render loops (GC stutter).
+- Call expensive hooks repeatedly per component.
+- Fetch the whole world when one chunk changed.
+- Add a light to the shared three.js scene (recompiles every shader).
 
----
+Measuring: follow the perf harness protocol in docs/PROJECT.md section 7 (3 runs, discard the first, median).
 
-## After Making Changes
+## Where things live
 
-Always audit for:
-- Broken functionality elsewhere
-- FPS/performance regressions
-- Bugs and data flow errors
-- Orphaned or duplicate code
-- Technical debt introduced
-- Hard-coded values that should be configurable
+| Area | Location |
+|---|---|
+| Chunk loading, cache, collision | `src/hooks/useChunkLoader.ts`, `src/hooks/usePlacedBlocksWithCache.ts`, `src/contexts/BlocksContext.tsx` |
+| Main scene / HUD / controls | `src/components/fortress/` |
+| Block rendering | `src/components/PlacedBlocks.tsx`, `src/components/InstancedAtlasBlockGroup.tsx` |
+| Trees | `src/features/trees/` |
+| Enemy AI | `src/features/enemies/ai/` (+ one folder per monster in `src/features/`) |
+| Netcode + server core | `src/features/netcode/`, `worker/` |
+| Theme / panels | `src/theme/`, `src/components/ui/GamePanel.tsx` |
+| Database schema reference | `src/integrations/supabase/types.ts` |
 
-Conclude with list of all files added or changed.
+System docs: docs/ARCHITECTURE_NORTHSTAR.md, docs/MULTIPLAYER_CDO_PLAN_V3.md, docs/PERFORMANCE.md, docs/DATA_FLOW.md, docs/CHUNKS.md, docs/TREES.md, docs/ENEMIES.md, docs/OPEN_ISSUES.md.
 
----
+## Common tasks
 
-## UI Rules
+- New enemy type: folder `src/features/{enemy}/` with types, constants, index and a renderer; adapter in `src/features/enemies/ai/adapters/`; register in EnemyManager. Senses (sight/sound/smell) belong to the senses window: route through `acquireTarget()`.
+- New tree decoration: add the block type to `TreeBlockType`, encode it in `blockTypeEncoder.ts`, generate it in `treeGrowth.ts`, add its texture to the atlas.
+- Chunk bugs: check the `[CameraTrackedBlocks]` console log, `loadedChunksRef.size`, and `visibleBlocks.length` vs `blocks.length`; look for `??` vs length-check bugs.
 
-- NEVER add UI elements without explicit user request
-- If new UI seems needed, ask first
+## After making changes
 
----
+Audit for broken functionality, FPS regressions, data-flow bugs, orphaned or duplicate code, and hard-coded values. List every file added or changed.
 
-## Critical Performance Patterns
+## Doc upkeep
 
-### DO:
-- Use `useRef` for frequently-changing data
-- Use instanced rendering for blocks
-- Use texture atlas for tree blocks
-- Check `array?.length` not just `array ??` for fallbacks
-- Budget expensive operations across frames
-- Use LOD throttling for distant entities
-
-### DON'T:
-- Create objects in render loops (causes GC stutter)
-- Use React state for real-time data
-- Call expensive hooks multiple times per component
-- Fetch entire world when only one chunk changed
-- Block main thread with synchronous operations
-
----
-
-## Key Architecture Concepts
-
-### Three-Tier Cache
-```
-Memory (loadedChunksRef) → IndexedDB → Supabase
-```
-- Memory: Real-time rendering, collision
-- IndexedDB: Offline persistence, fast reload
-- Supabase: Source of truth, multiplayer sync
-
-### Chunk System
-- World divided into 16×16 block horizontal chunks
-- Unlimited vertical extent (300+ block trees)
-- Surface culling removes interior blocks for rendering
-- Collision uses full block list, rendering uses culled list
-
-### Rendering Split
-- `blocks[]` - ALL blocks (collision detection)
-- `visibleBlocks[]` - Surface-only (instanced rendering)
-
-**CRITICAL BUG PATTERN**:
-```typescript
-// WRONG - ?? doesn't catch empty array []
-const blocks = chunkData.visibleBlocks ?? chunkData.blocks;
-
-// RIGHT - explicitly check length
-const blocks = chunkData.visibleBlocks?.length ? chunkData.visibleBlocks : chunkData.blocks;
-```
-
-### Tree System
-- Generated from seed definitions (deterministic)
-- Stored as compressed blueprints
-- Growth happens server-side
-- Client refetches via chunk_versions subscription
-
-### Enemy AI
-- LOD-based tick throttling (distant enemies tick slower)
-- Utility-based behavior selection
-- Adapter pattern for type-specific logic
-- Spatial indexing for O(1) proximity queries
-
----
-
-## Documentation
-
-Read these docs to understand the codebase:
-
-| Document | What It Covers |
-|----------|----------------|
-| `docs/ARCHITECTURE.md` | High-level system overview |
-| `docs/PERFORMANCE.md` | Performance constraints and patterns |
-| `docs/DATA_FLOW.md` | Cache tiers and data synchronization |
-| `docs/CHUNKS.md` | Chunk loading, visibility, lifecycle |
-| `docs/TREES.md` | Tree generation, blueprints, growth |
-| `docs/ENEMIES.md` | Enemy AI, behaviors, adapters |
-
----
-
-## Key Files Quick Reference
-
-| File | Purpose |
-|------|---------|
-| `src/hooks/useChunkLoader.ts` | Core chunk loading, caching, collision |
-| `src/hooks/usePlacedBlocksWithCache.ts` | Block sync, realtime subscriptions |
-| `src/contexts/BlocksContext.tsx` | Central block state provider |
-| `src/components/fortress/FortressScene.tsx` | Main 3D scene setup |
-| `src/components/fortress/FortressScene.CameraTrackedBlocks.tsx` | Chunk visibility |
-| `src/components/PlacedBlocks.tsx` | Block grouping and render dispatch |
-| `src/components/InstancedAtlasBlockGroup.tsx` | Tree block instanced rendering |
-| `src/features/trees/lib/treeGrowth.ts` | Tree generation algorithm |
-| `src/features/enemies/ai/` | Universal enemy AI system |
-
----
-
-## Common Tasks
-
-### Adding a new enemy type
-1. Create folder `src/features/{enemy-name}/`
-2. Add types.ts, constants.ts, index.ts
-3. Create components/{Enemy}Renderer.tsx
-4. Create adapter in `src/features/enemies/ai/adapters/`
-5. Register in EnemyManager
-
-### Adding a tree decoration
-1. Add block type to `TreeBlockType` union in types.ts
-2. Add encoding in `blockTypeEncoder.ts`
-3. Add generation function in `treeGrowth.ts`
-4. Add texture to atlas
-
-### Debugging chunk issues
-1. Check console for `[CameraTrackedBlocks]` pipeline log
-2. Verify `loadedChunksRef.size` vs expected
-3. Check `visibleBlocks.length` vs `blocks.length`
-4. Look for `??` vs `?.length` bugs
-
-### Debugging performance
-1. Open DevTools Performance tab
-2. Look for long tasks (>50ms)
-3. Check for repeated GC (object allocation in loops)
-4. Verify instanced rendering (few draw calls for many blocks)
+- Follow ~/.claude/docs/PROJECT_DOCS_STANDARD.md section 5: update docs/PROJECT.md (features, modules, gotchas, open problems) in the same commit as the change; keep this file under 150 lines.
+- Last doc review: 2026-Oct-22
