@@ -181,7 +181,7 @@ export async function blobToImageBitmap(blob: Blob): Promise<ImageBitmap> {
  * Create empty atlas metadata
  */
 // Bump this when SLOT_RANGES in atlasManager.ts change to force atlas rebuild
-export const ATLAS_SCHEMA_VERSION = 7;
+export const ATLAS_SCHEMA_VERSION = 8; // 8: slot ranges re-split by measured demand (see atlasManager.ts)
 
 export function createEmptyMetadata(atlasId: number): AtlasMetadata {
   return {

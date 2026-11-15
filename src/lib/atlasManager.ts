@@ -80,25 +80,47 @@ export function generatePerSlotMipmaps(baseCanvas: HTMLCanvasElement): HTMLCanva
   return mipmaps;
 }
 
-// Slot range allocations by category
-// Trees: 30 tiers × 3 textures + animations = 150
-// Shwarm: 10 tiers × 1 = 10
-// Shombie: 10 tiers × 1 + animations = 30
-// Shnake: 10 tiers × 3 + animations = 90
-// Walapa: 10 tiers × 3 = 30
+// Slot range allocations by category.
+//
+// The atlas is ONE 8192-square texture = 1024 fixed 256-square slots, and an
+// animated monster tier costs one slot PER FRAME (up to 24). The old split was
+// written before the animated tiers existed and never revisited, so it had
+// blocks sitting on 270 slots for 48 textures while shombie had 30 slots for a
+// demand of 152 and overflowed on every load, rendering those monsters as flat
+// colour. wide_tree was silently over too (34 needed, 30 given).
+//
+// Measured demand, 2026-Nov-15, counting animation frames from the _<n>f_ in
+// each texture URL, across the live blocks / seed_definitions / *_definitions
+// tables (identical for both games - they share the database):
+//
+//   tree 52 · fungal_tree 0 · wide_tree 34 · block 48 · global ~20
+//   shwarm 50 · shombie 152 · shnake 81 · shroomer 128 · vortax 1 · walapa 0
+//   TOTAL 566 of 1024, so it all fits comfortably once split by real need.
+//
+// Budgets below give every category at least ~1.3x its measured demand, and
+// 2x where it was cheap. shpider and shtickman are deliberately absent: they
+// are not atlas categories, they load their textures directly.
+//
+// ⚠ Re-measure before adding an animated tier, and bump ATLAS_SCHEMA_VERSION
+// in atlasStorage.ts whenever these ranges move, or clients keep a cached
+// atlas built against the old layout and draw the wrong textures.
+//
+// The permanent fix for the 1024-slot ceiling is the DataArrayTexture backend
+// (src/config/textureBackend.ts, default off). This re-split buys the room to
+// work in; it does not remove the ceiling.
 export const SLOT_RANGES: Record<string, { start: number; end: number }> = {
-  tree: { start: 0, end: 149 },        // 150 slots
-  shwarm: { start: 150, end: 399 },    // 250 slots (10 tiers × up to 24 animated frames)
-  shombie: { start: 400, end: 429 },   // 30 slots
-  shnake: { start: 430, end: 519 },    // 90 slots
-  walapa: { start: 520, end: 549 },    // 30 slots
-  global: { start: 550, end: 569 },    // 20 slots
-  block: { start: 570, end: 839 },     // 270 slots
-  fungal_tree: { start: 840, end: 929 }, // 90 slots (30 tiers × 3 types)
-  shroomer: { start: 930, end: 959 },   // 30 slots (carved from unused 'misc')
-  vortax: { start: 960, end: 969 },     // 10 slots (tier 1 only; carved from 'misc')
-  wide_tree: { start: 970, end: 999 },  // 30 slots (10 tiers × 3 types: trunk/branch/fruit; carved from 'misc'). Wide trees are capped at 10 tiers.
-  misc: { start: 1000, end: 1023 },     // 24 slots
+  tree:        { start: 0,   end: 103 },  // 104 slots (needs 52)
+  fungal_tree: { start: 104, end: 155 },  //  52 slots (needs 0 today)
+  wide_tree:   { start: 156, end: 223 },  //  68 slots (needs 34; was 30, over)
+  block:       { start: 224, end: 327 },  // 104 slots (needs 48; was 270)
+  global:      { start: 328, end: 355 },  //  28 slots
+  shwarm:      { start: 356, end: 443 },  //  88 slots (needs 50; was 250)
+  shombie:     { start: 444, end: 639 },  // 196 slots (needs 152; was 30)
+  shnake:      { start: 640, end: 755 },  // 116 slots (needs 81)
+  shroomer:    { start: 756, end: 923 },  // 168 slots (needs 128; was 30)
+  vortax:      { start: 924, end: 943 },  //  20 slots (needs 1)
+  walapa:      { start: 944, end: 979 },  //  36 slots (needs 0 today)
+  misc:        { start: 980, end: 1023 }, //  44 slots spare
 };
 
 // Placeholder colors for missing textures — light tan so blocks are visible, not black
