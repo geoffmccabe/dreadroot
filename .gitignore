@@ -49,3 +49,8 @@ public/*.psd
 
 # Starblink-flavoured build output (VITE_GAME_ID=starblink), deployed by hand to CF Pages
 dist-starblink
+
+# Large source assets that must NOT be served: Cloudflare Pages rejects any
+# single file over 25MB, which silently stuck the deploy for 3 weeks (and once
+# before, see df255a61). Keep originals here, out of public/.
+source-assets/
