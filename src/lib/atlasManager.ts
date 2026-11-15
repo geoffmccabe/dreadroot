@@ -80,48 +80,14 @@ export function generatePerSlotMipmaps(baseCanvas: HTMLCanvasElement): HTMLCanva
   return mipmaps;
 }
 
-// Slot range allocations by category.
-//
-// The atlas is ONE 8192-square texture = 1024 fixed 256-square slots, and an
-// animated monster tier costs one slot PER FRAME (up to 24). The old split was
-// written before the animated tiers existed and never revisited, so it had
-// blocks sitting on 270 slots for 48 textures while shombie had 30 slots for a
-// demand of 152 and overflowed on every load, rendering those monsters as flat
-// colour. wide_tree was silently over too (34 needed, 30 given).
-//
-// Measured demand, 2026-Nov-15, counting animation frames from the _<n>f_ in
-// each texture URL, across the live blocks / seed_definitions / *_definitions
-// tables (identical for both games - they share the database):
-//
-//   tree 52 · fungal_tree 0 · wide_tree 34 · block 48 · global ~20
-//   shwarm 50 · shombie 152 · shnake 81 · shroomer 128 · vortax 1 · walapa 0
-//   TOTAL 566 of 1024, so it all fits comfortably once split by real need.
-//
-// Budgets below give every category at least ~1.3x its measured demand, and
-// 2x where it was cheap. shpider and shtickman are deliberately absent: they
-// are not atlas categories, they load their textures directly.
-//
-// ⚠ Re-measure before adding an animated tier, and bump ATLAS_SCHEMA_VERSION
-// in atlasStorage.ts whenever these ranges move, or clients keep a cached
-// atlas built against the old layout and draw the wrong textures.
-//
-// The permanent fix for the 1024-slot ceiling is the DataArrayTexture backend
-// (src/config/textureBackend.ts, default off). This re-split buys the room to
-// work in; it does not remove the ceiling.
-export const SLOT_RANGES: Record<string, { start: number; end: number }> = {
-  tree:        { start: 0,   end: 103 },  // 104 slots (needs 52)
-  fungal_tree: { start: 104, end: 155 },  //  52 slots (needs 0 today)
-  wide_tree:   { start: 156, end: 223 },  //  68 slots (needs 34; was 30, over)
-  block:       { start: 224, end: 327 },  // 104 slots (needs 48; was 270)
-  global:      { start: 328, end: 355 },  //  28 slots
-  shwarm:      { start: 356, end: 443 },  //  88 slots (needs 50; was 250)
-  shombie:     { start: 444, end: 639 },  // 196 slots (needs 152; was 30)
-  shnake:      { start: 640, end: 755 },  // 116 slots (needs 81)
-  shroomer:    { start: 756, end: 923 },  // 168 slots (needs 128; was 30)
-  vortax:      { start: 924, end: 943 },  //  20 slots (needs 1)
-  walapa:      { start: 944, end: 979 },  //  36 slots (needs 0 today)
-  misc:        { start: 980, end: 1023 }, //  44 slots spare
-};
+// The slot layout lives in atlasSlots.ts, which this file, atlasStorage and
+// atlasLookup all read, so there is exactly one copy of it. Re-exported here
+// because callers have always imported it from this module.
+import { SLOT_RANGES, DYNAMIC_POOL_START, ATLAS_SLOT_COUNT } from './atlasSlots';
+
+// Bookkeeping key for the shared overflow pool. Not a real category.
+const POOL_KEY = '__pool';
+export { SLOT_RANGES };
 
 // Placeholder colors for missing textures — light tan so blocks are visible, not black
 function getPlaceholderColor(_slotIndex: number): string {
@@ -500,15 +466,54 @@ class AtlasManagerClass {
       return null;
     }
 
+    // Preferred home: the category's own range, which keeps a category's slots
+    // together and makes the atlas readable in the debug panel.
     const nextSlot = this.metadata.nextFreeSlot[category] ?? range.start;
-
-    if (nextSlot + slotsNeeded - 1 > range.end) {
-      console.error(`[AtlasManager] Category ${category} is full (next: ${nextSlot}, need: ${slotsNeeded}, max: ${range.end})`);
-      return null;
+    if (nextSlot + slotsNeeded - 1 <= range.end) {
+      this.metadata.nextFreeSlot[category] = nextSlot + slotsNeeded;
+      return nextSlot;
     }
 
-    this.metadata.nextFreeSlot[category] = nextSlot + slotsNeeded;
-    return nextSlot;
+    // Overflow. Per-category budgets are guesses, and they have been wrong
+    // three times in a row: an animated tier costs one slot PER FRAME (up to
+    // 24), and a tier with NO texture still costs one. Rather than drop the
+    // texture and render a monster as flat colour, take the slots from a pool
+    // shared by every non-deterministic category. The pool is everything above
+    // the reserved tree formulas that nothing has claimed yet.
+    const poolNext = this.metadata.nextFreeSlot[POOL_KEY] ?? DYNAMIC_POOL_START;
+    const poolStart = Math.max(poolNext, this.highWaterMark());
+    if (poolStart + slotsNeeded - 1 < ATLAS_SLOT_COUNT) {
+      this.metadata.nextFreeSlot[POOL_KEY] = poolStart + slotsNeeded;
+      console.warn(
+        `[AtlasManager] ${category} outgrew its range (needed ${slotsNeeded} past ${range.end}); ` +
+        `took slots ${poolStart}..${poolStart + slotsNeeded - 1} from the shared pool. ` +
+        `Widen ${category} in atlasSlots.ts when convenient.`
+      );
+      return poolStart;
+    }
+
+    // Genuinely out of atlas. This is the 1024-slot ceiling, and the only
+    // real answer is the DataArrayTexture backend (src/config/textureBackend.ts).
+    console.error(
+      `[AtlasManager] ATLAS FULL: ${category} needed ${slotsNeeded} slots and the ` +
+      `shared pool is exhausted at ${poolStart}/${ATLAS_SLOT_COUNT}. This texture will ` +
+      `render as flat colour. Switch on the texture-array backend.`
+    );
+    return null;
+  }
+
+  /** Highest slot any category has allocated so far, so the pool never overlaps one. */
+  private highWaterMark(): number {
+    if (!this.metadata) return DYNAMIC_POOL_START;
+    let high = DYNAMIC_POOL_START;
+    for (const [cat, next] of Object.entries(this.metadata.nextFreeSlot)) {
+      if (cat === POOL_KEY) continue;
+      const r = SLOT_RANGES[cat];
+      // A category that has not overrun its range cannot collide with the pool,
+      // because the pool only ever hands out slots above every range's end.
+      if (r && next <= r.end + 1 && r.end + 1 > high) high = r.end + 1;
+    }
+    return high;
   }
 
   /**

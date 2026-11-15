@@ -35,6 +35,7 @@ import { registerTextureId } from '@/lib/arrayTextureRegistry';
 import { parseStripMetadata } from '@/lib/animationToStrip';
 import { dlog } from '@/lib/debugLog';
 import { GAME_ID } from '@/config/game';
+import { SLOT_RANGES } from '@/lib/atlasSlots';
 
 /** Stable empty array: `block_types` is absent from this project (see below). */
 const EMPTY_BLOCK_TYPES: Array<{ name: string; texture_url: string | null }> = [];
@@ -204,7 +205,8 @@ export function useAtlasSync(options?: {
         const fruitDiag: string[] = [];
         for (let tier = 1; tier <= 30; tier++) {
           const def = seedDefinitions.find(d => d.tier === tier && (d.tree_type || 'original') === 'original');
-          const baseSlot = (tier - 1) * 3;
+          // Tree slots are a formula; the base comes from the slot table, never a literal.
+          const baseSlot = SLOT_RANGES.tree.start + (tier - 1) * 3;
           const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
           specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
           specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });
@@ -471,7 +473,8 @@ export async function syncAtlasOnInit(): Promise<void> {
     const fruitDiag: string[] = [];
     for (let tier = 1; tier <= 30; tier++) {
       const def = seedDefinitions.find((d: any) => d.tier === tier && (d.tree_type || 'original') === 'original');
-      const baseSlot = (tier - 1) * 3;
+      // Tree slots are a formula; the base comes from the slot table, never a literal.
+      const baseSlot = SLOT_RANGES.tree.start + (tier - 1) * 3;
       const fruitUrl = def?.fruit_texture_url || def?.branch_texture_url || def?.trunk_texture_url || null;
       specs.push({ textureId: getTreeTextureId(tier, 'trunk'), category: 'tree', sourceUrl: def?.trunk_texture_url || null, slotIndex: baseSlot });
       specs.push({ textureId: getTreeTextureId(tier, 'branch'), category: 'tree', sourceUrl: def?.branch_texture_url || def?.trunk_texture_url || null, slotIndex: baseSlot + 1 });

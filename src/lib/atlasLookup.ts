@@ -7,6 +7,7 @@
 
 import { ATLAS_GRID_SIZE } from './textureAtlas';
 import { atlasManager, getSlotPixelPosition } from './atlasManager';
+import { SLOT_RANGES } from './atlasSlots';
 
 export interface AtlasUVs {
   uvOffsetX: number;
@@ -104,7 +105,7 @@ export function getGlobalTextureId(name: string): string {
  */
 function calculateTreeSlotIndex(tier: number, type: 'trunk' | 'branch' | 'fruit'): number {
   const typeOffset = type === 'trunk' ? 0 : type === 'branch' ? 1 : 2;
-  return (tier - 1) * 3 + typeOffset;
+  return SLOT_RANGES.tree.start + (tier - 1) * 3 + typeOffset;
 }
 
 /**
@@ -161,7 +162,7 @@ export function getTreeUVs(tier: number, type: 'trunk' | 'branch' | 'fruit'): At
  */
 export function calculateFungalTreeSlotIndex(tier: number, type: 'stem' | 'cap_top' | 'cap_underside'): number {
   const typeOffset = type === 'stem' ? 0 : type === 'cap_top' ? 1 : 2;
-  return 840 + (tier - 1) * 3 + typeOffset;
+  return SLOT_RANGES.fungal_tree.start + (tier - 1) * 3 + typeOffset;
 }
 
 /**
@@ -211,7 +212,7 @@ export function getFungalTreeUVs(tier: number, type: 'stem' | 'cap_top' | 'cap_u
  * 970 + (tier-1)*3 + typeOffset, capped at 10 tiers (slots 970–999). Slot order
  * within a tier: trunk, branch, fruit. Mirrors the fungal scheme.
  */
-const WIDE_TREE_SLOT_START = 970;
+const WIDE_TREE_SLOT_START = SLOT_RANGES.wide_tree.start;
 export const WIDE_TREE_MAX_TIERS = 10;
 
 export function calculateWideTreeSlotIndex(tier: number, type: 'trunk' | 'branch' | 'fruit'): number {

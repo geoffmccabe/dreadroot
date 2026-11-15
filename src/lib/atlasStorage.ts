@@ -6,6 +6,7 @@
  */
 
 import { ATLAS_PIXEL_SIZE } from './textureAtlas';
+import { SLOT_RANGES } from './atlasSlots';
 
 const DB_NAME = 'fortress_atlas';
 const DB_VERSION = 1;
@@ -181,7 +182,7 @@ export async function blobToImageBitmap(blob: Blob): Promise<ImageBitmap> {
  * Create empty atlas metadata
  */
 // Bump this when SLOT_RANGES in atlasManager.ts change to force atlas rebuild
-export const ATLAS_SCHEMA_VERSION = 8; // 8: slot ranges re-split by measured demand (see atlasManager.ts)
+export const ATLAS_SCHEMA_VERSION = 10; // 10: deterministic reservations + shared overflow pool
 
 export function createEmptyMetadata(atlasId: number): AtlasMetadata {
   return {
@@ -190,16 +191,13 @@ export function createEmptyMetadata(atlasId: number): AtlasMetadata {
     schemaVersion: ATLAS_SCHEMA_VERSION,
     lastModified: Date.now(),
     slots: {},
-    nextFreeSlot: {
-      tree: 0,        // 0-149 (150 slots)
-      shwarm: 150,    // 150-399 (250 slots for animated textures)
-      shombie: 400,   // 400-429 (30 slots)
-      shnake: 430,    // 430-519 (90 slots)
-      walapa: 520,    // 520-549 (30 slots)
-      global: 550,    // 550-569 (20 slots)
-      block: 570,     // 570-839 (270 slots)
-      misc: 840,      // 840-1023 (184 slots)
-    },
+    // Seeded FROM SLOT_RANGES rather than a second hand-written copy. The
+    // duplicate that used to live here had gone stale and did not mention
+    // fungal_tree, wide_tree, shroomer or vortax at all, so a freshly rebuilt
+    // atlas allocated from the OLD offsets and immediately overflowed.
+    nextFreeSlot: Object.fromEntries(
+      Object.entries(SLOT_RANGES).map(([category, range]) => [category, range.start])
+    ),
   };
 }
 
