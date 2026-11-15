@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useActiveGame } from '@/config/activeGame';
 import { gameDataKey } from '@/config/gameRegistry';
 import { useAuth } from '@/contexts/AuthContext';
+import { GAME_ID } from '@/config/game';
 
 export interface CombatStat {
   id: string;
@@ -120,37 +121,45 @@ export function useUserCombatStats() {
         supabase
           .from('shwarm_definitions')
           .select('id, tier, name, texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         supabase
           .from('shnake_definitions')
           .select('id, tier, name, head_texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         supabase
           .from('shombie_definitions')
           .select('id, tier, name, texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         supabase
           .from('shtickman_definitions')
           .select('id, tier, name, body_texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         supabase
           .from('shpider_definitions' as any)
           .select('id, tier, name, body_texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         // walapa_definitions is optional — some Supabase projects
         // don't have the table. Falls back to an empty list.
         supabase
           .from('walapa_definitions' as any)
           .select('id, tier, name, body_texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         supabase
           .from('shroomer_definitions' as any)
           .select('id, tier, name, texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
         // vortax_definitions is optional until its migration is run.
         supabase
           .from('vortax_definitions' as any)
           .select('id, tier, name, texture_url')
+          .eq('game', GAME_ID)
           .order('tier', { ascending: true }),
       ]);
 

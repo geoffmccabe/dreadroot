@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ShwarmDefinition, ShwarmDefinitionRow } from '../types';
+import { GAME_ID } from '@/config/game';
 
 /**
  * Converts database row (snake_case) to frontend type (camelCase)
@@ -59,6 +60,7 @@ export function useShwarmDefinitions() {
       const { data, error } = await supabase
         .from('shwarm_definitions')
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
 
       if (error) throw error;

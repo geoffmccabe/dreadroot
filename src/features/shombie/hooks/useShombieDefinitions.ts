@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ShombieDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 // Module-level cache for fast tier lookups
 let definitionsCache: ShombieDefinition[] = [];
@@ -15,6 +16,7 @@ export function useShombieDefinitions() {
       const { data, error } = await supabase
         .from('shombie_definitions')
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
       
       if (error) {

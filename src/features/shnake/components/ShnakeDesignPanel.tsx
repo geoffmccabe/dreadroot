@@ -16,6 +16,7 @@ import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { EnemySoundSettings, SoundConfig } from '@/components/EnemySoundSettings';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import type { ShnakeDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 interface ShnakeDesignPanelProps {
   className?: string;
@@ -107,6 +108,7 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       const { data, error } = await supabase
         .from('shnake_definitions')
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
 
       if (error) throw error;
@@ -194,6 +196,9 @@ export function ShnakeDesignPanel({ className }: ShnakeDesignPanelProps) {
       
       const payload = {
         tier: currentDef.tier,
+        // Stamp the game: these tables are UNIQUE(game, tier) now, so each
+        // game owns its own tiers instead of sharing one global set.
+        game: GAME_ID,
         name: currentDef.name,
         head_texture_url: currentDef.head_texture_url,
         body_texture_url: currentDef.body_texture_url,

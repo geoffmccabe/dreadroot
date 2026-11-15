@@ -24,6 +24,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { convertAnimationToStrip } from '@/lib/animationToStrip';
 import { CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import { GAME_ID } from '@/config/game';
 
 interface Target {
   table: 'blocks' | 'shpider_definitions' | 'seed_definitions';
@@ -72,7 +73,8 @@ export function GifMigrationPanel() {
       {
         const { data, error } = await supabase
           .from('shpider_definitions' as any)
-          .select('id, tier, body_texture_url, leg_texture_url, face_texture_url');
+          .select('id, tier, body_texture_url, leg_texture_url, face_texture_url')
+          .eq('game', GAME_ID);
         if (error) throw error;
         for (const row of (data as any[] ?? [])) {
           for (const col of ['body_texture_url', 'leg_texture_url', 'face_texture_url']) {

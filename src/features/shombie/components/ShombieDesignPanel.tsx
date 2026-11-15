@@ -17,6 +17,7 @@ import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animati
 import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { rotateTexture } from '@/lib/textureRotation';
 import type { ShombieDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 interface ShombieDesignPanelProps {
   className?: string;
@@ -97,6 +98,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
     const { data, error } = await supabase
       .from('shombie_definitions')
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true });
 
     if (error) {
@@ -190,6 +192,9 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
     const saveData = {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     console.log('[ShombieDesign] Saving:', { isNew, tier: baseData.tier, saveData });
@@ -201,7 +206,7 @@ export function ShombieDesignPanel({ className }: ShombieDesignPanelProps) {
         // Insert new definition - use upsert on tier for safety
         const { data, error } = await supabase
           .from('shombie_definitions')
-          .upsert([saveData], { onConflict: 'tier' })
+          .upsert([saveData], { onConflict: 'game,tier' })
           .select()
           .single();
         if (error) throw error;

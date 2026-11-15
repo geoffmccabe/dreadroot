@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ShroomerDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 // Module-level cache for fast tier lookups
 let definitionsCache: ShroomerDefinition[] = [];
@@ -17,6 +18,7 @@ export function useShroomerDefinitions() {
       const { data, error } = await supabase
         .from('shroomer_definitions' as any)
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
 
       if (error) {

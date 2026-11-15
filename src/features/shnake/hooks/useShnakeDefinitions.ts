@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ShnakeDefinition, ShnakeDefinitionRow } from '../types';
+import { GAME_ID } from '@/config/game';
 
 function rowToDefinition(row: ShnakeDefinitionRow): ShnakeDefinition {
   return {
@@ -29,6 +30,7 @@ export function useShnakeDefinitions() {
       const { data, error } = await supabase
         .from('shnake_definitions')
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
       if (error) throw error;
       return (data as ShnakeDefinitionRow[]).map(rowToDefinition);

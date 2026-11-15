@@ -16,6 +16,7 @@ import { convertTextureToKtx2 } from '@/lib/ktx2';
 import type { ShtickmanDefinition } from '../types';
 import { getHeightBlocks, getHeadSizeBlocks } from '../types';
 import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
+import { GAME_ID } from '@/config/game';
 
 interface ShtickmanDesignPanelProps {
   className?: string;
@@ -103,6 +104,7 @@ export function ShtickmanDesignPanel({ className }: ShtickmanDesignPanelProps) {
     const { data, error } = await supabase
       .from('shtickman_definitions')
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true });
 
     if (error) {
@@ -268,13 +270,16 @@ export function ShtickmanDesignPanel({ className }: ShtickmanDesignPanelProps) {
     const saveData = {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     try {
       if (isNew) {
         const { data, error } = await supabase
           .from('shtickman_definitions')
-          .upsert(saveData, { onConflict: 'tier' })
+          .upsert(saveData, { onConflict: 'game,tier' })
           .select()
           .single();
 

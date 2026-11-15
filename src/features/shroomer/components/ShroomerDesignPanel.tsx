@@ -17,6 +17,7 @@ import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animati
 import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { rotateTexture } from '@/lib/textureRotation';
 import type { ShroomerDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 // shroomer_definitions isn't in the generated Supabase types; cast the client
 // per-call so this panel can read/write it without regenerating types.
@@ -98,6 +99,7 @@ export function ShroomerDesignPanel({ className }: ShroomerDesignPanelProps) {
     const { data, error } = await sb
       .from('shroomer_definitions')
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true });
 
     if (error) {
@@ -185,6 +187,9 @@ export function ShroomerDesignPanel({ className }: ShroomerDesignPanelProps) {
     const saveData = {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     console.log('[ShroomerDesign] Saving:', { isNew, tier: baseData.tier, saveData });
@@ -195,7 +200,7 @@ export function ShroomerDesignPanel({ className }: ShroomerDesignPanelProps) {
       if (isNew) {
         const { data, error } = await sb
           .from('shroomer_definitions')
-          .upsert([saveData], { onConflict: 'tier' })
+          .upsert([saveData], { onConflict: 'game,tier' })
           .select()
           .single();
         if (error) throw error;

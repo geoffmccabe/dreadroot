@@ -34,6 +34,7 @@ import { isArrayWorld } from '@/config/textureBackend';
 import { registerTextureId } from '@/lib/arrayTextureRegistry';
 import { parseStripMetadata } from '@/lib/animationToStrip';
 import { dlog } from '@/lib/debugLog';
+import { GAME_ID } from '@/config/game';
 
 /** Stable empty array: `block_types` is absent from this project (see below). */
 const EMPTY_BLOCK_TYPES: Array<{ name: string; texture_url: string | null }> = [];
@@ -76,6 +77,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('shwarm_definitions')
         .select('tier, texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) throw error;
       return data;
@@ -90,6 +92,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('shombie_definitions')
         .select('tier, texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) throw error;
       return data;
@@ -104,6 +107,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('shroomer_definitions' as any)
         .select('tier, texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) throw error;
       return data as Array<{ tier: number; texture_url: string | null }>;
@@ -118,6 +122,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('vortax_definitions' as any)
         .select('tier, texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) throw error;
       return data as Array<{ tier: number; texture_url: string | null }>;
@@ -132,6 +137,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('shnake_definitions')
         .select('tier, head_texture_url, body_texture_url, face_texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) throw error;
       return data;
@@ -150,6 +156,7 @@ export function useAtlasSync(options?: {
       const { data, error } = await supabase
         .from('walapa_definitions' as any)
         .select('tier, body_texture_url, belly_texture_url, eyes_texture_url')
+        .eq('game', GAME_ID)
         .order('tier');
       if (error) return [];
       return data ?? [];
@@ -423,12 +430,18 @@ export async function syncAtlasOnInit(): Promise<void> {
     walapasResult,
   ] = await Promise.all([
     supabase.from('seed_definitions').select('*').order('tier'),
-    supabase.from('shwarm_definitions').select('tier, texture_url').order('tier'),
-    supabase.from('shombie_definitions').select('tier, texture_url').order('tier'),
-    supabase.from('shroomer_definitions' as any).select('tier, texture_url').order('tier'),
-    supabase.from('vortax_definitions' as any).select('tier, texture_url').order('tier'),
-    supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url').order('tier'),
-    supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url').order('tier'),
+    supabase.from('shwarm_definitions').select('tier, texture_url')
+    .eq('game', GAME_ID).order('tier'),
+    supabase.from('shombie_definitions').select('tier, texture_url')
+    .eq('game', GAME_ID).order('tier'),
+    supabase.from('shroomer_definitions' as any).select('tier, texture_url')
+    .eq('game', GAME_ID).order('tier'),
+    supabase.from('vortax_definitions' as any).select('tier, texture_url')
+    .eq('game', GAME_ID).order('tier'),
+    supabase.from('shnake_definitions').select('tier, head_texture_url, body_texture_url, face_texture_url')
+    .eq('game', GAME_ID).order('tier'),
+    supabase.from('walapa_definitions' as any).select('tier, body_texture_url, belly_texture_url, eyes_texture_url')
+    .eq('game', GAME_ID).order('tier'),
   ]);
 
   const seedDefinitions = seedsResult.data;

@@ -17,6 +17,7 @@ import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { rotateTexture } from '@/lib/textureRotation';
 import type { VortaxDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 // vortax_definitions isn't in the generated Supabase types; cast per-call.
 const sb = supabase as any;
@@ -84,6 +85,7 @@ export function VortaxDesignPanel({ className }: VortaxDesignPanelProps) {
     const { data, error } = await sb
       .from('vortax_definitions')
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true });
 
     if (error) {
@@ -161,6 +163,9 @@ export function VortaxDesignPanel({ className }: VortaxDesignPanelProps) {
     const saveData = {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     try {
@@ -169,7 +174,7 @@ export function VortaxDesignPanel({ className }: VortaxDesignPanelProps) {
       if (isNew) {
         const { data, error } = await sb
           .from('vortax_definitions')
-          .upsert([saveData], { onConflict: 'tier' })
+          .upsert([saveData], { onConflict: 'game,tier' })
           .select()
           .single();
         if (error) throw error;

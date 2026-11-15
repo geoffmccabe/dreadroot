@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { WalapaDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 // Module-level cache for synchronous access
 let definitionsCache: WalapaDefinition[] = [];
@@ -33,6 +34,7 @@ export function useWalapaDefinitions() {
       const { data, error } = await supabase
         .from('walapa_definitions' as any)
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
 
       if (error) {

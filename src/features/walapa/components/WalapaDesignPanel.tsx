@@ -18,6 +18,7 @@ import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import type { WalapaDefinition } from '../types';
 import { TIER_RARITY, RARITY_COLORS } from '../constants';
 import { DEFAULT_WALAPA_DEFINITION } from '../hooks/useWalapaDefinitions';
+import { GAME_ID } from '@/config/game';
 
 interface WalapaDesignPanelProps {
   className?: string;
@@ -55,6 +56,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
     const { data, error } = await supabase
       .from('walapa_definitions' as any)
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true });
 
     if (error) {
@@ -152,6 +154,9 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
       sound_config: sound_config ? JSON.parse(JSON.stringify(sound_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     console.log('[WalapaDesign] Saving:', { isNew, tier: baseData.tier, saveData });
@@ -162,7 +167,7 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
       if (isNew) {
         const { data, error } = await supabase
           .from('walapa_definitions' as any)
-          .upsert([saveData], { onConflict: 'tier' })
+          .upsert([saveData], { onConflict: 'game,tier' })
           .select()
           .single();
         if (error) throw error;
@@ -209,13 +214,16 @@ export function WalapaDesignPanel({ className }: WalapaDesignPanelProps) {
       ...baseData,
       ai_config: ai_config ? JSON.parse(JSON.stringify(ai_config)) : null,
       sound_config: sound_config ? JSON.parse(JSON.stringify(sound_config)) : null,
+      // Stamp the game so this row belongs to THIS game only. These tables are
+      // UNIQUE(game, tier) now, not UNIQUE(tier), so each game owns its own tiers.
+      game: GAME_ID,
     };
 
     try {
       if (isNew) {
         const { data, error } = await supabase
           .from('walapa_definitions' as any)
-          .upsert([saveData], { onConflict: 'tier' })
+          .upsert([saveData], { onConflict: 'game,tier' })
           .select()
           .single();
         if (error) throw error;

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { ShpiderDefinition } from '../types';
+import { GAME_ID } from '@/config/game';
 
 let definitionsCache: ShpiderDefinition[] = [];
 
@@ -11,6 +12,7 @@ export function useShpiderDefinitions() {
       const { data, error } = await (supabase
         .from('shpider_definitions' as any)
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true }) as any);
 
       if (error) {

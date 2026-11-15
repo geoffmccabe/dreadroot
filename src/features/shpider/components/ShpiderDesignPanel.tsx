@@ -15,6 +15,7 @@ import { convertTextureToKtx2 } from '@/lib/ktx2';
 import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import type { ShpiderDefinition } from '../types';
 import { ShpiderEggsPanel } from './ShpiderEggsPanel';
+import { GAME_ID } from '@/config/game';
 
 type LeftSelection = { kind: 'tier'; tier: number } | { kind: 'eggs' };
 
@@ -53,6 +54,7 @@ export function ShpiderDesignPanel({ className }: ShpiderDesignPanelProps) {
     const { data, error } = await (supabase
       .from('shpider_definitions' as any)
       .select('*')
+      .eq('game', GAME_ID)
       .order('tier', { ascending: true }) as any);
 
     if (error) {

@@ -18,6 +18,7 @@ import { CoinDropsEditor } from '@/features/coinDrops/CoinDropsEditor';
 import { EnemyBehaviorSettings, AIConfig } from '@/components/EnemyBehaviorSettings';
 import { convertAnimationToStrip, needsAnimationProcessing } from '@/lib/animationToStrip';
 import { convertTextureToKtx2 } from '@/lib/ktx2';
+import { GAME_ID } from '@/config/game';
 
 const RARITY_COLORS: Record<string, string> = {
   common: '#9ca3af',
@@ -129,6 +130,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
       const { data, error } = await supabase
         .from('shwarm_definitions')
         .select('*')
+        .eq('game', GAME_ID)
         .order('tier', { ascending: true });
 
       if (error) throw error;
@@ -204,6 +206,9 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
       
       const defData = {
         tier: currentDef.tier,
+        // Stamp the game: these tables are UNIQUE(game, tier) now, so each
+        // game owns its own tiers instead of sharing one global set.
+        game: GAME_ID,
         name: currentDef.name,
         texture_url: currentDef.texture_url,
         speed: currentDef.speed,
@@ -481,6 +486,7 @@ export function ShwarmDesignPanel({ className }: ShwarmDesignPanelProps) {
                               .from('shwarm_definitions')
                               .insert({
                                 tier: def.tier,
+                                game: GAME_ID,
                                 name: def.name,
                                 texture_url: def.texture_url,
                                 speed: def.speed,
