@@ -42,7 +42,7 @@ export interface ParkourController {
     x: number, footY: number, z: number,
     fx: number, fz: number,
     running: boolean, now: number,
-  ): { action: 'climb' | 'vault'; seconds: number } | null;
+  ): { action: 'climb' | 'vault' | 'vaultHigh'; seconds: number } | null;
   /** Advance the running move. Only valid while `isActive()`. */
   advance(now: number): ParkourStep;
 }
@@ -80,8 +80,15 @@ export function useParkour(): ParkourController {
         // wall and hopping onto a single block are different animations, and
         // playing the wall climb on a one-block ledge is what "it climbs the
         // air" has been all along — there is nothing there to climb.
+        // ...and the HEIGHT picks between the two vault clips. The runner has
+        // always told vaultLow from vaultHigh, but this collapsed both to the
+        // single 'vault' action, so diving a 2-block wall played the 1m hop
+        // clip and the dive animation we own was never once seen. The root rig
+        // has neither clip, so for those three this changes nothing.
         return {
-          action: started.style === 'climb' ? 'climb' : 'vault',
+          action: started.style === 'climb' ? 'climb'
+                : started.move === 'vaultHigh' ? 'vaultHigh'
+                : 'vault',
           seconds: started.durationMs / 1000,
         };
       },
